@@ -1,5 +1,8 @@
 # Operational Multi-Model Seasonal Forecasting System (MAM & Kiremt)
 
+
+## Probabilistic & Deterministic forecasts of Rainfall Onset (ONS), Cessation (CESS), and Season Length (SL) for Ethiopia and Kenya 
+
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://reactjs.org/)
@@ -7,7 +10,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An operational, end-to-end seasonal climate forecasting and decision-support system designed for East Africa (**Kenya MAM "Long Rains"** and **Ethiopia "Kiremt" / "Belg"** seasons). 
+An operational, end-to-end seasonal climate forecasting and decision-support system designed for East Africa (**Kenya MAM "Long Rains"**, **Kenya OND "Short Rains"**, **Ethiopia "Kiremt" (June - September) and "Belg" (February - May)** seasons). 
 
 Developed for **ILRI (International Livestock Research Institute) Climate Services** and **CGIAR**, this platform moves beyond traditional seasonal rainfall totals by delivering high-resolution probabilistic forecasts of **Rainfall Onset (ONS)**, **Cessation (CESS)**, and **Length of Growing Period (LGP / Season Length)** derived from Copernicus Climate Change Service (C3S) multi-model ensembles and calibrated against CHIRPS observations.
 
@@ -100,23 +103,23 @@ All model forecast members are bias-corrected daily using empirical quantile map
 
 ```mermaid
 flowchart TD
-    subgraph Data & Pipeline
-        CDS[Copernicus CDS C3S Models] --> Ingest[scripts/download_seasonal_forecasts_daily_c3s.py]
-        CHIRPS[CHIRPS 0.25° Daily Obs] --> Ingest
-        Ingest --> DunningEngine[notebook/dunning_lib.py & Stage 8 Pipeline]
-        DunningEngine --> Processed[Processed NetCDF & Diagnostic Arrays]
+    subgraph Pipeline["Data & Pipeline"]
+        CDS["Copernicus CDS C3S Models"] --> Ingest["scripts/download_seasonal_forecasts_daily_c3s.py"]
+        CHIRPS["CHIRPS 0.25° Daily Obs"] --> Ingest
+        Ingest --> DunningEngine["notebook/dunning_lib.py & Stage 8 Pipeline"]
+        DunningEngine --> Processed["Processed NetCDF & Diagnostic Arrays"]
     end
 
-    subgraph Backend - FastAPI
-        Processed --> Loader[backend/mam_loader.py: In-Memory Multi-Array Cache]
-        Loader --> API[FastAPI Endpoints: /grid, /pixel, /models, /sites, /bulletin]
+    subgraph Backend["Backend - FastAPI"]
+        Processed --> Loader["backend/mam_loader.py: In-Memory Multi-Array Cache"]
+        Loader --> API["FastAPI Endpoints: /grid, /pixel, /models, /sites, /bulletin"]
     end
 
-    subgraph Frontend - React + Vite
-        API --> QueryCache[TanStack Query & Zustand Store]
-        QueryCache --> MapEngine[MapPanel.jsx: MapLibre GL Raster/Choropleths]
-        QueryCache --> PlumeCharts[App.jsx: Recharts A(D) Plumes & Time Series]
-        QueryCache --> Gauges[Tercile Risk Gauges & Ensemble Agreement Dials]
+    subgraph Frontend["Frontend - React + Vite"]
+        API --> QueryCache["TanStack Query & Zustand Store"]
+        QueryCache --> MapEngine["MapPanel.jsx: MapLibre GL Raster/Choropleths"]
+        QueryCache --> PlumeCharts["App.jsx: Recharts A(D) Plumes & Time Series"]
+        QueryCache --> Gauges["Tercile Risk Gauges & Ensemble Agreement Dials"]
     end
 ```
 
