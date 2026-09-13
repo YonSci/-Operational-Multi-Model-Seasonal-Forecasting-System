@@ -21,7 +21,7 @@ const ALL_LAYERS = [
 
 const useDashboardStore = create((set, get) => ({
   // -- Site selection -------------------------------------------------------
-  selectedSite: null,
+  selectedSite: { site_name: "Kapiti Research Station Farm", lat: -1.632, lon: 37.148 },
   setSelectedSite: (site) => set({ selectedSite: site }),
 
   // -- Model toggles --------------------------------------------------------

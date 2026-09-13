@@ -86,6 +86,45 @@ const BASEMAPS = {
   topo:      { style: STYLE_TOPO,      label: 'Topographic' },
 }
 
+// -- Monitored Farm Sites ---------------------------------------------------
+export const MONITORED_SITES = [
+  { site_name: "Kapiti Research Station Farm",   lat: -1.63209, lon: 37.1479, county: "Machakos",   desc: "ILRI Research Farm" },
+  { site_name: "KALRO Kiboko, Makueni Farm",     lat: -2.21046, lon: 37.7190, county: "Makueni",    desc: "KALRO Dryland Station" },
+  { site_name: "El Karama Sahiwals Farm",         lat: -2.38710, lon: 37.4851, county: "Kajiado",    desc: "Livestock Breeding Farm" },
+  { site_name: "LiveMo LTD, Memerush, Kajiado",  lat: -2.38726, lon: 37.4850, county: "Kajiado",    desc: "Commercial Pastoral Ranch" },
+  { site_name: "Genco LTD Maralal Samburu Farm", lat:  0.92730, lon: 36.5690, county: "Samburu",    desc: "Northern Pastoral Hub" },
+  { site_name: "Genco LTD Tana River Farm",      lat: -2.21314, lon: 40.0517, county: "Tana River", desc: "Coast Rangeland Site" },
+]
+
+const SITES_GEOJSON = {
+  type: 'FeatureCollection',
+  features: MONITORED_SITES.map(s => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+    properties: {
+      site_name: s.site_name,
+      short_name: s.site_name.replace(' Farm', '').replace(' Station', '').split(',')[0].slice(0, 15),
+      lat: s.lat,
+      lon: s.lon,
+      county: s.county,
+      desc: s.desc
+    }
+  }))
+}
+
+// Strip obsolete or non-standard CRS from GeoJSON to prevent MapLibre parsing issues
+function cleanGeoJSON(data) {
+  if (!data) return null
+  try {
+    const copy = JSON.parse(JSON.stringify(data))
+    if (copy.crs) delete copy.crs
+    return copy
+  } catch(_) {
+    return data
+  }
+}
+
+
 
 // -- Colour scales ----------------------------------------------------------
 const CS = {
@@ -399,43 +438,98 @@ function setupLayers(map, darkMode, onDone) {
     map.addSource('boundary-admin1',{type:'geojson',data:{type:'FeatureCollection',features:[]}})
     map.addLayer({id:'boundary-admin1-line',type:'line',source:'boundary-admin1',
       layout:{visibility:'none'},
-      paint:{'line-color':'#9ca3af','line-width':0.8,'line-dasharray':[2,1.5]}})
+      paint:{
+        'line-color': darkMode ? '#94a3b8' : '#475569',
+        'line-width': 1.4,
+        'line-dasharray': [3, 2],
+        'line-opacity': 0.9
+      }})
   }
   if(!map.getSource('boundary-admin0')){
     map.addSource('boundary-admin0',{type:'geojson',data:{type:'FeatureCollection',features:[]}})
     map.addLayer({id:'boundary-admin0-line',type:'line',source:'boundary-admin0',
       layout:{visibility:'visible'},
-      paint:{'line-color':'#fbbf24','line-width':1.8}})
+      paint:{
+        'line-color': darkMode ? '#38bdf8' : '#0f172a',
+        'line-width': 2.4,
+        'line-opacity': 0.95
+      }})
+  }
+  if(!map.getSource('monitored-farm-sites')){
+    map.addSource('monitored-farm-sites', {type:'geojson', data: SITES_GEOJSON})
+    map.addLayer({
+      id: 'monitored-farm-sites-halo',
+      type: 'circle',
+      source: 'monitored-farm-sites',
+      paint: {
+        'circle-radius': 11,
+        'circle-color': '#10b981',
+        'circle-opacity': 0.28,
+        'circle-stroke-color': '#059669',
+        'circle-stroke-width': 1.5,
+      }
+    })
+    map.addLayer({
+      id: 'monitored-farm-sites-point',
+      type: 'circle',
+      source: 'monitored-farm-sites',
+      paint: {
+        'circle-radius': 6.5,
+        'circle-color': '#10b981',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2.2,
+      }
+    })
+    map.addLayer({
+      id: 'monitored-farm-sites-label',
+      type: 'symbol',
+      source: 'monitored-farm-sites',
+      layout: {
+        'text-field': ['get', 'short_name'],
+        'text-size': 10,
+        'text-offset': [0, 1.3],
+        'text-anchor': 'top',
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      },
+      paint: {
+        'text-color': darkMode ? '#f1f5f9' : '#0f172a',
+        'text-halo-color': darkMode ? '#0f172a' : '#ffffff',
+        'text-halo-width': 2,
+      }
+    })
   }
   if(!map.getSource('selected')){
     map.addSource('selected',{type:'geojson',data:{type:'FeatureCollection',features:[]}})
     map.addLayer({id:'selected-dot',type:'circle',source:'selected',
-      paint:{'circle-radius':8,'circle-color':'#ef4444','circle-stroke-color':'#fff','circle-stroke-width':2}})
+      paint:{'circle-radius':9,'circle-color':'#ef4444','circle-stroke-color':'#ffffff','circle-stroke-width':2.5}})
   }
   if(onDone) onDone()
 }
 
 // Apply cached boundary GeoJSON + visibility to a live map (called after
 // initial setup, after basemap style swaps, and on toggle/country change).
-function applyBoundaryLayers(map, boundaryData, showAdmin0, showAdmin1){
-  console.log('[boundaries] applyBoundaryLayers called',
-    'admin0Features=', boundaryData?.admin0?.features?.length,
-    'admin1Features=', boundaryData?.admin1?.features?.length,
-    'showAdmin0=', showAdmin0, 'showAdmin1=', showAdmin1,
-    'source0exists=', !!map.getSource('boundary-admin0'),
-    'source1exists=', !!map.getSource('boundary-admin1'))
-  if(boundaryData?.admin0){
-    try{ map.getSource('boundary-admin0')?.setData(boundaryData.admin0) }
+function applyBoundaryLayers(map, boundaryData, showAdmin0, showAdmin1, darkMode){
+  if(!map) return
+  if(boundaryData?.admin0 && map.getSource('boundary-admin0')){
+    try{ map.getSource('boundary-admin0').setData(cleanGeoJSON(boundaryData.admin0)) }
     catch(e){ console.warn('[boundaries] admin0 setData failed', e) }
   }
-  if(boundaryData?.admin1){
-    try{ map.getSource('boundary-admin1')?.setData(boundaryData.admin1) }
+  if(boundaryData?.admin1 && map.getSource('boundary-admin1')){
+    try{ map.getSource('boundary-admin1').setData(cleanGeoJSON(boundaryData.admin1)) }
     catch(e){ console.warn('[boundaries] admin1 setData failed', e) }
   }
-  try{ map.setLayoutProperty('boundary-admin0-line','visibility',showAdmin0?'visible':'none') }
-  catch(e){ console.warn('[boundaries] admin0 visibility failed', e) }
-  try{ map.setLayoutProperty('boundary-admin1-line','visibility',showAdmin1?'visible':'none') }
-  catch(e){ console.warn('[boundaries] admin1 visibility failed', e) }
+  try{
+    if(map.getLayer('boundary-admin0-line')){
+      map.setLayoutProperty('boundary-admin0-line','visibility',showAdmin0?'visible':'none')
+      map.setPaintProperty('boundary-admin0-line','line-color',darkMode?'#38bdf8':'#0f172a')
+    }
+  }catch(e){ console.warn('[boundaries] admin0 visibility failed', e) }
+  try{
+    if(map.getLayer('boundary-admin1-line')){
+      map.setLayoutProperty('boundary-admin1-line','visibility',showAdmin1?'visible':'none')
+      map.setPaintProperty('boundary-admin1-line','line-color',darkMode?'#94a3b8':'#475569')
+    }
+  }catch(e){ console.warn('[boundaries] admin1 visibility failed', e) }
 }
 
 // -- Main: gridData arrives as prop from App.jsx ---------------------------
@@ -490,7 +584,6 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
     }
   }, [activeTab])
   const [tooltip,    setTooltip]     = useState(null)
-  const [showCounties,setShowCounties]= useState(false)
 
   const setSelectedSite = useDashboardStore(s=>s.setSelectedSite)
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
@@ -563,23 +656,104 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
           }catch(e){ console.warn('init raster apply failed:',e) }
         }
         try{ map.setPaintProperty('forecast-img','raster-opacity',COUNTRY_VIEWS[countryRef.current]?.available?0.85:0) }catch(_){}
-        applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0Ref.current, showAdmin1Ref.current)
+        applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0Ref.current, showAdmin1Ref.current, darkRef.current)
         setMapReady(true)
       })
     })
-    map.on('click','forecast-hits-fill',(e)=>{
+
+    const handleMapClick = (e) => {
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
-      const p=e.features?.[0]?.properties??{}
-      const lat=typeof p.lat==='number'?p.lat:parseFloat(e.lngLat.lat.toFixed(3))
-      const lon=typeof p.lon==='number'?p.lon:parseFloat(e.lngLat.lng.toFixed(3))
-      setSelectedSite({site_name:lat.toFixed(3)+'N '+lon.toFixed(3)+'E',lat,lon})
-    })
-    map.on('mousemove','forecast-hits-fill',(e)=>{
+
+      // 1. Monitored farm site clicked
+      try {
+        const siteFeatures = map.queryRenderedFeatures(e.point, {
+          layers: ['monitored-farm-sites-point', 'monitored-farm-sites-halo', 'monitored-farm-sites-label']
+        })
+        if (siteFeatures && siteFeatures.length > 0) {
+          const p = siteFeatures[0].properties ?? {}
+          const sName = p.site_name || 'Monitored Farm'
+          const lat = Number(p.lat)
+          const lon = Number(p.lon)
+          setSelectedSite({ site_name: sName, lat, lon })
+          return
+        }
+      } catch(_) {}
+
+      // 2. Forecast grid cell clicked
+      try {
+        const gridFeatures = map.queryRenderedFeatures(e.point, {
+          layers: ['forecast-hits-fill']
+        })
+        if (gridFeatures && gridFeatures.length > 0) {
+          const p = gridFeatures[0].properties ?? {}
+          const lat = typeof p.lat === 'number' ? p.lat : parseFloat(e.lngLat.lat.toFixed(3))
+          const lon = typeof p.lon === 'number' ? p.lon : parseFloat(e.lngLat.lng.toFixed(3))
+          const site_name = `${Math.abs(lat).toFixed(3)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(3)}°E`
+          setSelectedSite({ site_name, lat, lon })
+          return
+        }
+      } catch(_) {}
+
+      // 3. Fallback: Any click within Kenya bounds
+      const { lng, lat } = e.lngLat
+      if (lat >= -5.0 && lat <= 5.0 && lng >= 33.0 && lng <= 42.5) {
+        const rLat = parseFloat(lat.toFixed(3))
+        const rLon = parseFloat(lng.toFixed(3))
+        const site_name = `${Math.abs(rLat).toFixed(3)}°${rLat >= 0 ? 'N' : 'S'}, ${Math.abs(rLon).toFixed(3)}°E`
+        setSelectedSite({ site_name, lat: rLat, lon: rLon })
+      }
+    }
+
+    const handleMouseMove = (e) => {
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
-      map.getCanvas().style.cursor='crosshair'
-      setTooltip({x:e.point.x,y:e.point.y,props:e.features?.[0]?.properties??{}})
-    })
-    map.on('mouseleave','forecast-hits-fill',()=>{map.getCanvas().style.cursor='';setTooltip(null)})
+
+      // Check farm sites first
+      try {
+        const siteFeatures = map.queryRenderedFeatures(e.point, {
+          layers: ['monitored-farm-sites-point', 'monitored-farm-sites-halo']
+        })
+        if (siteFeatures && siteFeatures.length > 0) {
+          map.getCanvas().style.cursor = 'pointer'
+          const p = siteFeatures[0].properties ?? {}
+          setTooltip({
+            x: e.point.x,
+            y: e.point.y,
+            isSite: true,
+            site: p
+          })
+          return
+        }
+      } catch(_) {}
+
+      // Check forecast grid
+      try {
+        const gridFeatures = map.queryRenderedFeatures(e.point, {
+          layers: ['forecast-hits-fill']
+        })
+        if (gridFeatures && gridFeatures.length > 0) {
+          map.getCanvas().style.cursor = 'crosshair'
+          setTooltip({
+            x: e.point.x,
+            y: e.point.y,
+            isSite: false,
+            props: gridFeatures[0].properties ?? {}
+          })
+          return
+        }
+      } catch(_) {}
+
+      map.getCanvas().style.cursor = ''
+      setTooltip(null)
+    }
+
+    const handleMouseLeave = () => {
+      map.getCanvas().style.cursor = ''
+      setTooltip(null)
+    }
+
+    map.on('click', handleMapClick)
+    map.on('mousemove', handleMouseMove)
+    map.on('mouseleave', handleMouseLeave)
     window.__map = map
     window.__boundaryDataRef = boundaryDataRef
     mapRef.current=map
@@ -618,7 +792,7 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
           }catch(_){}
         }
         try{ map.setPaintProperty('forecast-img','raster-opacity',COUNTRY_VIEWS[countryRef.current]?.available?0.85:0) }catch(_){}
-        applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0Ref.current, showAdmin1Ref.current)
+        applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0Ref.current, showAdmin1Ref.current, darkRef.current)
       })
     })
   },[basemapId])
@@ -662,8 +836,8 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
     showAdmin0Ref.current=showAdmin0
     showAdmin1Ref.current=showAdmin1
     const map=mapRef.current; if(!map||!mapReadyRef.current) return
-    applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0, showAdmin1)
-  },[showAdmin0,showAdmin1,mapReady,boundaryVersion])
+    applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0, showAdmin1, darkRef.current)
+  },[showAdmin0,showAdmin1,mapReady,boundaryVersion,darkMode])
 
   // Log when gridData prop changes
   useEffect(()=>{
@@ -685,15 +859,6 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
     if(!mapReadyRef.current) return
     try{ map.setPaintProperty('forecast-img','raster-opacity',countryView.available?0.85:0) }catch(_){}
   },[country])
-
-  // -- County toggle -----------------------------------------------------
-  useEffect(()=>{
-    const map=mapRef.current; if(!map||!mapReady) return
-    try{
-      map.setLayoutProperty('admin-1-boundary','visibility',showCounties?'visible':'none')
-      if(showCounties){map.setPaintProperty('admin-1-boundary','line-opacity',0.9)}
-    }catch(_){}
-  },[showCounties,mapReady])
 
   // -- Selected site -----------------------------------------------------
   useEffect(()=>{
@@ -939,6 +1104,48 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
         </div>
         )}
 
+        {/* Farm Quick Selector -- top-right (next to MapLibre nav controls) */}
+        {countryView.available && (
+          <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto'}}>
+            <select
+              value={MONITORED_SITES.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
+              onChange={(e) => {
+                const site = MONITORED_SITES.find(s => s.site_name === e.target.value)
+                if (site) {
+                  setSelectedSite({ site_name: site.site_name, lat: site.lat, lon: site.lon })
+                  mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
+                }
+              }}
+              style={{padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',
+                      backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,
+                      color:'var(--text-secondary)',fontWeight:600,outline:'none'}}>
+              <option value="">🎯 Monitored Farms ({MONITORED_SITES.length})...</option>
+              {MONITORED_SITES.map(s => (
+                <option key={s.site_name} value={s.site_name}>
+                  {s.site_name.replace(' Farm', '')} ({s.county})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Selected Site Indicator Badge -- top-left underneath layer dropdown */}
+        {selectedSite && countryView.available && (
+          <div style={{position:'absolute',top:38,left:8,pointerEvents:'auto',
+                       display:'flex',alignItems:'center',gap:6,padding:'4px 9px',
+                       borderRadius:6,fontSize:9,background:'var(--bg-elevated)',
+                       border:brd,backdropFilter:'blur(4px)',boxShadow:'0 2px 8px rgba(0,0,0,0.2)'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444'}}/>
+            <span style={{color:'var(--text-muted)',fontWeight:700}}>ACTIVE:</span>
+            <span style={{color:'var(--text-primary)',fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              {selectedSite.site_name}
+            </span>
+            <span style={{color:'var(--text-faint)'}}>
+              ({selectedSite.lat.toFixed(2)}°, {selectedSite.lon.toFixed(2)}°)
+            </span>
+          </div>
+        )}
+
         {/* Colour legend -- bottom-right */}
         {countryView.available && (
         <div style={{position:'absolute',bottom:8,right:8,pointerEvents:'auto'}}>
@@ -975,46 +1182,62 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
           )}
         </div>
 
-        {/* Boundary picker -- bottom-left, next to basemap picker */}
-        <div style={{position:'absolute',bottom:8,left:110,pointerEvents:'auto'}}>
-          <button onClick={()=>setShowBoundaries(v=>!v)}
-            style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
-            <span style={{fontSize:9,fontWeight:700,color:'var(--text-muted)'}}>BOUNDARIES</span>
-            <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
+        {/* Boundary toggles -- bottom-left, next to basemap picker */}
+        <div style={{position:'absolute',bottom:8,left:110,pointerEvents:'auto',display:'flex',gap:5}}>
+          <button onClick={()=>setShowAdmin0(v=>!v)}
+            title="Toggle Kenya National Border"
+            style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',borderRadius:8,fontSize:9,cursor:'pointer',
+                    backdropFilter:'blur(4px)',
+                    background: showAdmin0 ? (darkMode ? 'rgba(56,189,248,0.2)' : '#e0f2fe') : 'var(--bg-elevated)',
+                    border: '1px solid ' + (showAdmin0 ? 'var(--accent-blue)' : 'var(--border-primary)'),
+                    color: showAdmin0 ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                    fontWeight: showAdmin0 ? 700 : 500}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:showAdmin0?'var(--accent-blue)':'var(--text-faint)'}}/>
+            BORDER: {showAdmin0 ? 'ON' : 'OFF'}
           </button>
-          {showBoundaries && (
-            <div style={{position:'absolute',bottom:'100%',left:0,marginBottom:4,borderRadius:8,
-                         boxShadow:'0 8px 24px rgba(0,0,0,0.35)',background:'var(--bg-elevated)',
-                         border:brd,padding:8,minWidth:170}}>
-              <label style={{display:'flex',alignItems:'center',gap:7,padding:'5px 4px',cursor:'pointer',fontSize:10,color:'var(--text-secondary)'}}>
-                <input type="checkbox" checked={showAdmin0} onChange={e=>setShowAdmin0(e.target.checked)}/>
-                Country boundary
-              </label>
-              <label style={{display:'flex',alignItems:'center',gap:7,padding:'5px 4px',cursor:'pointer',fontSize:10,color:'var(--text-secondary)'}}>
-                <input type="checkbox" checked={showAdmin1} onChange={e=>setShowAdmin1(e.target.checked)}/>
-                County / District boundary
-              </label>
-            </div>
-          )}
+          <button onClick={()=>setShowAdmin1(v=>!v)}
+            title="Toggle County / District Boundaries"
+            style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',borderRadius:8,fontSize:9,cursor:'pointer',
+                    backdropFilter:'blur(4px)',
+                    background: showAdmin1 ? (darkMode ? 'rgba(16,185,129,0.2)' : '#d1fae5') : 'var(--bg-elevated)',
+                    border: '1px solid ' + (showAdmin1 ? '#10b981' : 'var(--border-primary)'),
+                    color: showAdmin1 ? (darkMode ? '#34d399' : '#059669') : 'var(--text-secondary)',
+                    fontWeight: showAdmin1 ? 700 : 500}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:showAdmin1?'#10b981':'var(--text-faint)'}}/>
+            COUNTIES: {showAdmin1 ? 'ON' : 'OFF'}
+          </button>
         </div>
 
-        {/* Hover tooltip -- follows cursor over the forecast grid */}
-        {tooltip && tipLines && (
+        {/* Hover tooltip -- follows cursor over monitored farm sites and forecast grid */}
+        {tooltip && (
           <div style={{position:'absolute',left:tooltip.x+14,top:tooltip.y+14,
-                       background:'var(--bg-elevated)',border:brd,borderRadius:6,
-                       padding:'6px 9px',maxWidth:220,boxShadow:'0 4px 16px rgba(0,0,0,0.35)',
+                       background:'var(--bg-elevated)',border:brd,borderRadius:8,
+                       padding:'8px 12px',maxWidth:260,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',
                        zIndex:30}}>
-            {tipLines.map((line,i)=>(
-              <div key={i} style={{fontSize:9,color:i===0?'var(--accent-blue)':'var(--text-secondary)',
-                                    fontWeight:i===0?700:400,whiteSpace:'nowrap',
-                                    marginBottom:i<tipLines.length-1?2:0}}>
-                {line}
+            {tooltip.isSite ? (
+              <div>
+                <div style={{fontSize:11,fontWeight:800,color:'#10b981',marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
+                  <span>📍</span> {tooltip.site.site_name}
+                </div>
+                <div style={{fontSize:9,color:'var(--text-secondary)',marginBottom:2}}>
+                  County: <strong style={{color:'var(--text-primary)'}}>{tooltip.site.county}</strong>  •  {tooltip.site.desc}
+                </div>
+                <div style={{fontSize:8,color:'var(--text-faint)',marginTop:4,borderTop:'1px solid var(--border-primary)',paddingTop:3}}>
+                  {Number(tooltip.site.lat).toFixed(3)}°N, {Number(tooltip.site.lon).toFixed(3)}°E  •  <span style={{color:'var(--accent-blue)',fontWeight:600}}>Click to load forecast</span>
+                </div>
               </div>
-            ))}
+            ) : tipLines ? (
+              tipLines.map((line,i)=>(
+                <div key={i} style={{fontSize:9,color:i===0?'var(--accent-blue)':'var(--text-secondary)',
+                                      fontWeight:i===0?700:400,whiteSpace:'nowrap',
+                                      marginBottom:i<tipLines.length-1?2:0}}>
+                  {line}
+                </div>
+              ))
+            ) : null}
           </div>
         )}
       </div>
-
     </div>
   )
 }
