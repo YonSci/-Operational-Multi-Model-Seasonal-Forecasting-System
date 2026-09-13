@@ -1,0 +1,31 @@
+# ── Kenya MAM Dashboard — Backend ─────────────────────────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system deps (netCDF4, h5py need HDF5 libs)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libhdf5-dev libnetcdf-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source
+COPY backend/ .
+
+# Data is mounted at runtime — not baked in
+# VOLUME ["/data"]
+
+ENV PYTHONUNBUFFERED=1
+ENV BASE_DIR=/data
+ENV OP_YEAR=2026
+
+EXPOSE 8765
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8765/health || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765", \
+     "--workers", "1", "--timeout-keep-alive", "120"]

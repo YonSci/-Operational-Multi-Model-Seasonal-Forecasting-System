@@ -1,0 +1,33 @@
+# ── Kenya MAM Dashboard — Frontend build ──────────────────────────────────
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --prefer-offline
+
+COPY frontend/ .
+
+# No API tokens needed -- MapLibre GL JS with free CARTO tiles
+
+RUN npm run build
+
+# Stage 2: Serve via nginx
+FROM nginx:1.25-alpine
+
+# Remove default config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Our custom nginx config (proxies /api to backend)
+COPY docker/nginx.conf /etc/nginx/conf.d/dashboard.conf
+
+# Built assets
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -f http://localhost/health_nginx || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

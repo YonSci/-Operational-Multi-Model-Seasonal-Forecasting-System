@@ -1,0 +1,39 @@
+# Dependencies
+frontend/node_modules/
+frontend/dist/
+
+# Environment files
+.env
+frontend/.env
+backend/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Data (large NetCDF, Zarr, and pipeline outputs)
+outputs/
+outputs_*/
+CHIRPS/
+*.nc
+*.zarr/
+*.zarr
+data/bias-corrected/
+data/chirps_*/
+data/chrips_*/
+data/seasonal_*/
+data/outputs_*/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Docker build artifacts
+docker/.env

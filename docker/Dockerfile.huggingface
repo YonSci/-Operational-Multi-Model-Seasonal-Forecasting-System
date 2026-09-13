@@ -1,0 +1,40 @@
+# Hugging Face Spaces Dockerfile
+# Single container: FastAPI backend + nginx serving React build
+# Spaces requires port 7860
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libhdf5-dev libnetcdf-dev nginx curl nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Build frontend
+COPY frontend/ /build/frontend/
+WORKDIR /build/frontend
+RUN npm ci && npm run build
+
+# Copy built frontend to nginx root
+RUN cp -r dist /app/static
+
+# Copy backend
+COPY backend/ /app/backend/
+
+# nginx config for HF Spaces (port 7860)
+RUN printf 'server {\n  listen 7860;\n  root /app/static;\n  index index.html;\n  location /api/ {\n    proxy_pass http://127.0.0.1:8765/;\n    proxy_read_timeout 120s;\n  }\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/dashboard.conf
+RUN rm -f /etc/nginx/sites-enabled/default
+
+# Startup script: launch uvicorn + nginx
+RUN printf '#!/bin/bash\ncd /app/backend && uvicorn main:app --host 127.0.0.1 --port 8765 &\nsleep 5\nnginx -g "daemon off;"\n' > /app/start.sh && chmod +x /app/start.sh
+
+ENV BASE_DIR=/data
+ENV OP_YEAR=2026
+EXPOSE 7860
+
+CMD ["/app/start.sh"]

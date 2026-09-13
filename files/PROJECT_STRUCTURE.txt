@@ -1,0 +1,204 @@
+# Kenya MAM v3.0.0 — Complete Project File Structure
+# Up to Docker Test Deployment
+# =============================================================
+# 
+# Copy this entire structure into:
+#   C:\Users\yonas\Documents\ILRI\onset-kenya\
+#
+# Files marked [NEW] were created in this session.
+# Files marked [UPDATED] were modified in this session.
+# Files marked [EXISTING] were pre-existing pipeline notebooks.
+# =============================================================
+
+onset-kenya/
+│
+├── .env                              [NEW — copy from docker/.env.example and fill in]
+│
+├── vercel.json                       [NEW — Vercel SPA + API proxy config]
+│
+├── skill_weighted_ensemble.py        [NEW — notebook cells for Stage 8 skill weighting]
+│
+│
+# ═══════════════════════════════════════════════════════════════
+# FRONTEND
+# ═══════════════════════════════════════════════════════════════
+│
+├── frontend/
+│   ├── package.json                  [EXISTING — add maplibre-gl, remove mapbox-gl]
+│   ├── package-lock.json
+│   ├── index.html                    [EXISTING]
+│   │
+│   ├── vite.config.js               [UPDATED — production build + chunk splitting]
+│   ├── tailwind.config.js           [EXISTING]
+│   │
+│   ├── public/
+│   │   └── ilri-logo.png            [EXISTING]
+│   │
+│   └── src/
+│       ├── main.jsx                  [EXISTING]
+│       ├── index.css                 [UPDATED — CSS variables dark+light mode]
+│       │
+│       ├── App.jsx                   [NEW — 1513 lines, all 20 components]
+│       │   # Components inside App.jsx:
+│       │   #   StatBox, Card, PlaceholderPanel
+│       │   #   GaugeCard, TercileBar, AgreementDial
+│       │   #   PrecipPlume, ADPlume (with skill-weighted curves)
+│       │   #   RiskGauges, ProbabilisticOutlook, EnsembleAgreement
+│       │   #   ForecastingTab
+│       │   #   ProbabilisticTab
+│       │   #   MultiModelTab (Equal / HR-weighted / RPSS-weighted)
+│       │   #   ValidationTab (skill table + domain-mean probs per VAL year)
+│       │   #   HistoricalTab + HistoricalTimeSeries
+│       │   #   AboutTab (8-step methodology + gauge definitions)
+│       │   #   TopNav, App (root)
+│       │
+│       ├── api/
+│       │   └── queries.js            [NEW — all TanStack Query hooks]
+│       │       # useHealth, useModels, usePixelStats, useTaylor,
+│       │       # useChirpsHistorical, useValidation
+│       │
+│       ├── store/
+│       │   └── useDashboardStore.js  [NEW — Zustand: selectedSite, activeModels]
+│       │
+│       └── components/
+│           └── MapPanel.jsx          [NEW — 796 lines]
+│               # 5 tab-specific layer arrays:
+│               #   LAYERS (forecast, 9 layers)
+│               #   PROB_LAYERS (probabilistic, 10 layers)
+│               #   MULTI_LAYERS (multi-model, 9 layers)
+│               #   VAL_LAYERS (validation, 9 layers)
+│               #   HIST_LAYERS (historical, 12 layers)
+│               # Grid dropdown per tab (3×3, 3×3+1, 3×4, 3×3, 3×3)
+│               # MapLibre GL JS with CARTO free tiles (no Mapbox token)
+│               # inset:0 overlay wrapper (fixes overflow:hidden clipping)
+│               # Legend bottom-right, layer picker top-left
+│
+│
+# ═══════════════════════════════════════════════════════════════
+# BACKEND
+# ═══════════════════════════════════════════════════════════════
+│
+├── backend/
+│   ├── requirements.txt              [NEW]
+│   │   # fastapi, uvicorn, xarray, netCDF4, numpy, scipy, h5py
+│   │
+│   ├── main.py                       [UPDATED — CORS, lifespan loader, env vars]
+│   │
+│   ├── mam_loader.py                 [UPDATED — 620 lines]
+│   │   # All data loading for 8 C3S models
+│   │   # get_grid_stats() — 16 valid layers:
+│   │   #   anomaly, spread, median
+│   │   #   prob_bn, prob_nn, prob_an, failure
+│   │   #   chirps_p50, chirps_spread
+│   │   #   bias, detection_rate
+│   │   #   rpss_val, hitrate_val, alpha
+│   │   #   hr_weighted, rpss_weighted
+│   │   # configure() re-reads BASE_DIR/OP_YEAR from env at call time
+│   │   # BASE_DIR and OP_YEAR read from environment variables
+│   │
+│   └── kenya_api/
+│       ├── __init__.py
+│       ├── grid.py                   [UPDATED — valid_layers whitelist (must match mam_loader)]
+│       │   # GET /grid?variable&layer&model&bust
+│       │   # Returns GeoJSON FeatureCollection for spatial map layer
+│       │
+│       ├── pixel.py                  [UPDATED — added /chirps_historical + /validation]
+│       │   # GET /pixel?lat&lon          — full pixel stats (all models)
+│       │   # GET /chirps?lat&lon         — CHIRPS climatological curve
+│       │   # GET /taylor?lat&lon         — Taylor diagram stats
+│       │   # GET /chirps_historical?lat&lon — CHIRPS time series + trend stats
+│       │   # GET /validation            — domain-mean BN/NN/AN per VAL year per model
+│       │
+│       ├── models.py                 [EXISTING — GET /models]
+│       ├── sites.py                  [EXISTING — GET /sites]
+│       └── bulletin.py               [EXISTING — GET /bulletin]
+│
+│
+# ═══════════════════════════════════════════════════════════════
+# DOCKER DEPLOYMENT
+# ═══════════════════════════════════════════════════════════════
+│
+└── docker/
+    ├── .env.example                  [NEW — template, copy to onset-kenya/.env]
+    │   # DATA_DIR=C:/Users/yonas/Documents/ILRI/onset-kenya
+    │   # OP_YEAR=2026
+    │   # (No Mapbox token needed — uses MapLibre + free CARTO tiles)
+    │
+    ├── Dockerfile.backend            [NEW]
+    │   # FROM python:3.11-slim
+    │   # Installs libhdf5, libnetcdf, python deps
+    │   # COPY backend/ .
+    │   # ENV BASE_DIR=/data  ENV OP_YEAR=2026
+    │   # EXPOSE 8765
+    │   # CMD uvicorn main:app --host 0.0.0.0 --port 8765
+    │
+    ├── Dockerfile.frontend           [NEW]
+    │   # Stage 1: node:20-alpine — npm ci + npm run build
+    │   # Stage 2: nginx:1.25-alpine — serve dist/ + proxy /api to backend
+    │   # EXPOSE 80
+    │
+    ├── Dockerfile.huggingface        [NEW — single container for HF Spaces]
+    │   # Builds frontend + backend in one image
+    │   # Serves on port 7860 (HF Spaces requirement)
+    │   # nginx proxies /api/ to uvicorn on 127.0.0.1:8765
+    │
+    ├── docker-compose.yml            [NEW]
+    │   # Services: backend (port 8765) + frontend (port 80)
+    │   # DATA_DIR mounted read-only at /data inside backend
+    │   # frontend depends_on: backend condition: service_healthy
+    │   # Both on mam_net bridge network
+    │
+    ├── nginx.conf                    [NEW]
+    │   # listen 80
+    │   # location /api/ → proxy_pass http://backend:8765/
+    │   # location / → try_files $uri $uri/ /index.html  (SPA fallback)
+    │   # Gzip + aggressive caching for Vite fingerprinted assets
+    │
+    ├── requirements.txt              [NEW — same as backend/requirements.txt]
+    │
+    ├── .dockerignore                 [NEW]
+    │   # Excludes: node_modules, dist, __pycache__, .git
+    │
+    ├── README_DOCKER.md              [NEW — quick start guide]
+    ├── DEPLOYMENT_GUIDE.md           [NEW — full guide: Option A ngrok, B HF Spaces, C Vercel]
+    ├── NGROK_SETUP.md                [NEW — ngrok-specific step-by-step]
+    ├── PACKAGE_SWAP.txt              [NEW — npm uninstall mapbox-gl / install maplibre-gl]
+    ├── deploy.sh                     [NEW — Linux/Mac deploy helper script]
+    └── test_deployment.py            [NEW — automated test: frontend + API + endpoints]
+        # Tests: index.html, /api/health, /api/models, /api/grid,
+        #        /api/pixel, /api/chirps_historical, /api/validation
+        # Exit 0 = all pass, non-zero = failures listed
+
+
+# ═══════════════════════════════════════════════════════════════
+# PIPELINE NOTEBOOKS (pre-existing, referenced not modified)
+# ═══════════════════════════════════════════════════════════════
+
+# outputs_ECMWF_SEAS5_v3/     ← model output directories (one per model)
+# outputs_UKMO_GloSea6_v3/
+# outputs_Meteo-France_Sys8_v3/
+# outputs_DWD_GCFS2.1_v3/
+# outputs_CMCC-SPS4_v3/
+# outputs_NCEP_CFSv2_v3/
+# outputs_ECCC_CanSIPS_v3/
+# outputs_BOM_ACCESS-S2_v3/
+#   Each contains:
+#     onset_doy.nc, cessation_doy.nc, lgp_days.nc
+#     bc_daily_all.nc  (large — loads into RAM)
+#     probs_damped_onset.nc, probs_damped_cessation.nc, probs_damped_lgp.nc
+#     hitrate_cal_onset.nc, hitrate_cal_cessation.nc, hitrate_cal_lgp.nc  ← needed for HR weighting
+#     rpss_val_onset.nc, rpss_val_cessation.nc, rpss_val_lgp.nc           ← needed for RPSS weighting
+#     alpha_onset.nc, alpha_cessation.nc, alpha_lgp.nc
+
+
+# ═══════════════════════════════════════════════════════════════
+# SKILL FILES (for future Claude sessions)
+# ═══════════════════════════════════════════════════════════════
+
+# kenya-mam-dashboard.skill   ← install in Claude skills directory
+#   kenya-mam-skill/
+#   ├── SKILL.md               main skill (OXC rules, architecture, patterns, checklist)
+#   └── references/
+#       ├── bugs.md            11 annotated bugs with root cause + fix
+#       ├── api.md             complete API reference (all 10 endpoints)
+#       └── layers.md          full layer catalogue (49 layers across 5 tabs)

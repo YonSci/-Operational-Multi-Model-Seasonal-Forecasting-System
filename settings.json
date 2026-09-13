@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install*)",
+      "Bash(npm run*)",
+      "Bash(npm ci*)",
+      "Bash(pip install*)",
+      "Bash(uvicorn*)",
+      "Bash(python*)",
+      "Bash(python3*)",
+      "Bash(docker*)",
+      "Bash(mkdir*)",
+      "Bash(cp*)",
+      "Bash(mv*)",
+      "Bash(cat*)",
+      "Bash(find*)",
+      "Bash(ls*)",
+      "Bash(grep*)",
+      "Bash(sed*)",
+      "Bash(echo*)",
+      "Bash(node*)",
+      "Bash(npx*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(sudo rm*)"
+    ]
+  },
+  "env": {
+    "PYTHONUNBUFFERED": "1"
+  }
+}

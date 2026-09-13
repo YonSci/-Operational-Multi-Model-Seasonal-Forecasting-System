@@ -1,0 +1,53 @@
+# Kenya MAM Dashboard — docker-compose
+# Usage:
+#   docker-compose up -d
+#   docker-compose down
+#
+# Data volume: mount your pipeline output directory at /data inside the backend.
+
+version: "3.9"
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: mam_backend
+    restart: unless-stopped
+    environment:
+      BASE_DIR: /data
+      OP_YEAR: ${OP_YEAR:-2026}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # Mount your ILRI pipeline output directory (read-only)
+      - ${DATA_DIR}:/data:ro
+    ports:
+      - "8765:8765"   # expose for direct API access / debugging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s   # data loading takes time
+    networks:
+      - mam_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      # No API tokens required -- using MapLibre GL JS with free CARTO tiles
+    container_name: mam_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - mam_net
+
+networks:
+  mam_net:
+    driver: bridge

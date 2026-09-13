@@ -1,0 +1,10 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+frontend/node_modules
+frontend/dist
+**/.git
+**/.DS_Store
+*.md
+*.txt
+!backend/requirements.txt

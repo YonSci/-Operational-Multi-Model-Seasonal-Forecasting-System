@@ -1,0 +1,11 @@
+# package.json change required
+# In your frontend/ directory, run:
+#
+#   npm uninstall mapbox-gl
+#   npm install maplibre-gl
+#
+# Then replace in package.json:
+#   "mapbox-gl": "..." -> "maplibre-gl": "^4.x.x"
+#
+# If you have a lockfile, delete node_modules and package-lock.json then:
+#   npm install
