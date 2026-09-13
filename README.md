@@ -30,6 +30,7 @@ Developed for **ILRI (International Livestock Research Institute) Climate Servic
   - [Environment Configuration](#environment-configuration)
   - [Local Development](#local-development)
   - [Docker Deployment](#docker-deployment)
+  - [Cloud Deployment (Render & Vercel)](#cloud-deployment-render--vercel)
 - [API Documentation](#api-documentation)
 - [Dashboard Features](#dashboard-features)
 - [Contributors & Attribution](#contributors--attribution)
@@ -269,6 +270,38 @@ Test the container deployment:
 ```bash
 python docker/test_deployment.py
 ```
+
+---
+
+### Cloud Deployment (Render & Vercel)
+
+The system is architected for decoupled cloud deployment: **FastAPI backend on Render** and **React frontend on Vercel**.
+
+#### 1. Backend Deployment on Render (Web Service)
+1. Sign in to [Render](https://render.com) and click **"New +"** $\rightarrow$ **"Web Service"**.
+2. Select **"Build and deploy from a Git repository"** and choose `YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System`.
+3. Configure the service settings:
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Instance Type**: `Free`
+4. Add Environment Variables:
+   - `PYTHON_VERSION`: `3.11.9`
+   - `OP_YEAR`: `2026`
+   - `LOAD_BC_DAILY`: `0` *(Crucial on Render free tier (512MB RAM): prevents loading 4GB of daily precipitation arrays into RAM to eliminate Out-of-Memory crashes).*
+5. Click **"Create Web Service"**. Once deployed, copy your backend URL (e.g. `https://seasonal-forecast-backend.onrender.com`).
+
+#### 2. Frontend Deployment on Vercel
+1. Sign in to [Vercel](https://vercel.com) and click **"Add New..."** $\rightarrow$ **"Project"**.
+2. Import `YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System`.
+3. Build Settings:
+   - The repository includes root-level redirection scripts and `vercel.json` so you can leave the **Root Directory** as default `./` or set it to **`frontend`**.
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist` (or `frontend/dist`)
+4. Add Environment Variables:
+   - `VITE_API_BASE`: `https://<your-backend-name>.onrender.com` *(paste your live Render backend URL from step 1, without a trailing slash)*
+5. Click **"Deploy"**. Vercel will build the frontend and provide your production URL (e.g. `https://<project-name>.vercel.app`).
 
 ---
 
