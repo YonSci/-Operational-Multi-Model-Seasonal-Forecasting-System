@@ -1,14 +1,21 @@
 import { useQuery } from '@tanstack/react-query'
 
-const BASE = import.meta.env.VITE_API_BASE ?? '/api'
+const rawBase = import.meta.env.VITE_API_BASE || '/api'
+export const API_BASE = rawBase.replace(/\/+$/, '')
 
 // -- Fetch helpers ---------------------------------------------------------
 
 async function fetchJSON(path) {
-  const res = await fetch(`${BASE}${path}`)
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  const url = `${API_BASE}${cleanPath}`
+  const res = await fetch(url)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`API ${res.status}: ${text}`)
+  }
+  const contentType = res.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Expected JSON from API at ${url} but received ${contentType}. Check VITE_API_BASE.`)
   }
   return res.json()
 }

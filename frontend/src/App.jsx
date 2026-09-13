@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, Area, Scatter, Customized, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer
 } from 'recharts'
-import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation } from './api/queries'
+import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation, API_BASE } from './api/queries'
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
@@ -1411,7 +1411,7 @@ const TABS = [
   {id:'about',         label:'About',         icon:'?'},
 ]
 
-function TopNav({ activeTab, setActiveTab, health, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick }) {
+function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick }) {
   const modelNames = modelsData?.models ? Object.keys(modelsData.models) : []
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 8px',fontSize:11,fontWeight:600,cursor:'pointer',outline:'none'}
   return (
@@ -1441,7 +1441,9 @@ function TopNav({ activeTab, setActiveTab, health, modelsData, country, setCount
         </div>
         <div className="flex items-center gap-2">
           <div className={'w-1.5 h-1.5 rounded-full '+(health?.status==='ok'?'bg-emerald-400':'bg-red-400')}/>
-          <span style={{fontSize:10,color:'var(--header-muted)'}}>{health?.status==='ok'?health.models_loaded+' models live':'connecting...'}</span>
+          <span style={{fontSize:10,color:health?.status==='ok'?'var(--header-muted)':'#f87171'}}>
+            {health?.status==='ok' ? health.models_loaded+' models live' : healthError ? 'backend offline' : 'connecting...'}
+          </span>
           <button onClick={()=>setDarkMode(d=>!d)} className="ml-3 px-2 py-1 rounded-md text-[10px] border transition-colors" style={{background:'var(--bg-elevated)',borderColor:'var(--border-primary)',color:'var(--accent-blue)'}}>
             {darkMode?'Light mode':'Dark mode'}
           </button>
@@ -1488,7 +1490,7 @@ export default function App() {
     setSelectedInit(s.init)
   }
 
-  const { data: health }                               = useHealth()
+  const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
   const { data: modelsData, isLoading: modelsLoading } = useModels()
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
   const activeModels    = useDashboardStore(s=>s.activeModels)
@@ -1515,7 +1517,7 @@ export default function App() {
     if (!modelsLoaded||!selectedModel) return
     const model = selectedModel!=='multimodel'?selectedModel:''
     const {variable,layer}=mapLayer
-    const url='/api/grid?variable='+variable+'&layer='+layer+'&bust=true'+(model?'&model='+encodeURIComponent(model):'')
+    const url = `${API_BASE}/grid?variable=${variable}&layer=${layer}&bust=true` + (model ? `&model=${encodeURIComponent(model)}` : '')
     const ctrl=new AbortController()
     fetch(url,{signal:ctrl.signal})
       .then(r=>{if(!r.ok) throw new Error('HTTP '+r.status);return r.json()})
@@ -1536,7 +1538,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-base)',fontFamily:"'IBM Plex Mono','Fira Code',monospace"}}>
       <TopNav activeTab={activeTab} setActiveTab={setActiveTab} onLogoClick={()=>setShowLanding(true)}
-              health={health} modelsData={modelsData}
+              health={health} healthLoading={healthLoading} healthError={healthError} modelsData={modelsData}
               country={country} setCountry={setCountry}
               selectedSeason={selectedSeason} onSeasonChange={changeSeason}
               selectedModel={selectedModel} setSelectedModel={setSelectedModel}

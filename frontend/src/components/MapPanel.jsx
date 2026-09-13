@@ -5,38 +5,34 @@ import useDashboardStore from '../store/useDashboardStore'
 
 // MapLibre GL JS -- no token required
 
-// Free CARTO basemap styles (no account / API key needed)
+// Clean basemap styles (100% free, no API key or watermark required)
 const STYLE_DARK  = {
   "version": 8,
   "sources": {
-    "carto-dark": {
+    "esri-dark": {
       "type": "raster",
       "tiles": [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
       ],
       "tileSize": 256,
-      "attribution": "(c) CARTO (c) OpenStreetMap contributors"
+      "attribution": "(c) Esri, HERE, Garmin, (c) OpenStreetMap contributors"
     }
   },
-  "layers": [{ "id": "carto-dark-layer", "type": "raster", "source": "carto-dark" }]
+  "layers": [{ "id": "esri-dark-layer", "type": "raster", "source": "esri-dark" }]
 }
 const STYLE_LIGHT = {
   "version": 8,
   "sources": {
-    "carto-light": {
+    "esri-light": {
       "type": "raster",
       "tiles": [
-        "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
       ],
       "tileSize": 256,
-      "attribution": "(c) CARTO (c) OpenStreetMap contributors"
+      "attribution": "(c) Esri, HERE, Garmin, (c) OpenStreetMap contributors"
     }
   },
-  "layers": [{ "id": "carto-light-layer", "type": "raster", "source": "carto-light" }]
+  "layers": [{ "id": "esri-light-layer", "type": "raster", "source": "esri-light" }]
 }
 const STYLE_OSM = {
   "version": 8,
