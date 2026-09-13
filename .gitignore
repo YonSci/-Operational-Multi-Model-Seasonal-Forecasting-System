@@ -15,6 +15,7 @@ __pycache__/
 *.egg-info/
 
 # Data (large NetCDF, Zarr, and pipeline outputs)
+!backend/demo_data.npz
 outputs/
 outputs_*/
 CHIRPS/

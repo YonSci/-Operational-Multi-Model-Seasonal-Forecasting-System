@@ -84,4 +84,5 @@ def health():
         "models_loaded": len(s.get("MODELS", {})),
         "model_names"  : list(s.get("MODELS", {}).keys()),
         "chirps_onset_mean_doy": on_mean,
+        "demo_mode"    : s.get("demo_mode", False),
     }

@@ -329,30 +329,136 @@ def _load_model(name, out_dir, chirps):
                 op_idx=op_idx, n_members=n_members,
                 color=MODEL_COLORS.get(name,"#888888"), model_years=model_years)
 
+# ── Demo / Cloud fallback loader ──────────────────────────────────────────
+def _load_demo_npz():
+    npz_path = os.path.join(os.path.dirname(__file__), "demo_data.npz")
+    if not os.path.exists(npz_path):
+        npz_path = os.path.join(_REPO_ROOT, "backend", "demo_data.npz")
+    if not os.path.exists(npz_path):
+        raise FileNotFoundError(f"demo_data.npz not found at {npz_path}")
+
+    print(f"[data_loader] Loading demo dataset from {npz_path}...")
+    data = np.load(npz_path)
+    target_lat = data["target_lat"].astype(np.float64)
+    target_lon = data["target_lon"].astype(np.float64)
+    n_lat, n_lon = len(target_lat), len(target_lon)
+    lm = data["lm"].astype(bool)
+    onset_doy = data["chirps_onset"]
+    cessation_doy = data["chirps_cessation"]
+    lgp_days = data["chirps_lgp"]
+    chirps_years = data["chirps_years"]
+    cal_mask = np.isin(chirps_years, CAL_YEARS)
+    cal_idx = np.where(cal_mask)[0]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        chirps_clim = {
+            "onset": np.where(lm, np.nanmean(onset_doy[cal_mask], axis=0), np.nan).astype(np.float32),
+            "cessation": np.where(lm, np.nanmean(cessation_doy[cal_mask], axis=0), np.nan).astype(np.float32),
+            "lgp": np.where(lm, np.nanmean(lgp_days[cal_mask], axis=0), np.nan).astype(np.float32),
+        }
+
+    chirps = dict(
+        onset_doy=onset_doy, cessation_doy=cessation_doy, lgp_days=lgp_days,
+        C_clim=data["C_clim"], Q_bar=data["Q_bar"], d_s=data["d_s"], d_e=data["d_e"],
+        t33_onset=data["t33_onset"], t67_onset=data["t67_onset"],
+        t33_cess=data["t33_cess"], t67_cess=data["t67_cess"],
+        t33_lgp=data["t33_lgp"], t67_lgp=data["t67_lgp"],
+        target_lat=target_lat, target_lon=target_lon,
+        n_lat=n_lat, n_lon=n_lon, lm=lm,
+        chirps_years=chirps_years, cal_idx=cal_idx, cal_mask=cal_mask,
+        chirps_clim=chirps_clim,
+    )
+
+    models_map = [
+        ("ECMWF SEAS5", "ecmwf"),
+        ("UKMO GloSea6", "ukmo"),
+        ("Meteo-France Sys8", "mf"),
+        ("DWD GCFS2.1", "dwd"),
+        ("CMCC-SPS4", "cmcc"),
+        ("NCEP CFSv2", "ncep"),
+        ("ECCC CanSIPS", "eccc"),
+    ]
+
+    MODELS = {}
+    for name, k in models_map:
+        if f"{k}_onset" not in data: continue
+        m_on = data[f"{k}_onset"]
+        m_cs = data[f"{k}_cessation"]
+        m_lg = data[f"{k}_lgp"]
+        m_years = data[f"{k}_years"]
+        op_mask = m_years == _OP_YEAR
+        op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
+        n_members = int(m_on.shape[0])
+
+        probs_damped = {
+            "onset": data[f"{k}_p_on"],
+            "cessation": data[f"{k}_p_cs"],
+            "lgp": data[f"{k}_p_lg"],
+        }
+        alpha = {
+            "onset": data[f"{k}_a_on"],
+            "cessation": data[f"{k}_a_cs"],
+            "lgp": data[f"{k}_a_lg"],
+        }
+        hitrate_cal = {
+            "onset": data[f"{k}_h_on"],
+            "cessation": data[f"{k}_h_cs"],
+            "lgp": data[f"{k}_h_lg"],
+        }
+        hitrate_val = {
+            "onset": data[f"{k}_h_on"],
+            "cessation": data[f"{k}_h_cs"],
+            "lgp": data[f"{k}_h_lg"],
+        }
+        rpss_val = {
+            "onset": data[f"{k}_r_on"],
+            "cessation": data[f"{k}_r_cs"],
+            "lgp": data[f"{k}_r_lg"],
+        }
+
+        # Daily rainfall array for pixel cumulative curves
+        bc_daily = np.zeros((n_members, len(m_years), 182, n_lat, n_lon), dtype=np.float32)
+
+        MODELS[name] = dict(
+            onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
+            bc_daily=bc_daily, probs_damped=probs_damped, alpha=alpha,
+            hitrate_cal=hitrate_cal, hitrate_val=hitrate_val, rpss_val=rpss_val,
+            op_idx=op_idx, n_members=n_members,
+            color=MODEL_COLORS.get(name, "#888888"), model_years=m_years
+        )
+
+    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset.")
+    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True}
+
 # ── Main load ──────────────────────────────────────────────────────────────
 def load(force=False):
     global _state, _loaded
     if _loaded and not force: return
     if not _configured: configure()
-    chirps_dir = _resolve_chirps_dir(_BASE_DIR, MODEL_DIRS)
-    chirps = _load_chirps(chirps_dir)
-    print("[data_loader] Loading model outputs ...")
-    MODELS = {}
-    for name, out_dir in MODEL_DIRS.items():
-        entry = _load_model(name, out_dir, chirps)
-        if entry is not None: MODELS[name] = entry
-    if not MODELS:
-        expected = "\n".join(f"  - {k}: {v}" for k, v in MODEL_DIRS.items())
-        raise RuntimeError(
-            "No models loaded.\n"
-            f"BASE_DIR={_BASE_DIR}\n"
-            "Expected model directories (or equivalent aliases):\n"
-            f"{expected}\n"
-            "Check BASE_DIR and run pipeline notebooks first."
-        )
-    print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models. Ready.")
-    _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR}
-    _loaded = True
+    try:
+        chirps_dir = _resolve_chirps_dir(_BASE_DIR, MODEL_DIRS)
+        chirps = _load_chirps(chirps_dir)
+        print("[data_loader] Loading model outputs ...")
+        MODELS = {}
+        for name, out_dir in MODEL_DIRS.items():
+            entry = _load_model(name, out_dir, chirps)
+            if entry is not None: MODELS[name] = entry
+        if not MODELS:
+            raise RuntimeError("No models loaded from NetCDF files.")
+        print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
+        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False}
+        _loaded = True
+    except Exception as exc:
+        print(f"[data_loader] Raw NetCDF data not available ({type(exc).__name__}: {exc})")
+        print("[data_loader] Initializing cloud demo mode from demo_data.npz...")
+        try:
+            _state = _load_demo_npz()
+            _loaded = True
+            print(f"[data_loader] Cloud demo mode ready with {len(_state.get('MODELS', {}))} models live.")
+        except Exception as demo_exc:
+            print(f"[data_loader] ERROR: Failed to load demo state: {demo_exc}")
+            raise
 
 def is_loaded(): return _loaded
 def get_state():
@@ -627,27 +733,30 @@ def get_taylor_stats():
     s, lm, cal_idx = _state, _state["lm"], _state["cal_idx"]
     MODELS = s["MODELS"]
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore",RuntimeWarning)
-        obs_ts  = np.nanmean(s["onset_doy"][cal_idx][:,lm], axis=1)
+        warnings.simplefilter("ignore", RuntimeWarning)
+        obs_ts = np.nanmean(s["onset_doy"][cal_idx][:, lm], axis=1)
         obs_std = float(np.nanstd(obs_ts, ddof=1)) or 1.0
+    obs_years = s["chirps_years"][cal_idx]
     results = {}
     for name, md in MODELS.items():
-        ci = np.where(np.isin(md["model_years"], CAL_YEARS))[0]
-        if len(ci) < 5: continue
+        common_years = np.intersect1d(obs_years, md["model_years"])
+        if len(common_years) < 4: continue
+        obs_sub_idx = [int(np.where(obs_years == y)[0][0]) for y in common_years]
+        mod_sub_idx = [int(np.where(md["model_years"] == y)[0][0]) for y in common_years]
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore",RuntimeWarning)
-            mod_ts = np.nanmean(np.nanmean(md["onset_doy"][:,ci,:,:][:,:,lm],axis=0),axis=1)
-        n = min(len(obs_ts), len(mod_ts)); o, m = obs_ts[:n], mod_ts[:n]
-        v = ~(np.isnan(o)|np.isnan(m))
+            warnings.simplefilter("ignore", RuntimeWarning)
+            o = obs_ts[obs_sub_idx]
+            m = np.nanmean(np.nanmean(md["onset_doy"][:, mod_sub_idx, :, :][:, :, lm], axis=0), axis=1)
+        v = ~(np.isnan(o) | np.isnan(m))
         if v.sum() < 4: continue
-        corr   = float(np.corrcoef(o[v], m[v])[0,1])
+        corr   = float(np.corrcoef(o[v], m[v])[0, 1])
         std_n  = float(np.nanstd(m[v], ddof=1)) / obs_std
         o_c    = o[v] - np.nanmean(o[v]); m_c = m[v] - np.nanmean(m[v])
-        rmse_n = float(np.sqrt(np.mean((m_c-o_c)**2))) / obs_std
-        results[name] = dict(corr=round(max(-1.0,min(1.0,corr)),4),
-                             std_n=round(std_n,4), rmse_n=round(rmse_n,4),
+        rmse_n = float(np.sqrt(np.mean((m_c - o_c)**2))) / obs_std
+        results[name] = dict(corr=round(max(-1.0, min(1.0, corr)), 4),
+                             std_n=round(std_n, 4), rmse_n=round(rmse_n, 4),
                              color=md["color"], n_years=int(v.sum()))
-    return dict(obs_std=round(obs_std,3), models=results)
+    return dict(obs_std=round(obs_std, 3), models=results)
 
 # ── Self-test ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
@@ -655,22 +764,22 @@ if __name__ == "__main__":
     base = sys.argv[1] if len(sys.argv) > 1 else _BASE_DIR
     configure(base_dir=base)
     load()
-    print("\n── Model info ──────────────────────────────────")
+    print("\n-- Model info ----------------------------------")
     for m in get_model_info():
         print(f"  {m['name']:<24} {m['n_members']:>3} mem  "
               f"HR={m['hr_onset']}  {'PASS' if m['skill_pass'] else 'low'}")
-    print("\n── Pixel test (site 0) ─────────────────────────")
+    print("\n-- Pixel test (site 0) -------------------------")
     px = get_pixel_stats(SITES[0]["lat"], SITES[0]["lon"])
-    print(f"  Pixel: ({px['pi']},{px['pj']}) lat={px['glat']:.3f} lon={px['glon']:.3f} Δ={px['delta_km']}km")
+    print(f"  Pixel: ({px['pi']},{px['pj']}) lat={px['glat']:.3f} lon={px['glon']:.3f} delta={px['delta_km']}km")
     for mn, ms in px["models"].items():
         sp = ms["on_p90"]-ms["on_p10"]
         print(f"  {mn:<24} P50=DOY{ms['on_med']:.0f}  anom={ms['on_anom']:+.1f}d  spread={sp:.0f}d")
-    print("\n── Taylor stats ────────────────────────────────")
+    print("\n-- Taylor stats --------------------------------")
     t = get_taylor_stats()
     print(f"  obs_std={t['obs_std']}d")
     for mn, ts in t["models"].items():
         print(f"  {mn:<24} corr={ts['corr']:.3f}  std_n={ts['std_n']:.3f}  rmse_n={ts['rmse_n']:.3f}")
-    print("\n── Grid stats (onset/anomaly) ───────────────────")
+    print("\n-- Grid stats (onset/anomaly) -------------------")
     g = get_grid_stats("onset","anomaly")
     print(f"  vmin={g['vmin']}  vmax={g['vmax']}  units={g['units']}")
     print("\ndata_loader self-test complete.")
