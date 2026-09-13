@@ -2,7 +2,6 @@
   "name": "seasonal-forecast-system",
   "private": true,
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
-    "install-all": "cd frontend && npm install"
+    "build": "cd frontend && npm install --legacy-peer-deps && npm run build"
   }
 }
