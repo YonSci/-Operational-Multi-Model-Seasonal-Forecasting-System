@@ -34,9 +34,9 @@ def list_sites():
         if dl.is_loaded():
             try:
                 px = dl.get_pixel_stats(s["lat"], s["lon"])
-                entry.update(pi=px["pi"], pj=px["pj"],
-                             glat=px["glat"], glon=px["glon"],
-                             dkm=px["delta_km"])
+                entry.update(pi=int(px["pi"]), pj=int(px["pj"]),
+                             glat=float(px["glat"]), glon=float(px["glon"]),
+                             dkm=float(px["delta_km"]))
             except Exception: pass
         result.append(entry)
     return {"sites": result, "count": len(result)}

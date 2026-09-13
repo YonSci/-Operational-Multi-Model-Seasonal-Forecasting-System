@@ -494,7 +494,7 @@ def _nearest_pixel(lat, lon):
             dist = np.sqrt(((lat_arr[i]-lat)*111)**2 +
                            ((lon_arr[j]-lon)*111*np.cos(np.radians(lat_arr[i])))**2)
             if dist < best_dist: best_dist, best_pi, best_pj = dist, i, j
-    return best_pi, best_pj
+    return int(best_pi), int(best_pj)
 
 def _pct(arr, q): return float(np.percentile(arr,q)) if len(arr)>0 else float("nan")
 
