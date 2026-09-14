@@ -7,6 +7,7 @@ import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
+import BulletinModal from './components/BulletinModal'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1436,7 +1437,7 @@ const TABS = [
   {id:'about',         label:'About',         icon:'?'},
 ]
 
-function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick }) {
+function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
   const modelNames = modelsData?.models ? Object.keys(modelsData.models) : []
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 8px',fontSize:11,fontWeight:600,cursor:'pointer',outline:'none'}
   return (
@@ -1464,12 +1465,27 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
             <span style={{fontSize:9,color:'var(--header-muted)',marginLeft:4}}>Init {INIT_LABELS[selectedInit]??selectedInit}</span>
           </>)}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={onOpenBulletin}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.45))',
+              border: '1px solid rgba(245, 158, 11, 0.75)',
+              color: '#fbbf24',
+              boxShadow: '0 0 14px -2px rgba(245, 158, 11, 0.25)'
+            }}
+            title="Generate publication seasonal forecast bulletin for selected point or custom coordinates (PDF / PNG)"
+          >
+            <span>📄</span>
+            <span>Generate Bulletin</span>
+          </button>
           <div className={'w-1.5 h-1.5 rounded-full '+(health?.status==='ok'?'bg-emerald-400':'bg-red-400')}/>
           <span style={{fontSize:10,color:health?.status==='ok'?'var(--header-muted)':'#f87171'}}>
             {health?.status==='ok' ? health.models_loaded+' models live' : healthError ? 'backend offline' : 'connecting...'}
           </span>
-          <button onClick={()=>setDarkMode(d=>!d)} className="ml-3 px-2 py-1 rounded-md text-[10px] border transition-colors" style={{background:'var(--bg-elevated)',borderColor:'var(--border-primary)',color:'var(--accent-blue)'}}>
+          <button onClick={()=>setDarkMode(d=>!d)} className="ml-1 px-2 py-1 rounded-md text-[10px] border transition-colors" style={{background:'var(--bg-elevated)',borderColor:'var(--border-primary)',color:'var(--accent-blue)'}}>
             {darkMode?'Light mode':'Dark mode'}
           </button>
         </div>
@@ -1498,6 +1514,7 @@ export default function App() {
   const [selectedYear,  setSelectedYear]  = useState(2026)
   const [selectedInit,  setSelectedInit]  = useState('0201')
   const [selectedSeason,setSelectedSeason]= useState('long_rains')
+  const [bulletinModalOpen, setBulletinModalOpen] = useState(false)
 
   useEffect(()=>{document.documentElement.classList.toggle('light',!darkMode)},[darkMode])
 
@@ -1569,6 +1586,7 @@ export default function App() {
               selectedModel={selectedModel} setSelectedModel={setSelectedModel}
               selectedYear={selectedYear} setSelectedYear={setSelectedYear}
               selectedInit={selectedInit}
+              onOpenBulletin={()=>setBulletinModalOpen(true)}
               darkMode={darkMode} setDarkMode={setDarkMode}/>
       {modelsLoading?(
         <div className="flex items-center justify-center flex-1">
@@ -1579,7 +1597,7 @@ export default function App() {
           {activeTab!=='about'&&(
           <div className="shrink-0 flex flex-col" style={{width:'40%',minWidth:320,maxWidth:520}}>
             <div className="flex-1 min-h-0">
-              <MapPanel darkMode={darkMode} selectedModel={selectedModel} gridData={mapGridData} onLayerChange={setMapLayer} activeTab={activeTab} country={country}/>
+              <MapPanel darkMode={darkMode} selectedModel={selectedModel} gridData={mapGridData} onLayerChange={setMapLayer} activeTab={activeTab} country={country} onOpenBulletin={()=>setBulletinModalOpen(true)}/>
             </div>
           </div>
           )}
@@ -1593,6 +1611,11 @@ export default function App() {
           </div>
         </div>
       )}
+      <BulletinModal
+        isOpen={bulletinModalOpen}
+        onClose={()=>setBulletinModalOpen(false)}
+        selectedSite={selectedSite}
+      />
     </div>
   )
 }

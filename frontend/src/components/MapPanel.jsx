@@ -533,7 +533,7 @@ function applyBoundaryLayers(map, boundaryData, showAdmin0, showAdmin1, darkMode
 }
 
 // -- Main: gridData arrives as prop from App.jsx ---------------------------
-export default function MapPanel({darkMode=false, selectedModel='', gridData=null, onLayerChange, activeTab='', country='kenya'}) {
+export default function MapPanel({darkMode=false, selectedModel='', gridData=null, onLayerChange, activeTab='', country='kenya', onOpenBulletin}) {
   const mapContainer = useRef(null)
   const mapRef       = useRef(null)
   const darkRef      = useRef(darkMode)
@@ -1143,6 +1143,30 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
             <span style={{color:'var(--text-faint)'}}>
               ({selectedSite.lat.toFixed(2)}°, {selectedSite.lon.toFixed(2)}°)
             </span>
+            {onOpenBulletin && (
+              <button
+                type="button"
+                onClick={onOpenBulletin}
+                title="Generate PDF/PNG Bulletin for this point"
+                style={{
+                  marginLeft: 4,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  fontSize: 8,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: 'rgba(245, 158, 11, 0.2)',
+                  border: '1px solid rgba(245, 158, 11, 0.6)',
+                  color: '#fbbf24',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <span>📄</span>
+                <span>BULLETIN</span>
+              </button>
+            )}
           </div>
         )}
 

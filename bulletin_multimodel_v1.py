@@ -466,7 +466,8 @@ def _draw_ad_plume(ax, pi, pj):
     ax.axvspan(_de_px, WIN_DOY_END,   color="#EEF2F7", alpha=0.25, zorder=0)
     ax.axhline(0, color="black", lw=0.7, ls="--", alpha=0.35)
 
-    ax.plot(_win_doys, _c_clim_px, color=COL_CHIRPS,
+    _nc        = min(len(_win_doys), len(_c_clim_px))
+    ax.plot(_win_doys[:_nc], _c_clim_px[:_nc], color=COL_CHIRPS,
             lw=2.8, zorder=6, label="CHIRPS CAL C(d)")
 
     ax.plot(_ds_px, _c_clim_px[_ds_k], "o",
@@ -498,11 +499,11 @@ def _draw_ad_plume(ax, pi, pj):
         if np.all(all_bc == 0):
             continue
 
-        # Trim _win_doys to match actual forecast days (181 or 182)
-        _nd    = all_bc.shape[1]
+        # Trim _win_doys and all_bc to match actual forecast days and window
+        _nd    = min(all_bc.shape[1], len(_win_doys))
         _wdoys = _win_doys[:_nd]
 
-        A_all  = np.nancumsum(all_bc - Q_bar_px, axis=1)
+        A_all  = np.nancumsum(all_bc[:, :_nd] - Q_bar_px, axis=1)
         A_med  = np.nanmedian(A_all, axis=0)
         ax.plot(_wdoys, A_med, color=col, lw=1.6,
                 zorder=5, label=mkey, alpha=0.88)

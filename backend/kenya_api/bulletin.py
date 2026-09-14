@@ -20,9 +20,9 @@ def generate_bulletin(req: BulletinRequest):
     """Generate a multi-model bulletin PNG/PDF for the requested site."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
-    if not os.path.exists(_BULLETIN_SCRIPT):
-        raise HTTPException(500, f"Bulletin script not found: {_BULLETIN_SCRIPT}")
-    if req.fmt not in ("png","pdf"):
+    site_name = req.site_name.strip() if req.site_name and req.site_name.strip() else f"Location_{req.lat:.3f}_{req.lon:.3f}"
+    fmt = req.fmt.lower().strip()
+    if fmt not in ("png", "pdf"):
         raise HTTPException(400, "fmt must be png or pdf")
 
     s = dl.get_state()
@@ -71,24 +71,30 @@ def generate_bulletin(req: BulletinRequest):
             fn = g.get("generate_mm_bulletin")
             if fn is None:
                 raise RuntimeError("generate_mm_bulletin not found in bulletin script")
-            png_path = fn(req.site_name, req.lat, req.lon)
+            png_path = fn(site_name, float(req.lat), float(req.lon))
         except Exception as e:
             import traceback
             raise HTTPException(500, f"Bulletin error: {e}\n{traceback.format_exc()}")
 
         out_path  = png_path
         media     = "image/png"; suffix = ".png"
-        if req.fmt == "pdf":
+        if fmt == "pdf":
             out_path = png_path.replace(".png",".pdf")
-            _png_to_pdf(png_path, out_path, req.site_name)
+            _png_to_pdf(png_path, out_path, site_name)
             media = "application/pdf"; suffix = ".pdf"
 
-        safe = req.site_name.replace(" ","_").replace(",","").replace("/","-")
+        safe = site_name.replace(" ","_").replace(",","").replace("/","-")
         fname = f"bulletin_mm_{safe}_MAM{dl._OP_YEAR}{suffix}"
         with open(out_path,"rb") as f: content = f.read()
 
-    return Response(content=content, media_type=media,
-                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+    return Response(
+        content=content,
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
+    )
 
 
 def _has_cartopy():

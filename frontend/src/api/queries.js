@@ -115,3 +115,55 @@ export function useValidation() {
     staleTime: Infinity,
   })
 }
+
+/**
+ * POST /bulletin -- generate and download publication bulletin (PDF or PNG)
+ */
+export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf' }) {
+  const cleanFmt = fmt.toLowerCase() === 'png' ? 'png' : 'pdf'
+  const url = `${API_BASE}/bulletin`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      site_name: site_name || `Location_${Number(lat).toFixed(3)}_${Number(lon).toFixed(3)}`,
+      lat: Number(lat),
+      lon: Number(lon),
+      fmt: cleanFmt,
+    }),
+  })
+
+  if (!res.ok) {
+    let errDetail = ''
+    try {
+      const errJson = await res.json()
+      errDetail = errJson.detail || JSON.stringify(errJson)
+    } catch {
+      errDetail = await res.text()
+    }
+    throw new Error(errDetail || `Server error (${res.status})`)
+  }
+
+  const blob = await res.blob()
+  const disposition = res.headers.get('content-disposition') || ''
+  let filename = `bulletin_mm_${(site_name || 'site').replace(/[^a-zA-Z0-9_-]/g, '_')}_MAM2026.${cleanFmt}`
+  const match = disposition.match(/filename="?([^";]+)"?/)
+  if (match && match[1]) {
+    filename = match[1].trim()
+  }
+
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000)
+
+  return { filename, size: blob.size }
+}
+
