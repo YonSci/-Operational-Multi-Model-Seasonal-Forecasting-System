@@ -8,9 +8,37 @@ import mam_loader as dl
 
 router = APIRouter()
 
-_BULLETIN_SCRIPT = os.path.join(
-    os.path.dirname(__file__), "..", "..", "bulletin_multimodel_v1.py"
-)
+def _find_bulletin_script():
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "..", "bulletin_multimodel_v1.py"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "bulletin_multimodel_v1.py"),
+        os.path.join(os.getcwd(), "backend", "bulletin_multimodel_v1.py"),
+        os.path.join(os.getcwd(), "bulletin_multimodel_v1.py"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+    return os.path.abspath(candidates[0])
+
+_COMPILED_BULLETIN = None
+
+def _get_compiled_bulletin():
+    global _COMPILED_BULLETIN
+    if _COMPILED_BULLETIN is not None:
+        return _COMPILED_BULLETIN
+    script_path = _find_bulletin_script()
+    if not os.path.isfile(script_path):
+        raise FileNotFoundError(f"Bulletin generator script not found at {script_path}")
+    with open(script_path, encoding="utf-8") as f:
+        bsrc = f.read()
+    cut = len(bsrc)
+    for marker in ["# BATCH RUN", "\nfor s in SITES:"]:
+        pos = bsrc.find(marker)
+        if pos > 0:
+            cut = pos
+            break
+    _COMPILED_BULLETIN = compile(bsrc[:cut], script_path, "exec")
+    return _COMPILED_BULLETIN
 
 class BulletinRequest(BaseModel):
     site_name: str; lat: float; lon: float; fmt: str = "png"
@@ -25,10 +53,13 @@ def generate_bulletin(req: BulletinRequest):
     if fmt not in ("png", "pdf"):
         raise HTTPException(400, "fmt must be png or pdf")
 
+    import gc
+    gc.collect()
     s = dl.get_state()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        import matplotlib; matplotlib.use("Agg")
+        import matplotlib
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
         import matplotlib.patches as mpatches
@@ -50,20 +81,17 @@ def generate_bulletin(req: BulletinRequest):
             "CAL_YEARS": dl.CAL_YEARS, "OP_YEAR": dl._OP_YEAR,
             "WIN_DOY_START": dl.WIN_DOY_START, "WIN_DOY_END": dl.WIN_DOY_END,
             "BULLETIN_DIR": tmpdir,
+            "BULLETIN_DPI": 100,
             "HAS_CARTOPY": _has_cartopy(),
             "os": os, "np": np,
             "plt": plt, "gridspec": gridspec,
             "mpatches": mpatches, "mpl": mpl,
         }
         try:
-            with open(_BULLETIN_SCRIPT, encoding="utf-8") as f: bsrc = f.read()
-            cut = len(bsrc)
-            for marker in ["# BATCH RUN", "\nfor s in SITES:"]:
-                pos = bsrc.find(marker)
-                if pos > 0: cut = pos; break
+            compiled = _get_compiled_bulletin()
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                exec(compile(bsrc[:cut], _BULLETIN_SCRIPT, "exec"), g)
+                exec(compiled, g)
             def _hline(ax, y, color, lw=1.0, ls="-", x0=0.0, x1=1.0):
                 ax.plot([x0,x1],[y,y],color=color,lw=lw,ls=ls,
                         transform=ax.transAxes,clip_on=False,zorder=10)
@@ -72,7 +100,11 @@ def generate_bulletin(req: BulletinRequest):
             if fn is None:
                 raise RuntimeError("generate_mm_bulletin not found in bulletin script")
             png_path = fn(site_name, float(req.lat), float(req.lon))
+            plt.close("all")
+            del g
+            gc.collect()
         except Exception as e:
+            plt.close("all")
             import traceback
             raise HTTPException(500, f"Bulletin error: {e}\n{traceback.format_exc()}")
 
@@ -80,13 +112,14 @@ def generate_bulletin(req: BulletinRequest):
         media     = "image/png"; suffix = ".png"
         if fmt == "pdf":
             out_path = png_path.replace(".png",".pdf")
-            _png_to_pdf(png_path, out_path, site_name)
+            _png_to_pdf(png_path, out_path, site_name, dpi=100)
             media = "application/pdf"; suffix = ".pdf"
 
         safe = site_name.replace(" ","_").replace(",","").replace("/","-")
         fname = f"bulletin_mm_{safe}_MAM{dl._OP_YEAR}{suffix}"
         with open(out_path,"rb") as f: content = f.read()
 
+    gc.collect()
     return Response(
         content=content,
         media_type=media,
@@ -101,21 +134,29 @@ def _has_cartopy():
     try: import cartopy; return True
     except ImportError: return False
 
-def _png_to_pdf(png_path, pdf_path, title):
+def _png_to_pdf(png_path, pdf_path, title, dpi=100):
+    import gc
+    gc.collect()
     from reportlab.lib.pagesizes import A3
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as _rl
     from PIL import Image as _PIL
     _PIL.MAX_IMAGE_PIXELS = None
-    pw,ph=A3; mg=10*mm
-    img=_PIL.open(png_path); iw,ih=img.size
-    scale=min((pw-2*mg)/(iw/150*72),(ph-2*mg)/(ih/150*72))
-    dw=iw/150*72*scale; dh=ih/150*72*scale
-    xo=mg+((pw-2*mg)-dw)/2; yo=mg+((ph-2*mg)-dh)/2
-    c=_rl.Canvas(pdf_path,pagesize=(pw,ph))
-    c.setTitle(title); c.setAuthor("ICPAC / ILRI Climate Services")
-    c.drawImage(png_path,xo,yo,width=dw,height=dh,preserveAspectRatio=True,mask="auto")
+    pw, ph = A3
+    mg = 10 * mm
+    with _PIL.open(png_path) as img:
+        iw, ih = img.size
+        scale = min((pw - 2 * mg) / (iw / dpi * 72), (ph - 2 * mg) / (ih / dpi * 72))
+        dw = (iw / dpi * 72) * scale
+        dh = (ih / dpi * 72) * scale
+        xo = mg + ((pw - 2 * mg) - dw) / 2
+        yo = mg + ((ph - 2 * mg) - dh) / 2
+    c = _rl.Canvas(pdf_path, pagesize=(pw, ph))
+    c.setTitle(title)
+    c.setAuthor("ICPAC / ILRI Climate Services")
+    c.drawImage(png_path, xo, yo, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
     c.save()
+    gc.collect()
 
 
 @router.get("/export")

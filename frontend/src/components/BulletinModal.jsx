@@ -95,7 +95,11 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
       clearTimeout(msgTimer1)
       clearTimeout(msgTimer2)
       console.error('[Bulletin generation error]', err)
-      setError(err.message || 'Bulletin generation failed. Please try again.')
+      let displayError = err.message || 'Bulletin generation failed. Please try again.'
+      if (displayError.includes('Failed to fetch')) {
+        displayError = 'Could not reach the forecast server. The backend may still be starting up or rendering. Please try again in 15 seconds.'
+      }
+      setError(displayError)
     } finally {
       setIsGenerating(false)
       setProgressMsg('')

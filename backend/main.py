@@ -48,9 +48,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # Allow all origins for prototype — tighten in production
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(models.router,   prefix="/models",  tags=["Models"])
