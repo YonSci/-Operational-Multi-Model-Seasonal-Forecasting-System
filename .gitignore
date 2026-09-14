@@ -36,5 +36,11 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
+# Scratch & temporary artifacts
+scratch/
+*.png
+!backend/ilri_logo.png
+!ILRI_logo.png
+
 # Docker build artifacts
 docker/.env

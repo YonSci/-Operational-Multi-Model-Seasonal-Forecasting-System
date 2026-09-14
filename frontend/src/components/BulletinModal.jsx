@@ -10,10 +10,22 @@ const PRESET_FARMS = [
   { site_name: 'LiveMo LTD, Memerush, Kajiado Farm', lat: -2.38726, lon: 37.4850 },
 ]
 
+const FORECAST_MODELS = [
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5', tag: '51 ens members', centre: 'European Centre' },
+  { id: 'UKMO GloSea6', name: 'UKMO GloSea6', tag: '42 ens members', centre: 'UK Met Office' },
+  { id: 'Meteo-France Sys8', name: 'Météo-France Sys8', tag: '51 ens members', centre: 'Météo-France' },
+  { id: 'DWD GCFS2.1', name: 'DWD GCFS2.1', tag: '50 ens members', centre: 'Deutscher Wetterdienst' },
+  { id: 'CMCC-SPS4', name: 'CMCC-SPS4', tag: '50 ens members', centre: 'Euro-Med Centre' },
+  { id: 'NCEP CFSv2', name: 'NCEP CFSv2', tag: '32 ens members', centre: 'NOAA / NCEP' },
+  { id: 'ECCC CanSIPS', name: 'ECCC CanSIPS', tag: '20 ens members', centre: 'Environment Canada' },
+]
+
 export default function BulletinModal({ isOpen, onClose, selectedSite }) {
   const [siteName, setSiteName] = useState('KALRO Kiboko, Makueni Farm')
   const [lat, setLat] = useState(-2.21046)
   const [lon, setLon] = useState(37.7190)
+  const [bulletinType, setBulletinType] = useState('multi') // 'multi' | 'single'
+  const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
   const [fmt, setFmt] = useState('pdf')
   const [isGenerating, setIsGenerating] = useState(false)
   const [progressMsg, setProgressMsg] = useState('')
@@ -66,19 +78,26 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
     }
 
     if (parsedLat < -5.5 || parsedLat > 5.5 || parsedLon < 33.0 || parsedLon > 42.5) {
-      // Gentle warning for points outside East Africa / Kenya bounding box
       setError('Note: Coordinates appear outside the Kenya / East Africa domain (-5.5° to 5.5°N, 33.0° to 42.5°E). The model will match the nearest land boundary pixel.')
     }
 
     setIsGenerating(true)
-    setProgressMsg('Extracting pixel climatology & timing statistics...')
+    setProgressMsg(
+      bulletinType === 'single'
+        ? `Extracting ${selectedModel} ensemble members & pixel climatology...`
+        : 'Extracting multi-model ensemble & timing statistics...'
+    )
 
     const msgTimer1 = setTimeout(() => {
-      setProgressMsg('Rendering multi-model plume, probabilistic terciles & risk panels...')
+      setProgressMsg(
+        bulletinType === 'single'
+          ? `Rendering ${selectedModel} precipitation plume, tercile outlooks & 44-yr time series...`
+          : 'Rendering multi-model plume, probabilistic terciles & risk panels...'
+      )
     }, 2500)
 
     const msgTimer2 = setTimeout(() => {
-      setProgressMsg(fmt === 'pdf' ? 'Assembling high-resolution A3 PDF bulletin...' : 'Rendering 150 DPI publication graphic...')
+      setProgressMsg(fmt === 'pdf' ? 'Assembling high-resolution A3 PDF bulletin...' : 'Rendering 100 DPI publication graphic...')
     }, 5500)
 
     try {
@@ -87,6 +106,8 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
         lat: parsedLat,
         lon: parsedLon,
         fmt,
+        bulletin_type: bulletinType,
+        model_name: selectedModel,
       })
       clearTimeout(msgTimer1)
       clearTimeout(msgTimer2)
@@ -141,7 +162,104 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
         </div>
 
         {/* Modal Body / Form */}
-        <form onSubmit={handleGenerate} className="p-6 space-y-5">
+        <form onSubmit={handleGenerate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+          {/* Bulletin Type (Multi-Model vs Single Model) */}
+          <div>
+            <label className="block text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
+              Select Bulletin Type
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label
+                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                  bulletinType === 'multi'
+                    ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
+                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="bulletin-type"
+                  value="multi"
+                  checked={bulletinType === 'multi'}
+                  onChange={() => setBulletinType('multi')}
+                  className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                />
+                <div>
+                  <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                    Multi-Model Consensus
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">Weighted</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    7 WMO global models combined with optimal RPSS skill weights
+                  </div>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                  bulletinType === 'single'
+                    ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
+                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="bulletin-type"
+                  value="single"
+                  checked={bulletinType === 'single'}
+                  onChange={() => setBulletinType('single')}
+                  className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                />
+                <div>
+                  <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                    Single Model Forecast
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Official single-model template with 44-yr historical series & plume
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* If Single-Model is selected: Model Selector */}
+          {bulletinType === 'single' && (
+            <div className="bg-blue-950/20 border border-blue-800/40 p-3.5 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold tracking-wider text-blue-300 uppercase flex items-center gap-1.5">
+                  <span>🛰️</span> Select Forecast System Model
+                </label>
+                <span className="text-[10px] text-slate-400">7 WMO GPC Models</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {FORECAST_MODELS.map(m => {
+                  const isSelected = selectedModel === m.id
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedModel(m.id)}
+                      className={`px-2.5 py-2 rounded-lg text-left border transition-all flex items-center justify-between ${
+                        isSelected
+                          ? 'bg-amber-500/20 border-amber-500/60 text-amber-200'
+                          : 'bg-slate-900/70 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <div>
+                        <div className="text-xs font-semibold leading-tight">{m.name}</div>
+                        <div className="text-[9px] text-slate-400">{m.centre}</div>
+                      </div>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                        {m.tag}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Farm Preset Quick Selector */}
           <div>
             <div className="flex items-center justify-between mb-2">

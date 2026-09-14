@@ -119,7 +119,7 @@ export function useValidation() {
 /**
  * POST /bulletin -- generate and download publication bulletin (PDF or PNG)
  */
-export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf' }) {
+export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf', bulletin_type = 'multi', model_name = 'ECMWF SEAS5' }) {
   const cleanFmt = fmt.toLowerCase() === 'png' ? 'png' : 'pdf'
   const url = `${API_BASE}/bulletin`
 
@@ -133,6 +133,8 @@ export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf' }) {
       lat: Number(lat),
       lon: Number(lon),
       fmt: cleanFmt,
+      bulletin_type: bulletin_type || 'multi',
+      model_name: model_name || 'ECMWF SEAS5',
     }),
   })
 
