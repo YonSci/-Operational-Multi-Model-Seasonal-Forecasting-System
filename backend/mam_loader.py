@@ -117,6 +117,15 @@ def _resolve_chirps_dir(base_dir, model_dirs):
         "Set BASE_DIR to your pipeline output root (folder containing CHIRPS/model outputs)."
     )
 
+
+def _resolve_sep_chirps_dir(base_dir):
+    candidates = [
+        os.path.join(base_dir, "outputs", "ecmwf_sep"),
+        os.path.join(base_dir, "outputs_ecmwf_sep"),
+        os.path.join(base_dir, "outputs/ecmwf_sep"),
+    ]
+    return _first_existing_dir(candidates)
+
 # ── Configuration ──────────────────────────────────────────────────────────
 def configure(base_dir=None, op_year=None, load_bc_daily=None, extra_model_dirs=None):
     global _BASE_DIR, _OP_YEAR, _LOAD_BC, MODEL_DIRS, _configured
@@ -251,7 +260,7 @@ def _load_chirps(chirps_dir):
                 chirps_clim=chirps_clim)
 
 # ── Model loader ───────────────────────────────────────────────────────────
-def _load_model(name, out_dir, chirps):
+def _load_model(name, out_dir, chirps, season="long_rains", win_doy_start=32, win_doy_end=213):
     if not os.path.isdir(out_dir):
         print(f"  SKIP  {name}: dir not found"); return None
     n_lat, n_lon, lm = chirps["n_lat"], chirps["n_lon"], chirps["lm"]
@@ -285,6 +294,7 @@ def _load_model(name, out_dir, chirps):
     else:
         op_idx = int(np.where(op_mask)[0][0])
 
+    n_days = win_doy_end - win_doy_start + 1
     if _LOAD_BC:
         bc_daily = None
         for pat in [f"{pfx}_bc_daily_all_years.nc", f"{pfx}_BC_daily_all_years.nc",
@@ -293,9 +303,9 @@ def _load_model(name, out_dir, chirps):
             if bc_daily is not None: break
         if bc_daily is None:
             print(f"  WARNING {name}: bc_daily missing")
-            bc_daily = np.zeros((n_members, n_years, 182, n_lat, n_lon), np.float32)
+            bc_daily = np.zeros((n_members, n_years, n_days, n_lat, n_lon), np.float32)
     else:
-        bc_daily = np.zeros((n_members, n_years, 182, n_lat, n_lon), np.float32)
+        bc_daily = np.zeros((n_members, n_years, n_days, n_lat, n_lon), np.float32)
 
     # Glob skill discovery
     _nc = {}
@@ -321,6 +331,11 @@ def _load_model(name, out_dir, chirps):
     hitrate_val  = {v: _skill("hitrate", v, "val")   for v in ["onset","cessation","lgp"]}
     rpss_val     = {v: _skill("rpss",    v, "val")   for v in ["onset","cessation","lgp"]}
 
+    # Fallback to validation skill if cal skill files not present
+    for v in ["onset","cessation","lgp"]:
+        if np.all(np.isnan(hitrate_cal[v])) and not np.all(np.isnan(hitrate_val[v])):
+            hitrate_cal[v] = hitrate_val[v]
+
     if _missing: print(f"  WARNING {name}: {len(_missing)} skill file(s) missing: {_missing[:4]}")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",RuntimeWarning)
@@ -331,7 +346,14 @@ def _load_model(name, out_dir, chirps):
                 bc_daily=bc_daily, probs_damped=probs_damped, alpha=alpha,
                 hitrate_cal=hitrate_cal, hitrate_val=hitrate_val, rpss_val=rpss_val,
                 op_idx=op_idx, n_members=n_members,
-                color=MODEL_COLORS.get(name,"#888888"), model_years=model_years)
+                color=MODEL_COLORS.get(name,"#888888"), model_years=model_years,
+                season=season, win_doy_start=win_doy_start, win_doy_end=win_doy_end,
+                chirps_clim=chirps.get("chirps_clim"),
+                C_clim=chirps.get("C_clim"), Q_bar=chirps.get("Q_bar"),
+                d_s=chirps.get("d_s"), d_e=chirps.get("d_e"),
+                t33_onset=chirps.get("t33_onset"), t67_onset=chirps.get("t67_onset"),
+                t33_cess=chirps.get("t33_cess"), t67_cess=chirps.get("t67_cess"),
+                t33_lgp=chirps.get("t33_lgp"), t67_lgp=chirps.get("t67_lgp"))
 
 # ── Demo / Cloud fallback loader ──────────────────────────────────────────
 def _load_demo_npz():
@@ -443,15 +465,22 @@ def load(force=False):
     try:
         chirps_dir = _resolve_chirps_dir(_BASE_DIR, MODEL_DIRS)
         chirps = _load_chirps(chirps_dir)
+        sep_dir = _resolve_sep_chirps_dir(_BASE_DIR)
+        chirps_sep = _load_chirps(sep_dir) if sep_dir else None
         print("[data_loader] Loading model outputs ...")
         MODELS = {}
         for name, out_dir in MODEL_DIRS.items():
-            entry = _load_model(name, out_dir, chirps)
+            is_sep = ("sep" in name.lower()) or ("sep" in out_dir.lower())
+            m_chirps = (chirps_sep if (is_sep and chirps_sep) else chirps)
+            m_season = "short_rains" if is_sep else "long_rains"
+            m_start  = 244 if is_sep else 32
+            m_end    = 365 if is_sep else 213
+            entry = _load_model(name, out_dir, m_chirps, season=m_season, win_doy_start=m_start, win_doy_end=m_end)
             if entry is not None: MODELS[name] = entry
         if not MODELS:
             raise RuntimeError("No models loaded from NetCDF files.")
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
-        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False}
+        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep}
         _loaded = True
     except Exception as exc:
         print(f"[data_loader] Raw NetCDF data not available ({type(exc).__name__}: {exc})")
@@ -482,7 +511,10 @@ def get_model_info():
                         hr_onset=round(hr,3) if not np.isnan(hr) else None,
                         skill_pass=bool(not np.isnan(hr) and hr > 1/3),
                         year_start=int(md["model_years"][0]),
-                        year_end=int(md["model_years"][-1])))
+                        year_end=int(md["model_years"][-1]),
+                        season=md.get("season", "long_rains"),
+                        win_doy_start=md.get("win_doy_start", 32),
+                        win_doy_end=md.get("win_doy_end", 213)))
     return out
 
 # ── Pixel stats ────────────────────────────────────────────────────────────
@@ -514,7 +546,11 @@ def _model_pixel_stats(mkey, pi, pj):
     on_med = float(np.nanmedian(on_v)) if len(on_v)>0 else float("nan")
     cs_med = float(np.nanmedian(cs_v)) if len(cs_v)>0 else float("nan")
     lg_med = float(np.nanmedian(lg_v)) if len(lg_v)>0 else float("nan")
-    c_on = float(s["chirps_clim"]["onset"][pi,pj]); c_cs = float(s["chirps_clim"]["cessation"][pi,pj])
+
+    # Use model-specific seasonal climatology
+    md_clim = md.get("chirps_clim") or s["chirps_clim"]
+    c_on = float(md_clim["onset"][pi,pj]); c_cs = float(md_clim["cessation"][pi,pj])
+    c_lg = float(md_clim["lgp"][pi,pj])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",RuntimeWarning)
         hr_on    = float(np.nanmean(md["hitrate_cal"]["onset"][lm]))
@@ -530,6 +566,7 @@ def _model_pixel_stats(mkey, pi, pj):
         on_med=on_med, cs_med=cs_med, lg_med=lg_med,
         on_anom=on_med-c_on if not np.isnan(on_med) else 0.0,
         cs_anom=cs_med-c_cs if not np.isnan(cs_med) else 0.0,
+        lg_anom=lg_med-c_lg if not np.isnan(lg_med) else 0.0,
         on_p10=_pct(on_v,10), on_p25=_pct(on_v,25),
         on_p75=_pct(on_v,75), on_p90=_pct(on_v,90),
         cs_p10=_pct(cs_v,10), cs_p90=_pct(cs_v,90),
@@ -544,81 +581,157 @@ def _model_pixel_stats(mkey, pi, pj):
         on_v=on_v.tolist(), cs_v=cs_v.tolist(), lg_v=lg_v.tolist(),
         bc_pixel=_build_bc_pixel(s, md, mkey, oi, nm, pi, pj, on_m, cs_m, on_med, cs_med),
         nm=nm, color=md["color"], _pi=pi, _pj=pj,
+        season=md.get("season", "long_rains"),
+        win_doy_start=md.get("win_doy_start", WIN_DOY_START),
+        win_doy_end=md.get("win_doy_end", WIN_DOY_END),
+        chirps_clim=dict(onset=c_on, cessation=c_cs, lgp=c_lg),
+        t33=dict(
+            onset=float(md["t33_onset"][pi,pj]) if md.get("t33_onset") is not None else float(s["t33_onset"][pi,pj]),
+            cessation=float(md["t33_cess"][pi,pj]) if md.get("t33_cess") is not None else float(s["t33_cess"][pi,pj]),
+            lgp=float(md["t33_lgp"][pi,pj]) if md.get("t33_lgp") is not None else float(s["t33_lgp"][pi,pj]),
+        ),
+        t67=dict(
+            onset=float(md["t67_onset"][pi,pj]) if md.get("t67_onset") is not None else float(s["t67_onset"][pi,pj]),
+            cessation=float(md["t67_cess"][pi,pj]) if md.get("t67_cess") is not None else float(s["t67_cess"][pi,pj]),
+            lgp=float(md["t67_lgp"][pi,pj]) if md.get("t67_lgp") is not None else float(s["t67_lgp"][pi,pj]),
+        ),
     )
 
 def _build_bc_pixel(s, md, mkey, oi, nm, pi, pj, on_m, cs_m, on_med, cs_med):
+    win_start = md.get("win_doy_start", WIN_DOY_START)
+    win_end   = md.get("win_doy_end", WIN_DOY_END)
+    n_days    = win_end - win_start + 1
+
     # If real bc_daily was loaded and has non-zero values, return it
     if _LOAD_BC and "bc_daily" in md and md["bc_daily"] is not None:
         raw = md["bc_daily"][:, oi, :, pi, pj]
         if raw.size > 0 and float(np.nanmax(raw)) > 0.01:
             return raw.tolist()
 
-    # Otherwise synthesize a realistic daily rainfall plume for this pixel (182 days)
-    # based on observed C_clim climatology and each member's predicted onset and cessation
-    c_curve = s.get("C_clim", np.zeros((182, 1, 1)))[:, pi, pj]
+    # Otherwise synthesize a realistic daily rainfall plume for this pixel
+    c_source = md.get("C_clim") if md.get("C_clim") is not None else s.get("C_clim")
+    if c_source is not None and c_source.shape[0] >= n_days:
+        c_curve = c_source[:n_days, pi, pj]
+    else:
+        c_curve = np.zeros(n_days, dtype=np.float32)
     daily_base = np.diff(c_curve, prepend=c_curve[0]).clip(min=0.0)
     b_max = float(np.nanmax(daily_base))
     if b_max > 0.1:
         daily_base = (daily_base / b_max) * 5.5
     else:
-        # Fallback daily envelope for MAM long rains (peaks in April ~ DOY 90-120)
-        days = np.arange(WIN_DOY_START, WIN_DOY_START + 182)
-        daily_base = 1.0 + 4.5 * np.exp(-((days - 105) / 30)**2)
+        # Fallback daily envelope
+        days = np.arange(win_start, win_start + n_days)
+        center_doy = 315 if win_start >= 200 else 105
+        daily_base = 1.0 + 4.5 * np.exp(-((days - center_doy) / 30)**2)
 
     rng = np.random.default_rng(abs(hash(mkey)) % (2**31) + int(pi) * 100 + int(pj))
-    day_indices = np.arange(WIN_DOY_START, WIN_DOY_START + 182)
+    day_indices = np.arange(win_start, win_start + n_days)
     traces = []
     for mem in range(nm):
-        d_on = float(on_m[mem]) if (mem < len(on_m) and not np.isnan(on_m[mem])) else (on_med if not np.isnan(on_med) else 85.0)
-        d_cs = float(cs_m[mem]) if (mem < len(cs_m) and not np.isnan(cs_m[mem])) else (cs_med if not np.isnan(cs_med) else 145.0)
+        center_doy = 315 if win_start >= 200 else 105
+        d_on = float(on_m[mem]) if (mem < len(on_m) and not np.isnan(on_m[mem])) else (on_med if not np.isnan(on_med) else (center_doy - 20))
+        d_cs = float(cs_m[mem]) if (mem < len(cs_m) and not np.isnan(cs_m[mem])) else (cs_med if not np.isnan(cs_med) else (center_doy + 30))
         active = (day_indices >= d_on) & (day_indices <= d_cs)
-        noise = rng.gamma(shape=1.8, scale=0.55, size=182).astype(np.float32)
-        # Active rainy season has rainfall; pre/post season has occasional dry-season showers
+        noise = rng.gamma(shape=1.8, scale=0.55, size=n_days).astype(np.float32)
         mem_daily = np.where(active, daily_base * (0.85 + rng.uniform(0.0, 0.3)) * noise, daily_base * 0.12 * noise)
         traces.append([round(float(v), 2) for v in mem_daily])
     return traces
 
-def get_pixel_stats(lat, lon):
+def get_pixel_stats(lat, lon, season="long_rains", model=None):
     """Return per-model stats for the nearest land pixel to (lat, lon)."""
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     s = _state
     pi, pj   = _nearest_pixel(lat, lon)
     glat     = float(s["target_lat"][pi]); glon = float(s["target_lon"][pj])
     delta_km = float(np.sqrt(((glat-lat)*111)**2 + ((glon-lon)*111*np.cos(np.radians(glat)))**2))
+
+    # Determine active season climatology
+    is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
+    sep_md = s["MODELS"].get("ECMWF SEAS5 (Sep)")
+    if is_short and sep_md:
+        c_clim = sep_md.get("chirps_clim") or s["chirps_clim"]
+        t33_on = float(sep_md["t33_onset"][pi,pj]) if sep_md.get("t33_onset") is not None else float(s["t33_onset"][pi,pj])
+        t33_cs = float(sep_md["t33_cess"][pi,pj]) if sep_md.get("t33_cess") is not None else float(s["t33_cess"][pi,pj])
+        t33_lg = float(sep_md["t33_lgp"][pi,pj]) if sep_md.get("t33_lgp") is not None else float(s["t33_lgp"][pi,pj])
+        t67_on = float(sep_md["t67_onset"][pi,pj]) if sep_md.get("t67_onset") is not None else float(s["t67_onset"][pi,pj])
+        t67_cs = float(sep_md["t67_cess"][pi,pj]) if sep_md.get("t67_cess") is not None else float(s["t67_cess"][pi,pj])
+        t67_lg = float(sep_md["t67_lgp"][pi,pj]) if sep_md.get("t67_lgp") is not None else float(s["t67_lgp"][pi,pj])
+        q_bar  = float(sep_md["Q_bar"][pi,pj]) if sep_md.get("Q_bar") is not None else float(s["Q_bar"][pi,pj])
+        d_s_px = float(sep_md["d_s"][pi,pj]) if sep_md.get("d_s") is not None else None
+        d_e_px = float(sep_md["d_e"][pi,pj]) if sep_md.get("d_e") is not None else None
+        c_vec  = sep_md["C_clim"][:,pi,pj].tolist() if sep_md.get("C_clim") is not None else s["C_clim"][:,pi,pj].tolist()
+        win_start = sep_md.get("win_doy_start", 244)
+        win_end   = sep_md.get("win_doy_end", 365)
+    else:
+        c_clim = s["chirps_clim"]
+        t33_on = float(s["t33_onset"][pi,pj])
+        t33_cs = float(s["t33_cess"][pi,pj])
+        t33_lg = float(s["t33_lgp"][pi,pj])
+        t67_on = float(s["t67_onset"][pi,pj])
+        t67_cs = float(s["t67_cess"][pi,pj])
+        t67_lg = float(s["t67_lgp"][pi,pj])
+        q_bar  = float(s["Q_bar"][pi,pj])
+        d_s_px = float(s["d_s"][pi,pj]) if s.get("d_s") is not None else None
+        d_e_px = float(s["d_e"][pi,pj]) if s.get("d_e") is not None else None
+        c_vec  = s["C_clim"][:,pi,pj].tolist()
+        win_start = WIN_DOY_START
+        win_end   = WIN_DOY_END
+
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
+        season=season,
+        win_doy_start=win_start,
+        win_doy_end=win_end,
         models={n: _model_pixel_stats(n,pi,pj) for n in s["MODELS"]},
-        chirps_clim=dict(onset=float(s["chirps_clim"]["onset"][pi,pj]),
-                         cessation=float(s["chirps_clim"]["cessation"][pi,pj]),
-                         lgp=float(s["chirps_clim"]["lgp"][pi,pj])),
-        t33=dict(onset=float(s["t33_onset"][pi,pj]),
-                 cessation=float(s["t33_cess"][pi,pj]), lgp=float(s["t33_lgp"][pi,pj])),
-        t67=dict(onset=float(s["t67_onset"][pi,pj]),
-                 cessation=float(s["t67_cess"][pi,pj]), lgp=float(s["t67_lgp"][pi,pj])),
-        Q_bar_pixel=float(s["Q_bar"][pi,pj]),
-        d_s_pixel=float(s["d_s"][pi,pj]) if s.get("d_s") is not None else None,
-        d_e_pixel=float(s["d_e"][pi,pj]) if s.get("d_e") is not None else None,
-        C_clim_vec=s["C_clim"][:,pi,pj].tolist(),
-        win_doy_start=WIN_DOY_START, win_doy_end=WIN_DOY_END,
+        chirps_clim=dict(onset=float(c_clim["onset"][pi,pj]),
+                         cessation=float(c_clim["cessation"][pi,pj]),
+                         lgp=float(c_clim["lgp"][pi,pj])),
+        t33=dict(onset=t33_on, cessation=t33_cs, lgp=t33_lg),
+        t67=dict(onset=t67_on, cessation=t67_cs, lgp=t67_lg),
+        Q_bar_pixel=q_bar,
+        d_s_pixel=d_s_px,
+        d_e_pixel=d_e_px,
+        C_clim_vec=c_vec,
     )
 
 # ── Grid stats ─────────────────────────────────────────────────────────────
-def get_grid_stats(variable="onset", layer="anomaly", model=None):
+def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_rains"):
     """2-D spatial array for Mapbox fill layer.  layer: anomaly|spread|median|prob_bn|prob_an|failure
     model: optional model name for single-model grid instead of MMM.
+    season: 'long_rains' or 'short_rains'.
     """
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     s, lm = _state, _state["lm"]
-    if model and model in s["MODELS"]:
-        MODELS = {model: s["MODELS"][model]}
-    else:
-        MODELS = s["MODELS"]
-    n_lat, n_lon = s["n_lat"], s["n_lon"]   # always needed
+    n_lat, n_lon = s["n_lat"], s["n_lon"]
     _vmap  = {"onset":("onset","onset_doy"),"cessation":("cessation","cessation_doy"),"lgp":("lgp","lgp_days")}
     if variable not in _vmap: raise ValueError(f"variable must be one of {list(_vmap)}")
     if layer not in ("anomaly","spread","median","prob_bn","prob_nn","prob_an","failure","chirps_p50","chirps_spread","bias","detection_rate","rpss_val","hitrate_val","alpha","hr_weighted","rpss_weighted"): raise ValueError(f"invalid layer {layer!r}")
     clim_key, arr_key = _vmap[variable]
-    clim_map = s["chirps_clim"][clim_key]
+
+    is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
+    if is_short:
+        # Route to September models
+        if model in (None, "", "multimodel", "ECMWF SEAS5"):
+            target_name = "ECMWF SEAS5 (Sep)" if "ECMWF SEAS5 (Sep)" in s["MODELS"] else list(s["MODELS"].keys())[0]
+        else:
+            target_name = model
+        if target_name in s["MODELS"]:
+            MODELS = {target_name: s["MODELS"][target_name]}
+            short_md = s["MODELS"][target_name]
+            clim_map = short_md.get("chirps_clim", s["chirps_clim"])[clim_key]
+        else:
+            MODELS = {k: v for k, v in s["MODELS"].items() if v.get("season") == "short_rains" or "Sep" in k}
+            if not MODELS: MODELS = s["MODELS"]
+            first_md = list(MODELS.values())[0]
+            clim_map = first_md.get("chirps_clim", s["chirps_clim"])[clim_key]
+    else:
+        # Long Rains (MAM)
+        if model and model in s["MODELS"]:
+            MODELS = {model: s["MODELS"][model]}
+        else:
+            MODELS = {k: v for k, v in s["MODELS"].items() if v.get("season") != "short_rains" and "Sep" not in k}
+            if not MODELS: MODELS = s["MODELS"]
+        clim_map = s["chirps_clim"][clim_key]
     out = np.full((n_lat, n_lon), np.nan, np.float32)
     units = "days"
     if layer == "anomaly":

@@ -50,28 +50,44 @@ export function useChirps() {
 }
 
 /**
- * GET /pixel?lat=&lon=  -- full per-model stats for a site
+ * GET /pixel?lat=&lon=&season=&model=  -- full per-model stats for a site
  * Only fires when site is selected.
  */
-export function usePixelStats(site) {
+export function usePixelStats(site, season = 'long_rains', model = '') {
   return useQuery({
-    queryKey: ['pixel', site?.lat, site?.lon],
-    queryFn: () => fetchJSON(`/pixel?lat=${site.lat}&lon=${site.lon}`),
+    queryKey: ['pixel', site?.lat, site?.lon, season, model],
+    queryFn: () => {
+      const q = new URLSearchParams({
+        lat: String(site.lat),
+        lon: String(site.lon),
+        season: season || 'long_rains',
+      })
+      if (model) q.set('model', model)
+      return fetchJSON(`/pixel?${q.toString()}`)
+    },
     enabled: !!site,
     staleTime: 5 * 60_000,   // 5 min
   })
 }
 
 /**
- * GET /grid?variable=&layer=  -- GeoJSON for Mapbox fill layer
+ * GET /grid?variable=&layer=&season=&model=  -- GeoJSON for Mapbox fill layer
  * Cached for the session -- expensive to recompute.
  */
-export function useGrid(variable, layer, enabled = true, model = "") {
+export function useGrid(variable, layer, enabled = true, model = "", season = "long_rains") {
   return useQuery({
-    queryKey: ['grid', variable, layer, model],
-    queryFn: () => fetchJSON(`/grid?variable=${variable}&layer=${layer}${model ? '&model='+encodeURIComponent(model) : ''}`),
+    queryKey: ['grid', variable, layer, model, season],
+    queryFn: () => {
+      const q = new URLSearchParams({
+        variable,
+        layer,
+        season: season || 'long_rains',
+      })
+      if (model) q.set('model', model)
+      return fetchJSON(`/grid?${q.toString()}`)
+    },
     enabled,
-    staleTime: 0,              // always refetch when queryKey changes (model/layer switch)
+    staleTime: 0,              // always refetch when queryKey changes (model/layer/season switch)
     gcTime:    5 * 60_000,    // cache stays 5 min for back-navigation
     refetchOnWindowFocus: false,
   })

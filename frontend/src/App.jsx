@@ -26,7 +26,9 @@ function doyToDate(d,year=2026){
   try{return new Date(year,0,Math.round(d)).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}catch{return '--'}
 }
 function pct(v){ return v!=null&&!isNaN(v)?(v*100).toFixed(0)+'%':'--' }
-const DOY_MONTHS=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
+const DOY_MONTHS_MAM=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
+const DOY_MONTHS_SOND=[{doy:244,label:'Sep'},{doy:274,label:'Oct'},{doy:305,label:'Nov'},{doy:335,label:'Dec'}]
+const DOY_MONTHS=DOY_MONTHS_MAM
 
 // --- Country / season -> primary initialization date ----------------------
 const SEASONS = {
@@ -72,7 +74,7 @@ function PlaceholderPanel({label,icon}) {
 }
 
 // --- A(D) Plume -----------------------------------------------------------
-function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weights=null }) {
+function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weights=null, selectedSeason='long_rains' }) {
   if (!pixelData) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>
       No data -- click a pixel on the map
@@ -80,8 +82,10 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   )
 
   const { models } = pixelData
-  const winStart = pixelData.win_doy_start ?? 32
-  const winEnd   = pixelData.win_doy_end   ?? 213
+  const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
+  const monthTicks = isShort ? DOY_MONTHS_SOND : DOY_MONTHS_MAM
+  const winStart = pixelData.win_doy_start ?? (isShort ? 244 : 32)
+  const winEnd   = pixelData.win_doy_end   ?? (isShort ? 365 : 213)
   const Q_bar    = pixelData.Q_bar_pixel   ?? 0   // pixel climatological daily rainfall mean
   const C_vec    = pixelData.C_clim_vec    ?? []  // CHIRPS CAL C(d) -- already cumulative, plot directly
   const d_s_chirps = pixelData.d_s_pixel          // CHIRPS OP onset DOY
@@ -89,8 +93,12 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
   const nDays = winEnd - winStart + 1
 
+  const effectiveKey = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
+    ? ('ECMWF SEAS5 (Sep)' in (models ?? {}) ? 'ECMWF SEAS5 (Sep)' : selectedModel)
+    : selectedModel
+
   const activeEntries = Object.entries(models).filter(([n]) =>
-    selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
+    effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
   )
 
   // For each model: compute A(D) for EVERY member separately, then get P10/P50/P90 across members
@@ -193,8 +201,8 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
         <XAxis
           dataKey="doy" type="number" domain={[winStart, winEnd]}
-          ticks={DOY_MONTHS.map(m => m.doy)}
-          tickFormatter={d => DOY_MONTHS.find(m => m.doy === d)?.label ?? ''}
+          ticks={monthTicks.map(m => m.doy)}
+          tickFormatter={d => monthTicks.find(m => m.doy === d)?.label ?? ''}
           tick={{ fontSize:9, fill:'var(--chart-axis)' }} stroke="var(--chart-axis)"
         />
         <YAxis
@@ -207,7 +215,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
           contentStyle={{ background:'var(--chart-tooltip-bg)', border:'1px solid var(--border-primary)', borderRadius:6, fontSize:10, color:'var(--text-primary)' }}
           formatter={(v, name) => null}
           labelFormatter={d => {
-            const month = DOY_MONTHS.slice().reverse().find(m => d >= m.doy)
+            const month = monthTicks.slice().reverse().find(m => d >= m.doy)
             return 'DOY ' + d + '  (' + doyToDate(d) + ')' + (month ? '  -- ' + month.label : '')
           }}
           itemStyle={{display:'none'}}
@@ -266,27 +274,34 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
 
 // --- Precip Plume (BC daily) ----------------------------------------------
-function PrecipPlume({pixelData,selectedModel,activeModels}) {
-  const DOY_START=32, N_DAYS=150
-  const MONTH_TICKS=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
-  const DRY_THRESHOLD=0.5
+function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_rains'}) {
+  const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
+  const DOY_START = isShort ? 244 : 32
+  const N_DAYS = isShort ? 122 : 150
+  const MONTH_TICKS = isShort ? DOY_MONTHS_SOND : DOY_MONTHS_MAM
+  const DRY_THRESHOLD = 0.5
 
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
 
-  const models=pixelData.models??{}
-  const entries=Object.entries(models).filter(([n])=>selectedModel==='multimodel'?(activeModels.size>0?activeModels.has(n):true):n===selectedModel)
+  const models = pixelData.models ?? {}
+  const effectiveKey = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
+    ? ('ECMWF SEAS5 (Sep)' in models ? 'ECMWF SEAS5 (Sep)' : selectedModel)
+    : selectedModel
+  const entries = Object.entries(models).filter(([n]) =>
+    effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+  )
 
-  const allTraces=[]
-  entries.forEach(([name,ms])=>{
-    let bc=ms.bc_pixel??[]
+  const allTraces = []
+  entries.forEach(([name, ms]) => {
+    let bc = ms.bc_pixel ?? []
     // Fallback: if bc_pixel is empty, synthesize daily rainfall plume from C_clim_vec
-    if((!bc || !bc.length) && pixelData.C_clim_vec && pixelData.C_clim_vec.length >= 150) {
+    if ((!bc || !bc.length) && pixelData.C_clim_vec && pixelData.C_clim_vec.length >= 100) {
       const cCurve = pixelData.C_clim_vec
       const dBase = cCurve.map((v, i) => i === 0 ? v : Math.max(0, v - cCurve[i-1]))
       const bMax = Math.max(...dBase, 0.1)
       const scaled = dBase.map(v => (v / bMax) * 5.5)
-      const onMed = ms.on_med ?? 80
-      const csMed = ms.cs_med ?? 140
+      const onMed = ms.on_med ?? (isShort ? 315 : 80)
+      const csMed = ms.cs_med ?? (isShort ? 350 : 140)
       bc = Array.from({length: 10}, (_, mIdx) => {
         return scaled.map((val, dIdx) => {
           const doy = DOY_START + dIdx
@@ -296,10 +311,10 @@ function PrecipPlume({pixelData,selectedModel,activeModels}) {
         })
       })
     }
-    if(!bc || !bc.length) return
-    bc.forEach(memberDays=>{
-      if(!memberDays?.length) return
-      allTraces.push({color:ms.color??'#4a8fc4',data:memberDays.slice(DOY_START-1,DOY_START-1+N_DAYS)})
+    if (!bc || !bc.length) return
+    bc.forEach(memberDays => {
+      if (!memberDays?.length) return
+      allTraces.push({ color: ms.color ?? '#4a8fc4', data: memberDays.slice(0, N_DAYS) })
     })
   })
 
@@ -626,49 +641,62 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
 }
 
 
-function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeModels}) {
+function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeModels,selectedSeason='long_rains',selectedInit='0201'}) {
   if (!pixelData&&!isLoading) return (
     <div className="flex flex-col items-center justify-center h-full gap-2" style={{color:'var(--text-faint)'}}>
       <span className="text-2xl">*</span>
       <span className="text-sm tracking-wide">Click any pixel on the map to load forecast data</span>
     </div>
   )
-  const models=pixelData?.models??{}
-  const chirpsOn=pixelData?.chirps_clim?.onset, chirpsCs=pixelData?.chirps_clim?.cessation, chirpsLg=pixelData?.chirps_clim?.lgp
-  const entries=Object.entries(models).filter(([n])=>selectedModel==='multimodel'?(activeModels.size>0?activeModels.has(n):true):n===selectedModel)
-  const med=arr=>arr.length?[...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)]:null
-  const mmmOn=med(entries.map(([,m])=>m.on_med).filter(v=>v!=null))
-  const mmmCs=med(entries.map(([,m])=>m.cs_med).filter(v=>v!=null))
-  const mmmLg=med(entries.map(([,m])=>m.lg_med).filter(v=>v!=null))
-  const mmmAnom=mmmOn!=null&&chirpsOn?mmmOn-chirpsOn:null
-  const mmmCsAnom=mmmCs!=null&&chirpsCs?mmmCs-chirpsCs:null
-  const mmmLgAnom=mmmLg!=null&&chirpsLg?mmmLg-chirpsLg:null
-  const domTiming=mmmAnom!=null?(mmmAnom>5?'Late':mmmAnom<-5?'Early':'Normal'):'Normal'
-  const allOnP10=entries.map(([,m])=>m.on_p10).filter(v=>v!=null)
-  const allOnP90=entries.map(([,m])=>m.on_p90).filter(v=>v!=null)
-  const allCsP10=entries.map(([,m])=>m.cs_p10).filter(v=>v!=null)
-  const allCsP90=entries.map(([,m])=>m.cs_p90).filter(v=>v!=null)
-  const allLgP10=entries.map(([,m])=>m.lg_p10).filter(v=>v!=null)
-  const allLgP90=entries.map(([,m])=>m.lg_p90).filter(v=>v!=null)
-  const lgSpread=allLgP10.length&&allLgP90.length?Math.round(Math.min(...allLgP10))+'-'+Math.round(Math.max(...allLgP90))+'d':null
+  const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
+  const seasonCode = isShort ? 'SOND' : 'MAM'
+  const models = pixelData?.models ?? {}
+  const effectiveKey = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
+    ? ('ECMWF SEAS5 (Sep)' in models ? 'ECMWF SEAS5 (Sep)' : selectedModel)
+    : selectedModel
+  const displayModel = selectedModel === 'multimodel' ? 'All Models' : selectedModel
+
+  const entries = Object.entries(models).filter(([n]) =>
+    effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+  )
+
+  const activeClim = entries[0]?.[1]?.chirps_clim ?? pixelData?.chirps_clim
+  const chirpsOn = activeClim?.onset, chirpsCs = activeClim?.cessation, chirpsLg = activeClim?.lgp
+  const med = arr => arr.length ? [...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)] : null
+  const mmmOn = med(entries.map(([,m]) => m.on_med).filter(v => v != null))
+  const mmmCs = med(entries.map(([,m]) => m.cs_med).filter(v => v != null))
+  const mmmLg = med(entries.map(([,m]) => m.lg_med).filter(v => v != null))
+  const mmmAnom = mmmOn != null && chirpsOn ? mmmOn - chirpsOn : null
+  const mmmCsAnom = mmmCs != null && chirpsCs ? mmmCs - chirpsCs : null
+  const mmmLgAnom = mmmLg != null && chirpsLg ? mmmLg - chirpsLg : null
+  const domTiming = mmmAnom != null ? (mmmAnom > 5 ? 'Late' : mmmAnom < -5 ? 'Early' : 'Normal') : 'Normal'
+  const allOnP10 = entries.map(([,m]) => m.on_p10).filter(v => v != null)
+  const allOnP90 = entries.map(([,m]) => m.on_p90).filter(v => v != null)
+  const allCsP10 = entries.map(([,m]) => m.cs_p10).filter(v => v != null)
+  const allCsP90 = entries.map(([,m]) => m.cs_p90).filter(v => v != null)
+  const allLgP10 = entries.map(([,m]) => m.lg_p10).filter(v => v != null)
+  const allLgP90 = entries.map(([,m]) => m.lg_p90).filter(v => v != null)
+  const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
+  const opYear = selectedYear ?? (isShort ? 2025 : 2026)
+
   return (
     <div className="flex h-full gap-2 overflow-hidden">
       <div className="flex flex-col gap-2 overflow-hidden" style={{flex:1,minWidth:0}}>
-        <Card title={'Ensemble Precipitation Plume  -  '+(selectedModel==='multimodel'?'All Models':selectedModel)+'  -  MAM '+(selectedYear??2026)}
+        <Card title={'Ensemble Precipitation Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
               className="flex-1 min-h-0" style={{minHeight:240}}>
           <div style={{height:'100%',padding:8}}>
-            <PrecipPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels}/>
+            <PrecipPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason}/>
           </div>
         </Card>
-        <Card title={'C(d) / A(D) Plume  -  '+(selectedModel==='multimodel'?'All Models':selectedModel)+'  -  MAM '+(selectedYear??2026)}
+        <Card title={'C(d) / A(D) Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
               className="flex-1 min-h-0" style={{minHeight:220}}>
           <div style={{height:'100%',padding:8}}>
-            <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels}/>
+            <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason}/>
           </div>
         </Card>
       </div>
       <div className="flex flex-col gap-2 overflow-y-auto shrink-0" style={{width:300}}>
-        <Card title={'Ensemble Forecast Summary  -  '+selectedModel+'  -  MAM '+(selectedYear??2026)} className="shrink-0">
+        <Card title={'Ensemble Forecast Summary  -  '+displayModel+'  -  '+seasonCode+' '+opYear} className="shrink-0">
           <div className="p-3 space-y-2">
             {[['ONSET',mmmOn,mmmAnom,allOnP10,allOnP90,chirpsOn,'DOY'],
               ['CESSATION',mmmCs,mmmCsAnom,allCsP10,allCsP90,chirpsCs,'DOY'],
@@ -1530,6 +1558,11 @@ export default function App() {
     const s = seasons.find(x=>x.id===seasonId) ?? seasons[0]
     setSelectedSeason(s.id)
     setSelectedInit(s.init)
+    if (s.id === 'short_rains') {
+      setSelectedYear(2025)
+    } else if (s.id === 'long_rains') {
+      setSelectedYear(2026)
+    }
   }
 
   const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
@@ -1550,23 +1583,29 @@ export default function App() {
   },[modelsData,setActiveModels])
 
   const querySite = selectedSite??{lat:-1.62,lon:37.12}
-  const { data: pixelData,  isLoading: pixelLoading } = usePixelStats(querySite)
+  const effectiveModel = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
+    ? 'ECMWF SEAS5 (Sep)'
+    : (selectedModel !== 'multimodel' ? selectedModel : '')
+  const { data: pixelData,  isLoading: pixelLoading } = usePixelStats(querySite, selectedSeason, effectiveModel)
   const { data: chirpsHist }                           = useChirpsHistorical(querySite)
   const { data: validationData }                       = useValidation()
 
   const modelsLoaded = !!modelsData?.models
   useEffect(()=>{
     if (!modelsLoaded||!selectedModel) return
-    const model = selectedModel!=='multimodel'?selectedModel:''
+    let model = selectedModel!=='multimodel'?selectedModel:''
+    if (selectedSeason === 'short_rains' && (model === 'ECMWF SEAS5' || !model)) {
+      model = 'ECMWF SEAS5 (Sep)'
+    }
     const {variable,layer}=mapLayer
-    const url = `${API_BASE}/grid?variable=${variable}&layer=${layer}&bust=true` + (model ? `&model=${encodeURIComponent(model)}` : '')
+    const url = `${API_BASE}/grid?variable=${variable}&layer=${layer}&bust=true&season=${selectedSeason}` + (model ? `&model=${encodeURIComponent(model)}` : '')
     const ctrl=new AbortController()
     fetch(url,{signal:ctrl.signal})
       .then(r=>{if(!r.ok) throw new Error('HTTP '+r.status);return r.json()})
       .then(data=>setMapGridData(data))
       .catch(err=>{if(err.name!=='AbortError') console.warn('[Grid fetch error]',err)})
     return ()=>ctrl.abort()
-  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded])
+  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason])
 
   if (showLanding) {
     return (
@@ -1602,7 +1641,7 @@ export default function App() {
           </div>
           )}
           <div className="flex-1 min-w-0 overflow-hidden h-full">
-            {activeTab==='forecast'      && <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels}/>}
+            {activeTab==='forecast'      && <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}

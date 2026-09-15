@@ -29,11 +29,11 @@ def _clean(obj):
     return obj
 
 
-@lru_cache(maxsize=32)
-def _build_geojson(variable: str, layer: str, model: str = ""):
+@lru_cache(maxsize=64)
+def _build_geojson(variable: str, layer: str, model: str = "", season: str = "long_rains"):
     """Build and cache GeoJSON FeatureCollection for a variable+layer combo."""
     try:
-        grid = dl.get_grid_stats(variable=variable, layer=layer, model=model if model else None)
+        grid = dl.get_grid_stats(variable=variable, layer=layer, model=model if model else None, season=season)
     except Exception as e:
         raise ValueError(f"get_grid_stats failed for {variable}/{layer}: {e}")
 
@@ -74,14 +74,19 @@ def _build_geojson(variable: str, layer: str, model: str = ""):
                 },
             })
 
-    # Enrich features with tooltip data using CHIRPS clim
+    # Enrich features with tooltip data using appropriate season CHIRPS clim
     try:
         import numpy as np
-        lats_arr = np.array(lats)
-        lons_arr = np.array(lons)
-        chirps_on  = dl.get_state().get("chirps_clim", {}).get("onset")
-        chirps_cs  = dl.get_state().get("chirps_clim", {}).get("cessation")
-        chirps_lgp = dl.get_state().get("chirps_clim", {}).get("lgp")
+        is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
+        sep_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Sep)")
+        if is_short and sep_md and "chirps_clim" in sep_md:
+            c_clim = sep_md["chirps_clim"]
+        else:
+            c_clim = dl.get_state().get("chirps_clim", {})
+
+        chirps_on  = c_clim.get("onset")
+        chirps_cs  = c_clim.get("cessation")
+        chirps_lgp = c_clim.get("lgp")
         for feat in features:
             p = feat["properties"]
             ii, jj = p["pi"], p["pj"]
@@ -115,10 +120,11 @@ def _build_geojson(variable: str, layer: str, model: str = ""):
 
 @router.get("")
 def get_grid(
-    variable: str  = Query("onset",   description="onset | cessation | lgp"),
-    layer   : str  = Query("anomaly", description="anomaly | spread | prob_bn | prob_an | failure"),
-    bust    : bool = Query(False,     description="Clear cache and rebuild"),
-    model   : str  = Query("",       description="Optional: single model name for per-model grid"),
+    variable: str  = Query("onset",        description="onset | cessation | lgp"),
+    layer   : str  = Query("anomaly",      description="anomaly | spread | prob_bn | prob_an | failure"),
+    bust    : bool = Query(False,          description="Clear cache and rebuild"),
+    model   : str  = Query("",            description="Optional: single model name for per-model grid"),
+    season  : str  = Query("long_rains",  description="long_rains | short_rains"),
 ):
     """
     Return a GeoJSON FeatureCollection for the requested map layer.
@@ -139,7 +145,7 @@ def get_grid(
         _build_geojson.cache_clear()
 
     try:
-        data = _build_geojson(variable, layer, model or "")
+        data = _build_geojson(variable, layer, model or "", season or "long_rains")
     except ValueError as e:
         raise HTTPException(500, str(e))
     except Exception as e:

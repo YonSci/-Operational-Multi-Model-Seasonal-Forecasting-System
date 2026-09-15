@@ -19,14 +19,14 @@ from kenya_api import models, pixel, grid, sites, bulletin
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("\n" + "=" * 60)
-    print("  Kenya MAM Dashboard  —  starting up")
+    print("  Kenya MAM Dashboard  -  starting up")
     print(f"  mam_loader: {dl.__file__}")
     print("=" * 60)
     dl.configure()   # uses defaults from mam_loader (BASE_DIR etc.)
     try:
         dl.load()
         print("=" * 60)
-        print("  API ready  →  http://localhost:8080/docs")
+        print("  API ready  ->  http://localhost:8080/docs")
         print("=" * 60 + "\n")
     except Exception as exc:
         # Keep API alive so frontend can run; data endpoints return 503 until data is fixed.
