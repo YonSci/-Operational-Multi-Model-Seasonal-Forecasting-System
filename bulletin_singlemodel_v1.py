@@ -6,6 +6,8 @@
 
 import os
 import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import gc
 import datetime
 import numpy as np
@@ -143,6 +145,77 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     cs_med = float(np.nanmedian(cs_v)) if len(cs_v) > 0 else np.nan
     lg_med = float(np.nanmedian(lg_v)) if len(lg_v) > 0 else np.nan
 
+    f_year = int(md["model_years"][oi]) if "model_years" in md and len(md["model_years"]) > oi else op_year
+    is_sep = ("Sep" in model_name or "sep" in model_name or "short" in model_name.lower() or (not np.isnan(on_med) and on_med > 200))
+
+    if is_sep:
+        season_name = "Short Rains (SOND)"
+        season_code = "SOND"
+        init_date_str = f"01 September {f_year}"
+        valid_date_str = f"September – December {f_year}"
+        win_start = 244
+        win_end = 365
+        cal_label = "1993-2016"
+        cal_detail = f"CAL: 1993–2016 (24 yrs)   |   VAL: 2017–2024 (8 yrs)   |   OP year: {f_year}   |   Ensemble: {nm} members"
+        sub_window_str = f"Forecast window: DOY {win_start} (01 Sep) – DOY {win_end} (31 Dec)"
+        
+        # Load Short Rains CHIRPS climatology and historical series from outputs/ecmwf_sep
+        sep_dir = os.path.join(s.get("base_dir", "."), "outputs", "ecmwf_sep")
+        if not os.path.isdir(sep_dir):
+            sep_dir = os.path.join(os.path.dirname(__file__), "..", "outputs", "ecmwf_sep")
+        if os.path.isdir(sep_dir):
+            try:
+                import xarray as xr
+                ds_con = xr.open_dataset(os.path.join(sep_dir, "CHIRPS_onset_doy_1981_2025.nc"))
+                ds_ccs = xr.open_dataset(os.path.join(sep_dir, "CHIRPS_cessation_doy_1981_2025.nc"))
+                ds_clg = xr.open_dataset(os.path.join(sep_dir, "CHIRPS_lgp_days_1981_2025.nc"))
+                c_on_hist = ds_con[list(ds_con.data_vars)[0]].values[:, pi, pj]
+                c_cs_hist = ds_ccs[list(ds_ccs.data_vars)[0]].values[:, pi, pj]
+                c_lg_hist = ds_clg[list(ds_clg.data_vars)[0]].values[:, pi, pj]
+                chirps_years = ds_con["year"].values.astype(int)
+                cal_mask_s = (chirps_years >= 1993) & (chirps_years <= 2016)
+                cal_idx = np.where(cal_mask_s)[0]
+                c_on_clim = float(np.nanmean(c_on_hist[cal_idx]))
+                c_cs_clim = float(np.nanmean(c_cs_hist[cal_idx]))
+                c_lg_clim = float(np.nanmean(c_lg_hist[cal_idx]))
+                ds_con.close(); ds_ccs.close(); ds_clg.close()
+            except Exception as ex:
+                c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
+                c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
+                c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
+                chirps_years = s["chirps_years"]
+                cal_idx = s["cal_idx"]
+                c_on_hist = s["onset_doy"][:, pi, pj]
+                c_cs_hist = s["cessation_doy"][:, pi, pj]
+                c_lg_hist = s["lgp_days"][:, pi, pj]
+        else:
+            c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
+            c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
+            c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
+            chirps_years = s["chirps_years"]
+            cal_idx = s["cal_idx"]
+            c_on_hist = s["onset_doy"][:, pi, pj]
+            c_cs_hist = s["cessation_doy"][:, pi, pj]
+            c_lg_hist = s["lgp_days"][:, pi, pj]
+    else:
+        season_name = "Long Rains (MAM)"
+        season_code = "MAM"
+        init_date_str = f"01 February {f_year}"
+        valid_date_str = f"March – April – May {f_year}"
+        win_start = 32
+        win_end = 213
+        cal_label = "1981-2016"
+        cal_detail = f"CAL: 1981–2016 (36 yrs)   |   VAL: 2017–2025 (held out)   |   OP year: {f_year}   |   Ensemble: {nm} members"
+        sub_window_str = "Onset window: P10 (~mid-Feb) – P34 (~mid-Jun)   |   Cessation window: P24 (~late Apr) – P37 (~mid-Jul)"
+        c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
+        c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
+        c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
+        chirps_years = s["chirps_years"]
+        cal_idx = s["cal_idx"]
+        c_on_hist = s["onset_doy"][:, pi, pj]
+        c_cs_hist = s["cessation_doy"][:, pi, pj]
+        c_lg_hist = s["lgp_days"][:, pi, pj]
+
     on_anom = on_med - c_on_clim if not np.isnan(on_med) else 0.0
     cs_anom = cs_med - c_cs_clim if not np.isnan(cs_med) else 0.0
     lg_anom = lg_med - c_lg_clim if not np.isnan(lg_med) else 0.0
@@ -161,13 +234,6 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     cs_p10, cs_p90 = _pct(cs_v, 10), _pct(cs_v, 90)
     lg_p25, lg_p75 = _pct(lg_v, 25), _pct(lg_v, 75)
 
-    # Historical CHIRPS series at pixel
-    cal_idx = s["cal_idx"]
-    chirps_years = s["chirps_years"]
-    c_on_hist = s["onset_doy"][:, pi, pj]
-    c_cs_hist = s["cessation_doy"][:, pi, pj]
-    c_lg_hist = s["lgp_days"][:, pi, pj]
-
     c_on_cal = c_on_hist[cal_idx]
     c_on_valid = c_on_cal[~np.isnan(c_on_cal)]
     on_pctile = int(round(100 * np.mean(c_on_valid < on_med))) if len(c_on_valid) > 0 else 50
@@ -181,20 +247,24 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     lg_pctile = int(round(100 * np.mean(c_lg_valid < lg_med))) if len(c_lg_valid) > 0 else 50
 
     # Sowing Readiness Window
-    sow_optimal_start = _doy_to_date_str(on_p10 + 5)
-    sow_optimal_end   = _doy_to_date_str(on_p90 - 5 if on_p90 - 5 > on_p10 + 5 else on_p90)
-    sow_earliest      = _doy_to_date_str(on_p10)
-    sow_latest        = _doy_to_date_str(on_p90)
-    sow_ens_mean      = _doy_to_date_str(on_med)
-    sow_chirps_clim   = _doy_to_date_str(c_on_clim)
+    sow_optimal_start = _doy_to_date_str(on_p10 + 5, f_year)
+    sow_optimal_end   = _doy_to_date_str(on_p90 - 5 if on_p90 - 5 > on_p10 + 5 else on_p90, f_year)
+    sow_earliest      = _doy_to_date_str(on_p10, f_year)
+    sow_latest        = _doy_to_date_str(on_p90, f_year)
+    sow_ens_mean      = _doy_to_date_str(on_med, f_year)
+    sow_chirps_clim   = _doy_to_date_str(c_on_clim, f_year)
 
     # Risk Metrics
-    p_late_on  = float(np.mean(on_v > 118)) if len(on_v) > 0 else 0.0  # DOY 118 ~ late Apr (P24)
-    p_early_on = float(np.mean(on_v < 69)) if len(on_v) > 0 else 0.0   # DOY 69 ~ early Mar (P14)
+    if is_sep:
+        p_late_on  = float(np.mean(on_v > (c_on_clim + 7))) if len(on_v) > 0 else 0.0
+        p_early_on = float(np.mean(on_v < (c_on_clim - 7))) if len(on_v) > 0 else 0.0
+    else:
+        p_late_on  = float(np.mean(on_v > 118)) if len(on_v) > 0 else 0.0
+        p_early_on = float(np.mean(on_v < 69)) if len(on_v) > 0 else 0.0
     p_lgp_35   = float(np.mean(lg_v < 35)) if len(lg_v) > 0 else 0.0
     p_lgp_45   = float(np.mean(lg_v < 45)) if len(lg_v) > 0 else 0.0
     p_lgp_60   = float(np.mean(lg_v < 60)) if len(lg_v) > 0 else 0.0
-    p_dry_spell = 0.20   # 2 consecutive dry pentads in LGP
+    p_dry_spell = 0.20
     p_season_fail = float(np.mean(np.isnan(on_m))) if len(on_m) > 0 else 0.0
     agree_on = float(np.max(p_on))
     agree_cs = float(np.max(p_cs))
@@ -237,7 +307,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         transform=fig.transFigure, zorder=10, clip_on=False
     ))
 
-    fig.text(0.04, HDR_TOP - 0.020, "SEASONAL FORECAST BULLETIN",
+    fig.text(0.04, HDR_TOP - 0.020, f"SEASONAL FORECAST BULLETIN — {season_name.upper()}",
              fontsize=17, fontweight="bold", color=COL_HDR_TITLE,
              va="center", transform=fig.transFigure, zorder=11)
     fig.text(0.04, HDR_TOP - 0.038, site_name,
@@ -246,9 +316,9 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
 
     # Metadata right aligned
     meta_x = 0.58
-    fig.text(meta_x, HDR_TOP - 0.015, "Init date  :  01 February 2026",
+    fig.text(meta_x, HDR_TOP - 0.015, f"Init date  :  {init_date_str}",
              fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
-    fig.text(meta_x, HDR_TOP - 0.025, "Valid      :  March – April – May 2026",
+    fig.text(meta_x, HDR_TOP - 0.025, f"Valid      :  {valid_date_str}",
              fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
     fig.text(meta_x, HDR_TOP - 0.035, f"Source     :  {model_name} Seasonal Forecast System (v5)",
              fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
@@ -279,10 +349,10 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         transform=fig.transFigure, zorder=10, clip_on=False
     ))
     fig.text(0.04, SUB_TOP - 0.009,
-             f"Kenya MAM {op_year}   |   Site: {lat_q:+.4f}, {lon_q:+.4f}   |   Nearest 0.25° pixel: ({pi},{pj}) [{glat:.2f}, {glon:.2f}]  D={dkm:.1f} km   |   Detection Ruleset v2.3   |   CHIRPS 0.25   |   CAL 1981-2016",
+             f"Kenya {season_name} {f_year}   |   Site: {lat_q:+.4f}, {lon_q:+.4f}   |   Nearest 0.25° pixel: ({pi},{pj}) [{glat:.2f}, {glon:.2f}]  D={dkm:.1f} km   |   Detection Ruleset v2.3   |   CHIRPS 0.25   |   CAL {cal_label}",
              fontsize=7.8, color="#FFFFFF", va="center", transform=fig.transFigure, zorder=11)
     fig.text(0.04, SUB_TOP - 0.023,
-             f"Onset window: P10 (~mid-Feb) – P34 (~mid-Jun)   |   Cessation window: P24 (~late Apr) – P37 (~mid-Jul)   |   CAL: 1981–2016 (36 yrs)   |   VAL: 2017–2025 (held out)   |   OP year: {op_year}   |   Ensemble: {nm} members",
+             f"{sub_window_str}   |   {cal_detail}",
              fontsize=7.2, color="#94A3B8", va="center", transform=fig.transFigure, zorder=11)
 
     # =========================================================================
@@ -353,18 +423,18 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ax_plume = fig.add_subplot(gs[2, :])
     ax_plume.set_facecolor("#FFFFFF")
 
-    # Time axis in days
-    days = np.arange(1, 183)
-    p_x = np.arange(32, 214) # DOY window
-
     bc_arr = md.get("bc_daily")
-    if bc_arr is not None and len(bc_arr.shape) == 5:
-        daily_mem = bc_arr[:, oi, :, pi, pj] # (nm, 182)
+    if bc_arr is not None and len(bc_arr.shape) == 5 and not np.all(bc_arr == 0):
+        daily_mem = bc_arr[:, oi, :, pi, pj] # (nm, n_days)
     else:
         # Synthesize plume from historical / model onset parameters
+        p_x = np.arange(32, 214) # DOY window
         rng = np.random.RandomState(42 + pi * 10 + pj)
         base = np.exp(-((p_x - on_med)**2) / (2 * 18**2)) * 30 + 5
         daily_mem = np.array([np.maximum(0, base * rng.normal(1.0, 0.25, len(p_x))) for _ in range(nm)])
+
+    n_days = int(daily_mem.shape[1])
+    days = np.arange(1, n_days + 1)
 
     p10_daily = np.percentile(daily_mem, 10, axis=0)
     p90_daily = np.percentile(daily_mem, 90, axis=0)
@@ -384,19 +454,22 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ax_plume.axhline(15.0, color="#EA580C", lw=0.9, ls=":", label="Dry threshold (15 mm/d)")
 
     # Onset & Cessation vertical markers
-    on_day_rel = max(1, min(182, int(on_med - 32)))
-    cs_day_rel = max(1, min(182, int(cs_med - 32)))
-    ax_plume.axvline(on_day_rel, color="#15803D", lw=2.0, label=f"Mean onset – {_doy_to_date_str(on_med)}")
-    ax_plume.axvline(cs_day_rel, color="#B91C1C", lw=2.0, label=f"Mean cessation – {_doy_to_date_str(cs_med)}")
+    on_day_rel = max(1, min(n_days, int(on_med - win_start + 1)))
+    cs_day_rel = max(1, min(n_days, int(cs_med - win_start + 1)))
+    ax_plume.axvline(on_day_rel, color="#15803D", lw=2.0, label=f"Mean onset – {_doy_to_date_str(on_med, f_year)}")
+    ax_plume.axvline(cs_day_rel, color="#B91C1C", lw=2.0, label=f"Mean cessation – {_doy_to_date_str(cs_med, f_year)}")
 
-    ax_plume.set_xlim(1, 182)
+    ax_plume.set_xlim(1, n_days)
     ax_plume.set_ylabel("Precipitation (mm/day)", fontsize=9.0, fontweight="bold", color=COL_TXT_NAVY)
     ax_plume.set_title(f"Ensemble Plume – {nm} members  |  Forecast season length (LGP): {lg_p25:.0f}d – {lg_p75:.0f}d (central 50%, IQR)  |  Site: {glat:.2f}°N, {glon:.2f}°E",
                        fontsize=10.0, fontweight="bold", color=COL_TXT_NAVY, pad=6)
 
     # Date ticks along X axis
-    tick_days = [1, 20, 40, 60, 80, 100, 120, 140, 160, 180]
-    tick_labels = [_doy_to_date_str(32 + d) for d in tick_days]
+    tick_step = 20 if n_days > 150 else 15
+    tick_days = list(range(1, n_days, tick_step))
+    if tick_days[-1] != n_days:
+        tick_days.append(n_days)
+    tick_labels = [_doy_to_date_str(win_start - 1 + d, f_year) for d in tick_days]
     ax_plume.set_xticks(tick_days)
     ax_plume.set_xticklabels(tick_labels, fontsize=8.0)
     ax_plume.grid(True, linestyle="--", alpha=0.4)
@@ -552,12 +625,12 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
             trend_y = np.polyval(poly, np.append(yrs_cal, yrs_val))
             ax.plot(np.append(yrs_cal, yrs_val), trend_y, "-.", color="#DC2626", lw=1.2, label=f"Trend: {poly[0]:+.2f}/yr")
 
-        # 2026 Forecast marker
-        ax.errorbar([op_year], [f_val], yerr=[[f_val - p10], [p90 - f_val]], fmt="*",
+        # Forecast marker
+        ax.errorbar([f_year], [f_val], yerr=[[f_val - p10], [p90 - f_val]], fmt="*",
                     color="#DC2626", ecolor="#DC2626", markersize=14, capsize=4, elinewidth=1.5,
-                    label=f"{model_name} {op_year}: {f_val:.0f} [{_doy_to_date_str(p10) if is_doy else f'{p10:.0f}d'} – {_doy_to_date_str(p90) if is_doy else f'{p90:.0f}d'}]")
+                    label=f"{model_name} {f_year}: {f_val:.0f} [{_doy_to_date_str(p10, f_year) if is_doy else f'{p10:.0f}d'} – {_doy_to_date_str(p90, f_year) if is_doy else f'{p90:.0f}d'}]")
 
-        ax.set_title(f"{var_title} – CHIRPS Historical Record (1981–2025) + {model_name} {op_year} Forecast",
+        ax.set_title(f"{var_title} – CHIRPS Historical Record (1981–2025) + {model_name} {f_year} Forecast",
                      fontsize=9.0, fontweight="bold", color=COL_TXT_NAVY, pad=4)
         ax.set_xlim(1979, 2028)
         ax.set_ylabel(y_unit, fontsize=8.0, fontweight="bold")
@@ -620,11 +693,42 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     safe_model = model_name.replace(" ", "_").replace("/", "-")
     if not out_dir:
         out_dir = os.getcwd()
-    out_png = os.path.join(out_dir, f"bulletin_{safe_model}_{safe_site}_MAM{op_year}.png")
+    os.makedirs(out_dir, exist_ok=True)
+    out_png = os.path.join(out_dir, f"bulletin_{safe_model}_{safe_site}_{season_code}{f_year}.png")
+    out_pdf = os.path.join(out_dir, f"bulletin_{safe_model}_{safe_site}_{season_code}{f_year}.pdf")
 
     fig.savefig(out_png, dpi=dpi, bbox_inches="tight", facecolor=fig.get_facecolor())
+    try:
+        from PIL import Image
+        img = Image.open(out_png)
+        img.save(out_pdf, "PDF", resolution=float(dpi))
+        print(f"  [OK] Saved PDF: {out_pdf}")
+    except Exception as ex:
+        print(f"  Notice: could not export PDF: {ex}")
+
     plt.close(fig)
     plt.close("all")
     gc.collect()
 
     return out_png
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate Single-Model Bulletin")
+    parser.add_argument("--site", default="KALRO Kiboko, Makueni Farm")
+    parser.add_argument("--lat", type=float, default=-2.21046)
+    parser.add_argument("--lon", type=float, default=37.7190)
+    parser.add_argument("--model", default="ECMWF SEAS5 (Sep)")
+    parser.add_argument("--outdir", default="outputs/bulletins")
+    parser.add_argument("--dpi", type=int, default=100)
+    args = parser.parse_args()
+
+    import mam_loader as dl
+    dl.configure()
+    if not dl.is_loaded():
+        dl.load(force=True)
+
+    print(f"\nGenerating bulletin for {args.site} ({args.lat}, {args.lon}) using {args.model} ...")
+    res = generate_single_model_bulletin(args.site, args.lat, args.lon, model_name=args.model, out_dir=args.outdir, dpi=args.dpi)
+    print(f"[OK] Output PNG: {res}\n")

@@ -11,7 +11,8 @@ const PRESET_FARMS = [
 ]
 
 const FORECAST_MODELS = [
-  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5', tag: '51 ens members', centre: 'European Centre' },
+  { id: 'ECMWF SEAS5 (Sep)', name: 'ECMWF SEAS5 (September / Short Rains)', tag: '25 ens members (SOND)', centre: 'European Centre' },
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (February / Long Rains)', tag: '51 ens members (MAM)', centre: 'European Centre' },
   { id: 'UKMO GloSea6', name: 'UKMO GloSea6', tag: '42 ens members', centre: 'UK Met Office' },
   { id: 'Meteo-France Sys8', name: 'Météo-France Sys8', tag: '51 ens members', centre: 'Météo-France' },
   { id: 'DWD GCFS2.1', name: 'DWD GCFS2.1', tag: '50 ens members', centre: 'Deutscher Wetterdienst' },

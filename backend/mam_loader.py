@@ -37,6 +37,7 @@ _LOAD_BC  = _os.environ.get("LOAD_BC_DAILY", "1").lower() not in ("0", "false", 
 MODEL_DIRS:   dict = {}
 _MODEL_DIR_ALIASES = {
     "ECMWF SEAS5": ["outputs_dunning_v3", "outputs_ECMWF_SEAS5_v3", "outputs/dunning_v3", "outputs/seas5_v3", "outputs/ecmwf_v3"],
+    "ECMWF SEAS5 (Sep)": ["outputs/ecmwf_sep", "outputs_ecmwf_sep"],
     "UKMO GloSea6": ["outputs_ukmo_v3", "outputs_UKMO_GloSea6_v3", "outputs/ukmo_v3"],
     "Meteo-France Sys8": ["outputs_mf_v3", "outputs_Meteo-France_Sys8_v3", "outputs/mf_v3"],
     "DWD GCFS2.1": ["outputs_dwd_v3", "outputs_DWD_GCFS2.1_v3", "outputs/dwd_v3"],
@@ -46,6 +47,7 @@ _MODEL_DIR_ALIASES = {
 }
 MODEL_COLORS: dict = {
     "ECMWF SEAS5"       : "#1B5EA6",
+    "ECMWF SEAS5 (Sep)" : "#0284C7",
     "UKMO GloSea6"      : "#C0392B",
     "Meteo-France Sys8" : "#1E6B45",
     "DWD GCFS2.1"       : "#8B4513",
@@ -67,7 +69,7 @@ CAL_YEARS     = np.arange(1981, 2017)
 _PREFIX_MAP   = {
     "dunning_v3":"SEAS5","bom_v3":"BOM","ukmo_v3":"UKMO","mf_v3":"MF",
     "dwd_v3":"DWD","cmcc_v3":"CMCC","ncep_v3":"NCEP","eccc_v3":"ECCC",
-    "ecmwf_v3":"ECMWF",
+    "ecmwf_v3":"ECMWF","ecmwf_sep":"ECMWF",
 }
 
 
@@ -278,8 +280,10 @@ def _load_model(name, out_dir, chirps):
         if len(model_years) != n_years: model_years = np.arange(start, start+n_years)
     op_mask = model_years == _OP_YEAR
     if not op_mask.any():
-        print(f"  SKIP  {name}: OP_YEAR {_OP_YEAR} not found"); return None
-    op_idx = int(np.where(op_mask)[0][0])
+        op_idx = len(model_years) - 1
+        print(f"  NOTICE {name}: OP_YEAR {_OP_YEAR} not found, defaulting to latest year {model_years[op_idx]}")
+    else:
+        op_idx = int(np.where(op_mask)[0][0])
 
     if _LOAD_BC:
         bc_daily = None

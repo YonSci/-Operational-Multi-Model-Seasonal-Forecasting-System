@@ -155,7 +155,8 @@ def generate_bulletin(req: BulletinRequest):
             _png_to_pdf(png_path, out_path, site_name, dpi=100)
             media = "application/pdf"; suffix = ".pdf"
 
-        fname = f"{fname_prefix}_MAM{dl._OP_YEAR}{suffix}"
+        season_tag = "SOND" if ("Sep" in (req.model_name or "") or "sep" in (req.model_name or "").lower()) else f"MAM{dl._OP_YEAR}"
+        fname = f"{fname_prefix}_{season_tag}{suffix}"
         with open(out_path, "rb") as f: content = f.read()
 
     gc.collect()
