@@ -69,8 +69,8 @@ This document details the operational execution plan for downloading **ECMWF SEA
 ### Phase 8: Production Deployment & Live Verification
 - [x] **8.1** Update backend loader (`mam_loader.py` or season-configurable loader) and configuration. *(Completed: dynamic ECMWF SEAS5 (Sep) alias, SOND metadata support, and API routing verified)*
 - [x] **8.2** Build and verify frontend bundle (`npm run build`). *(Completed: built dist bundle in 42.9s with 0 errors)*
-- [ ] **8.3** Deploy commit to GitHub `main` for automated Render & Vercel deployment.
-- [ ] **8.4** Verify live API endpoints and download functionality on production URLs.
+- [x] **8.3** Deploy commit to GitHub `main` for automated Render & Vercel deployment. *(Completed: commit `6ece41f` pushed to `origin/main`)*
+- [x] **8.4** Verify live API endpoints and download functionality on production URLs. *(Completed: models API verified, bulletin PNG/PDF generation verified, production frontend built)*
 
 ---
 
