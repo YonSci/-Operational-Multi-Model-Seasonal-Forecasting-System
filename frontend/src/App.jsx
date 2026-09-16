@@ -74,7 +74,7 @@ function PlaceholderPanel({label,icon}) {
 }
 
 // --- A(D) Plume -----------------------------------------------------------
-function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weights=null, selectedSeason='long_rains' }) {
+function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weights=null, selectedSeason='long_rains', selectedYear=2026 }) {
   if (!pixelData) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>
       No data -- click a pixel on the map
@@ -82,6 +82,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   )
 
   const { models } = pixelData
+  const opYear = selectedYear ?? pixelData?.op_year ?? 2026
   const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
   const monthTicks = isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM
   const winStart = isShort ? 244 : 32
@@ -215,7 +216,6 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
           contentStyle={{ background:'var(--chart-tooltip-bg)', border:'1px solid var(--border-primary)', borderRadius:6, fontSize:10, color:'var(--text-primary)' }}
           formatter={(v, name) => null}
           labelFormatter={d => {
-            const opYear = selectedYear ?? 2026
             const month = monthTicks.slice().reverse().find(m => d >= m.doy)
             return 'DOY ' + d + '  (' + doyToDate(d, opYear) + ')' + (month ? '  -- ' + month.label : '')
           }}
@@ -752,7 +752,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
         <Card title={'C(d) / A(D) Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
               className="flex-1 min-h-0" style={{minHeight:220}}>
           <div style={{height:'100%',padding:8}}>
-            <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason}/>
+            <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason} selectedYear={opYear}/>
           </div>
         </Card>
       </div>
@@ -1219,7 +1219,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
 }
 
 // --- MultiModelTab ------------------------------------------------------------
-function MultiModelTab({ pixelData, activeModels, modelsData }) {
+function MultiModelTab({ pixelData, activeModels, modelsData, selectedSeason='long_rains', selectedYear=2026 }) {
   const [weightMode, setWeightMode] = useState('equal')  // 'equal' | 'hr' | 'rpss'
 
   if (!pixelData) return (
@@ -1355,7 +1355,7 @@ function MultiModelTab({ pixelData, activeModels, modelsData }) {
             A(D) Plume -- All Active Models
           </div>
           <div style={{flex:1,padding:8}}>
-            <ADPlume pixelData={pixelData} selectedModel="multimodel" activeModels={activeModels} weightMode={weightMode} weights={weights}/>
+            <ADPlume pixelData={pixelData} selectedModel="multimodel" activeModels={activeModels} weightMode={weightMode} weights={weights} selectedSeason={selectedSeason} selectedYear={selectedYear}/>
           </div>
         </div>
 
@@ -1764,7 +1764,7 @@ export default function App() {
           <div className="flex-1 min-w-0 overflow-hidden h-full">
             {activeTab==='forecast'      && <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
-            {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData}/>}
+            {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab/>}

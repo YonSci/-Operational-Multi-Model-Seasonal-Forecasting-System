@@ -460,7 +460,7 @@ def _load_demo_npz():
         sep_onset = data["sep_chirps_onset"]
         sep_cess  = data["sep_chirps_cessation"]
         sep_lgp   = data["sep_chirps_lgp"]
-        sep_years = data["sep_ecmwf_years"] if "sep_ecmwf_years" in data else np.arange(1993, 1993 + len(sep_onset))
+        sep_years = data["sep_chirps_years"] if "sep_chirps_years" in data else np.arange(1993, 1993 + len(sep_onset))
         sep_cal_mask = np.isin(sep_years, CAL_YEARS)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)

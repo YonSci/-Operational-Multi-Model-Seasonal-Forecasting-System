@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import * as mapboxgl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import useDashboardStore from '../store/useDashboardStore'
+
+if (typeof mapboxgl.setWorkerUrl === 'function') {
+  mapboxgl.setWorkerUrl(workerUrl)
+}
 
 // MapLibre GL JS -- no token required
 
