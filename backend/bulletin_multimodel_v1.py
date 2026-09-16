@@ -493,7 +493,19 @@ def _draw_ad_plume(ax, pi, pj):
     for k, (mkey, md) in enumerate(MODELS.items()):
         col    = md.get("color", MM_MODEL_COLORS[k % len(MM_MODEL_COLORS)])
         oi     = md["op_idx"]
-        all_bc = md["bc_daily"][:, oi, :, pi, pj]  # (n_mem, n_days)
+        bc_obj = md.get("bc_daily")
+        if bc_obj is None:
+            continue
+        if isinstance(bc_obj, dict):
+            raw = bc_obj.get(OP_YEAR)
+            if raw is not None and hasattr(raw, "ndim") and raw.ndim == 4:
+                all_bc = raw[:, :, pi, pj]
+            else:
+                continue
+        elif hasattr(bc_obj, "ndim") and bc_obj.ndim == 5:
+            all_bc = bc_obj[:, oi, :, pi, pj]  # (n_mem, n_days)
+        else:
+            continue
 
         # Skip if bc_daily is a zero stub (LOAD_BC_DAILY=False or file missing)
         if np.all(all_bc == 0):

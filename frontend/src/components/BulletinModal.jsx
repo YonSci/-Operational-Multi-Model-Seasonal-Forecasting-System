@@ -123,7 +123,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
         bulletin_type: isShort ? 'single' : bulletinType,
         model_name: isShort ? 'ECMWF SEAS5' : selectedModel,
         season: selectedSeason || (isShort ? 'short_rains' : 'long_rains'),
-        year: Number(selectedYear) || (isShort ? 2025 : 2026),
+        year: Number(selectedYear) || 2026,
       })
       clearTimeout(msgTimer1)
       clearTimeout(msgTimer2)

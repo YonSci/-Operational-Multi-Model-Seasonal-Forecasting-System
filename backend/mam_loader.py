@@ -443,8 +443,8 @@ def _load_demo_npz():
             "lgp": data[f"{k}_r_lg"],
         }
 
-        # Daily rainfall array for pixel cumulative curves
-        bc_daily = np.zeros((n_members, len(m_years), 182, n_lat, n_lon), dtype=np.float32)
+        # Daily rainfall array for pixel cumulative curves (None in demo mode to save 5+ GB RAM)
+        bc_daily = None
 
         MODELS[name] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -493,13 +493,11 @@ def _load_demo_npz():
         op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
         n_members = int(m_on.shape[0])
 
-        sep_bc_daily = np.zeros((n_members, len(m_years), 122, n_lat, n_lon), dtype=np.float32)
-        if "sep_ecmwf_bc_daily_2026" in data and 2026 in m_years:
-            idx_26 = int(np.where(m_years == 2026)[0][0])
-            sep_bc_daily[:, idx_26] = data["sep_ecmwf_bc_daily_2026"].astype(np.float32)
-        if "sep_ecmwf_bc_daily_2025" in data and 2025 in m_years:
-            idx_25 = int(np.where(m_years == 2025)[0][0])
-            sep_bc_daily[:, idx_25] = data["sep_ecmwf_bc_daily_2025"].astype(np.float32)
+        sep_bc_daily = {}
+        if "sep_ecmwf_bc_daily_2026" in data:
+            sep_bc_daily[2026] = data["sep_ecmwf_bc_daily_2026"].astype(np.float32)
+        if "sep_ecmwf_bc_daily_2025" in data:
+            sep_bc_daily[2025] = data["sep_ecmwf_bc_daily_2025"].astype(np.float32)
 
         MODELS["ECMWF SEAS5 (Sep)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -716,7 +714,18 @@ def _build_bc_pixel(s, md, mkey, oi, nm, pi, pj, on_m, cs_m, on_med, cs_med):
 
     # If real bc_daily was loaded and has non-zero values, return it
     if _LOAD_BC and "bc_daily" in md and md["bc_daily"] is not None:
-        raw = md["bc_daily"][:, oi, :, pi, pj]
+        bc_obj = md["bc_daily"]
+        if isinstance(bc_obj, dict):
+            target_yr = int(md["model_years"][oi]) if ("model_years" in md and len(md["model_years"]) > oi) else _OP_YEAR
+            raw = bc_obj.get(target_yr)
+            if raw is not None and hasattr(raw, "ndim") and raw.ndim == 4:
+                raw = raw[:, :, pi, pj]
+            else:
+                raw = np.array([])
+        elif hasattr(bc_obj, "ndim") and bc_obj.ndim == 5:
+            raw = bc_obj[:, oi, :, pi, pj]
+        else:
+            raw = np.array([])
         if raw.size > 0 and float(np.nanmax(raw)) > 0.01:
             return raw.tolist()
 

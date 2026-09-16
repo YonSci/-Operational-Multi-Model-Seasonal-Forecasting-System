@@ -561,11 +561,19 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ax_plume.set_facecolor("#FFFFFF")
 
     bc_arr = md.get("bc_daily")
-    if bc_arr is not None and len(bc_arr.shape) == 5 and not np.all(bc_arr == 0):
+    daily_mem = None
+    if isinstance(bc_arr, dict):
+        raw = bc_arr.get(f_year)
+        if raw is not None and hasattr(raw, "ndim") and raw.ndim == 4:
+            daily_mem = raw[:, :, pi, pj] # (nm, n_days)
+    elif bc_arr is not None and hasattr(bc_arr, "ndim") and bc_arr.ndim == 5:
         daily_mem = bc_arr[:, oi, :, pi, pj] # (nm, n_days)
+
+    if daily_mem is not None and hasattr(daily_mem, "ndim") and daily_mem.ndim == 2 and not np.all(daily_mem == 0):
+        pass
     else:
         # Synthesize plume from historical / model onset parameters
-        p_x = np.arange(32, 214) # DOY window
+        p_x = np.arange(win_start, win_end + 1) # DOY window
         rng = np.random.RandomState(42 + pi * 10 + pj)
         base = np.exp(-((p_x - on_med)**2) / (2 * 18**2)) * 30 + 5
         daily_mem = np.array([np.maximum(0, base * rng.normal(1.0, 0.25, len(p_x))) for _ in range(nm)])

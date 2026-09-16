@@ -184,25 +184,31 @@ def _has_cartopy():
 def _png_to_pdf(png_path, pdf_path, title, dpi=100):
     import gc
     gc.collect()
-    from reportlab.lib.pagesizes import A3
-    from reportlab.lib.units import mm
-    from reportlab.pdfgen import canvas as _rl
-    from PIL import Image as _PIL
-    _PIL.MAX_IMAGE_PIXELS = None
-    pw, ph = A3
-    mg = 10 * mm
-    with _PIL.open(png_path) as img:
-        iw, ih = img.size
-        scale = min((pw - 2 * mg) / (iw / dpi * 72), (ph - 2 * mg) / (ih / dpi * 72))
-        dw = (iw / dpi * 72) * scale
-        dh = (ih / dpi * 72) * scale
-        xo = mg + ((pw - 2 * mg) - dw) / 2
-        yo = mg + ((ph - 2 * mg) - dh) / 2
-    c = _rl.Canvas(pdf_path, pagesize=(pw, ph))
-    c.setTitle(title)
-    c.setAuthor("ICPAC / ILRI Climate Services")
-    c.drawImage(png_path, xo, yo, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
-    c.save()
+    try:
+        from reportlab.lib.pagesizes import A3
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas as _rl
+        from PIL import Image as _PIL
+        _PIL.MAX_IMAGE_PIXELS = None
+        pw, ph = A3
+        mg = 10 * mm
+        with _PIL.open(png_path) as img:
+            iw, ih = img.size
+            scale = min((pw - 2 * mg) / (iw / dpi * 72), (ph - 2 * mg) / (ih / dpi * 72))
+            dw = (iw / dpi * 72) * scale
+            dh = (ih / dpi * 72) * scale
+            xo = mg + ((pw - 2 * mg) - dw) / 2
+            yo = mg + ((ph - 2 * mg) - dh) / 2
+        c = _rl.Canvas(pdf_path, pagesize=(pw, ph))
+        c.setTitle(title)
+        c.setAuthor("ICPAC / ILRI Climate Services")
+        c.drawImage(png_path, xo, yo, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
+        c.save()
+    except Exception as exc:
+        # Reliable fallback: direct PIL PDF conversion
+        from PIL import Image
+        with Image.open(png_path) as img:
+            img.save(pdf_path, "PDF", resolution=float(dpi))
     gc.collect()
 
 
