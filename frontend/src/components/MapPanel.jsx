@@ -193,6 +193,32 @@ const CS = {
   h_lgp_det:    { s:[0.5,0.6,0.7,0.8,0.9,0.95,1.0], c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Detection Rate: Season Length (fraction)' },
 }
 
+// Dedicated Short Rains (OND) colour scales:
+const CS_OND = {
+  onset_med:    { s:[280,295,305,315,325,335,345], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
+  cess_med:     { s:[320,330,338,344,350,358,365], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble cessation P50 (DOY)' },
+  lgp_med:      { s:[5,10,15,20,25,35,50],         c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length P50 (days)' },
+  onset_hr_w:   { s:[280,295,305,315,325,335,345], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 HR-Weighted (DOY)' },
+  cess_hr_w:    { s:[320,330,338,344,350,358,365], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 HR-Weighted (DOY)' },
+  lgp_hr_w:     { s:[5,10,15,20,25,35,50],         c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length HR-Weighted (days)' },
+  onset_rpss_w: { s:[280,295,305,315,325,335,345], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 RPSS-Weighted (DOY)' },
+  cess_rpss_w:  { s:[320,330,338,344,350,358,365], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 RPSS-Weighted (DOY)' },
+  lgp_rpss_w:   { s:[5,10,15,20,25,35,50],         c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length RPSS-Weighted (days)' },
+  chirps_p50_onset: { s:[280,295,305,315,325,335,345], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
+  chirps_p50_cess:  { s:[320,330,338,344,350,358,365], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Cessation P50 (DOY)' },
+  chirps_p50_lgp:   { s:[5,10,15,20,25,35,50],         c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'CHIRPS Season Length P50 (days)' },
+  h_onset_p50:  { s:[280,295,305,315,325,335,345], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 (DOY)' },
+  h_cess_p50:   { s:[320,330,338,344,350,358,365], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 (DOY)' },
+  h_lgp_p50:    { s:[5,10,15,20,25,35,50],         c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
+}
+
+function getScale(scaleId, isShortRains = false) {
+  if (isShortRains && CS_OND[scaleId]) {
+    return CS_OND[scaleId]
+  }
+  return CS[scaleId]
+}
+
 // Default layers (forecast / probabilistic / multi-model tabs)
 // Grouped for 4-column dropdown (Onset / Cessation / Season Length per row)
 const LAYERS = [
@@ -317,7 +343,7 @@ function buildRaster(gridData, scale) {
   return {dataUrl:canvas.toDataURL(),coords:[[OMNA,LMXA],[OMXA,LMXA],[OMXA,LMNA],[OMNA,LMNA]]}
 }
 
-function fmtTip(props, L) {
+function fmtTip(props, L, year = 2026) {
   if (!props) return null
   const lines = [], mv = props.map_val
   L = L ?? ''
@@ -332,7 +358,7 @@ function fmtTip(props, L) {
   if (mv != null) {
     // P50 / median layers
     if (L.includes('p50') || L.includes('med')) {
-      const d = isDOY ? doyToDate(mv) : null
+      const d = isDOY ? doyToDate(mv, year) : null
       const val = isDOY
         ? 'DOY ' + mv.toFixed(0) + (d ? '  (' + d + ')' : '')
         : mv.toFixed(0) + ' days'
@@ -378,11 +404,11 @@ function fmtTip(props, L) {
 
   // CHIRPS CAL reference for onset/cessation/lgp layers
   if (props.chirps_on != null && isOnset) {
-    const d = doyToDate(props.chirps_on)
+    const d = doyToDate(props.chirps_on, year)
     lines.push('CHIRPS CAL onset: DOY ' + Math.round(props.chirps_on) + (d ? '  (' + d + ')' : ''))
   }
   if (props.chirps_cs != null && isCess) {
-    const d = doyToDate(props.chirps_cs)
+    const d = doyToDate(props.chirps_cs, year)
     lines.push('CHIRPS CAL cess: DOY ' + Math.round(props.chirps_cs) + (d ? '  (' + d + ')' : ''))
   }
   if (props.chirps_lgp != null && isLGP) {
@@ -396,9 +422,11 @@ function fmtTip(props, L) {
   return lines
 }
 
-function Legend({scaleId}){
-  const s=CS[scaleId]; if(!s) return null
-  return(
+function Legend({ scaleId, isShort = false, opYear = 2026 }) {
+  const s = getScale(scaleId, isShort); if (!s) return null
+  const isDOY = (scaleId.includes('onset') || scaleId.includes('cess')) &&
+                (scaleId.includes('med') || scaleId.includes('p50') || scaleId.includes('chirps') || scaleId.includes('_w'))
+  return (
     <div style={{background:'var(--bg-surface)',
                  border:'1px solid var(--border-primary)',borderRadius:8,padding:8,minWidth:140,backdropFilter:'blur(6px)'}}>
       <p style={{fontSize:9,color:'var(--text-muted)',marginBottom:4,textAlign:'center'}}>{s.label}</p>
@@ -408,6 +436,13 @@ function Legend({scaleId}){
       <div style={{display:'flex',justifyContent:'space-between',fontSize:8,color:'var(--text-faint)'}}>
         <span>{s.s[0]}</span><span>{s.s[Math.floor(s.s.length/2)]}</span><span>{s.s[s.s.length-1]}</span>
       </div>
+      {isDOY && (
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:7,color:'var(--text-muted)',marginTop:2}}>
+          <span>{doyToDate(s.s[0], opYear)}</span>
+          <span>{doyToDate(s.s[Math.floor(s.s.length/2)], opYear)}</span>
+          <span>{doyToDate(s.s[s.s.length-1], opYear)}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -533,7 +568,19 @@ function applyBoundaryLayers(map, boundaryData, showAdmin0, showAdmin1, darkMode
 }
 
 // -- Main: gridData arrives as prop from App.jsx ---------------------------
-export default function MapPanel({darkMode=false, selectedModel='', gridData=null, onLayerChange, activeTab='', country='kenya', onOpenBulletin}) {
+export default function MapPanel({
+  darkMode=false,
+  selectedModel='',
+  gridData=null,
+  onLayerChange,
+  activeTab='',
+  country='kenya',
+  selectedSeason='long_rains',
+  selectedYear=2026,
+  onOpenBulletin
+}) {
+  const isShort = selectedSeason === 'short_rains' || (gridData?.meta?.vmin != null && gridData.meta.vmin > 200)
+  const opYear = selectedYear ?? (isShort ? 2025 : 2026)
   const mapContainer = useRef(null)
   const mapRef       = useRef(null)
   const darkRef      = useRef(darkMode)
@@ -615,18 +662,19 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
   // Build raster
   const [raster, setRaster] = useState(null)
   useEffect(()=>{
-    console.log('[Raster build] gridData:', gridData?.features?.length, 'activeLayer:', activeLayer)
+    console.log('[Raster build] gridData:', gridData?.features?.length, 'activeLayer:', activeLayer, 'isShort:', isShort)
     const csKey2 = activeLayer.startsWith('h_') ? (
         activeLayer.includes('p50')  ? (activeLayer.includes('onset')?'onset_med':activeLayer.includes('cess')?'cess_med':'lgp_med')
       : activeLayer.includes('spr')  ? 'onset_spread'
       : activeLayer.includes('bias') ? 'bias'
       : activeLayer.includes('det')  ? 'detection_rate'
       : activeLayer) : activeLayer
-    const scale=CS[csKey2]; if(!gridData||!scale){ console.log('[Raster build] SKIP - no data/scale'); return }
+    const scale = getScale(csKey2, isShort)
+    if(!gridData||!scale){ console.log('[Raster build] SKIP - no data/scale'); return }
     const r = buildRaster(gridData,scale)
     console.log('[Raster build] result:', r ? 'OK dataUrl len='+r.dataUrl.length : 'NULL')
     if(r) setRaster(r)
-  },[gridData,activeLayer])
+  },[gridData,activeLayer,isShort])
 
   // -- Map init ----------------------------------------------------------
   useEffect(()=>{
@@ -869,7 +917,7 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
     try{map.getSource('selected')?.setData(fc)}catch(_){}
   },[selectedSite,mapReady])
 
-  const tipLines=tooltip?fmtTip(tooltip.props,activeLayer):null
+  const tipLines=tooltip?fmtTip(tooltip.props,activeLayer,opYear):null
   const brd='1px solid var(--border-primary)'
 
   return (
@@ -1173,7 +1221,7 @@ export default function MapPanel({darkMode=false, selectedModel='', gridData=nul
         {/* Colour legend -- bottom-right */}
         {countryView.available && (
         <div style={{position:'absolute',bottom:8,right:8,pointerEvents:'auto'}}>
-          <Legend scaleId={activeLayer}/>
+          <Legend scaleId={activeLayer} isShort={isShort} opYear={opYear}/>
         </div>
         )}
 

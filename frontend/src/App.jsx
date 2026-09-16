@@ -1747,7 +1747,17 @@ export default function App() {
           {activeTab!=='about'&&(
           <div className="shrink-0 flex flex-col" style={{width:'40%',minWidth:320,maxWidth:520}}>
             <div className="flex-1 min-h-0">
-              <MapPanel darkMode={darkMode} selectedModel={selectedModel} gridData={mapGridData} onLayerChange={setMapLayer} activeTab={activeTab} country={country} onOpenBulletin={()=>setBulletinModalOpen(true)}/>
+              <MapPanel
+                darkMode={darkMode}
+                selectedModel={selectedModel}
+                gridData={mapGridData}
+                onLayerChange={setMapLayer}
+                activeTab={activeTab}
+                country={country}
+                selectedSeason={selectedSeason}
+                selectedYear={selectedYear}
+                onOpenBulletin={()=>setBulletinModalOpen(true)}
+              />
             </div>
           </div>
           )}
