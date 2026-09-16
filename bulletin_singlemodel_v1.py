@@ -95,6 +95,98 @@ def _hline(ax, y, color, lw=1.0, ls="-", x0=0.0, x1=1.0):
     ax.plot([x0, x1], [y, y], color=color, lw=lw, ls=ls,
             transform=ax.transAxes, clip_on=False, zorder=10)
 
+def _get_boundary_file(name):
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "frontend", "public", "boundaries", name),
+        os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "boundaries", name),
+        os.path.join(os.getcwd(), "frontend", "public", "boundaries", name),
+        os.path.join(os.getcwd(), "boundaries", name),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+    return None
+
+def _draw_grid_location_map(fig, gs_cell, glat, glon, lat_q=None, lon_q=None, dkm=None):
+    ke0_path = _get_boundary_file("ke_admin0.geojson")
+    ke1_path = _get_boundary_file("ke_admin1.geojson")
+
+    # Method 1: High-fidelity Vector GeoJSON rendering (fast, offline, self-contained)
+    if ke0_path and os.path.isfile(ke0_path):
+        try:
+            import json
+            import matplotlib.patches as patches
+            ax = fig.add_subplot(gs_cell)
+            ax.set_facecolor("#DBEAFE")
+            ax.set_xlim(33.5, 42.2)
+            ax.set_ylim(-4.8, 4.8)
+
+            # County sub-boundaries
+            if ke1_path and os.path.isfile(ke1_path):
+                with open(ke1_path, "r", encoding="utf-8") as f:
+                    ke1 = json.load(f)
+                for feat in ke1.get("features", []):
+                    geom = feat.get("geometry", {})
+                    gtype = geom.get("type")
+                    coords = geom.get("coordinates", [])
+                    polys = [coords] if gtype == "Polygon" else (coords if gtype == "MultiPolygon" else [])
+                    for poly in polys:
+                        if poly and len(poly):
+                            ax.add_patch(patches.Polygon(poly[0], facecolor="#F1EFE9", edgecolor="#CBD5E1", linewidth=0.4, zorder=1))
+
+            # Country border
+            with open(ke0_path, "r", encoding="utf-8") as f:
+                ke0 = json.load(f)
+            for feat in ke0.get("features", []):
+                geom = feat.get("geometry", {})
+                gtype = geom.get("type")
+                coords = geom.get("coordinates", [])
+                polys = [coords] if gtype == "Polygon" else (coords if gtype == "MultiPolygon" else [])
+                for poly in polys:
+                    if poly and len(poly):
+                        ax.add_patch(patches.Polygon(poly[0], facecolor="none", edgecolor="#334155", linewidth=0.8, zorder=2))
+
+            ax.axhline(glat, color=COL_MAP_SITE, lw=0.5, alpha=0.4, zorder=3)
+            ax.axvline(glon, color=COL_MAP_SITE, lw=0.5, alpha=0.4, zorder=3)
+            ax.plot(glon, glat, "*", color=COL_MAP_SITE, markersize=11, markeredgecolor="#FFFFFF", markeredgewidth=0.8, zorder=5)
+            ax.text(glon + 0.3, glat + 0.2, f"{glat:.2f}\n{glon:.2f}E", color=COL_MAP_SITE, fontsize=8, fontweight="bold", zorder=6)
+
+            ax.set_xticks([34, 36, 38, 40, 42])
+            ax.set_xticklabels(["34°E", "36°E", "38°E", "40°E", "42°E"], fontsize=7, color=COL_TXT_MUTED)
+            ax.set_yticks([-4, -2, 0, 2, 4])
+            ax.set_yticklabels(["4°S", "2°S", "0°", "2°N", "4°N"], fontsize=7, color=COL_TXT_MUTED)
+            ax.tick_params(axis="both", which="both", length=2, pad=2)
+            ax.set_title("Grid Location", fontsize=9.5, fontweight="bold", color=COL_TXT_NAVY, pad=4)
+            return ax
+        except Exception as exc:
+            print(f"[bulletin] GeoJSON map render warning: {exc}")
+
+    # Method 2: Cartopy fallback
+    if HAS_CARTOPY:
+        try:
+            ax = fig.add_subplot(gs_cell, projection=ccrs.PlateCarree())
+            ax.set_extent([33.5, 42.2, -4.8, 4.8], crs=ccrs.PlateCarree())
+            ax.add_feature(cfeature.LAND, facecolor="#F1EFE9", zorder=0)
+            ax.add_feature(cfeature.OCEAN, facecolor="#DBEAFE", zorder=0)
+            ax.add_feature(cfeature.BORDERS, linewidth=0.6, edgecolor="#475569", zorder=2)
+            ax.add_feature(cfeature.COASTLINE, linewidth=0.7, edgecolor="#1E293B", zorder=2)
+            ax.axhline(glat, color=COL_MAP_SITE, lw=0.5, alpha=0.4, zorder=3)
+            ax.axvline(glon, color=COL_MAP_SITE, lw=0.5, alpha=0.4, zorder=3)
+            ax.plot(glon, glat, "*", color=COL_MAP_SITE, markersize=12, markeredgecolor="#FFFFFF", markeredgewidth=1.0, transform=ccrs.PlateCarree(), zorder=5)
+            ax.text(glon + 0.3, glat + 0.2, f"{glat:.2f}\n{glon:.2f}E", color=COL_MAP_SITE, fontsize=8, fontweight="bold", transform=ccrs.PlateCarree(), zorder=6)
+            ax.set_title("Grid Location", fontsize=9.5, fontweight="bold", color=COL_TXT_NAVY, pad=4)
+            return ax
+        except Exception as exc:
+            print(f"[bulletin] Cartopy render warning: {exc}")
+
+    # Method 3: Text card fallback
+    ax = fig.add_subplot(gs_cell)
+    ax.axis("off")
+    ax.set_facecolor(COL_PANEL_BG)
+    ax.text(0.5, 0.6, f"Site Location\n{lat_q:+.4f}°N, {lon_q:+.4f}°E", ha="center", va="center", fontsize=10, fontweight="bold", color=COL_MAP_SITE)
+    ax.text(0.5, 0.35, f"Grid Pixel: [{glat:.2f}°, {glon:.2f}°]\nDistance: {dkm:.1f} km" if dkm else f"Grid Pixel: [{glat:.2f}°, {glon:.2f}°]", ha="center", va="center", fontsize=8, color=COL_TXT_MUTED)
+    return ax
+
 # =============================================================================
 # SINGLE-MODEL BULLETIN GENERATOR
 # =============================================================================
@@ -362,22 +454,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     # =========================================================================
     # ROW 0: GRID LOCATION MAP + ENSEMBLE TIMING SUMMARY TABLE
     # =========================================================================
-    if HAS_CARTOPY:
-        ax_map = fig.add_subplot(gs[0, 0], projection=ccrs.PlateCarree())
-        ax_map.set_extent([33.5, 42.2, -4.8, 4.8], crs=ccrs.PlateCarree())
-        ax_map.add_feature(cfeature.LAND, facecolor="#F1EFE9", zorder=0)
-        ax_map.add_feature(cfeature.OCEAN, facecolor="#DBEAFE", zorder=0)
-        ax_map.add_feature(cfeature.BORDERS, linewidth=0.6, edgecolor="#475569", zorder=2)
-        ax_map.add_feature(cfeature.COASTLINE, linewidth=0.7, edgecolor="#1E293B", zorder=2)
-        ax_map.plot(glon, glat, "*", color=COL_MAP_SITE, markersize=14, markeredgecolor="#FFFFFF", markeredgewidth=1.0, transform=ccrs.PlateCarree(), zorder=5)
-        ax_map.text(glon + 0.3, glat + 0.2, f"{glat:.2f}\n{glon:.2f}E", color=COL_MAP_SITE, fontsize=8, fontweight="bold", transform=ccrs.PlateCarree(), zorder=6)
-        ax_map.set_title("Grid Location", fontsize=9.5, fontweight="bold", color=COL_TXT_NAVY, pad=4)
-    else:
-        ax_map = fig.add_subplot(gs[0, 0])
-        ax_map.axis("off")
-        ax_map.set_facecolor(COL_PANEL_BG)
-        ax_map.text(0.5, 0.6, f"Site Location\n{lat_q:+.4f}°N, {lon_q:+.4f}°E", ha="center", va="center", fontsize=10, fontweight="bold", color=COL_MAP_SITE)
-        ax_map.text(0.5, 0.35, f"Grid Pixel: [{glat:.2f}°, {glon:.2f}°]\nDistance: {dkm:.1f} km", ha="center", va="center", fontsize=8, color=COL_TXT_MUTED)
+    ax_map = _draw_grid_location_map(fig, gs[0, 0], glat, glon, lat_q=lat_q, lon_q=lon_q, dkm=dkm)
 
     # Table: Ensemble Timing Summary
     ax_tbl = fig.add_subplot(gs[0, 1:4])

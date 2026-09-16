@@ -376,6 +376,17 @@ const RISK_DEFS=[
   {key:'agree_on_max',group:'Forecast Confidence',label:'Ensemble Confidence', icon:'\u25CE',sub:'Max agreement on onset category', def:'Fraction of active models agreeing on dominant onset category (BN/NN/AN). Above 50% = meaningful consensus.',                                                      thresh:0.5,  warn:false,higher_better:true},
 ]
 
+const RISK_DEFS_SOND=[
+  {key:'p_late_on',   group:'Onset Timing',      label:'Late Onset Risk',      icon:'\u23F0',sub:'P(Onset after ~18 Nov)',  def:'Probability the SOND season begins later than the climatological upper tercile onset (~18 Nov). Elevated risk of delayed crop planting.', thresh:0.333,warn:true, doy:322, warningLevel:0.5},
+  {key:'p_early_on',  group:'Onset Timing',      label:'Early Onset Risk',     icon:'\uD83C\uDF31',sub:'P(Onset before ~02 Nov)', def:'Probability of an unusually early onset (before ~02 Nov). Can indicate false start risk.', thresh:0.333,warn:false,doy:306},
+  {key:'p_lgp_lt20',  group:'Season Length',     label:'Critically Short Season', icon:'\u26A0', sub:'P(Season Length < 20 days)',   def:'Season under 20 days is critically short -- insufficient for rain-fed crops to reach maturity.', thresh:0.20, warn:true, warningLevel:0.35},
+  {key:'p_lgp_lt30',  group:'Season Length',     label:'Short Season Risk',    icon:'\uD83D\uDCC9',sub:'P(Season Length < 30 days)',   def:'Season under 30 days is below the minimum for most short-cycle varieties.', thresh:0.333,warn:true},
+  {key:'p_lgp_lt40',  group:'Season Length',     label:'Below-Normal Season',  icon:'\uD83C\uDF26',sub:'P(Season Length < 40 days)',   def:'Season under 40 days is below the climatological median for Short Rains (~35-40 days).', thresh:0.333,warn:true},
+  {key:'p_fail',      group:'Season Failure',    label:'Season Failure',       icon:'\u2715', sub:'P(No detectable onset)',           def:'Fraction of members with no detectable rainfall onset. Above 10% is an early warning signal.', thresh:0.10, warn:true, warningLevel:0.20},
+  {key:'p_dry_spell', group:'Season Failure',    label:'Dry Spell Risk',       icon:'\uD83C\uDFDC',sub:'Proxy: P(Season < 20d)',          def:'Proxy indicator using P(LGP<20d) as surrogate for dry spell risk after onset in Short Rains.', thresh:0.333,warn:true},
+  {key:'agree_on_max',group:'Forecast Confidence',label:'Ensemble Confidence', icon:'\u25CE',sub:'Max agreement on onset category', def:'Fraction of ensemble members agreeing on dominant onset category (BN/NN/AN). Above 50% = meaningful consensus.', thresh:0.5, warn:false,higher_better:true},
+]
+
 function GaugeCard({def:rd,vals,entries}) {
   const [showDef,setShowDef]=useState(false)
   if (!vals||!vals.length) return (
@@ -428,26 +439,59 @@ function GaugeCard({def:rd,vals,entries}) {
   )
 }
 
-function RiskGauges({pixelData,activeModels,selectedModel='multimodel'}) {
+function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedSeason='long_rains'}) {
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
-  const entries=Object.entries(pixelData.models).filter(([n])=>selectedModel==='multimodel'?activeModels.has(n):n===selectedModel).slice(0,8)
-  const groups={}
-  RISK_DEFS.forEach(rd=>{
-    if (!groups[rd.group]) groups[rd.group]=[]
+  const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
+  const allEntries = Object.entries(pixelData.models ?? {}).filter(([n]) => {
+    if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
+    return selectedModel === 'multimodel' ? activeModels.has(n) : n === selectedModel
+  })
+  const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
+  const groups = {}
+  const defs = isShort ? RISK_DEFS_SOND : RISK_DEFS
+  defs.forEach(rd => {
+    if (!groups[rd.group]) groups[rd.group] = []
     let vals
-    if (rd.key==='p_late_on')  vals=entries.map(([,ms])=>{const v=ms.on_v??[];return v.length?v.filter(x=>x>89).length/v.length:null}).filter(v=>v!=null)
-    else if (rd.key==='p_early_on') vals=entries.map(([,ms])=>{const v=ms.on_v??[];return v.length?v.filter(x=>x<74).length/v.length:null}).filter(v=>v!=null)
-    else if (rd.key==='p_lgp_lt35') vals=entries.map(([,ms])=>{const v=ms.lg_v??[];return v.length?v.filter(x=>x<35).length/v.length:null}).filter(v=>v!=null)
-    else if (rd.key==='p_lgp_lt45') vals=entries.map(([,ms])=>{const v=ms.lg_v??[];return v.length?v.filter(x=>x<45).length/v.length:null}).filter(v=>v!=null)
-    else if (rd.key==='p_lgp_lt60') vals=entries.map(([,ms])=>{const v=ms.lg_v??[];return v.length?v.filter(x=>x<60).length/v.length:null}).filter(v=>v!=null)
-    else if (rd.key==='p_dry_spell') vals=entries.map(([,ms])=>{const v=ms.lg_v??[];return v.length?v.filter(x=>x<35).length/v.length:null}).filter(v=>v!=null)
-    else if (rd.key==='agree_on_max') vals=[Math.max(...entries.map(([,ms])=>ms.agree_on??1/3).filter(v=>!isNaN(v)))]
-    else vals=entries.map(([,ms])=>ms[rd.key]).filter(v=>v!=null&&!isNaN(v))
-    groups[rd.group].push({rd,vals})
+    if (rd.key === 'p_late_on') {
+      vals = entries.map(([,ms]) => {
+        const v = ms.on_v ?? []
+        const thr = ms.t67?.onset ?? (isShort ? 322 : 89)
+        return v.length ? v.filter(x => x > thr).length / v.length : null
+      }).filter(v => v != null)
+    } else if (rd.key === 'p_early_on') {
+      vals = entries.map(([,ms]) => {
+        const v = ms.on_v ?? []
+        const thr = ms.t33?.onset ?? (isShort ? 306 : 74)
+        return v.length ? v.filter(x => x < thr).length / v.length : null
+      }).filter(v => v != null)
+    } else if (rd.key === 'p_lgp_lt20') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 20).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'p_lgp_lt30') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 30).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'p_lgp_lt40') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 40).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'p_lgp_lt35') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 35).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'p_lgp_lt45') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 45).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'p_lgp_lt60') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 60).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'p_dry_spell') {
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; const thr = isShort ? 20 : 35; return v.length ? v.filter(x => x < thr).length / v.length : null }).filter(v => v != null)
+    } else if (rd.key === 'agree_on_max') {
+      vals = [Math.max(...entries.map(([,ms]) => ms.agree_on ?? (ms.p_on ? Math.max(...ms.p_on) : 1/3)).filter(v => !isNaN(v)))]
+    } else if (rd.key === 'p_fail') {
+      vals = entries.map(([,ms]) => ms.p_fail ?? 0).filter(v => v != null)
+    } else {
+      vals = entries.map(([,ms]) => ms[rd.key]).filter(v => v != null && !isNaN(v))
+    }
+    groups[rd.group].push({rd, vals})
   })
   return (
     <div style={{padding:'8px 10px',overflowY:'auto',height:'100%'}}>
-      <p style={{fontSize:9,color:'var(--text-faint)',marginBottom:10,lineHeight:1.5}}>Click any card to see the definition. Threshold line shown on bar.</p>
+      <p style={{fontSize:9,color:'var(--text-faint)',marginBottom:10,lineHeight:1.5}}>
+        {isShort ? 'Short Rains (SOND) risk indicators relative to 1993-2016 climatological terciles.' : 'Click any card to see the definition. Threshold line shown on bar.'}
+      </p>
       {Object.entries(groups).map(([grp,items])=>(
         <div key={grp} style={{marginBottom:16}}>
           <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--accent-blue)',marginBottom:8,paddingBottom:4,borderBottom:'1px solid var(--border-primary)'}}>{grp}</div>
@@ -494,18 +538,24 @@ function TercileBar({values}) {
   )
 }
 
-function ProbabilisticOutlook({pixelData,activeModels,selectedModel='multimodel'}) {
+function ProbabilisticOutlook({pixelData,activeModels,selectedModel='multimodel',selectedSeason='long_rains'}) {
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
-  const entries=Object.entries(pixelData.models).filter(([n])=>selectedModel==='multimodel'?activeModels.has(n):n===selectedModel)
+  const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
+  const allEntries = Object.entries(pixelData.models ?? {}).filter(([n]) => {
+    if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
+    return selectedModel === 'multimodel' ? activeModels.has(n) : n === selectedModel
+  })
+  const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
+  const climLabel = isShort ? '1993-2016' : '1981-2016'
   const secs=[
-    {key:'p_on', label:'Onset Timing', icon:'\uD83C\uDF27', def:'BN=late onset, AN=early onset vs 1981-2016 terciles'},
+    {key:'p_on', label:'Onset Timing', icon:'\uD83C\uDF27', def:`BN=late onset, AN=early onset vs ${climLabel} climatological terciles`},
     {key:'p_cs', label:'Cessation Timing', icon:'\u2600', def:'AN=late cessation (longer rains)'},
     {key:'p_lgp',label:'Season Length', icon:'\uD83D\uDCC5', def:'BN=shorter than average growing period'},
   ]
   return (
     <div style={{padding:'10px 12px',overflowY:'auto',height:'100%'}}>
       <div style={{marginBottom:12,padding:'8px 10px',background:'var(--bg-elevated)',borderRadius:8,border:'1px solid var(--border-primary)',fontSize:9,color:'var(--text-secondary)',lineHeight:1.6}}>
-        Tercile probabilities relative to <strong>1981-2016 climatology</strong>. Climatological expectation = 33% per category. Values above 40% indicate a meaningful signal.
+        Tercile probabilities relative to <strong>{climLabel} climatology</strong>. Climatological expectation = 33% per category. Values above 40% indicate a meaningful signal.
       </div>
       {secs.map(s=>(
         <div key={s.key} style={{background:'var(--bg-elevated)',borderRadius:8,padding:'6px 10px',border:'1px solid var(--border-primary)',marginBottom:6}}>
@@ -541,15 +591,17 @@ function AgreementDial({value,label}) {
   )
 }
 
-function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel' }) {
+function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel', selectedSeason='long_rains' }) {
   if (!pixelData) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',
                  height:'100%',color:'var(--text-faint)',fontSize:11}}>No data</div>
   )
-
-  const entries = Object.entries(pixelData.models)
-    .filter(([n]) => selectedModel==='multimodel' ? activeModels.has(n) : n===selectedModel)
-    .slice(0, 8)
+  const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
+  const allEntries = Object.entries(pixelData.models ?? {}).filter(([n]) => {
+    if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
+    return selectedModel === 'multimodel' ? activeModels.has(n) : n === selectedModel
+  })
+  const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
 
   const vars = [
     { key:'agree_on',  label:'Onset',         icon:'\uD83C\uDF27' },
@@ -559,7 +611,7 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
 
   const medianOf = key => {
     const vals = entries.map(([,ms]) => ms[key] ?? 1/3)
-    return [...vals].sort((a,b)=>a-b)[Math.floor(vals.length/2)]
+    return vals.length ? [...vals].sort((a,b)=>a-b)[Math.floor(vals.length/2)] : 1/3
   }
 
   // Compact SVG dial
@@ -587,7 +639,11 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-
+      {isShort && (
+        <div style={{padding:'4px 8px',background:'rgba(59,130,246,0.08)',borderBottom:'1px solid var(--border-primary)',fontSize:8.5,color:'var(--accent-blue)',fontWeight:600,textAlign:'center'}}>
+          Single-Model Operational Ensemble: ECMWF SEAS5 (25 Ensemble Members)
+        </div>
+      )}
       {/* Dial summary row */}
       <div style={{flexShrink:0,display:'flex',justifyContent:'space-around',padding:'8px 4px 6px',
                    borderBottom:'1px solid var(--border-primary)',background:'var(--bg-elevated)'}}>
@@ -729,20 +785,25 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
 
 // --- Probabilistic Tab ----------------------------------------------------
 function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel,modelsData,selectedYear,setSelectedYear,country,selectedSeason,onSeasonChange,selectedInit}) {
-  const modelNames=modelsData?.models?Object.keys(modelsData.models):[]
+  const isShort = selectedSeason === 'short_rains'
+  const modelNames = isShort ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
+  const yearOptions = isShort ? [2025, 2024, 2023, 2022] : [2026, 2025, 2024, 2023]
+  const seasonCode = isShort ? 'SOND' : 'MAM'
+  const opYear = selectedYear ?? (isShort ? 2025 : 2026)
+  const displayModel = isShort ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
   const selStyle={background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       <div style={{flexShrink:0,padding:'8px 12px',background:'var(--bg-elevated)',borderBottom:'1px solid var(--border-primary)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Model</span>
-          <select value={selectedModel} onChange={e=>setSelectedModel(e.target.value)} style={selStyle}>{modelNames.map(n=><option key={n} value={n}>{n}</option>)}</select></div>
+          <select value={isShort ? 'ECMWF SEAS5' : selectedModel} onChange={e=>setSelectedModel(e.target.value)} style={selStyle}>{modelNames.map(n=><option key={n} value={n}>{n}</option>)}</select></div>
         <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Season</span>
           <select value={selectedSeason} onChange={e=>onSeasonChange(e.target.value)} style={selStyle}>
             {(SEASONS[country]??SEASONS.kenya).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
           </select></div>
         <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Year</span>
-          <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>{[2026,2025,2024,2023].map(y=><option key={y} value={y}>{y}</option>)}</select></div>
-        <div style={{marginLeft:'auto',fontSize:9,color:'var(--text-faint)'}}>{!pixelData?'Click a pixel to load data':selectedModel+' - Init '+(INIT_LABELS[selectedInit]??selectedInit)+' - '+(selectedSeason==='short_rains'?'SOND':'MAM')+' '+selectedYear}</div>
+          <select value={opYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>{yearOptions.map(y=><option key={y} value={y}>{y}</option>)}</select></div>
+        <div style={{marginLeft:'auto',fontSize:9,color:'var(--text-faint)'}}>{!pixelData?'Click a pixel to load data':displayModel+' - Init '+(INIT_LABELS[selectedInit]??selectedInit)+' - '+seasonCode+' '+opYear}</div>
       </div>
       {!pixelData?(
         <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:'var(--text-faint)'}}>
@@ -761,7 +822,7 @@ function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel
                   <span style={{fontSize:11,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)'}}>{title}</span>
                   {subtitle&&<span style={{fontSize:9,color:'var(--text-faint)'}}>{subtitle}</span>}
                 </div>
-                <div style={{flex:1,overflow:'auto'}}><Comp pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel}/></div>
+                <div style={{flex:1,overflow:'auto'}}><Comp pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} selectedSeason={selectedSeason}/></div>
               </div>
             </div>
           ))}
