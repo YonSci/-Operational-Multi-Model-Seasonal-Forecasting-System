@@ -93,13 +93,11 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
   const nDays = winEnd - winStart + 1
 
-  const effectiveKey = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
-    ? ('ECMWF SEAS5 (Sep)' in (models ?? {}) ? 'ECMWF SEAS5 (Sep)' : selectedModel)
-    : selectedModel
-
-  const activeEntries = Object.entries(models).filter(([n]) =>
-    effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
-  )
+  const allActiveEntries = Object.entries(models).filter(([n]) => {
+    if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
+    return effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+  })
+  const activeEntries = (isShort && allActiveEntries.length > 1) ? [allActiveEntries[0]] : allActiveEntries
 
   // For each model: compute A(D) for EVERY member separately, then get P10/P50/P90 across members
   // A_m(d) = cumsum_t[ bc_daily[m,t] - Q_bar ]   (correct Dunning method)
@@ -287,12 +285,11 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
 
   const models = pixelData.models ?? {}
-  const effectiveKey = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
-    ? ('ECMWF SEAS5 (Sep)' in models ? 'ECMWF SEAS5 (Sep)' : selectedModel)
-    : selectedModel
-  const entries = Object.entries(models).filter(([n]) =>
-    effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
-  )
+  const allEntries = Object.entries(models).filter(([n]) => {
+    if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
+    return effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+  })
+  const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
 
   const allTraces = []
   entries.forEach(([name, ms]) => {
@@ -654,14 +651,11 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
   const seasonCode = isShort ? 'SOND' : 'MAM'
   const models = pixelData?.models ?? {}
-  const effectiveKey = (selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
-    ? ('ECMWF SEAS5 (Sep)' in models ? 'ECMWF SEAS5 (Sep)' : selectedModel)
-    : selectedModel
-  const displayModel = selectedModel === 'multimodel' ? 'All Models' : selectedModel
-
-  const entries = Object.entries(models).filter(([n]) =>
-    effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
-  )
+  const allEntries = Object.entries(models).filter(([n]) => {
+    if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
+    return effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+  })
+  const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
 
   const activeClim = entries[0]?.[1]?.chirps_clim ?? pixelData?.chirps_clim
   const chirpsOnRaw = activeClim?.onset, chirpsCsRaw = activeClim?.cessation, chirpsLg = activeClim?.lgp
