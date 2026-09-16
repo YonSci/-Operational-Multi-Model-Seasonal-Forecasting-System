@@ -87,4 +87,5 @@ def health():
         "model_names"  : list(s.get("MODELS", {}).keys()),
         "chirps_onset_mean_doy": on_mean,
         "demo_mode"    : s.get("demo_mode", False),
+        "version"      : "v1.0.5-memopt",
     }
