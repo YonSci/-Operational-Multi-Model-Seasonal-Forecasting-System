@@ -682,6 +682,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const allLgP90 = entries.map(([,m]) => m.lg_p90).filter(v => v != null)
   const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
   const opYear = selectedYear ?? (isShort ? 2025 : 2026)
+  const displayModel = isShort ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
 
   return (
     <div className="flex h-full gap-2 overflow-hidden">
