@@ -87,5 +87,42 @@ def health():
         "model_names"  : list(s.get("MODELS", {}).keys()),
         "chirps_onset_mean_doy": on_mean,
         "demo_mode"    : s.get("demo_mode", False),
-        "version"      : "v1.0.5-memopt",
+        "version"      : "v1.0.6-debug",
     }
+
+@app.get("/debug_bulletin", tags=["Health"])
+def debug_bulletin():
+    import traceback, tempfile, gc
+    logs = []
+    def log(msg):
+        try:
+            import resource
+            rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            logs.append(f"{msg} [RSS: {rss/1024:.1f} MB]")
+        except Exception:
+            logs.append(msg)
+
+    log("Step 0: Start")
+    try:
+        from bulletin_singlemodel_v1 import generate_single_model_bulletin
+        log("Step 1: Imported generate_single_model_bulletin")
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log("Step 2: Created temp dir")
+            png = generate_single_model_bulletin(
+                "KALRO Kiboko, Makueni Farm", -2.21046, 37.719,
+                model_name="ECMWF SEAS5 (Sep)",
+                out_dir=tmpdir, dpi=100,
+                season="short_rains", f_year=2026
+            )
+            log(f"Step 3: Generated PNG: {png} ({os.path.getsize(png)/1024:.1f} KB)")
+            
+            pdf = png.replace(".png", ".pdf")
+            from kenya_api.bulletin import _png_to_pdf
+            _png_to_pdf(png, pdf, "KALRO Kiboko", dpi=100)
+            log(f"Step 4: Converted to PDF: {pdf} ({os.path.getsize(pdf)/1024:.1f} KB)")
+            
+        log("Step 5: Done")
+        return {"status": "ok", "logs": logs}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc(), "logs": logs}
