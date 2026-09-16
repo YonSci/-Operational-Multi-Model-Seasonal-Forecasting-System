@@ -95,7 +95,7 @@ def generate_bulletin(req: BulletinRequest):
                 png_path = generate_single_model_bulletin(
                     site_name, float(req.lat), float(req.lon),
                     model_name=req_model,
-                    out_dir=tmpdir, dpi=100,
+                    out_dir=tmpdir, dpi=75,
                     season="short_rains" if is_short else "long_rains",
                     f_year=req.year
                 )
@@ -127,7 +127,7 @@ def generate_bulletin(req: BulletinRequest):
                 "CAL_YEARS": dl.CAL_YEARS, "OP_YEAR": dl._OP_YEAR,
                 "WIN_DOY_START": dl.WIN_DOY_START, "WIN_DOY_END": dl.WIN_DOY_END,
                 "BULLETIN_DIR": tmpdir,
-                "BULLETIN_DPI": 100,
+                "BULLETIN_DPI": 75,
                 "HAS_CARTOPY": _has_cartopy(),
                 "os": os, "np": np,
                 "plt": plt, "gridspec": gridspec,
@@ -181,34 +181,22 @@ def _has_cartopy():
     try: import cartopy; return True
     except ImportError: return False
 
-def _png_to_pdf(png_path, pdf_path, title, dpi=100):
+def _png_to_pdf(png_path, pdf_path, title, dpi=75):
     import gc
-    gc.collect()
+    from PIL import Image
     try:
-        from reportlab.lib.pagesizes import A3
-        from reportlab.lib.units import mm
-        from reportlab.pdfgen import canvas as _rl
-        from PIL import Image as _PIL
-        _PIL.MAX_IMAGE_PIXELS = None
-        pw, ph = A3
-        mg = 10 * mm
-        with _PIL.open(png_path) as img:
-            iw, ih = img.size
-            scale = min((pw - 2 * mg) / (iw / dpi * 72), (ph - 2 * mg) / (ih / dpi * 72))
-            dw = (iw / dpi * 72) * scale
-            dh = (ih / dpi * 72) * scale
-            xo = mg + ((pw - 2 * mg) - dw) / 2
-            yo = mg + ((ph - 2 * mg) - dh) / 2
-        c = _rl.Canvas(pdf_path, pagesize=(pw, ph))
-        c.setTitle(title)
-        c.setAuthor("ICPAC / ILRI Climate Services")
-        c.drawImage(png_path, xo, yo, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
-        c.save()
-    except Exception as exc:
-        # Reliable fallback: direct PIL PDF conversion
-        from PIL import Image
         with Image.open(png_path) as img:
-            img.save(pdf_path, "PDF", resolution=float(dpi))
+            if img.mode != "RGB":
+                rgb = Image.new("RGB", img.size, (248, 250, 252))
+                if "A" in img.mode:
+                    rgb.paste(img, mask=img.split()[3])
+                else:
+                    rgb.paste(img)
+                rgb.save(pdf_path, "PDF", resolution=float(dpi))
+            else:
+                img.save(pdf_path, "PDF", resolution=float(dpi))
+    except Exception as exc:
+        print(f"[bulletin] PDF export warning: {exc}")
     gc.collect()
 
 

@@ -195,7 +195,7 @@ def _draw_grid_location_map(fig, gs_cell, glat, glon, lat_q=None, lon_q=None, dk
 # =============================================================================
 # SINGLE-MODEL BULLETIN GENERATOR
 # =============================================================================
-def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SEAS5", out_dir=None, dpi=100, season=None, f_year=None):
+def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SEAS5", out_dir=None, dpi=75, season=None, f_year=None):
     import mam_loader as dl
     s = dl.get_state()
     op_year = dl._OP_YEAR
@@ -402,7 +402,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     agree_lg = float(np.max(p_lg))
     max_agree = max(agree_on, agree_cs, agree_lg)
 
-    # FIGURE CREATION (A3 Poster Format: 22 x 44 inches at 100 DPI)
+    # FIGURE CREATION (A3 Poster Format: 22 x 44 inches at 75 DPI)
     fig = plt.figure(figsize=(22, 44), facecolor=COL_BODY_BG)
 
     # 11 Main Rows in GridSpec
@@ -934,16 +934,8 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         out_dir = os.getcwd()
     os.makedirs(out_dir, exist_ok=True)
     out_png = os.path.join(out_dir, f"bulletin_{safe_model}_{safe_site}_{season_code}{f_year}.png")
-    out_pdf = os.path.join(out_dir, f"bulletin_{safe_model}_{safe_site}_{season_code}{f_year}.pdf")
 
     fig.savefig(out_png, dpi=dpi, bbox_inches="tight", facecolor=fig.get_facecolor())
-    try:
-        from PIL import Image
-        img = Image.open(out_png)
-        img.save(out_pdf, "PDF", resolution=float(dpi))
-        print(f"  [OK] Saved PDF: {out_pdf}")
-    except Exception as ex:
-        print(f"  Notice: could not export PDF: {ex}")
 
     plt.close(fig)
     plt.close("all")

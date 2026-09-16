@@ -87,7 +87,7 @@ def health():
         "model_names"  : list(s.get("MODELS", {}).keys()),
         "chirps_onset_mean_doy": on_mean,
         "demo_mode"    : s.get("demo_mode", False),
-        "version"      : "v1.0.7-stepdebug",
+        "version"      : "v1.0.8-bulletin-fix",
     }
 
 @app.get("/debug_bulletin", tags=["Health"])
@@ -116,7 +116,7 @@ def debug_bulletin(step: int = 0):
             rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
         except Exception:
             rss = None
-        return {"status": "ok", "rss_mb": rss, "cgroup": meminfo, "version": "v1.0.7-stepdebug"}
+        return {"status": "ok", "rss_mb": rss, "cgroup": meminfo, "version": "v1.0.8-bulletin-fix"}
 
     # Step 1: Import module only
     if step == 1:
@@ -138,26 +138,34 @@ def debug_bulletin(step: int = 0):
         log("Step 2: Figure created")
         with tempfile.TemporaryDirectory() as tmpdir:
             out_png = os.path.join(tmpdir, "test.png")
-            fig.savefig(out_png, dpi=100, bbox_inches="tight")
+            fig.savefig(out_png, dpi=75, bbox_inches="tight")
             log(f"Step 2: Saved PNG ({os.path.getsize(out_png)/1024:.1f} KB)")
         plt.close("all")
         gc.collect()
         log("Step 2: Closed figure")
         return {"status": "ok", "logs": logs}
 
-    # Step 3: Run full single model bulletin with custom dpi
+    # Step 3: Run full single model bulletin (PNG + PDF) with optimized 75 DPI
     try:
         from bulletin_singlemodel_v1 import generate_single_model_bulletin
+        from kenya_api.bulletin import _png_to_pdf
         with tempfile.TemporaryDirectory() as tmpdir:
             log("Step 3: Starting generate_single_model_bulletin")
             png = generate_single_model_bulletin(
                 "KALRO Kiboko, Makueni Farm", -2.21046, 37.719,
                 model_name="ECMWF SEAS5 (Sep)",
-                out_dir=tmpdir, dpi=80,
+                out_dir=tmpdir, dpi=75,
                 season="short_rains", f_year=2026
             )
-            log(f"Step 3: Generated PNG at 80 DPI: {png} ({os.path.getsize(png)/1024:.1f} KB)")
-        return {"status": "ok", "logs": logs}
+            png_size = os.path.getsize(png) / 1024
+            log(f"Step 3: Generated PNG at 75 DPI: {png} ({png_size:.1f} KB)")
+            
+            pdf = png.replace(".png", ".pdf")
+            _png_to_pdf(png, pdf, "KALRO Kiboko", dpi=75)
+            pdf_size = os.path.getsize(pdf) / 1024
+            log(f"Step 3: Converted to PDF at 75 DPI: {pdf} ({pdf_size:.1f} KB)")
+            
+        return {"status": "ok", "logs": logs, "png_kb": png_size, "pdf_kb": pdf_size}
     except Exception as e:
         return {"status": "error", "error": str(e), "traceback": traceback.format_exc(), "logs": logs}
 
