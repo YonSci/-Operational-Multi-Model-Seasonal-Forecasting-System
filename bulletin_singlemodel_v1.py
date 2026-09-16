@@ -245,10 +245,10 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     is_sep = (season == "short_rains" or "Sep" in model_name or "sep" in model_name or "short" in str(model_name).lower() or (not np.isnan(on_med) and on_med > 200))
 
     if is_sep:
-        season_name = "Short Rains (SOND)"
-        season_code = "SOND"
+        season_name = "Short Rains (OND)"
+        season_code = "OND"
         init_date_str = f"01 September {f_year}"
-        valid_date_str = f"September – December {f_year}"
+        valid_date_str = f"October – December {f_year}"
         win_start = 244
         win_end = 365
         cal_label = "1993-2016"

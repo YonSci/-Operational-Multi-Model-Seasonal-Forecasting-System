@@ -21,7 +21,7 @@ const FORECAST_MODELS = [
 ]
 
 const SHORT_RAINS_MODELS = [
-  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (SOND)', centre: 'European Centre' },
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (OND)', centre: 'European Centre' },
 ]
 
 export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'long_rains', selectedYear = 2025 }) {
@@ -164,7 +164,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
               <h3 className="text-sm font-bold tracking-wide uppercase text-slate-100 flex items-center gap-2">
                 Generate Seasonal Forecast Bulletin
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  {isShort ? `SOND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`}
+                  {isShort ? `OND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`}
                 </span>
               </h3>
               <p className="text-[11px] text-slate-400">Official ILRI publication template • Onset, Cessation & LGP</p>
@@ -194,7 +194,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
-                    Short Rains (SOND {selectedYear || 2025}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)
+                    Short Rains (OND {selectedYear || 2025}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)
                   </div>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
@@ -265,7 +265,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                 <label className="text-[10px] font-bold tracking-wider text-blue-300 uppercase flex items-center gap-1.5">
                   <span>🛰️</span> Select Forecast System Model
                 </label>
-                <span className="text-[10px] text-slate-400">{isShort ? '1 Available Model for SOND' : '7 WMO GPC Models'}</span>
+                <span className="text-[10px] text-slate-400">{isShort ? '1 Available Model for OND' : '7 WMO GPC Models'}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {activeModelsList.map(m => {

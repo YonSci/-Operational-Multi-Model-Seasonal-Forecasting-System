@@ -161,7 +161,7 @@ def generate_bulletin(req: BulletinRequest):
             _png_to_pdf(png_path, out_path, site_name, dpi=100)
             media = "application/pdf"; suffix = ".pdf"
 
-        season_tag = "SOND2025" if is_short else f"MAM{dl._OP_YEAR}"
+        season_tag = "OND2025" if is_short else f"MAM{dl._OP_YEAR}"
         fname = f"{fname_prefix}_{season_tag}{suffix}"
         with open(out_path, "rb") as f: content = f.read()
 

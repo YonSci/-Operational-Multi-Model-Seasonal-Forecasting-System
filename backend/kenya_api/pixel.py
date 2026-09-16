@@ -46,25 +46,32 @@ def get_pixel(
 
 
 @router.get("/chirps")
-def get_chirps():
+def get_chirps(
+    season: str = Query("long_rains", description="Season: 'long_rains' or 'short_rains'"),
+):
     """CHIRPS CAL domain-mean climatology and grid metadata."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
     s  = dl.get_state()
-    lm = s["lm"]
+    is_short = (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
+    c_source = (s.get("chirps_sep") if is_short and s.get("chirps_sep") else s)
+    lm = c_source.get("lm", s["lm"])
+    clim = c_source.get("chirps_clim", s["chirps_clim"])
+    target_lat = c_source.get("target_lat", s["target_lat"])
+    target_lon = c_source.get("target_lon", s["target_lon"])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return {
-            "on_clim" : round(float(np.nanmean(s["chirps_clim"]["onset"][lm])),    1),
-            "cs_clim" : round(float(np.nanmean(s["chirps_clim"]["cessation"][lm])),1),
-            "lgp_clim": round(float(np.nanmean(s["chirps_clim"]["lgp"][lm])),      1),
+            "on_clim" : round(float(np.nanmean(clim["onset"][lm])),    1),
+            "cs_clim" : round(float(np.nanmean(clim["cessation"][lm])),1),
+            "lgp_clim": round(float(np.nanmean(clim["lgp"][lm])),      1),
             "n_land"  : int(lm.sum()),
-            "n_lat"   : int(s["n_lat"]),
-            "n_lon"   : int(s["n_lon"]),
-            "lat_range": [round(float(s["target_lat"].min()), 3),
-                          round(float(s["target_lat"].max()), 3)],
-            "lon_range": [round(float(s["target_lon"].min()), 3),
-                          round(float(s["target_lon"].max()), 3)],
+            "n_lat"   : int(c_source.get("n_lat", s["n_lat"])),
+            "n_lon"   : int(c_source.get("n_lon", s["n_lon"])),
+            "lat_range": [round(float(target_lat.min()), 3),
+                          round(float(target_lat.max()), 3)],
+            "lon_range": [round(float(target_lon.min()), 3),
+                          round(float(target_lon.max()), 3)],
         }
 
 
@@ -79,6 +86,7 @@ def get_taylor():
 def get_chirps_historical(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
+    season: str = Query("long_rains", description="Season: 'long_rains' or 'short_rains'"),
 ):
     """Full CHIRPS time series (onset, cessation, LGP) for the nearest pixel."""
     if not dl.is_loaded():
@@ -90,19 +98,21 @@ def get_chirps_historical(
     import warnings
 
     s = dl.get_state()
+    is_short = (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
+    c_source = (s.get("chirps_sep") if is_short and s.get("chirps_sep") else s)
 
     # Nearest pixel
-    lat_arr = np.array(s["target_lat"])
-    lon_arr = np.array(s["target_lon"])
+    lat_arr = np.array(c_source.get("target_lat", s["target_lat"]))
+    lon_arr = np.array(c_source.get("target_lon", s["target_lon"]))
     pi = int(np.argmin(np.abs(lat_arr - lat)))
     pj = int(np.argmin(np.abs(lon_arr - lon)))
 
-    years    = [int(y) for y in s["chirps_years"]]
-    cal_mask = s["cal_mask"]
+    years    = [int(y) for y in c_source["chirps_years"]]
+    cal_mask = c_source["cal_mask"]
 
-    on_ts  = [float(v) if not np.isnan(v) else None for v in s["onset_doy"][:, pi, pj]]
-    cs_ts  = [float(v) if not np.isnan(v) else None for v in s["cessation_doy"][:, pi, pj]]
-    lgp_ts = [float(v) if not np.isnan(v) else None for v in s["lgp_days"][:, pi, pj]]
+    on_ts  = [float(v) if not np.isnan(v) else None for v in c_source["onset_doy"][:, pi, pj]]
+    cs_ts  = [float(v) if not np.isnan(v) else None for v in c_source["cessation_doy"][:, pi, pj]]
+    lgp_ts = [float(v) if not np.isnan(v) else None for v in c_source["lgp_days"][:, pi, pj]]
 
     def compute_stats(ts_raw):
         ts = np.array([v if v is not None else np.nan for v in ts_raw], dtype=float)
@@ -142,8 +152,8 @@ def get_chirps_historical(
             "detect_rate"      : det,
         }
 
-    cal_years_list = [int(y) for y in np.array(s["chirps_years"])[s["cal_mask"]]]
-    latest_year    = int(s["chirps_years"][-1])
+    cal_years_list = [int(y) for y in np.array(c_source["chirps_years"])[cal_mask]]
+    latest_year    = int(c_source["chirps_years"][-1])
 
     return _json({
         "years"      : years,

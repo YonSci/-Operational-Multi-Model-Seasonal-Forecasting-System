@@ -31,7 +31,7 @@ try:
 except ImportError:
     dl = None
 
-# Pipeline Configuration (Short Rains SOND)
+# Pipeline Configuration (Short Rains OND)
 WIN_DOY_START       = 244   # Sept 1 (DOY 244)
 WIN_DOY_END         = 365   # Dec 31 (DOY 365)
 WIN_N_DAYS          = WIN_DOY_END - WIN_DOY_START + 1  # 122 days
