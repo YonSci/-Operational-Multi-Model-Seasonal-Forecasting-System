@@ -84,12 +84,12 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   const { models } = pixelData
   const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
   const monthTicks = isShort ? DOY_MONTHS_SOND : DOY_MONTHS_MAM
-  const winStart = pixelData.win_doy_start ?? (isShort ? 244 : 32)
-  const winEnd   = pixelData.win_doy_end   ?? (isShort ? 365 : 213)
+  const winStart = isShort ? 244 : 32
+  const winEnd   = isShort ? 365 : 213
   const Q_bar    = pixelData.Q_bar_pixel   ?? 0   // pixel climatological daily rainfall mean
   const C_vec    = pixelData.C_clim_vec    ?? []  // CHIRPS CAL C(d) -- already cumulative, plot directly
-  const d_s_chirps = pixelData.d_s_pixel          // CHIRPS OP onset DOY
-  const d_e_chirps = pixelData.d_e_pixel          // CHIRPS OP cessation DOY
+  const d_s_chirps = (isShort && pixelData.d_s_pixel != null && pixelData.d_s_pixel < 200) ? null : pixelData.d_s_pixel          // CHIRPS OP onset DOY
+  const d_e_chirps = (isShort && pixelData.d_e_pixel != null && pixelData.d_e_pixel < 200) ? null : pixelData.d_e_pixel          // CHIRPS OP cessation DOY
 
   const nDays = winEnd - winStart + 1
 
@@ -166,8 +166,10 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   })
   // If multimodel, just show MMM median; if single model, show that model
   const med = arr => arr.length ? [...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)] : null
-  const mmm_on = med(activeEntries.map(([,m])=>m.on_med).filter(v=>v!=null))
-  const mmm_cs = med(activeEntries.map(([,m])=>m.cs_med).filter(v=>v!=null))
+  const mmm_on_raw = med(activeEntries.map(([,m])=>m.on_med).filter(v=>v!=null))
+  const mmm_cs_raw = med(activeEntries.map(([,m])=>m.cs_med).filter(v=>v!=null))
+  const mmm_on = (isShort && mmm_on_raw != null && mmm_on_raw < 200) ? null : mmm_on_raw
+  const mmm_cs = (isShort && mmm_cs_raw != null && mmm_cs_raw < 200) ? null : mmm_cs_raw
 
 
   // -- Weighted ensemble curves (equal / HR / RPSS) ---------------------
@@ -215,8 +217,9 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
           contentStyle={{ background:'var(--chart-tooltip-bg)', border:'1px solid var(--border-primary)', borderRadius:6, fontSize:10, color:'var(--text-primary)' }}
           formatter={(v, name) => null}
           labelFormatter={d => {
+            const opYear = isShort ? 2025 : 2026
             const month = monthTicks.slice().reverse().find(m => d >= m.doy)
-            return 'DOY ' + d + '  (' + doyToDate(d) + ')' + (month ? '  -- ' + month.label : '')
+            return 'DOY ' + d + '  (' + doyToDate(d, opYear) + ')' + (month ? '  -- ' + month.label : '')
           }}
           itemStyle={{display:'none'}}
         />
@@ -661,19 +664,26 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   )
 
   const activeClim = entries[0]?.[1]?.chirps_clim ?? pixelData?.chirps_clim
-  const chirpsOn = activeClim?.onset, chirpsCs = activeClim?.cessation, chirpsLg = activeClim?.lgp
+  const chirpsOnRaw = activeClim?.onset, chirpsCsRaw = activeClim?.cessation, chirpsLg = activeClim?.lgp
+  const chirpsOn = (isShort && chirpsOnRaw != null && chirpsOnRaw < 200) ? null : chirpsOnRaw
+  const chirpsCs = (isShort && chirpsCsRaw != null && chirpsCsRaw < 200) ? null : chirpsCsRaw
+
   const med = arr => arr.length ? [...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)] : null
-  const mmmOn = med(entries.map(([,m]) => m.on_med).filter(v => v != null))
-  const mmmCs = med(entries.map(([,m]) => m.cs_med).filter(v => v != null))
-  const mmmLg = med(entries.map(([,m]) => m.lg_med).filter(v => v != null))
+  const onMeds = entries.map(([,m]) => m.on_med).filter(v => v != null && (!isShort || v >= 200))
+  const csMeds = entries.map(([,m]) => m.cs_med).filter(v => v != null && (!isShort || v >= 200))
+  const lgMeds = entries.map(([,m]) => m.lg_med).filter(v => v != null)
+
+  const mmmOn = med(onMeds)
+  const mmmCs = med(csMeds)
+  const mmmLg = med(lgMeds)
   const mmmAnom = mmmOn != null && chirpsOn ? mmmOn - chirpsOn : null
   const mmmCsAnom = mmmCs != null && chirpsCs ? mmmCs - chirpsCs : null
   const mmmLgAnom = mmmLg != null && chirpsLg ? mmmLg - chirpsLg : null
   const domTiming = mmmAnom != null ? (mmmAnom > 5 ? 'Late' : mmmAnom < -5 ? 'Early' : 'Normal') : 'Normal'
-  const allOnP10 = entries.map(([,m]) => m.on_p10).filter(v => v != null)
-  const allOnP90 = entries.map(([,m]) => m.on_p90).filter(v => v != null)
-  const allCsP10 = entries.map(([,m]) => m.cs_p10).filter(v => v != null)
-  const allCsP90 = entries.map(([,m]) => m.cs_p90).filter(v => v != null)
+  const allOnP10 = entries.map(([,m]) => m.on_p10).filter(v => v != null && (!isShort || v >= 200))
+  const allOnP90 = entries.map(([,m]) => m.on_p90).filter(v => v != null && (!isShort || v >= 200))
+  const allCsP10 = entries.map(([,m]) => m.cs_p10).filter(v => v != null && (!isShort || v >= 200))
+  const allCsP90 = entries.map(([,m]) => m.cs_p90).filter(v => v != null && (!isShort || v >= 200))
   const allLgP10 = entries.map(([,m]) => m.lg_p10).filter(v => v != null)
   const allLgP90 = entries.map(([,m]) => m.lg_p90).filter(v => v != null)
   const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
@@ -704,10 +714,10 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
               <div key={sec} className="mb-2">
                 <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{sec}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  <StatBox label="P50" value={p50?(unit==='DOY'?'DOY '+Math.round(p50):Math.round(p50)+'d'):'--'} sub={unit==='DOY'?doy(p50):null}/>
+                  <StatBox label="P50" value={p50?(unit==='DOY'?'DOY '+Math.round(p50):Math.round(p50)+'d'):'--'} sub={unit==='DOY'?doy(p50, opYear):null}/>
                   <StatBox label="Anomaly" value={anom!=null?(anom>0?'+':'')+fmt(anom)+'d':'--'} color={anom>5?'text-orange-400':anom<-5?'text-emerald-400':''}/>
-                  <StatBox label="Spread" value={p10s.length&&p90s.length?(unit==='DOY'?doyRange(Math.min(...p10s),Math.max(...p90s)):Math.round(Math.min(...p10s))+'-'+Math.round(Math.max(...p90s))+'d'):'--'}/>
-                  <StatBox label="CAL mean" value={cal?(unit==='DOY'?'DOY '+Math.round(cal):Math.round(cal)+'d'):'--'} sub={unit==='DOY'?doy(cal):null}/>
+                  <StatBox label="Spread" value={p10s.length&&p90s.length?(unit==='DOY'?doyRange(Math.min(...p10s),Math.max(...p90s), opYear):Math.round(Math.min(...p10s))+'-'+Math.round(Math.max(...p90s))+'d'):'--'}/>
+                  <StatBox label="CAL mean" value={cal?(unit==='DOY'?'DOY '+Math.round(cal):Math.round(cal)+'d'):'--'} sub={unit==='DOY'?doy(cal, opYear):null}/>
                 </div>
               </div>
             ))}
@@ -737,7 +747,7 @@ function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel
           </select></div>
         <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Year</span>
           <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>{[2026,2025,2024,2023].map(y=><option key={y} value={y}>{y}</option>)}</select></div>
-        <div style={{marginLeft:'auto',fontSize:9,color:'var(--text-faint)'}}>{!pixelData?'Click a pixel to load data':selectedModel+' - Init '+(INIT_LABELS[selectedInit]??selectedInit)+' - MAM '+selectedYear}</div>
+        <div style={{marginLeft:'auto',fontSize:9,color:'var(--text-faint)'}}>{!pixelData?'Click a pixel to load data':selectedModel+' - Init '+(INIT_LABELS[selectedInit]??selectedInit)+' - '+(selectedSeason==='short_rains'?'SOND':'MAM')+' '+selectedYear}</div>
       </div>
       {!pixelData?(
         <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:'var(--text-faint)'}}>
@@ -1466,7 +1476,11 @@ const TABS = [
 ]
 
 function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
-  const modelNames = modelsData?.models ? Object.keys(modelsData.models) : []
+  const isShortSeason = selectedSeason === 'short_rains'
+  const modelNames = isShortSeason
+    ? ['ECMWF SEAS5']
+    : (modelsData?.models ? Object.keys(modelsData.models) : [])
+  const tabs = isShortSeason ? TABS.filter(t => t.id !== 'multimodel') : TABS
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 8px',fontSize:11,fontWeight:600,cursor:'pointer',outline:'none'}
   return (
     <header className="t-header shrink-0">
@@ -1511,7 +1525,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
           </button>
           <div className={'w-1.5 h-1.5 rounded-full '+(health?.status==='ok'?'bg-emerald-400':'bg-red-400')}/>
           <span style={{fontSize:10,color:health?.status==='ok'?'var(--header-muted)':'#f87171'}}>
-            {health?.status==='ok' ? health.models_loaded+' models live' : healthError ? 'backend offline' : 'connecting...'}
+            {health?.status==='ok' ? (isShortSeason ? '1 model live (ECMWF SEAS5)' : health.models_loaded+' models live') : healthError ? 'backend offline' : 'connecting...'}
           </span>
           <button onClick={()=>setDarkMode(d=>!d)} className="ml-1 px-2 py-1 rounded-md text-[10px] border transition-colors" style={{background:'var(--bg-elevated)',borderColor:'var(--border-primary)',color:'var(--accent-blue)'}}>
             {darkMode?'Light mode':'Dark mode'}
@@ -1519,7 +1533,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
         </div>
       </div>
       <div className="flex px-5 gap-1">
-        {TABS.map(t=>(
+        {tabs.map(t=>(
           <button key={t.id} onClick={()=>setActiveTab(t.id)}
             style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',fontSize:11,fontWeight:600,letterSpacing:'0.05em',cursor:'pointer',background:'transparent',borderBottom:'2px solid '+(activeTab===t.id?'var(--accent-blue)':'transparent'),marginBottom:-1,color:activeTab===t.id?'var(--accent-blue)':'var(--header-muted)',transition:'all 0.15s'}}>
             {t.label}
@@ -1560,16 +1574,24 @@ export default function App() {
     setSelectedInit(s.init)
     if (s.id === 'short_rains') {
       setSelectedYear(2025)
+      setSelectedModel('ECMWF SEAS5')
     } else if (s.id === 'long_rains') {
       setSelectedYear(2026)
     }
   }
 
   const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
-  const { data: modelsData, isLoading: modelsLoading } = useModels()
+  const { data: modelsData, isLoading: modelsLoading } = useModels(selectedSeason)
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
   const activeModels    = useDashboardStore(s=>s.activeModels)
   const setActiveModels = useDashboardStore(s=>s.setActiveModels)
+
+  useEffect(() => {
+    if (selectedSeason === 'short_rains') {
+      if (selectedModel !== 'ECMWF SEAS5') setSelectedModel('ECMWF SEAS5')
+      if (activeTab === 'multimodel') setActiveTab('forecast')
+    }
+  }, [selectedSeason, selectedModel, activeTab])
 
   useEffect(()=>{
     if (modelsData?.models) {
@@ -1654,6 +1676,8 @@ export default function App() {
         isOpen={bulletinModalOpen}
         onClose={()=>setBulletinModalOpen(false)}
         selectedSite={selectedSite}
+        selectedSeason={selectedSeason}
+        selectedYear={selectedYear}
       />
     </div>
   )

@@ -98,12 +98,15 @@ def _hline(ax, y, color, lw=1.0, ls="-", x0=0.0, x1=1.0):
 # =============================================================================
 # SINGLE-MODEL BULLETIN GENERATOR
 # =============================================================================
-def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SEAS5", out_dir=None, dpi=100):
+def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SEAS5", out_dir=None, dpi=100, season=None):
     import mam_loader as dl
     s = dl.get_state()
     op_year = dl._OP_YEAR
 
     models_dict = s.get("MODELS", {})
+    if season == "short_rains" or "Sep" in model_name or "sep" in model_name:
+        if "ECMWF SEAS5 (Sep)" in models_dict:
+            model_name = "ECMWF SEAS5 (Sep)"
     if model_name not in models_dict:
         # fallback to first available
         if models_dict:
@@ -137,16 +140,17 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     cs_v = cs_m[~np.isnan(cs_m)]
     lg_v = lg_m[~np.isnan(lg_m)]
 
-    c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
-    c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
-    c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
+    md_clim = md.get("chirps_clim") or s["chirps_clim"]
+    c_on_clim = float(md_clim["onset"][pi, pj])
+    c_cs_clim = float(md_clim["cessation"][pi, pj])
+    c_lg_clim = float(md_clim["lgp"][pi, pj])
 
     on_med = float(np.nanmedian(on_v)) if len(on_v) > 0 else np.nan
     cs_med = float(np.nanmedian(cs_v)) if len(cs_v) > 0 else np.nan
     lg_med = float(np.nanmedian(lg_v)) if len(lg_v) > 0 else np.nan
 
     f_year = int(md["model_years"][oi]) if "model_years" in md and len(md["model_years"]) > oi else op_year
-    is_sep = ("Sep" in model_name or "sep" in model_name or "short" in model_name.lower() or (not np.isnan(on_med) and on_med > 200))
+    is_sep = (season == "short_rains" or "Sep" in model_name or "sep" in model_name or "short" in str(model_name).lower() or (not np.isnan(on_med) and on_med > 200))
 
     if is_sep:
         season_name = "Short Rains (SOND)"

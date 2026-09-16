@@ -11,8 +11,7 @@ const PRESET_FARMS = [
 ]
 
 const FORECAST_MODELS = [
-  { id: 'ECMWF SEAS5 (Sep)', name: 'ECMWF SEAS5 (September / Short Rains)', tag: '25 ens members (SOND)', centre: 'European Centre' },
-  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (February / Long Rains)', tag: '51 ens members (MAM)', centre: 'European Centre' },
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5', tag: '51 ens members (MAM)', centre: 'European Centre' },
   { id: 'UKMO GloSea6', name: 'UKMO GloSea6', tag: '42 ens members', centre: 'UK Met Office' },
   { id: 'Meteo-France Sys8', name: 'Météo-France Sys8', tag: '51 ens members', centre: 'Météo-France' },
   { id: 'DWD GCFS2.1', name: 'DWD GCFS2.1', tag: '50 ens members', centre: 'Deutscher Wetterdienst' },
@@ -21,17 +20,31 @@ const FORECAST_MODELS = [
   { id: 'ECCC CanSIPS', name: 'ECCC CanSIPS', tag: '20 ens members', centre: 'Environment Canada' },
 ]
 
-export default function BulletinModal({ isOpen, onClose, selectedSite }) {
+const SHORT_RAINS_MODELS = [
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (SOND)', centre: 'European Centre' },
+]
+
+export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'long_rains', selectedYear = 2025 }) {
+  const isShort = selectedSeason === 'short_rains'
   const [siteName, setSiteName] = useState('KALRO Kiboko, Makueni Farm')
   const [lat, setLat] = useState(-2.21046)
   const [lon, setLon] = useState(37.7190)
-  const [bulletinType, setBulletinType] = useState('multi') // 'multi' | 'single'
+  const [bulletinType, setBulletinType] = useState(isShort ? 'single' : 'multi')
   const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
   const [fmt, setFmt] = useState('pdf')
   const [isGenerating, setIsGenerating] = useState(false)
   const [progressMsg, setProgressMsg] = useState('')
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  const activeModelsList = isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS
+
+  useEffect(() => {
+    if (isShort) {
+      setBulletinType('single')
+      setSelectedModel('ECMWF SEAS5')
+    }
+  }, [isShort])
 
   // Initialize or update fields when selectedSite changes or modal opens
   useEffect(() => {
@@ -107,8 +120,10 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
         lat: parsedLat,
         lon: parsedLon,
         fmt,
-        bulletin_type: bulletinType,
-        model_name: selectedModel,
+        bulletin_type: isShort ? 'single' : bulletinType,
+        model_name: isShort ? 'ECMWF SEAS5' : selectedModel,
+        season: selectedSeason || (isShort ? 'short_rains' : 'long_rains'),
+        year: Number(selectedYear) || (isShort ? 2025 : 2026),
       })
       clearTimeout(msgTimer1)
       clearTimeout(msgTimer2)
@@ -148,7 +163,9 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
             <div>
               <h3 className="text-sm font-bold tracking-wide uppercase text-slate-100 flex items-center gap-2">
                 Generate Seasonal Forecast Bulletin
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">MAM 2026</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {isShort ? `SOND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`}
+                </span>
               </h3>
               <p className="text-[11px] text-slate-400">Official ILRI publication template • Onset, Cessation & LGP</p>
             </div>
@@ -169,72 +186,89 @@ export default function BulletinModal({ isOpen, onClose, selectedSite }) {
             <label className="block text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
               Select Bulletin Type
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <label
-                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  bulletinType === 'multi'
-                    ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
-                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="bulletin-type"
-                  value="multi"
-                  checked={bulletinType === 'multi'}
-                  onChange={() => setBulletinType('multi')}
-                  className="mt-0.5 text-amber-500 focus:ring-amber-500"
-                />
+            {isShort ? (
+              <div className="p-3 rounded-xl border border-amber-500/60 bg-amber-500/10 flex items-center justify-between">
                 <div>
                   <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                    Multi-Model Consensus
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">Weighted</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    7 WMO global models combined with optimal RPSS skill weights
-                  </div>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                  bulletinType === 'single'
-                    ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
-                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="bulletin-type"
-                  value="single"
-                  checked={bulletinType === 'single'}
-                  onChange={() => setBulletinType('single')}
-                  className="mt-0.5 text-amber-500 focus:ring-amber-500"
-                />
-                <div>
-                  <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                    Single Model Forecast
+                    Single-Model Operational Forecast
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
-                    Official single-model template with 44-yr historical series & plume
+                    Short Rains (SOND {selectedYear || 2025}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)
                   </div>
                 </div>
-              </label>
-            </div>
+                <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  Active Season
+                </span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <label
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                    bulletinType === 'multi'
+                      ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
+                      : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="bulletin-type"
+                    value="multi"
+                    checked={bulletinType === 'multi'}
+                    onChange={() => setBulletinType('multi')}
+                    className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                      Multi-Model Consensus
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">Weighted</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      7 WMO global models combined with optimal RPSS skill weights
+                    </div>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                    bulletinType === 'single'
+                      ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
+                      : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="bulletin-type"
+                    value="single"
+                    checked={bulletinType === 'single'}
+                    onChange={() => setBulletinType('single')}
+                    className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                      Single Model Forecast
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Official single-model template with 44-yr historical series & plume
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
 
-          {/* If Single-Model is selected: Model Selector */}
-          {bulletinType === 'single' && (
+          {/* Model Selector */}
+          {(bulletinType === 'single' || isShort) && (
             <div className="bg-blue-950/20 border border-blue-800/40 p-3.5 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-bold tracking-wider text-blue-300 uppercase flex items-center gap-1.5">
                   <span>🛰️</span> Select Forecast System Model
                 </label>
-                <span className="text-[10px] text-slate-400">7 WMO GPC Models</span>
+                <span className="text-[10px] text-slate-400">{isShort ? '1 Available Model for SOND' : '7 WMO GPC Models'}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {FORECAST_MODELS.map(m => {
+                {activeModelsList.map(m => {
                   const isSelected = selectedModel === m.id
                   return (
                     <button

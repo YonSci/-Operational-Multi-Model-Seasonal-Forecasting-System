@@ -31,12 +31,12 @@ export function useHealth() {
   })
 }
 
-/** GET /models -- list all loaded models with metadata */
-export function useModels() {
+/** GET /models -- list all loaded models with metadata, filtered by season */
+export function useModels(season = 'long_rains') {
   return useQuery({
-    queryKey: ['models'],
-    queryFn: () => fetchJSON('/models'),
-    staleTime: Infinity,   // model list never changes during a session
+    queryKey: ['models', season],
+    queryFn: () => fetchJSON(`/models?season=${encodeURIComponent(season || 'long_rains')}`),
+    staleTime: 60_000,
   })
 }
 
@@ -135,7 +135,7 @@ export function useValidation() {
 /**
  * POST /bulletin -- generate and download publication bulletin (PDF or PNG)
  */
-export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf', bulletin_type = 'multi', model_name = 'ECMWF SEAS5' }) {
+export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf', bulletin_type = 'multi', model_name = 'ECMWF SEAS5', season = 'long_rains', year = 2025 }) {
   const cleanFmt = fmt.toLowerCase() === 'png' ? 'png' : 'pdf'
   const url = `${API_BASE}/bulletin`
 
@@ -149,8 +149,10 @@ export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf', bulle
       lat: Number(lat),
       lon: Number(lon),
       fmt: cleanFmt,
-      bulletin_type: bulletin_type || 'multi',
+      bulletin_type: bulletin_type || (season === 'short_rains' ? 'single' : 'multi'),
       model_name: model_name || 'ECMWF SEAS5',
+      season: season || 'long_rains',
+      year: Number(year) || (season === 'short_rains' ? 2025 : 2026),
     }),
   })
 

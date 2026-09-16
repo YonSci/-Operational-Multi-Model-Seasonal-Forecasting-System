@@ -499,22 +499,35 @@ def get_state():
     return _state
 
 # ── Model info ─────────────────────────────────────────────────────────────
-def get_model_info():
+def get_model_info(season=None):
     s, lm = get_state(), get_state()["lm"]
     out = []
+    is_short = (season == "short_rains")
     for name, md in s["MODELS"].items():
+        md_season = md.get("season", "long_rains")
+        if season is not None:
+            if is_short:
+                if md_season != "short_rains" and "Sep" not in name:
+                    continue
+            else:
+                if md_season == "short_rains" or "Sep" in name:
+                    continue
         with warnings.catch_warnings():
             warnings.simplefilter("ignore",RuntimeWarning)
             hr = float(np.nanmean(md["hitrate_cal"]["onset"][lm]))
-        out.append(dict(name=name, n_members=md["n_members"], op_idx=md["op_idx"],
+        
+        display_name = "ECMWF SEAS5" if (is_short and "Sep" in name) else name
+        op_y = int(md["model_years"][md["op_idx"]]) if ("op_idx" in md and "model_years" in md and md["op_idx"] < len(md["model_years"])) else (2025 if is_short else 2026)
+        out.append(dict(name=display_name, raw_name=name, n_members=md["n_members"], op_idx=md["op_idx"],
+                        op_year=op_y,
                         color=md["color"],
                         hr_onset=round(hr,3) if not np.isnan(hr) else None,
                         skill_pass=bool(not np.isnan(hr) and hr > 1/3),
                         year_start=int(md["model_years"][0]),
                         year_end=int(md["model_years"][-1]),
-                        season=md.get("season", "long_rains"),
-                        win_doy_start=md.get("win_doy_start", 32),
-                        win_doy_end=md.get("win_doy_end", 213)))
+                        season=md_season,
+                        win_doy_start=md.get("win_doy_start", 244 if is_short else 32),
+                        win_doy_end=md.get("win_doy_end", 365 if is_short else 213)))
     return out
 
 # ── Pixel stats ────────────────────────────────────────────────────────────
@@ -677,9 +690,14 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None):
         win_start = WIN_DOY_START
         win_end   = WIN_DOY_END
 
-    models_dict = {n: _model_pixel_stats(n,pi,pj) for n in s["MODELS"]}
-    if is_short and "ECMWF SEAS5 (Sep)" in models_dict:
-        models_dict["ECMWF SEAS5"] = models_dict["ECMWF SEAS5 (Sep)"]
+    if is_short:
+        models_dict = {}
+        if "ECMWF SEAS5 (Sep)" in s["MODELS"]:
+            sep_stats = _model_pixel_stats("ECMWF SEAS5 (Sep)", pi, pj)
+            models_dict["ECMWF SEAS5"] = sep_stats
+            models_dict["ECMWF SEAS5 (Sep)"] = sep_stats
+    else:
+        models_dict = {n: _model_pixel_stats(n, pi, pj) for n in s["MODELS"] if "(Sep)" not in n}
 
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),

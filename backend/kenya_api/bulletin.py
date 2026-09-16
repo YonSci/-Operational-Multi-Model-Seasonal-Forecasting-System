@@ -47,6 +47,8 @@ class BulletinRequest(BaseModel):
     fmt: str = "png"
     bulletin_type: str = "multi"   # "multi" or "single"
     model_name: str = "ECMWF SEAS5"
+    season: str = "long_rains"
+    year: int = 2025
 
 @router.post("/bulletin")
 def generate_bulletin(req: BulletinRequest):
@@ -57,11 +59,14 @@ def generate_bulletin(req: BulletinRequest):
     fmt = req.fmt.lower().strip()
     if fmt not in ("png", "pdf"):
         raise HTTPException(400, "fmt must be png or pdf")
-    btype = req.bulletin_type.lower().strip() if req.bulletin_type else "multi"
+    
+    s = dl.get_state()
+    is_short = (req.season == "short_rains") or ("Sep" in (req.model_name or "")) or (req.year == 2025 and req.season != "long_rains")
+    btype = "single" if is_short else (req.bulletin_type.lower().strip() if req.bulletin_type else "multi")
+    req_model = "ECMWF SEAS5 (Sep)" if (is_short and "ECMWF SEAS5 (Sep)" in s["MODELS"]) else (req.model_name or "ECMWF SEAS5")
 
     import gc
     gc.collect()
-    s = dl.get_state()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         import matplotlib
@@ -69,7 +74,7 @@ def generate_bulletin(req: BulletinRequest):
         import matplotlib.pyplot as plt
 
         safe = site_name.replace(" ", "_").replace(",", "").replace("/", "-")
-        safe_model = (req.model_name or "single_model").replace(" ", "_").replace(",", "").replace("/", "-")
+        safe_model = req_model.replace(" ", "_").replace(",", "").replace("/", "-").replace("(", "").replace(")", "")
 
         if btype == "single":
             try:
@@ -89,8 +94,9 @@ def generate_bulletin(req: BulletinRequest):
 
                 png_path = generate_single_model_bulletin(
                     site_name, float(req.lat), float(req.lon),
-                    model_name=req.model_name or "ECMWF SEAS5",
-                    out_dir=tmpdir, dpi=100
+                    model_name=req_model,
+                    out_dir=tmpdir, dpi=100,
+                    season="short_rains" if is_short else "long_rains"
                 )
                 plt.close("all")
                 gc.collect()
@@ -155,7 +161,7 @@ def generate_bulletin(req: BulletinRequest):
             _png_to_pdf(png_path, out_path, site_name, dpi=100)
             media = "application/pdf"; suffix = ".pdf"
 
-        season_tag = "SOND" if ("Sep" in (req.model_name or "") or "sep" in (req.model_name or "").lower()) else f"MAM{dl._OP_YEAR}"
+        season_tag = "SOND2025" if is_short else f"MAM{dl._OP_YEAR}"
         fname = f"{fname_prefix}_{season_tag}{suffix}"
         with open(out_path, "rb") as f: content = f.read()
 
