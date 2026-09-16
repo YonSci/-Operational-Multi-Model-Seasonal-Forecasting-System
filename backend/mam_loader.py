@@ -454,8 +454,95 @@ def _load_demo_npz():
             color=MODEL_COLORS.get(name, "#888888"), model_years=m_years
         )
 
-    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset.")
-    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True}
+    # ── Short Rains (OND) demo support ─────────────────────────────────────
+    chirps_sep = None
+    if "sep_chirps_onset" in data:
+        sep_onset = data["sep_chirps_onset"]
+        sep_cess  = data["sep_chirps_cessation"]
+        sep_lgp   = data["sep_chirps_lgp"]
+        sep_years = data["sep_ecmwf_years"] if "sep_ecmwf_years" in data else np.arange(1993, 1993 + len(sep_onset))
+        sep_cal_mask = np.isin(sep_years, CAL_YEARS)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            sep_clim = {
+                "onset": np.where(lm, np.nanmean(sep_onset[sep_cal_mask], axis=0), np.nan).astype(np.float32),
+                "cessation": np.where(lm, np.nanmean(sep_cess[sep_cal_mask], axis=0), np.nan).astype(np.float32),
+                "lgp": np.where(lm, np.nanmean(sep_lgp[sep_cal_mask], axis=0), np.nan).astype(np.float32),
+            }
+        chirps_sep = dict(
+            onset_doy=sep_onset, cessation_doy=sep_cess, lgp_days=sep_lgp,
+            C_clim=data["sep_C_clim"], Q_bar=data["sep_Q_bar"], d_s=data["sep_d_s"], d_e=data["sep_d_e"],
+            t33_onset=data["sep_t33_on"], t67_onset=data["sep_t67_on"],
+            t33_cess=data["sep_t33_cs"], t67_cess=data["sep_t67_cs"],
+            t33_lgp=data["sep_t33_lg"], t67_lgp=data["sep_t67_lg"],
+            target_lat=target_lat, target_lon=target_lon,
+            n_lat=n_lat, n_lon=n_lon, lm=lm,
+            chirps_years=sep_years,
+            chirps_clim=sep_clim,
+        )
+
+    if "sep_ecmwf_onset" in data:
+        m_on = data["sep_ecmwf_onset"]
+        m_cs = data["sep_ecmwf_cessation"]
+        m_lg = data["sep_ecmwf_lgp"]
+        m_years = data["sep_ecmwf_years"]
+        op_mask = m_years == 2025
+        op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
+        n_members = int(m_on.shape[0])
+
+        sep_bc_daily = np.zeros((n_members, len(m_years), 122, n_lat, n_lon), dtype=np.float32)
+        if "sep_ecmwf_bc_daily_2025" in data:
+            sep_bc_daily[:, op_idx] = data["sep_ecmwf_bc_daily_2025"].astype(np.float32)
+
+        MODELS["ECMWF SEAS5 (Sep)"] = dict(
+            onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
+            bc_daily=sep_bc_daily,
+            probs_damped={
+                "onset": data["sep_ecmwf_p_on"],
+                "cessation": data["sep_ecmwf_p_cs"],
+                "lgp": data["sep_ecmwf_p_lg"],
+            },
+            alpha={
+                "onset": data["sep_ecmwf_a_on"],
+                "cessation": data["sep_ecmwf_a_cs"],
+                "lgp": data["sep_ecmwf_a_lg"],
+            },
+            hitrate_cal={
+                "onset": data["sep_ecmwf_h_on"],
+                "cessation": data["sep_ecmwf_h_cs"],
+                "lgp": data["sep_ecmwf_h_lg"],
+            },
+            hitrate_val={
+                "onset": data["sep_ecmwf_h_on"],
+                "cessation": data["sep_ecmwf_h_cs"],
+                "lgp": data["sep_ecmwf_h_lg"],
+            },
+            rpss_val={
+                "onset": data["sep_ecmwf_r_on"],
+                "cessation": data["sep_ecmwf_r_cs"],
+                "lgp": data["sep_ecmwf_r_lg"],
+            },
+            op_idx=op_idx, n_members=n_members,
+            color=MODEL_COLORS.get("ECMWF SEAS5 (Sep)", "#0284C7"),
+            model_years=m_years,
+            season="short_rains",
+            win_doy_start=244,
+            win_doy_end=365,
+            chirps_clim=chirps_sep["chirps_clim"] if chirps_sep else chirps_clim,
+            t33_onset=chirps_sep["t33_onset"] if chirps_sep else None,
+            t67_onset=chirps_sep["t67_onset"] if chirps_sep else None,
+            t33_cess=chirps_sep["t33_cess"] if chirps_sep else None,
+            t67_cess=chirps_sep["t67_cess"] if chirps_sep else None,
+            t33_lgp=chirps_sep["t33_lgp"] if chirps_sep else None,
+            t67_lgp=chirps_sep["t67_lgp"] if chirps_sep else None,
+            C_clim=chirps_sep["C_clim"] if chirps_sep else None,
+            Q_bar=chirps_sep["Q_bar"] if chirps_sep else None,
+            d_s=chirps_sep["d_s"] if chirps_sep else None,
+            d_e=chirps_sep["d_e"] if chirps_sep else None,
+        )
+
+    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (including Short Rains OND: {bool(chirps_sep)}).")
+    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep}
 
 # ── Main load ──────────────────────────────────────────────────────────────
 def load(force=False):
