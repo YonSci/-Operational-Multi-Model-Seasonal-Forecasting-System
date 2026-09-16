@@ -1640,7 +1640,7 @@ export default function App() {
   const [activeTab,     setActiveTab]     = useState('forecast')
   const [darkMode,      setDarkMode]      = useState(false)
   const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
-  const [mapLayer,      setMapLayer]      = useState({variable:'onset',layer:'anomaly'})
+  const [mapLayer,      setMapLayer]      = useState({variable:'onset',layer:'median'})
   const [mapGridData,   setMapGridData]   = useState(null)
   const [selectedYear,  setSelectedYear]  = useState(2026)
   const [selectedInit,  setSelectedInit]  = useState('0201')

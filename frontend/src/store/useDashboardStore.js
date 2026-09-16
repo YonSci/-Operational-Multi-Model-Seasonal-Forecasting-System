@@ -34,7 +34,7 @@ const useDashboardStore = create((set, get) => ({
   }),
 
   // -- Map layer ------------------------------------------------------------
-  activeLayerId: 'onset_anom',
+  activeLayerId: 'onset_med',
   setActiveLayer: (id) => set({ activeLayerId: id }),
   getActiveLayer: () => ALL_LAYERS.find(l => l.id === get().activeLayerId) ?? ALL_LAYERS[0],
   allLayers: ALL_LAYERS,

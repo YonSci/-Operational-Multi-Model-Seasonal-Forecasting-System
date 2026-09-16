@@ -408,7 +408,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     # 11 Main Rows in GridSpec
     gs = gridspec.GridSpec(
         11, 4, figure=fig,
-        left=0.04, right=0.96, top=0.898, bottom=0.035,
+        left=0.04, right=0.96, top=0.898, bottom=0.058,
         hspace=0.28, wspace=0.25,
         height_ratios=[
             2.3,   # 0: Grid Location (col 0) & Timing Summary Table (cols 1:4)
@@ -481,10 +481,10 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ))
     fig.text(0.04, SUB_TOP - 0.009,
              f"Kenya {season_name} {f_year}   |   Site: {lat_q:+.4f}, {lon_q:+.4f}   |   Nearest 0.25° pixel: ({pi},{pj}) [{glat:.2f}, {glon:.2f}]  D={dkm:.1f} km   |   Detection Ruleset v2.3   |   CHIRPS 0.25   |   CAL {cal_label}",
-             fontsize=7.8, color="#FFFFFF", va="center", transform=fig.transFigure, zorder=11)
+             fontsize=9.2, color="#FFFFFF", va="center", transform=fig.transFigure, zorder=11)
     fig.text(0.04, SUB_TOP - 0.023,
              f"{sub_window_str}   |   {cal_detail}",
-             fontsize=7.2, color="#94A3B8", va="center", transform=fig.transFigure, zorder=11)
+             fontsize=8.5, color="#94A3B8", va="center", transform=fig.transFigure, zorder=11)
 
     # =========================================================================
     # ROW 0: GRID LOCATION MAP + ENSEMBLE TIMING SUMMARY TABLE
@@ -597,9 +597,9 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ax_plume.axvline(cs_day_rel, color="#B91C1C", lw=2.0, label=f"Mean cessation – {_doy_to_date_str(cs_med, f_year)}")
 
     ax_plume.set_xlim(1, n_days)
-    ax_plume.set_ylabel("Precipitation (mm/day)", fontsize=9.0, fontweight="bold", color=COL_TXT_NAVY)
+    ax_plume.set_ylabel("Precipitation (mm/day)", fontsize=10.5, fontweight="bold", color=COL_TXT_NAVY)
     ax_plume.set_title(f"Ensemble Plume – {nm} members  |  Forecast season length (LGP): {lg_p25:.0f}d – {lg_p75:.0f}d (central 50%, IQR)  |  Site: {glat:.2f}°N, {glon:.2f}°E",
-                       fontsize=10.0, fontweight="bold", color=COL_TXT_NAVY, pad=6)
+                       fontsize=12.0, fontweight="bold", color=COL_TXT_NAVY, pad=6)
 
     # Date ticks along X axis
     tick_step = 20 if n_days > 150 else 15
@@ -608,9 +608,10 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         tick_days.append(n_days)
     tick_labels = [_doy_to_date_str(win_start - 1 + d, f_year) for d in tick_days]
     ax_plume.set_xticks(tick_days)
-    ax_plume.set_xticklabels(tick_labels, fontsize=8.0)
+    ax_plume.set_xticklabels(tick_labels, fontsize=9.5)
+    ax_plume.tick_params(axis="both", labelsize=9.5)
     ax_plume.grid(True, linestyle="--", alpha=0.4)
-    ax_plume.legend(loc="upper right", ncol=3, fontsize=8.0, framealpha=0.9)
+    ax_plume.legend(loc="upper right", ncol=3, fontsize=9.2, framealpha=0.9)
 
     # =========================================================================
     # SECTION 2: PROBABILISTIC OUTLOOK (Tercile Bars + Season Failure)
@@ -633,35 +634,37 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         bars = ax_t.bar(["Below\nNormal", "Near\nNormal", "Above\nNormal"], probs,
                         color=[COL_BN, COL_NN, COL_AN], width=0.55, edgecolor="none")
         bars[dom_idx].set_edgecolor("#C9920A")
-        bars[dom_idx].set_linewidth(2.0)
+        bars[dom_idx].set_linewidth(2.2)
 
         for b in bars:
             h = b.get_height()
             ax_t.text(b.get_x() + b.get_width() / 2, h + 0.02, f"{h:.2f}",
-                      ha="center", fontsize=8.5, fontweight="bold", color=COL_TXT_DARK)
+                      ha="center", fontsize=11.0, fontweight="bold", color=COL_TXT_DARK)
 
-        ax_t.axhline(0.333, color="#64748B", ls="--", lw=0.8)
-        ax_t.set_ylim(0.0, 0.75)
-        ax_t.set_ylabel("Probability", fontsize=8.0, color=COL_TXT_MUTED)
+        ax_t.axhline(0.333, color="#64748B", ls="--", lw=0.9)
+        ax_t.set_ylim(0.0, 0.78)
+        ax_t.set_ylabel("Probability", fontsize=10.0, fontweight="bold", color=COL_TXT_MUTED)
+        ax_t.tick_params(axis="x", labelsize=10.0)
+        ax_t.tick_params(axis="y", labelsize=9.5)
         ax_t.set_title(f"{title} | Dominant: {dom_lbl}\nα={alpha:.3f} ({'detectable signal' if has_signal else 'near-climatological'})",
-                       fontsize=8.5, fontweight="bold", color=COL_TXT_NAVY, pad=4)
+                       fontsize=11.0, fontweight="bold", color=COL_TXT_NAVY, pad=5)
         badge_txt = "Signal" if has_signal else "Climatological"
         badge_col = COL_NORMAL if has_signal else "#B45309"
-        ax_t.text(0.95, 0.90, badge_txt, color=badge_col, style="italic", fontsize=7.5,
+        ax_t.text(0.95, 0.90, badge_txt, color=badge_col, style="italic", fontsize=9.5, fontweight="bold",
                   ha="right", va="top", transform=ax_t.transAxes)
 
     # Season Failure Gauge (col 3)
     ax_fail = fig.add_subplot(gs[4, 3])
     ax_fail.set_facecolor(COL_PANEL_BG)
-    ax_fail.set_title("P(Season Failure)", fontsize=9.0, fontweight="bold", color=COL_TXT_NAVY, pad=8)
+    ax_fail.set_title("P(Season Failure)", fontsize=11.0, fontweight="bold", color=COL_TXT_NAVY, pad=8)
     ax_fail.barh([0], [p_season_fail], color=COL_RISK_HI, height=0.45)
     ax_fail.set_xlim(0, 1.0)
     ax_fail.set_yticks([])
-    ax_fail.axvline(0.33, color="#64748B", ls="--", lw=0.8)
-    ax_fail.axvline(0.50, color="#0F172A", lw=1.2)
-    ax_fail.text(p_season_fail + 0.03, 0, f"{p_season_fail:.2f}", va="center", fontsize=8.5, fontweight="bold", color=COL_TXT_DARK)
+    ax_fail.axvline(0.33, color="#64748B", ls="--", lw=0.9)
+    ax_fail.axvline(0.50, color="#0F172A", lw=1.4)
+    ax_fail.text(p_season_fail + 0.03, 0, f"{p_season_fail:.2f}", va="center", fontsize=11.5, fontweight="bold", color=COL_TXT_DARK)
     ax_fail.set_xticks([0, 0.33, 0.5, 1.0])
-    ax_fail.set_xticklabels(["0", "0.33", "0.5", "1"], fontsize=7.5)
+    ax_fail.set_xticklabels(["0", "0.33", "0.5", "1"], fontsize=9.5, fontweight="bold")
 
     # =========================================================================
     # SECTION 3: RISK ASSESSMENT & SOWING READINESS
@@ -671,26 +674,38 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     # Top: Agreement bars (cols 0:2)
     ax_agr = fig.add_subplot(gs[6, 0:2])
     ax_agr.set_facecolor(COL_PANEL_BG)
-    ax_agr.set_title("Ensemble Agreement (fraction of members on dominant tercile)", fontsize=9.0, fontweight="bold", color=COL_TXT_NAVY, pad=6)
+    ax_agr.set_title("Ensemble Agreement (fraction of members on dominant tercile)", fontsize=12.0, fontweight="bold", color=COL_TXT_NAVY, pad=6)
     agr_y = [2, 1, 0]
     agr_vals = [agree_on, agree_cs, agree_lg]
     agr_cols = ["#2563EB", "#7C3AED", "#059669"]
     ax_agr.barh(agr_y, agr_vals, color=agr_cols, height=0.45)
     ax_agr.set_yticks(agr_y)
-    ax_agr.set_yticklabels(["Onset", "Cessation", "LGP"], fontsize=8.5, fontweight="bold")
+    ax_agr.set_yticklabels(["Onset", "Cessation", "LGP"], fontsize=11.5, fontweight="bold")
     ax_agr.set_xlim(0, 1.0)
-    ax_agr.axvline(0.33, color="#64748B", ls="--", lw=0.8)
+    ax_agr.axvline(0.33, color="#64748B", ls="--", lw=0.9)
     for y, v in zip(agr_y, agr_vals):
-        ax_agr.text(v + 0.02, y, f"{int(round(v*100))}%", va="center", fontsize=8.5, fontweight="bold", color=COL_TXT_DARK)
-    ax_agr.text(0.33, -0.45, "33% = climatological baseline", fontsize=7.0, style="italic", color=COL_TXT_MUTED, ha="center")
+        ax_agr.text(v + 0.02, y, f"{int(round(v*100))}%", va="center", fontsize=11.5, fontweight="bold", color=COL_TXT_DARK)
+    ax_agr.text(0.33, -0.45, "33% = climatological baseline", fontsize=9.5, style="italic", color=COL_TXT_MUTED, ha="center")
     ax_agr.set_xticks([0, 0.33, 0.5, 1.0])
+    ax_agr.tick_params(axis="x", labelsize=10.0)
 
     # Top: Sowing Readiness Window (cols 2:4)
     ax_sow = fig.add_subplot(gs[6, 2:4])
     ax_sow.axis("off")
     ax_sow.set_facecolor(COL_PANEL_BG)
-    ax_sow.text(0.5, 0.95, "Rainfall-Based Sowing Readiness Window", ha="center", fontsize=9.0, fontweight="bold", color="#15803D", transform=ax_sow.transAxes)
-    ax_sow.text(0.5, 0.85, "Based on rainfall onset timing only  |  Verify with soil moisture & ETo before planting", ha="center", fontsize=7.0, style="italic", color=COL_TXT_MUTED, transform=ax_sow.transAxes)
+
+    # Clean card container
+    ax_sow.add_patch(mpatches.FancyBboxPatch(
+        (0.015, 0.03), 0.97, 0.94, boxstyle="round,pad=0.015,rounding_size=0.015",
+        facecolor=COL_PANEL_BG, edgecolor=COL_BORDER, linewidth=1.2,
+        transform=ax_sow.transAxes, zorder=0, clip_on=False
+    ))
+
+    ax_sow.text(0.5, 0.92, "Rainfall-Based Sowing Readiness Window", ha="center", va="center",
+                fontsize=13.5, fontweight="bold", color="#15803D", transform=ax_sow.transAxes, zorder=2)
+    ax_sow.text(0.5, 0.83, "Based on rainfall onset timing only  |  Verify with soil moisture & ETo before planting",
+                ha="center", va="center", fontsize=9.8, style="italic", color=COL_TXT_MUTED, transform=ax_sow.transAxes, zorder=2)
+    _hline(ax_sow, 0.76, COL_BORDER, lw=1.0, x0=0.03, x1=0.97)
 
     sow_rows = [
         ("Optimal (P20-P80 onset):", f"{sow_optimal_start} – {sow_optimal_end}", True, "#15803D"),
@@ -699,11 +714,14 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         ("Ensemble mean onset:", sow_ens_mean, False, COL_TXT_DARK),
         ("CHIRPS climatology:", sow_chirps_clim, False, COL_TXT_DARK),
     ]
-    s_y = 0.70
+    s_y = 0.65
     for slbl, sval, is_b, scol in sow_rows:
-        ax_sow.text(0.15, s_y, slbl, fontsize=8.0, fontweight="bold" if is_b else "normal", color=COL_TXT_DARK, va="center", transform=ax_sow.transAxes)
-        ax_sow.text(0.75, s_y, sval, fontsize=8.5, fontweight="bold" if is_b else "normal", color=scol, va="center", transform=ax_sow.transAxes)
-        s_y -= 0.14
+        ax_sow.text(0.08, s_y, slbl, fontsize=12.0, fontweight="bold" if is_b else "normal",
+                    color=COL_TXT_NAVY if is_b else COL_TXT_DARK, va="center", transform=ax_sow.transAxes, zorder=2)
+        ax_sow.text(0.72, s_y, sval, fontsize=12.5, fontweight="bold",
+                    color=scol, va="center", transform=ax_sow.transAxes, zorder=2)
+        _hline(ax_sow, s_y - 0.055, "#F1F5F9", lw=0.6, x0=0.05, x1=0.95)
+        s_y -= 0.125
 
     # =========================================================================
     # SECTION 4: CLIMATOLOGY & TREND ANALYSIS (Table + 3 Time Series)
@@ -737,7 +755,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         ("Historical Pctile", 0.94, "left"),
     ]
     for ch, cx, al in chdrs:
-        ax_ctbl.text(cx, 0.83, ch, fontsize=9.5, fontweight="bold", color=COL_TXT_NAVY, ha=al, va="center", transform=ax_ctbl.transAxes, zorder=2)
+        ax_ctbl.text(cx, 0.83, ch, fontsize=10.5, fontweight="bold", color=COL_TXT_NAVY, ha=al, va="center", transform=ax_ctbl.transAxes, zorder=2)
     _hline(ax_ctbl, 0.74, COL_BORDER, lw=1.0, x0=0.012, x1=0.988)
 
     c_sd_on = float(np.nanstd(c_on_cal))
@@ -753,7 +771,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     for r in ctbl_rows:
         for val, (ch, cx, al) in zip(r, chdrs):
             col = COL_NORMAL if "+" in val and "Anomaly" in ch else (COL_LATE if "-" in val and "Anomaly" in ch else COL_TXT_DARK)
-            ax_ctbl.text(cx, cy, val, fontsize=10.0, color=col, ha=al, fontweight="bold" if cx > 0.65 or cx < 0.10 else "normal", va="center", transform=ax_ctbl.transAxes, zorder=2)
+            ax_ctbl.text(cx, cy, val, fontsize=11.5, color=col, ha=al, fontweight="bold" if cx > 0.65 or cx < 0.10 else "normal", va="center", transform=ax_ctbl.transAxes, zorder=2)
         _hline(ax_ctbl, cy - 0.10, COL_BORDER, lw=0.5, x0=0.012, x1=0.988)
         cy -= 0.22
 
@@ -784,9 +802,9 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         major_ticks = np.arange(tick_start, f_year + 1, 5)
         ax.set_xticks(major_ticks)
         ax.xaxis.set_minor_locator(MultipleLocator(1))
-        ax.tick_params(axis="x", labelsize=8.5, colors=COL_TXT_MUTED, length=4, which="major")
+        ax.tick_params(axis="x", labelsize=9.5, colors=COL_TXT_MUTED, length=4, which="major")
         ax.tick_params(axis="x", length=2, which="minor", colors="#CBD5E1")
-        ax.tick_params(axis="y", labelsize=8.5, colors=COL_TXT_NAVY)
+        ax.tick_params(axis="y", labelsize=9.5, colors=COL_TXT_NAVY)
 
         # 1. Shaded Calibration Period
         ax.axvspan(cal_start - 0.5, cal_end + 0.5, facecolor="#F8FAFC", edgecolor="#E2E8F0",
@@ -832,25 +850,25 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
                     label=f_label_str)
 
             ax.text(f_year + 0.45, p90, f"P90 ({_doy_to_date_str(p90, f_year) if is_doy else f'{p90:.0f}d'})",
-                    fontsize=7.8, fontweight="bold", color="#2563EB", va="center", zorder=8)
+                    fontsize=9.0, fontweight="bold", color="#2563EB", va="center", zorder=8)
             ax.text(f_year + 0.45, p10, f"P10 ({_doy_to_date_str(p10, f_year) if is_doy else f'{p10:.0f}d'})",
-                    fontsize=7.8, fontweight="bold", color="#2563EB", va="center", zorder=8)
+                    fontsize=9.0, fontweight="bold", color="#2563EB", va="center", zorder=8)
             ax.text(f_year + 0.45, f_val, f"P50 ({f_val:.0f})",
-                    fontsize=8.2, fontweight="bold", color="#D97706", va="center", zorder=8)
+                    fontsize=9.2, fontweight="bold", color="#D97706", va="center", zorder=8)
 
         # Title styled exactly like dashboard card header
         f_disp_str = f"{f_val:.0f}" + (f" ({_doy_to_date_str(f_val, f_year)})" if is_doy else "d")
-        ax.set_title(f" {var_title.upper()}", loc="left", fontsize=10.0, fontweight="bold", color=color_line, pad=5)
+        ax.set_title(f" {var_title.upper()}", loc="left", fontsize=11.5, fontweight="bold", color=color_line, pad=5)
         ax.set_title(f"mean {clim_val:.1f} {y_unit}{clim_date}   —   trend {trend_slope:+.3f} d/yr   —   {season_code} {f_year} Forecast: {f_disp_str} ",
-                     loc="right", fontsize=8.8, color=COL_TXT_NAVY, pad=5)
+                     loc="right", fontsize=10.2, fontweight="bold", color=COL_TXT_NAVY, pad=5)
 
-        ax.set_ylabel(y_unit, fontsize=8.5, fontweight="bold", color=COL_TXT_NAVY)
+        ax.set_ylabel(y_unit, fontsize=10.5, fontweight="bold", color=COL_TXT_NAVY)
         ax.grid(True, linestyle="--", alpha=0.35, color="#CBD5E1")
         for spine in ax.spines.values():
             spine.set_edgecolor("#CBD5E1")
             spine.set_linewidth(0.8)
 
-        ax.legend(loc="upper left", ncol=3, fontsize=7.8, framealpha=0.92, facecolor="#FFFFFF", edgecolor="#CBD5E1")
+        ax.legend(loc="upper left", ncol=3, fontsize=8.5, framealpha=0.92, facecolor="#FFFFFF", edgecolor="#CBD5E1")
 
         # Secondary date axis on the right for DOY
         if is_doy:
@@ -858,8 +876,8 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
             ax2.set_ylim(ax.get_ylim())
             ticks = ax.get_yticks()
             ax2.set_yticks(ticks)
-            ax2.set_yticklabels([_doy_to_date_str(t) for t in ticks], fontsize=7.5, color=COL_TXT_MUTED)
-            ax2.set_ylabel("Calendar Date", fontsize=8.0, color=COL_TXT_MUTED)
+            ax2.set_yticklabels([_doy_to_date_str(t) for t in ticks], fontsize=9.0, color=COL_TXT_MUTED)
+            ax2.set_ylabel("Calendar Date", fontsize=9.5, color=COL_TXT_MUTED)
             ax2.spines["right"].set_edgecolor("#CBD5E1")
 
     # Time series 1: Onset
@@ -878,7 +896,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     # =========================================================================
     # FOOTER
     # =========================================================================
-    FTR_H = 0.038
+    FTR_H = 0.034
     fig.patches.append(mpatches.Rectangle(
         (0.0, 0.0), 1.0, FTR_H,
         facecolor=COL_FOOTER_BG, edgecolor="none",
@@ -887,10 +905,10 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
 
     fig.text(0.04, FTR_H * 0.65,
              f"FORECAST SUMMARY   |   Onset: {_doy_to_date_str(on_med)} ({on_med:.1f} DOY, {on_anom:+.1f}d, {on_tl}, {on_pctile}th pctile)   |   Cessation: {_doy_to_date_str(cs_med)} ({cs_med:.1f} DOY, {cs_anom:+.1f}d, {cs_tl}, {cs_pctile}th pctile)   |   LGP: {lg_med:.0f}d ({lg_tl}, {lg_pctile}th pctile)   |   Sowing window: {sow_optimal_start} – {sow_optimal_end}",
-             fontsize=7.8, fontweight="bold", color="#F5D98C", va="center", transform=fig.transFigure, zorder=11)
+             fontsize=9.0, fontweight="bold", color="#F5D98C", va="center", transform=fig.transFigure, zorder=11)
     fig.text(0.04, FTR_H * 0.28,
              f"CHIRPS CLIM ({cal_label}):  Onset={c_on_clim:.1f} ({_doy_to_date_str(c_on_clim)})   Cessation={c_cs_clim:.1f} ({_doy_to_date_str(c_cs_clim)})   LGP={c_lg_clim:.0f}d   |   DETECTION RATE: Onset=100%   Cessation=100%   LGP=100%",
-             fontsize=7.2, color="#E2E8F0", va="center", transform=fig.transFigure, zorder=11)
+             fontsize=8.2, color="#E2E8F0", va="center", transform=fig.transFigure, zorder=11)
 
     if os.path.isfile(logo_path):
         try:

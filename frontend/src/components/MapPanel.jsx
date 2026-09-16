@@ -610,7 +610,7 @@ export default function MapPanel({
     activeTab==='historical'?'h_onset_p50':
     activeTab==='probabilistic'?'p_onset_bn':
     activeTab==='multimodel'?'onset_med':
-    'onset_anom'
+    'onset_med'
   )
   const [showLayers, setShowLayers]  = useState(false)
   const prevTabRef = useRef(activeTab)
