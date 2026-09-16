@@ -48,7 +48,7 @@ class BulletinRequest(BaseModel):
     bulletin_type: str = "multi"   # "multi" or "single"
     model_name: str = "ECMWF SEAS5"
     season: str = "long_rains"
-    year: int = 2025
+    year: int = 2026
 
 @router.post("/bulletin")
 def generate_bulletin(req: BulletinRequest):
@@ -61,7 +61,7 @@ def generate_bulletin(req: BulletinRequest):
         raise HTTPException(400, "fmt must be png or pdf")
     
     s = dl.get_state()
-    is_short = (req.season == "short_rains") or ("Sep" in (req.model_name or "")) or (req.year == 2025 and req.season != "long_rains")
+    is_short = (req.season == "short_rains") or ("Sep" in (req.model_name or "")) or (req.year in (2025, 2026) and req.season != "long_rains")
     btype = "single" if is_short else (req.bulletin_type.lower().strip() if req.bulletin_type else "multi")
     req_model = "ECMWF SEAS5 (Sep)" if (is_short and "ECMWF SEAS5 (Sep)" in s["MODELS"]) else (req.model_name or "ECMWF SEAS5")
 
@@ -96,7 +96,8 @@ def generate_bulletin(req: BulletinRequest):
                     site_name, float(req.lat), float(req.lon),
                     model_name=req_model,
                     out_dir=tmpdir, dpi=100,
-                    season="short_rains" if is_short else "long_rains"
+                    season="short_rains" if is_short else "long_rains",
+                    f_year=req.year
                 )
                 plt.close("all")
                 gc.collect()
@@ -161,7 +162,7 @@ def generate_bulletin(req: BulletinRequest):
             _png_to_pdf(png_path, out_path, site_name, dpi=100)
             media = "application/pdf"; suffix = ".pdf"
 
-        season_tag = "OND2025" if is_short else f"MAM{dl._OP_YEAR}"
+        season_tag = f"OND{req.year}" if is_short else f"MAM{dl._OP_YEAR}"
         fname = f"{fname_prefix}_{season_tag}{suffix}"
         with open(out_path, "rb") as f: content = f.read()
 

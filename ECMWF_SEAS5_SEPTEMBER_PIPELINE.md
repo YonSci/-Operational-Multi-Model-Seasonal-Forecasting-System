@@ -120,16 +120,17 @@ python scripts/download_seasonal_forecasts_daily_c3s.py \
 
 ## 🎯 Verification & Production Integration Status
 
-- [x] **Download & Extraction**: September initialization downloaded for 1993–2025.
-- [x] **Onset, Cessation & LGP Calculation**: Completed via anomalous accumulation method on DOY 244–365 window.
+- [x] **Download & Extraction**: September initialization downloaded for 1993–2026 (`ecmwf_202609_d01.nc` verified).
+- [x] **Onset, Cessation & LGP Calculation**: Completed via anomalous accumulation method on DOY 244–365 window for 1993–2026 (34 years).
 - [x] **Backend Integration**:
   - `mam_loader.py` dynamically loads September run as `ECMWF SEAS5 (Sep)`.
-  - `/models?season=short_rains` cleanly isolates available models to `ECMWF SEAS5` with `op_year: 2025`.
-  - `/pixel` strictly returns Short Rains metrics (onset ~ DOY 310–330, cessation ~ DOY 340–355) with no MAM date leakage.
-  - `/bulletin` routes Short Rains requests to single-model bulletin with `outputs/ecmwf_sep` CHIRPS baseline.
+  - `/models?season=short_rains` returns `op_year: 2026`.
+  - `/pixel` strictly returns Short Rains metrics for 2026 (and supports selectable `year=2025`).
+  - `/bulletin` routes Short Rains requests to single-model bulletin with `f_year=2026`.
+  - `backend/demo_data.npz` packed with both 2025 and 2026 operational daily traces for zero-dependency cloud deployment.
 - [x] **Frontend Integration**:
-  - C(d) / A(D) Plume X-axis domain locked to `[244, 365]`, aligning all daily points and month ticks (`Sep, Oct, Nov, Dec`).
-  - Top navigation bar restricts model selector to `ECMWF SEAS5` and updates live indicator to `1 model live (ECMWF SEAS5)`.
+  - C(d) / A(D) Plume X-axis domain locked to `[244, 365]`, aligning daily points and month ticks (`Sep, Oct, Nov, Dec`).
+  - Top navigation bar defaults Short Rains to `2026` with full dropdown selection (`[2026, 2025, 2024, 2023]`).
   - Multi-Model tab hidden when Short Rains is selected.
-  - Bulletin modal displays `SOND 2025` badge and defaults to single-model operational export.
+  - Bulletin modal defaults to `OND 2026` operational export.
 

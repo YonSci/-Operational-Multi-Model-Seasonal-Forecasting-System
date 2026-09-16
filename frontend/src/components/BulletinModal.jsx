@@ -24,7 +24,7 @@ const SHORT_RAINS_MODELS = [
   { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (OND)', centre: 'European Centre' },
 ]
 
-export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'long_rains', selectedYear = 2025 }) {
+export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'long_rains', selectedYear = 2026 }) {
   const isShort = selectedSeason === 'short_rains'
   const [siteName, setSiteName] = useState('KALRO Kiboko, Makueni Farm')
   const [lat, setLat] = useState(-2.21046)
@@ -194,7 +194,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
-                    Short Rains (OND {selectedYear || 2025}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)
+                    Short Rains (OND {selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)
                   </div>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">

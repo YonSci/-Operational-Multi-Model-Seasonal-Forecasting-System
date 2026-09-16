@@ -13,7 +13,7 @@ def get_models(season: str = Query(None, description="Optional season filter: 'l
     is_short = (season == "short_rains")
     return {
         "models"       : {m["name"]: m for m in info},
-        "op_year"      : 2025 if is_short else int(dl._OP_YEAR),
+        "op_year"      : int(dl._OP_YEAR),
         "win_doy_start": 244 if is_short else int(dl.WIN_DOY_START),
         "win_doy_end"  : 365 if is_short else int(dl.WIN_DOY_END),
     }

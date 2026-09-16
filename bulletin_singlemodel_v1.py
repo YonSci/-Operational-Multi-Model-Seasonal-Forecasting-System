@@ -190,7 +190,7 @@ def _draw_grid_location_map(fig, gs_cell, glat, glon, lat_q=None, lon_q=None, dk
 # =============================================================================
 # SINGLE-MODEL BULLETIN GENERATOR
 # =============================================================================
-def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SEAS5", out_dir=None, dpi=100, season=None):
+def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SEAS5", out_dir=None, dpi=100, season=None, f_year=None):
     import mam_loader as dl
     s = dl.get_state()
     op_year = dl._OP_YEAR
@@ -222,7 +222,10 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     dkm = float(np.sqrt(((glat - lat_q) * 111)**2 + ((glon - lon_q) * 111 * np.cos(np.radians(glat)))**2))
 
     # Pixel forecast extractions
-    oi = md["op_idx"]
+    if f_year is not None and "model_years" in md and f_year in md["model_years"]:
+        oi = int(np.where(md["model_years"] == f_year)[0][0])
+    else:
+        oi = md["op_idx"]
     nm = md["n_members"]
     on_m = md["onset_doy"][:, oi, pi, pj]
     cs_m = md["cessation_doy"][:, oi, pi, pj]
@@ -241,7 +244,8 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     cs_med = float(np.nanmedian(cs_v)) if len(cs_v) > 0 else np.nan
     lg_med = float(np.nanmedian(lg_v)) if len(lg_v) > 0 else np.nan
 
-    f_year = int(md["model_years"][oi]) if "model_years" in md and len(md["model_years"]) > oi else op_year
+    if f_year is None:
+        f_year = int(md["model_years"][oi]) if "model_years" in md and len(md["model_years"]) > oi else op_year
     is_sep = (season == "short_rains" or "Sep" in model_name or "sep" in model_name or "short" in str(model_name).lower() or (not np.isnan(on_med) and on_med > 200))
 
     if is_sep:

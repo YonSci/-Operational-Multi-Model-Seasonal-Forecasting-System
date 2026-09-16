@@ -215,7 +215,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
           contentStyle={{ background:'var(--chart-tooltip-bg)', border:'1px solid var(--border-primary)', borderRadius:6, fontSize:10, color:'var(--text-primary)' }}
           formatter={(v, name) => null}
           labelFormatter={d => {
-            const opYear = isShort ? 2025 : 2026
+            const opYear = selectedYear ?? 2026
             const month = monthTicks.slice().reverse().find(m => d >= m.doy)
             return 'DOY ' + d + '  (' + doyToDate(d, opYear) + ')' + (month ? '  -- ' + month.label : '')
           }}
@@ -737,7 +737,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const allLgP10 = entries.map(([,m]) => m.lg_p10).filter(v => v != null)
   const allLgP90 = entries.map(([,m]) => m.lg_p90).filter(v => v != null)
   const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
-  const opYear = selectedYear ?? (isShort ? 2025 : 2026)
+  const opYear = selectedYear ?? 2026
   const displayModel = isShort ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
 
   return (
@@ -787,9 +787,9 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
 function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel,modelsData,selectedYear,setSelectedYear,country,selectedSeason,onSeasonChange,selectedInit}) {
   const isShort = selectedSeason === 'short_rains'
   const modelNames = isShort ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
-  const yearOptions = isShort ? [2025, 2024, 2023, 2022] : [2026, 2025, 2024, 2023]
+  const yearOptions = [2026, 2025, 2024, 2023]
   const seasonCode = isShort ? 'OND' : 'MAM'
-  const opYear = selectedYear ?? (isShort ? 2025 : 2026)
+  const opYear = selectedYear ?? 2026
   const displayModel = isShort ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
   const selStyle={background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
   return (
@@ -1029,7 +1029,7 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
   const fcastP10 = varKey==='onset'?modelEntry?.on_p10:varKey==='cessation'?modelEntry?.cs_p10:modelEntry?.lg_p10
   const fcastP90 = varKey==='onset'?modelEntry?.on_p90:varKey==='cessation'?modelEntry?.cs_p90:modelEntry?.lg_p90
   const fcastP50 = varKey==='onset'?modelEntry?.on_med:varKey==='cessation'?modelEntry?.cs_med:modelEntry?.lg_med
-  const effectiveYear = opYear ?? (isShort ? 2025 : 2026)
+  const effectiveYear = opYear ?? 2026
   const fmtV = v => v==null?'--':isLGP?v.toFixed(1)+'d':'DOY '+Math.round(v)+' ('+doyToDate(v, effectiveYear)+')'
   const hasIQR = fcastP10!=null&&fcastP90!=null&&fcastP50!=null&&latestYear!=null
 
@@ -1134,9 +1134,9 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
 // --- HistoricalTab ------------------------------------------------------------
 function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel, modelsData, selectedYear, setSelectedYear, country, selectedSeason, onSeasonChange, selectedInit }) {
   const isShort = selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200
-  const opYear = isShort ? 2025 : (selectedYear || 2026)
+  const opYear = selectedYear || 2026
   const modelNames = isShort ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
-  const yearOptions = isShort ? [2025, 2024, 2023, 2022] : [2026, 2025, 2024, 2023]
+  const yearOptions = [2026, 2025, 2024, 2023]
   const activeModelName = isShort ? 'ECMWF SEAS5' : selectedModel
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
   const vars = [{key:'onset',label:'Onset DOY',color:'#34d399',unit:'DOY'},{key:'cessation',label:'Cessation DOY',color:'#f97316',unit:'DOY'},{key:'lgp',label:'Season Length',color:'#4a8fc4',unit:'days'}]
@@ -1662,7 +1662,7 @@ export default function App() {
     setSelectedSeason(s.id)
     setSelectedInit(s.init)
     if (s.id === 'short_rains') {
-      setSelectedYear(2025)
+      setSelectedYear(2026)
       setSelectedModel('ECMWF SEAS5')
     } else if (s.id === 'long_rains') {
       setSelectedYear(2026)

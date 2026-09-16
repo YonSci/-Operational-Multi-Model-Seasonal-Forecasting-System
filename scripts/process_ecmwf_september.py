@@ -327,6 +327,13 @@ def run_pipeline():
         alpha_star = dl.optimise_alpha(p_raw[:, e_idx[cal_mask_ov]], obs_cat[cal_mask_ov], ALPHA_GRID)
         p_damped = dl.apply_pooling(p_raw, alpha_star)
 
+        # Save calibration tercile boundaries
+        cal_dir = OUT_DIR / "calibration_params"
+        cal_dir.mkdir(parents=True, exist_ok=True)
+        suffix = "doy" if var_name != "lgp" else "days"
+        xr.DataArray(t33, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(cal_dir / f"t33_{var_name}_{suffix}.nc")
+        xr.DataArray(t67, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(cal_dir / f"t67_{var_name}_{suffix}.nc")
+
         xr.DataArray(p_damped, dims=["category", "year", "lat", "lon"], coords={"year": file_years, "lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"probs_damped_{var_name}.nc")
         xr.DataArray(alpha_star, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"alpha_{var_name}.nc")
 
@@ -342,6 +349,7 @@ def run_pipeline():
             xr.DataArray(rpss_val, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"rpss_{var_name}_val.nc")
             xr.DataArray(hr_val, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"hitrate_{var_name}_val.nc")
 
+    xr.Dataset({"year": ("year", file_years)}).to_netcdf(OUT_DIR / "model_years.nc")
     print(f"\n  ✓ All NetCDF files written successfully to {OUT_DIR}")
     print("=" * 70 + "\n")
 

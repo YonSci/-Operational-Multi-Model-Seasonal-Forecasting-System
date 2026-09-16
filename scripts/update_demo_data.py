@@ -62,11 +62,15 @@ def update_demo_data():
     ds_yr.close()
     data_sep['sep_ecmwf_years'] = years
 
-    print("[3/4] Extracting 2025 operational daily precipitation array...")
+    print("[3/4] Extracting operational daily precipitation arrays (2025 and 2026)...")
     ds_bc = xr.open_dataset(os.path.join(sep_dir, 'ECMWF_bc_daily_all_years.nc'))
     vname = list(ds_bc.data_vars)[0]
-    idx_2025 = list(years).index(2025)
-    data_sep['sep_ecmwf_bc_daily_2025'] = ds_bc[vname][:, idx_2025].values.astype(np.float16)
+    if 2025 in years:
+        idx_2025 = list(years).index(2025)
+        data_sep['sep_ecmwf_bc_daily_2025'] = ds_bc[vname][:, idx_2025].values.astype(np.float16)
+    if 2026 in years:
+        idx_2026 = list(years).index(2026)
+        data_sep['sep_ecmwf_bc_daily_2026'] = ds_bc[vname][:, idx_2026].values.astype(np.float16)
     ds_bc.close()
 
     print("[4/4] Combining with existing MAM data in backend/demo_data.npz...")

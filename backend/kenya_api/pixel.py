@@ -36,13 +36,14 @@ def get_pixel(
     lon: float = Query(..., description="Longitude (decimal degrees E)"),
     season: str = Query("long_rains", description="Season: 'long_rains' or 'short_rains'"),
     model: str = Query("", description="Optional active model name"),
+    year: int = Query(None, description="Optional forecast year"),
 ):
     """All model stats for the nearest land pixel to (lat, lon)."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
     if not (-5.0 <= lat <= 5.0 and 33.0 <= lon <= 42.5):
         raise HTTPException(400, f"({lat},{lon}) is outside the Kenya domain.")
-    return _json(dl.get_pixel_stats(lat, lon, season=season, model=model))
+    return _json(dl.get_pixel_stats(lat, lon, season=season, model=model, year=year))
 
 
 @router.get("/chirps")

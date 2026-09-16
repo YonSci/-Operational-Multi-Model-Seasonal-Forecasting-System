@@ -488,13 +488,18 @@ def _load_demo_npz():
         m_cs = data["sep_ecmwf_cessation"]
         m_lg = data["sep_ecmwf_lgp"]
         m_years = data["sep_ecmwf_years"]
-        op_mask = m_years == 2025
+        target_op_year = 2026 if (2026 in m_years) else 2025
+        op_mask = m_years == target_op_year
         op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
         n_members = int(m_on.shape[0])
 
         sep_bc_daily = np.zeros((n_members, len(m_years), 122, n_lat, n_lon), dtype=np.float32)
-        if "sep_ecmwf_bc_daily_2025" in data:
-            sep_bc_daily[:, op_idx] = data["sep_ecmwf_bc_daily_2025"].astype(np.float32)
+        if "sep_ecmwf_bc_daily_2026" in data and 2026 in m_years:
+            idx_26 = int(np.where(m_years == 2026)[0][0])
+            sep_bc_daily[:, idx_26] = data["sep_ecmwf_bc_daily_2026"].astype(np.float32)
+        if "sep_ecmwf_bc_daily_2025" in data and 2025 in m_years:
+            idx_25 = int(np.where(m_years == 2025)[0][0])
+            sep_bc_daily[:, idx_25] = data["sep_ecmwf_bc_daily_2025"].astype(np.float32)
 
         MODELS["ECMWF SEAS5 (Sep)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -636,9 +641,14 @@ def _nearest_pixel(lat, lon):
 
 def _pct(arr, q): return float(np.percentile(arr,q)) if len(arr)>0 else float("nan")
 
-def _model_pixel_stats(mkey, pi, pj):
+def _model_pixel_stats(mkey, pi, pj, year=None):
     s, lm = _state, _state["lm"]
-    md = s["MODELS"][mkey]; oi, nm = md["op_idx"], md["n_members"]
+    md = s["MODELS"][mkey]
+    if year is not None and "model_years" in md and year in md["model_years"]:
+        oi = int(np.where(md["model_years"] == year)[0][0])
+    else:
+        oi = md["op_idx"]
+    nm = md["n_members"]
     on_m  = md["onset_doy"][:,oi,pi,pj]; cs_m = md["cessation_doy"][:,oi,pi,pj]
     lg_m  = md["lgp_days"][:,oi,pi,pj]
     on_v  = on_m[~np.isnan(on_m)]; cs_v = cs_m[~np.isnan(cs_m)]; lg_v = lg_m[~np.isnan(lg_m)]
@@ -739,7 +749,7 @@ def _build_bc_pixel(s, md, mkey, oi, nm, pi, pj, on_m, cs_m, on_med, cs_med):
         traces.append([round(float(v), 2) for v in mem_daily])
     return traces
 
-def get_pixel_stats(lat, lon, season="long_rains", model=None):
+def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     """Return per-model stats for the nearest land pixel to (lat, lon)."""
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     s = _state
@@ -782,11 +792,11 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None):
     if is_short:
         models_dict = {}
         if "ECMWF SEAS5 (Sep)" in s["MODELS"]:
-            sep_stats = _model_pixel_stats("ECMWF SEAS5 (Sep)", pi, pj)
+            sep_stats = _model_pixel_stats("ECMWF SEAS5 (Sep)", pi, pj, year=year)
             models_dict["ECMWF SEAS5"] = sep_stats
             models_dict["ECMWF SEAS5 (Sep)"] = sep_stats
     else:
-        models_dict = {n: _model_pixel_stats(n, pi, pj) for n in s["MODELS"] if "(Sep)" not in n}
+        models_dict = {n: _model_pixel_stats(n, pi, pj, year=year) for n in s["MODELS"] if "(Sep)" not in n}
 
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
