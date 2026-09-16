@@ -478,6 +478,8 @@ def _load_demo_npz():
             target_lat=target_lat, target_lon=target_lon,
             n_lat=n_lat, n_lon=n_lon, lm=lm,
             chirps_years=sep_years,
+            cal_idx=np.where(sep_cal_mask)[0],
+            cal_mask=sep_cal_mask,
             chirps_clim=sep_clim,
         )
 

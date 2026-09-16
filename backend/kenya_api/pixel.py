@@ -108,7 +108,9 @@ def get_chirps_historical(
     pj = int(np.argmin(np.abs(lon_arr - lon)))
 
     years    = [int(y) for y in c_source["chirps_years"]]
-    cal_mask = c_source["cal_mask"]
+    cal_mask = c_source.get("cal_mask")
+    if cal_mask is None:
+        cal_mask = np.isin(np.array(years), np.arange(1981, 2017))
 
     on_ts  = [float(v) if not np.isnan(v) else None for v in c_source["onset_doy"][:, pi, pj]]
     cs_ts  = [float(v) if not np.isnan(v) else None for v in c_source["cessation_doy"][:, pi, pj]]
