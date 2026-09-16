@@ -95,7 +95,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
   const allActiveEntries = Object.entries(models).filter(([n]) => {
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
-    return effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+    return selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
   })
   const activeEntries = (isShort && allActiveEntries.length > 1) ? [allActiveEntries[0]] : allActiveEntries
 
@@ -287,7 +287,7 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
   const models = pixelData.models ?? {}
   const allEntries = Object.entries(models).filter(([n]) => {
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
-    return effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+    return selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
   })
   const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
 
@@ -653,7 +653,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const models = pixelData?.models ?? {}
   const allEntries = Object.entries(models).filter(([n]) => {
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
-    return effectiveKey === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === effectiveKey
+    return selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
   })
   const entries = (isShort && allEntries.length > 1) ? [allEntries[0]] : allEntries
 
