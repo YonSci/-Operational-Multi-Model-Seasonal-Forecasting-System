@@ -94,13 +94,18 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
             if chirps_on is not None:
                 c_on = float(chirps_on[ii, jj]) if not np.isnan(chirps_on[ii, jj]) else None
                 p["chirps_on"]  = round(c_on, 1) if c_on else None
-                p["on_anom"]    = round(mv - c_on, 1) if (variable == "onset" and layer == "anomaly" and c_on) else None
+                if variable == "onset":
+                    p["on_anom"] = round(mv, 1) if layer == "anomaly" else (round(mv - c_on, 1) if (layer == "median" and c_on) else None)
             if chirps_cs is not None:
                 c_cs = float(chirps_cs[ii, jj]) if not np.isnan(chirps_cs[ii, jj]) else None
                 p["chirps_cs"]  = round(c_cs, 1) if c_cs else None
+                if variable == "cessation":
+                    p["cs_anom"] = round(mv, 1) if layer == "anomaly" else (round(mv - c_cs, 1) if (layer == "median" and c_cs) else None)
             if chirps_lgp is not None:
                 c_lgp = float(chirps_lgp[ii, jj]) if not np.isnan(chirps_lgp[ii, jj]) else None
                 p["chirps_lgp"] = round(c_lgp, 1) if c_lgp else None
+                if variable == "lgp":
+                    p["lg_anom"] = round(mv, 1) if layer == "anomaly" else (round(mv - c_lgp, 1) if (layer == "median" and c_lgp) else None)
     except Exception:
         pass  # tooltip enrichment is best-effort
 

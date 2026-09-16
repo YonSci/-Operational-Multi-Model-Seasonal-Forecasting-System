@@ -677,12 +677,16 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None):
         win_start = WIN_DOY_START
         win_end   = WIN_DOY_END
 
+    models_dict = {n: _model_pixel_stats(n,pi,pj) for n in s["MODELS"]}
+    if is_short and "ECMWF SEAS5 (Sep)" in models_dict:
+        models_dict["ECMWF SEAS5"] = models_dict["ECMWF SEAS5 (Sep)"]
+
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
         season=season,
         win_doy_start=win_start,
         win_doy_end=win_end,
-        models={n: _model_pixel_stats(n,pi,pj) for n in s["MODELS"]},
+        models=models_dict,
         chirps_clim=dict(onset=float(c_clim["onset"][pi,pj]),
                          cessation=float(c_clim["cessation"][pi,pj]),
                          lgp=float(c_clim["lgp"][pi,pj])),
