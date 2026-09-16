@@ -115,3 +115,21 @@ python scripts/download_seasonal_forecasts_daily_c3s.py \
     --outdir ./data/seasonal_ecmwf_sep \
     --merge
 ```
+
+---
+
+## 🎯 Verification & Production Integration Status
+
+- [x] **Download & Extraction**: September initialization downloaded for 1993–2025.
+- [x] **Onset, Cessation & LGP Calculation**: Completed via anomalous accumulation method on DOY 244–365 window.
+- [x] **Backend Integration**:
+  - `mam_loader.py` dynamically loads September run as `ECMWF SEAS5 (Sep)`.
+  - `/models?season=short_rains` cleanly isolates available models to `ECMWF SEAS5` with `op_year: 2025`.
+  - `/pixel` strictly returns Short Rains metrics (onset ~ DOY 310–330, cessation ~ DOY 340–355) with no MAM date leakage.
+  - `/bulletin` routes Short Rains requests to single-model bulletin with `outputs/ecmwf_sep` CHIRPS baseline.
+- [x] **Frontend Integration**:
+  - C(d) / A(D) Plume X-axis domain locked to `[244, 365]`, aligning all daily points and month ticks (`Sep, Oct, Nov, Dec`).
+  - Top navigation bar restricts model selector to `ECMWF SEAS5` and updates live indicator to `1 model live (ECMWF SEAS5)`.
+  - Multi-Model tab hidden when Short Rains is selected.
+  - Bulletin modal displays `SOND 2025` badge and defaults to single-model operational export.
+
