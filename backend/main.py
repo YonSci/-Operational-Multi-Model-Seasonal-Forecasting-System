@@ -87,12 +87,12 @@ def health():
         "model_names"  : list(s.get("MODELS", {}).keys()),
         "chirps_onset_mean_doy": on_mean,
         "demo_mode"    : s.get("demo_mode", False),
-        "version"      : "v1.0.6-debug",
+        "version"      : "v1.0.7-stepdebug",
     }
 
 @app.get("/debug_bulletin", tags=["Health"])
-def debug_bulletin():
-    import traceback, tempfile, gc
+def debug_bulletin(step: int = 0):
+    import traceback, tempfile, gc, os
     logs = []
     def log(msg):
         try:
@@ -102,27 +102,62 @@ def debug_bulletin():
         except Exception:
             logs.append(msg)
 
-    log("Step 0: Start")
-    try:
+    # Step 0: Check base system memory & cgroup limits
+    if step == 0:
+        meminfo = {}
+        for p in ["/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.usage_in_bytes", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]:
+            if os.path.exists(p):
+                try:
+                    with open(p) as f: meminfo[p] = f.read().strip()
+                except Exception as e:
+                    meminfo[p] = str(e)
+        try:
+            import resource
+            rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        except Exception:
+            rss = None
+        return {"status": "ok", "rss_mb": rss, "cgroup": meminfo, "version": "v1.0.7-stepdebug"}
+
+    # Step 1: Import module only
+    if step == 1:
+        log("Step 1: Start import")
         from bulletin_singlemodel_v1 import generate_single_model_bulletin
         log("Step 1: Imported generate_single_model_bulletin")
-        
+        return {"status": "ok", "logs": logs}
+
+    # Step 2: Test Matplotlib figure allocation & savefig
+    if step == 2:
+        log("Step 2: Testing Matplotlib figure allocation")
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(22, 44), facecolor="#FFFFFF")
+        ax = fig.add_subplot(111)
+        ax.plot([0, 1], [0, 1])
+        ax.set_title("Test Figure")
+        log("Step 2: Figure created")
         with tempfile.TemporaryDirectory() as tmpdir:
-            log("Step 2: Created temp dir")
+            out_png = os.path.join(tmpdir, "test.png")
+            fig.savefig(out_png, dpi=100, bbox_inches="tight")
+            log(f"Step 2: Saved PNG ({os.path.getsize(out_png)/1024:.1f} KB)")
+        plt.close("all")
+        gc.collect()
+        log("Step 2: Closed figure")
+        return {"status": "ok", "logs": logs}
+
+    # Step 3: Run full single model bulletin with custom dpi
+    try:
+        from bulletin_singlemodel_v1 import generate_single_model_bulletin
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log("Step 3: Starting generate_single_model_bulletin")
             png = generate_single_model_bulletin(
                 "KALRO Kiboko, Makueni Farm", -2.21046, 37.719,
                 model_name="ECMWF SEAS5 (Sep)",
-                out_dir=tmpdir, dpi=100,
+                out_dir=tmpdir, dpi=80,
                 season="short_rains", f_year=2026
             )
-            log(f"Step 3: Generated PNG: {png} ({os.path.getsize(png)/1024:.1f} KB)")
-            
-            pdf = png.replace(".png", ".pdf")
-            from kenya_api.bulletin import _png_to_pdf
-            _png_to_pdf(png, pdf, "KALRO Kiboko", dpi=100)
-            log(f"Step 4: Converted to PDF: {pdf} ({os.path.getsize(pdf)/1024:.1f} KB)")
-            
-        log("Step 5: Done")
+            log(f"Step 3: Generated PNG at 80 DPI: {png} ({os.path.getsize(png)/1024:.1f} KB)")
         return {"status": "ok", "logs": logs}
     except Exception as e:
         return {"status": "error", "error": str(e), "traceback": traceback.format_exc(), "logs": logs}
+
