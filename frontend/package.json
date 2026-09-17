@@ -1,9 +1,9 @@
 {
-  "name": "kenya-mam-dashboard",
+  "name": "seasonal-climate-forecast-dashboard",
   "private": true,
   "version": "3.0.0",
   "type": "module",
-  "description": "Kenya MAM Seasonal Forecast Dashboard — ILRI Climate Services",
+  "description": "Operational Seasonal Climate Forecast Dashboard (Onset, Cessation & LGP) — ILRI & ICPAC",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

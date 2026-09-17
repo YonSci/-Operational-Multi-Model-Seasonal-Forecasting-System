@@ -33,8 +33,8 @@ const DOY_MONTHS=DOY_MONTHS_MAM
 // --- Country / season -> primary initialization date ----------------------
 const SEASONS = {
   kenya: [
-    { id:'long_rains',  label:'Long Rains (Masika: Mar-May)',   init:'0201', initLabel:'Feb 01' },
-    { id:'short_rains', label:'Short Rains (Vuli: Oct-Dec)',    init:'0901', initLabel:'Sep 01' },
+    { id:'short_rains', label:'Short Rains (OND: Oct-Dec)',    init:'0901', initLabel:'Sep 01' },
+    { id:'long_rains',  label:'Long Rains (MAM: Mar-May)',   init:'0201', initLabel:'Feb 01' },
   ],
   ethiopia: [
     { id:'kiremt', label:'Kiremt (Main Rains: Jun-Sep)', init:'0501', initLabel:'May 01' },
@@ -50,7 +50,7 @@ function Card({title,children,className='',action,style={}}) {
   return (
     <div className={'card '+className} style={style}>
       {title&&<div className="card-title flex items-center justify-between"><span>{title}</span>{action}</div>}
-      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      <div className="flex-1 min-h-[220px] lg:min-h-0 overflow-hidden">{children}</div>
     </div>
   )
 }
@@ -197,7 +197,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   })()
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minHeight={220}>
       <ComposedChart data={rows} margin={{ top:8, right:40, bottom:16, left:32 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
         <XAxis
@@ -340,7 +340,7 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
   const yMax=allVals.length?Math.min(Math.max(...allVals)*1.05,80):30
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minHeight={240}>
       <ComposedChart data={chartData} margin={{top:8,right:16,bottom:16,left:32}}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)"/>
         <XAxis dataKey="doy" type="number" domain={[DOY_START,DOY_START+N_DAYS-1]}
@@ -697,10 +697,16 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
 }
 
 
-function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeModels,selectedSeason='long_rains',selectedInit='0201'}) {
-  if (!pixelData&&!isLoading) return (
-    <div className="flex flex-col items-center justify-center h-full gap-2" style={{color:'var(--text-faint)'}}>
-      <span className="text-2xl">*</span>
+function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeModels,selectedSeason='short_rains',selectedInit='0901'}) {
+  if (isLoading && !pixelData) return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-3" style={{color:'var(--text-faint)'}}>
+      <div className="w-8 h-8 border-2 border-[var(--accent-blue)] border-t-transparent rounded-full animate-spin"/>
+      <span className="text-xs tracking-wider uppercase font-semibold text-[var(--accent-blue)]">Loading Forecast Analysis...</span>
+    </div>
+  )
+  if (!pixelData) return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-2" style={{color:'var(--text-faint)'}}>
+      <span className="text-2xl">📍</span>
       <span className="text-sm tracking-wide">Click any pixel on the map to load forecast data</span>
     </div>
   )
@@ -744,14 +750,14 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
     <div className="flex flex-col lg:flex-row h-full gap-2 overflow-y-auto lg:overflow-hidden p-0.5">
       <div className="flex flex-col gap-2 min-w-0 flex-1">
         <Card title={'Ensemble Precipitation Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
-              className="flex-1 min-h-[260px] sm:min-h-[280px]">
-          <div style={{height:'100%',minHeight:240,padding:8}}>
+              className="flex-1 min-h-[280px]">
+          <div className="w-full h-[260px] sm:h-[280px] lg:h-full min-h-[240px] p-2">
             <PrecipPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason}/>
           </div>
         </Card>
         <Card title={'C(d) / A(D) Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
-              className="flex-1 min-h-[240px] sm:min-h-[260px]">
-          <div style={{height:'100%',minHeight:220,padding:8}}>
+              className="flex-1 min-h-[260px]">
+          <div className="w-full h-[240px] sm:h-[260px] lg:h-full min-h-[220px] p-2">
             <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason} selectedYear={opYear}/>
           </div>
         </Card>
@@ -1110,7 +1116,7 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
     return null
   }
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" minHeight={170}>
       <ComposedChart data={combined} margin={{top:6,right:80,bottom:24,left:40}}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)"/>
         <XAxis dataKey="year" tick={{fontSize:9,fill:'var(--chart-axis)'}} stroke="var(--chart-axis)" tickFormatter={y=>y%5===0?String(y):''}/>
@@ -1201,7 +1207,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
                 <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',color:v.color}}>{v.label}</span>
                 {d&&<span style={{fontSize:9,color:'var(--text-faint)'}}>mean {d.mean} {v.unit} ({v.unit==='DOY'?doyToDate(d.mean, opYear):''}) - trend {d.trend_day_per_yr>0?'+':''}{d.trend_day_per_yr} d/yr</span>}
               </div>
-              <div style={{flex:1,padding:'4px 4px 0 4px',minHeight:0}}>
+              <div className="flex-1 w-full h-[180px] sm:h-[200px] lg:h-full min-h-[170px] p-1">
                 {!chirpsHist?<PlaceholderPanel label={v.label+' time series -- click a pixel'} icon="O"/>:
                   <HistoricalTimeSeries data={d?.ts} years={chirpsHist.years} label={v.label} color={v.color}
                     calYears={chirpsHist.cal_years} latestYear={chirpsHist.latest_year}
@@ -1497,11 +1503,11 @@ function AboutTab() {
     <div className="h-full overflow-y-auto touch-scroll p-3 sm:p-5 flex flex-col lg:flex-row gap-6">
       <div className="w-full lg:w-[56%] min-w-0">
         <S title="System Overview">
-          <KV label="System" value="Seasonal Onset, Cessation, & Season Length Forecast"/>
-          <KV label="Version" value="v1.0.0  April 2026" mono/>
+          <KV label="System" value="Operational Seasonal Climate Forecast Dashboard (Onset, Cessation & LGP)"/>
+          <KV label="Version" value="v3.0.0  Operational" mono/>
           <KV label="Developer" value="ILRI Climate Services in collaboration with ICPAC"/>
-          <KV label="Season" value="March-April-May (MAM) long rains, East Africa"/>
-          <KV label="Domain" value="Kenya  33.5-42.5E, 5S-5N  (42x34 grid, 833 land pixels)" mono/>
+          <KV label="Seasons" value="Short Rains (OND) & Long Rains (MAM), East Africa"/>
+          <KV label="Domain" value="Kenya & Ethiopia  (0.25 deg CHIRPS-native resolution)" mono/>
           <KV label="Resolution" value="0.25 (~28 km) -- CHIRPS native resolution"/>
           <KV label="Calibration" value="1981-2016 (36 years)"/>
           <KV label="Reference" value="Dunning et al. (2016) J. Geophys. Res. Atmos. 121(19). DOI: 10.1002/2016JD025428"/>
@@ -1576,7 +1582,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
       <div className="flex flex-wrap items-center justify-between px-3 py-2 sm:px-5 sm:py-2.5 gap-2">
         <button onClick={onLogoClick} className="flex flex-col leading-none text-left" style={{background:'transparent',border:'none',cursor:'pointer',padding:0}}>
           <span style={{fontSize:11,fontWeight:900,letterSpacing:'0.2em',textTransform:'uppercase',color:'var(--accent-blue)'}}>ILRI Climate Services</span>
-          <span style={{fontSize:9,letterSpacing:'0.06em',marginTop:2,color:'var(--header-muted)'}} className="hidden sm:inline">Onset, Cessation, &amp; Season Length Forecast System</span>
+          <span style={{fontSize:9,letterSpacing:'0.06em',marginTop:2,color:'var(--header-muted)'}} className="hidden sm:inline">Seasonal Climate Forecast Dashboard (Onset, Cessation &amp; LGP)</span>
         </button>
 
         {/* Action controls */}
@@ -1664,8 +1670,8 @@ export default function App() {
   const [mapLayer,      setMapLayer]      = useState({variable:'onset',layer:'median'})
   const [mapGridData,   setMapGridData]   = useState(null)
   const [selectedYear,  setSelectedYear]  = useState(2026)
-  const [selectedInit,  setSelectedInit]  = useState('0201')
-  const [selectedSeason,setSelectedSeason]= useState('long_rains')
+  const [selectedInit,  setSelectedInit]  = useState('0901')
+  const [selectedSeason,setSelectedSeason]= useState('short_rains')
   const [bulletinModalOpen, setBulletinModalOpen] = useState(false)
   const [mobileViewMode, setMobileViewMode]       = useState('split') // 'split' | 'map' | 'charts'
 

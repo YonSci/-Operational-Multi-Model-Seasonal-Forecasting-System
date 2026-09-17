@@ -1,6 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
 
-const rawBase = import.meta.env.VITE_API_BASE || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://127.0.0.1:8765' : '/api')
+function resolveApiBase() {
+  const envBase = import.meta.env.VITE_API_BASE
+  const isBrowser = typeof window !== 'undefined'
+  const isLocalhost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+  // If running in browser on a non-localhost domain or mobile device:
+  // fall back to the live operational backend on Render if envBase is localhost or missing
+  if (isBrowser && !isLocalhost) {
+    if (envBase && !envBase.includes('127.0.0.1') && !envBase.includes('localhost')) {
+      return envBase
+    }
+    return 'https://operational-multi-model-seasonal-1t6w.onrender.com'
+  }
+
+  return envBase || 'http://127.0.0.1:8765'
+}
+
+const rawBase = resolveApiBase()
 export const API_BASE = rawBase.replace(/\/+$/, '')
 
 // -- Fetch helpers ---------------------------------------------------------
@@ -167,9 +184,8 @@ export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf', bulle
     throw new Error(errDetail || `Server error (${res.status})`)
   }
 
-  const blob = await res.blob()
-  const disposition = res.headers.get('content-disposition') || ''
-  let filename = `bulletin_mm_${(site_name || 'site').replace(/[^a-zA-Z0-9_-]/g, '_')}_MAM2026.${cleanFmt}`
+  const seasonTag = season === 'short_rains' ? 'OND' : 'MAM'
+  let filename = `bulletin_${bulletin_type || 'mm'}_${(site_name || 'site').replace(/[^a-zA-Z0-9_-]/g, '_')}_${seasonTag}${year || 2026}.${cleanFmt}`
   const match = disposition.match(/filename="?([^";]+)"?/)
   if (match && match[1]) {
     filename = match[1].trim()

@@ -580,12 +580,12 @@ export default function MapPanel({
   onLayerChange,
   activeTab='',
   country='kenya',
-  selectedSeason='long_rains',
+  selectedSeason='short_rains',
   selectedYear=2026,
   onOpenBulletin
 }) {
   const isShort = selectedSeason === 'short_rains' || (gridData?.meta?.vmin != null && gridData.meta.vmin > 200)
-  const opYear = selectedYear ?? (isShort ? 2025 : 2026)
+  const opYear = selectedYear ?? 2026
   const mapContainer = useRef(null)
   const mapRef       = useRef(null)
   const darkRef      = useRef(darkMode)

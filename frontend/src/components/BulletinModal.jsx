@@ -24,7 +24,7 @@ const SHORT_RAINS_MODELS = [
   { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (OND)', centre: 'European Centre' },
 ]
 
-export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'long_rains', selectedYear = 2026 }) {
+export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026 }) {
   const isShort = selectedSeason === 'short_rains'
   const [siteName, setSiteName] = useState('KALRO Kiboko, Makueni Farm')
   const [lat, setLat] = useState(-2.21046)

@@ -37,7 +37,8 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
   const modelsLive = health?.status === 'ok' ? health.models_loaded : null
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', overflow: 'auto', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'IBM Plex Mono','Fira Code',monospace" }}>
+    <div className="relative w-full min-h-screen overflow-x-hidden overflow-y-auto touch-scroll"
+         style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'IBM Plex Mono','Fira Code',monospace" }}>
 
       {/* Ambient background accents */}
       <div aria-hidden="true" style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
@@ -89,17 +90,16 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
             background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)'
           }}>
             <Sprout size={13} color="var(--accent-blue)" />
-            Kenya &amp; Ethiopia  |  Seasonal Forecasting
+            Kenya &amp; Ethiopia  |  Seasonal Climate Forecasting
           </div>
 
-          <h1 style={{ fontSize: 'clamp(24px, 5vw, 50px)', fontWeight: 800, letterSpacing: '-0.02em', margin: 0, maxWidth: 820, lineHeight: 1.18 }}>
+          <h1 style={{ fontSize: 'clamp(24px, 5vw, 50px)', fontWeight: 800, letterSpacing: '-0.02em', margin: 0, maxWidth: 880, lineHeight: 1.18 }}>
             Onset, Cessation &amp; Season-Length<br />
-            <span style={{ color: 'var(--accent-blue)' }}>Seasonal Forecast System</span>
+            <span style={{ color: 'var(--accent-blue)' }}>Seasonal Climate Forecast Dashboard</span>
           </h1>
 
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 620, marginTop: 18, lineHeight: 1.7, padding: '0 8px' }}>
-            Operational probabilistic seasonal forecasting for Kenya and Ethiopia -- an 8-model C3S ensemble, calibrated
-            against 36 years of CHIRPS observations, delivering onset, cessation and length-of-season outlooks grid by grid.
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 660, marginTop: 18, lineHeight: 1.7, padding: '0 8px' }}>
+            Operational seasonal climate forecasting for Kenya and Ethiopia -- multi-model C3S ensemble and single-model operational runs (Long Rains MAM &amp; Short Rains OND), calibrated against CHIRPS observations to deliver onset, cessation, and season-length outlooks.
           </p>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: 440 }}>
@@ -174,7 +174,7 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
           <div>
             Project Lead: Dr. Teferi Demissie (ILRI)  |  Technical Lead: Yonas Mersha (ILRI)
           </div>
-          <div>Seasonal Forecast System  v3.0.0</div>
+          <div>Seasonal Climate Forecast Dashboard  v3.0.0</div>
         </div>
       </div>
     </div>
