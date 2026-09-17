@@ -233,6 +233,28 @@ const CS_OND = {
   h_lgp_p50:    { s:[5,10,15,20,25,35,50],         c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
 }
 
+// Dedicated Belg (FMAM: Feb-May, Ethiopia) colour scales:
+const CS_FMAM = {
+  onset_med:    { s:[45,60,75,90,105,120,135],     c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
+  cess_med:     { s:[115,125,135,145,155,165,175], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble cessation P50 (DOY)' },
+  lgp_med:      { s:[25,40,55,70,85,100,120],      c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length P50 (days)' },
+  onset_anom:   { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset anomaly (days)' },
+  cess_anom:    { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation anomaly (days)' },
+  lgp_anom:     { s:[-25,-15,-5,0,5,15,25],        c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length anomaly (days)' },
+  onset_hr_w:   { s:[45,60,75,90,105,120,135],     c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 HR-Weighted (DOY)' },
+  cess_hr_w:    { s:[115,125,135,145,155,165,175], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 HR-Weighted (DOY)' },
+  lgp_hr_w:     { s:[25,40,55,70,85,100,120],      c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length HR-Weighted (days)' },
+  onset_rpss_w: { s:[45,60,75,90,105,120,135],     c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 RPSS-Weighted (DOY)' },
+  cess_rpss_w:  { s:[115,125,135,145,155,165,175], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 RPSS-Weighted (DOY)' },
+  lgp_rpss_w:   { s:[25,40,55,70,85,100,120],      c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length RPSS-Weighted (days)' },
+  chirps_p50_onset: { s:[45,60,75,90,105,120,135], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
+  chirps_p50_cess:  { s:[115,125,135,145,155,165,175], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Cessation P50 (DOY)' },
+  chirps_p50_lgp:   { s:[25,40,55,70,85,100,120],  c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'CHIRPS Season Length P50 (days)' },
+  h_onset_p50:  { s:[45,60,75,90,105,120,135],     c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 (DOY)' },
+  h_cess_p50:   { s:[115,125,135,145,155,165,175], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 (DOY)' },
+  h_lgp_p50:    { s:[25,40,55,70,85,100,120],      c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
+}
+
 // Dedicated Kiremt (Main Rains, Ethiopia: Jun-Sep) colour scales:
 const CS_KIREMT = {
   onset_med:    { s:[155,175,195,215,235,255,280], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
@@ -256,17 +278,23 @@ const CS_KIREMT = {
 }
 
 function detectSeason(selectedSeason, country, gridData) {
-  if (selectedSeason === 'kiremt' || country === 'ethiopia') return 'kiremt'
+  if (selectedSeason === 'fmam' || selectedSeason === 'belg') return 'fmam'
+  if (selectedSeason === 'kiremt') return 'kiremt'
   if (selectedSeason === 'short_rains') return 'short_rains'
   const vmin = gridData?.meta?.vmin
   if (vmin != null) {
     if (vmin >= 250) return 'short_rains'
     if (vmin >= 130) return 'kiremt'
+    if (vmin >= 30 && vmin <= 130 && country === 'ethiopia') return 'fmam'
   }
+  if (country === 'ethiopia') return 'fmam'
   return 'long_rains'
 }
 
 function getScale(scaleId, season = 'long_rains') {
+  if (season === 'fmam' && CS_FMAM[scaleId]) {
+    return CS_FMAM[scaleId]
+  }
   if (season === 'kiremt' && CS_KIREMT[scaleId]) {
     return CS_KIREMT[scaleId]
   }

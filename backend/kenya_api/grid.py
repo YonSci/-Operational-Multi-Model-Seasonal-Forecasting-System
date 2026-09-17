@@ -77,11 +77,17 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     # Enrich features with tooltip data using appropriate season CHIRPS clim
     try:
         import numpy as np
-        is_kiremt = (season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"])
-        is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
+        is_fmam = (season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"])
+        is_kiremt = not is_fmam and ((season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
+        is_short = not is_fmam and not is_kiremt and ((season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+        fmam_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (FMAM)")
         kiremt_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Kiremt)")
         sep_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Sep)")
-        if is_kiremt and kiremt_md and "chirps_clim" in kiremt_md:
+        if is_fmam and fmam_md and "chirps_clim" in fmam_md:
+            c_clim = fmam_md["chirps_clim"]
+        elif is_fmam and dl.get_state().get("chirps_fmam"):
+            c_clim = dl.get_state()["chirps_fmam"]["chirps_clim"]
+        elif is_kiremt and kiremt_md and "chirps_clim" in kiremt_md:
             c_clim = kiremt_md["chirps_clim"]
         elif is_kiremt and dl.get_state().get("chirps_kiremt"):
             c_clim = dl.get_state()["chirps_kiremt"]["chirps_clim"]

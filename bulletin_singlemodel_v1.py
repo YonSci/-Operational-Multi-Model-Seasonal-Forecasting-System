@@ -6,6 +6,9 @@
 
 import os
 import sys
+_backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend")
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import gc
@@ -108,24 +111,41 @@ def _get_boundary_file(name):
     return None
 
 def _draw_grid_location_map(fig, gs_cell, glat, glon, lat_q=None, lon_q=None, dkm=None):
-    ke0_path = _get_boundary_file("ke_admin0.geojson")
-    ke1_path = _get_boundary_file("ke_admin1.geojson")
+    is_ethiopia = (glat > 4.5)
+    if is_ethiopia:
+        admin0_path = _get_boundary_file("eth_admin0.geojson")
+        admin1_path = _get_boundary_file("eth_admin1.geojson")
+        xlims = (32.8, 48.2)
+        ylims = (3.0, 15.0)
+        xticks = [34, 38, 42, 46]
+        xticklabels = ["34°E", "38°E", "42°E", "46°E"]
+        yticks = [4, 7, 10, 13]
+        yticklabels = ["4°N", "7°N", "10°N", "13°N"]
+    else:
+        admin0_path = _get_boundary_file("ke_admin0.geojson")
+        admin1_path = _get_boundary_file("ke_admin1.geojson")
+        xlims = (33.5, 42.2)
+        ylims = (-4.8, 4.8)
+        xticks = [34, 36, 38, 40, 42]
+        xticklabels = ["34°E", "36°E", "38°E", "40°E", "42°E"]
+        yticks = [-4, -2, 0, 2, 4]
+        yticklabels = ["4°S", "2°S", "0°", "2°N", "4°N"]
 
     # Method 1: High-fidelity Vector GeoJSON rendering (fast, offline, self-contained)
-    if ke0_path and os.path.isfile(ke0_path):
+    if admin0_path and os.path.isfile(admin0_path):
         try:
             import json
             import matplotlib.patches as patches
             ax = fig.add_subplot(gs_cell)
             ax.set_facecolor("#DBEAFE")
-            ax.set_xlim(33.5, 42.2)
-            ax.set_ylim(-4.8, 4.8)
+            ax.set_xlim(*xlims)
+            ax.set_ylim(*ylims)
 
-            # County sub-boundaries
-            if ke1_path and os.path.isfile(ke1_path):
-                with open(ke1_path, "r", encoding="utf-8") as f:
-                    ke1 = json.load(f)
-                for feat in ke1.get("features", []):
+            # County / regional sub-boundaries
+            if admin1_path and os.path.isfile(admin1_path):
+                with open(admin1_path, "r", encoding="utf-8") as f:
+                    adm1 = json.load(f)
+                for feat in adm1.get("features", []):
                     geom = feat.get("geometry", {})
                     gtype = geom.get("type")
                     coords = geom.get("coordinates", [])
@@ -135,9 +155,9 @@ def _draw_grid_location_map(fig, gs_cell, glat, glon, lat_q=None, lon_q=None, dk
                             ax.add_patch(patches.Polygon(poly[0], facecolor="#F1EFE9", edgecolor="#CBD5E1", linewidth=0.4, zorder=1))
 
             # Country border
-            with open(ke0_path, "r", encoding="utf-8") as f:
-                ke0 = json.load(f)
-            for feat in ke0.get("features", []):
+            with open(admin0_path, "r", encoding="utf-8") as f:
+                adm0 = json.load(f)
+            for feat in adm0.get("features", []):
                 geom = feat.get("geometry", {})
                 gtype = geom.get("type")
                 coords = geom.get("coordinates", [])
@@ -153,10 +173,10 @@ def _draw_grid_location_map(fig, gs_cell, glat, glon, lat_q=None, lon_q=None, dk
                     color=COL_MAP_SITE, fontsize=8.5, fontweight="bold", zorder=6,
                     bbox=dict(boxstyle="round,pad=0.22", facecolor="#FFFFFF", edgecolor=COL_MAP_SITE, alpha=0.92, lw=0.8))
 
-            ax.set_xticks([34, 36, 38, 40, 42])
-            ax.set_xticklabels(["34°E", "36°E", "38°E", "40°E", "42°E"], fontsize=7.5, color=COL_TXT_MUTED)
-            ax.set_yticks([-4, -2, 0, 2, 4])
-            ax.set_yticklabels(["4°S", "2°S", "0°", "2°N", "4°N"], fontsize=7.5, color=COL_TXT_MUTED)
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(xticklabels, fontsize=7.5, color=COL_TXT_MUTED)
+            ax.set_yticks(yticks)
+            ax.set_yticklabels(yticklabels, fontsize=7.5, color=COL_TXT_MUTED)
             ax.tick_params(axis="both", which="both", length=3, pad=3)
             for spine in ax.spines.values():
                 spine.set_edgecolor("#94A3B8")
@@ -201,20 +221,41 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     op_year = dl._OP_YEAR
 
     models_dict = s.get("MODELS", {})
-    if season == "short_rains" or "Sep" in model_name or "sep" in model_name:
-        if "ECMWF SEAS5 (Sep)" in models_dict:
-            model_name = "ECMWF SEAS5 (Sep)"
-    if model_name not in models_dict:
-        # fallback to first available
+    is_fmam = (season in ("fmam", "belg") or "FMAM" in str(model_name) or "fmam" in str(model_name).lower() or "belg" in str(model_name).lower())
+    is_kiremt = not is_fmam and (season in ("kiremt", "jjas") or "Kiremt" in str(model_name) or "kiremt" in str(model_name).lower())
+    is_sep = not is_fmam and not is_kiremt and (season in ("short_rains", "ond") or "Sep" in str(model_name) or "sep" in str(model_name).lower())
+
+    if is_fmam and "ECMWF SEAS5 (FMAM)" in models_dict:
+        model_name = "ECMWF SEAS5 (FMAM)"
+    elif is_kiremt and "ECMWF SEAS5 (Kiremt)" in models_dict:
+        model_name = "ECMWF SEAS5 (Kiremt)"
+    elif is_sep and "ECMWF SEAS5 (Sep)" in models_dict:
+        model_name = "ECMWF SEAS5 (Sep)"
+    elif model_name not in models_dict:
         if models_dict:
             model_name = list(models_dict.keys())[0]
         else:
             raise RuntimeError("No models loaded in forecast state.")
 
     md = models_dict[model_name]
-    target_lat = s["target_lat"]
-    target_lon = s["target_lon"]
-    lm = s["lm"]
+
+    # Resolve active country domain coordinates
+    if is_fmam and s.get("chirps_fmam"):
+        c_ref = s["chirps_fmam"]
+    elif is_kiremt and s.get("chirps_kiremt"):
+        c_ref = s["chirps_kiremt"]
+    elif is_sep and s.get("chirps_sep"):
+        c_ref = s["chirps_sep"]
+    elif lat_q > 4.5 and s.get("chirps_fmam"):
+        c_ref = s["chirps_fmam"]
+    elif lat_q > 4.5 and s.get("chirps_kiremt"):
+        c_ref = s["chirps_kiremt"]
+    else:
+        c_ref = s
+
+    target_lat = c_ref["target_lat"]
+    target_lon = c_ref["target_lon"]
+    lm = c_ref["lm"]
 
     # Nearest land pixel
     li = np.argwhere(lm)
@@ -240,7 +281,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     cs_v = cs_m[~np.isnan(cs_m)]
     lg_v = lg_m[~np.isnan(lg_m)]
 
-    md_clim = md.get("chirps_clim") or s["chirps_clim"]
+    md_clim = md.get("chirps_clim") or c_ref.get("chirps_clim") or s["chirps_clim"]
     c_on_clim = float(md_clim["onset"][pi, pj])
     c_cs_clim = float(md_clim["cessation"][pi, pj])
     c_lg_clim = float(md_clim["lgp"][pi, pj])
@@ -251,9 +292,42 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
 
     if f_year is None:
         f_year = int(md["model_years"][oi]) if "model_years" in md and len(md["model_years"]) > oi else op_year
-    is_sep = (season == "short_rains" or "Sep" in model_name or "sep" in model_name or "short" in str(model_name).lower() or (not np.isnan(on_med) and on_med > 200))
 
-    if is_sep:
+    if is_fmam:
+        season_name = "Belg Spring Rains (FMAM)"
+        season_code = "FMAM"
+        init_date_str = f"01 January {f_year}"
+        valid_date_str = f"February – May {f_year}"
+        win_start = 32
+        win_end = 166
+        cal_label = "1993-2016"
+        cal_start = 1993
+        cal_end = 2016
+        cal_detail = f"CAL: 1993–2016 (24 yrs)   |   VAL: 2017–2025 (9 yrs)   |   OP year: {f_year}   |   Ensemble: {nm} members"
+        sub_window_str = f"Forecast window: DOY {win_start} (01 Feb) – DOY {win_end} (15 Jun)"
+        c_on_hist = c_ref["onset_doy"][:, pi, pj]
+        c_cs_hist = c_ref["cessation_doy"][:, pi, pj]
+        c_lg_hist = c_ref["lgp_days"][:, pi, pj]
+        chirps_years = np.array(c_ref["chirps_years"], dtype=int)
+        cal_idx = np.where((chirps_years >= 1993) & (chirps_years <= 2016))[0]
+    elif is_kiremt:
+        season_name = "Kiremt Main Rains (JJAS)"
+        season_code = "Kiremt"
+        init_date_str = f"01 May {f_year}"
+        valid_date_str = f"June – September {f_year}"
+        win_start = 122
+        win_end = 304
+        cal_label = "1993-2016"
+        cal_start = 1993
+        cal_end = 2016
+        cal_detail = f"CAL: 1993–2016 (24 yrs)   |   VAL: 2017–2025 (9 yrs)   |   OP year: {f_year}   |   Ensemble: {nm} members"
+        sub_window_str = f"Forecast window: DOY {win_start} (02 May) – DOY {win_end} (31 Oct)"
+        c_on_hist = c_ref["onset_doy"][:, pi, pj]
+        c_cs_hist = c_ref["cessation_doy"][:, pi, pj]
+        c_lg_hist = c_ref["lgp_days"][:, pi, pj]
+        chirps_years = np.array(c_ref["chirps_years"], dtype=int)
+        cal_idx = np.where((chirps_years >= 1993) & (chirps_years <= 2016))[0]
+    elif is_sep:
         season_name = "Short Rains (OND)"
         season_code = "OND"
         init_date_str = f"01 September {f_year}"
@@ -265,56 +339,11 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         cal_end = 2016
         cal_detail = f"CAL: 1993–2016 (24 yrs)   |   VAL: 2017–2025 (8 yrs)   |   OP year: {f_year}   |   Ensemble: {nm} members"
         sub_window_str = f"Forecast window: DOY {win_start} (01 Sep) – DOY {win_end} (31 Dec)"
-        
-        c_src = s.get("chirps_sep")
-        if c_src is not None:
-            c_on_hist = c_src["onset_doy"][:, pi, pj]
-            c_cs_hist = c_src["cessation_doy"][:, pi, pj]
-            c_lg_hist = c_src["lgp_days"][:, pi, pj]
-            chirps_years = np.array(c_src["chirps_years"], dtype=int)
-            cal_mask_s = (chirps_years >= 1993) & (chirps_years <= 2016)
-            cal_idx = np.where(cal_mask_s)[0]
-            c_on_clim = float(c_src["chirps_clim"]["onset"][pi, pj])
-            c_cs_clim = float(c_src["chirps_clim"]["cessation"][pi, pj])
-            c_lg_clim = float(c_src["chirps_clim"]["lgp"][pi, pj])
-        else:
-            sep_dir = os.path.join(s.get("base_dir", "."), "outputs", "ecmwf_sep")
-            if not os.path.isdir(sep_dir):
-                sep_dir = os.path.join(os.path.dirname(__file__), "..", "outputs", "ecmwf_sep")
-            if os.path.isdir(sep_dir):
-                try:
-                    import xarray as xr
-                    ds_con = xr.open_dataset(os.path.join(sep_dir, "CHIRPS_onset_doy_1981_2025.nc"))
-                    ds_ccs = xr.open_dataset(os.path.join(sep_dir, "CHIRPS_cessation_doy_1981_2025.nc"))
-                    ds_clg = xr.open_dataset(os.path.join(sep_dir, "CHIRPS_lgp_days_1981_2025.nc"))
-                    c_on_hist = ds_con[list(ds_con.data_vars)[0]].values[:, pi, pj]
-                    c_cs_hist = ds_ccs[list(ds_ccs.data_vars)[0]].values[:, pi, pj]
-                    c_lg_hist = ds_clg[list(ds_clg.data_vars)[0]].values[:, pi, pj]
-                    chirps_years = ds_con["year"].values.astype(int)
-                    cal_mask_s = (chirps_years >= 1993) & (chirps_years <= 2016)
-                    cal_idx = np.where(cal_mask_s)[0]
-                    c_on_clim = float(np.nanmean(c_on_hist[cal_idx]))
-                    c_cs_clim = float(np.nanmean(c_cs_hist[cal_idx]))
-                    c_lg_clim = float(np.nanmean(c_lg_hist[cal_idx]))
-                    ds_con.close(); ds_ccs.close(); ds_clg.close()
-                except Exception:
-                    c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
-                    c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
-                    c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
-                    chirps_years = np.array(s["chirps_years"], dtype=int)
-                    cal_idx = s["cal_idx"]
-                    c_on_hist = s["onset_doy"][:, pi, pj]
-                    c_cs_hist = s["cessation_doy"][:, pi, pj]
-                    c_lg_hist = s["lgp_days"][:, pi, pj]
-            else:
-                c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
-                c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
-                c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
-                chirps_years = np.array(s["chirps_years"], dtype=int)
-                cal_idx = s["cal_idx"]
-                c_on_hist = s["onset_doy"][:, pi, pj]
-                c_cs_hist = s["cessation_doy"][:, pi, pj]
-                c_lg_hist = s["lgp_days"][:, pi, pj]
+        c_on_hist = c_ref["onset_doy"][:, pi, pj]
+        c_cs_hist = c_ref["cessation_doy"][:, pi, pj]
+        c_lg_hist = c_ref["lgp_days"][:, pi, pj]
+        chirps_years = np.array(c_ref["chirps_years"], dtype=int)
+        cal_idx = np.where((chirps_years >= 1993) & (chirps_years <= 2016))[0]
     else:
         season_name = "Long Rains (MAM)"
         season_code = "MAM"
@@ -327,14 +356,11 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         cal_end = 2016
         cal_detail = f"CAL: 1981–2016 (36 yrs)   |   VAL: 2017–2025 (held out)   |   OP year: {f_year}   |   Ensemble: {nm} members"
         sub_window_str = "Onset window: P10 (~mid-Feb) – P34 (~mid-Jun)   |   Cessation window: P24 (~late Apr) – P37 (~mid-Jul)"
-        c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
-        c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
-        c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
-        chirps_years = np.array(s["chirps_years"], dtype=int)
-        cal_idx = s["cal_idx"]
-        c_on_hist = s["onset_doy"][:, pi, pj]
-        c_cs_hist = s["cessation_doy"][:, pi, pj]
-        c_lg_hist = s["lgp_days"][:, pi, pj]
+        c_on_hist = c_ref["onset_doy"][:, pi, pj]
+        c_cs_hist = c_ref["cessation_doy"][:, pi, pj]
+        c_lg_hist = c_ref["lgp_days"][:, pi, pj]
+        chirps_years = np.array(c_ref["chirps_years"], dtype=int)
+        cal_idx = c_ref.get("cal_idx", np.where((chirps_years >= 1981) & (chirps_years <= 2016))[0])
 
     def _calc_trend_slope(years_arr, vals_arr):
         vm = ~np.isnan(vals_arr)

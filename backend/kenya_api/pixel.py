@@ -41,8 +41,8 @@ def get_pixel(
     """All model stats for the nearest land pixel to (lat, lon)."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
-    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower() or lat > 5.0 or lon > 42.5)
-    if is_kiremt:
+    is_ethiopia = (season in ["kiremt", "fmam", "belg"] or "kiremt" in str(season).lower() or "fmam" in str(season).lower() or "belg" in str(season).lower() or lat > 5.0 or lon > 42.5)
+    if is_ethiopia:
         if not (3.0 <= lat <= 15.0 and 33.0 <= lon <= 48.0):
             raise HTTPException(400, f"({lat},{lon}) is outside the Ethiopia domain.")
     else:
@@ -53,15 +53,18 @@ def get_pixel(
 
 @router.get("/chirps")
 def get_chirps(
-    season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', or 'kiremt'"),
+    season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', 'kiremt', or 'fmam'"),
 ):
     """CHIRPS CAL domain-mean climatology and grid metadata."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
     s  = dl.get_state()
-    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower())
-    is_short = (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
-    if is_kiremt and s.get("chirps_kiremt"):
+    is_fmam = (season in ["fmam", "belg"] or "fmam" in str(season).lower() or "belg" in str(season).lower())
+    is_kiremt = not is_fmam and (season == "kiremt" or "kiremt" in str(season).lower())
+    is_short = not is_fmam and not is_kiremt and (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
+    if is_fmam and s.get("chirps_fmam"):
+        c_source = s["chirps_fmam"]
+    elif is_kiremt and s.get("chirps_kiremt"):
         c_source = s["chirps_kiremt"]
     elif is_short and s.get("chirps_sep"):
         c_source = s["chirps_sep"]
@@ -98,13 +101,13 @@ def get_taylor():
 def get_chirps_historical(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
-    season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', or 'kiremt'"),
+    season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', 'kiremt', or 'fmam'"),
 ):
     """Full CHIRPS time series (onset, cessation, LGP) for the nearest pixel."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
-    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower() or lat > 5.0 or lon > 42.5)
-    if is_kiremt:
+    is_ethiopia = (season in ["kiremt", "fmam", "belg"] or "kiremt" in str(season).lower() or "fmam" in str(season).lower() or "belg" in str(season).lower() or lat > 5.0 or lon > 42.5)
+    if is_ethiopia:
         if not (3.0 <= lat <= 15.0 and 33.0 <= lon <= 48.0):
             raise HTTPException(400, f"({lat},{lon}) is outside the Ethiopia domain.")
     else:
@@ -115,8 +118,12 @@ def get_chirps_historical(
     import warnings
 
     s = dl.get_state()
-    is_short = (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
-    if is_kiremt and s.get("chirps_kiremt"):
+    is_fmam = (season in ["fmam", "belg"] or "fmam" in str(season).lower() or "belg" in str(season).lower())
+    is_kiremt = not is_fmam and (season == "kiremt" or "kiremt" in str(season).lower() or lat > 5.0 or lon > 42.5)
+    is_short = not is_fmam and not is_kiremt and (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
+    if is_fmam and s.get("chirps_fmam"):
+        c_source = s["chirps_fmam"]
+    elif is_kiremt and s.get("chirps_kiremt"):
         c_source = s["chirps_kiremt"]
     elif is_short and s.get("chirps_sep"):
         c_source = s["chirps_sep"]
@@ -132,7 +139,7 @@ def get_chirps_historical(
     years    = [int(y) for y in c_source["chirps_years"]]
     cal_mask = c_source.get("cal_mask")
     if cal_mask is None:
-        cal_mask = np.isin(np.array(years), np.arange(1981, 2017))
+        cal_mask = np.isin(np.array(years), np.arange(1993, 2017) if (is_kiremt or is_short or is_fmam) else np.arange(1981, 2017))
 
     on_ts  = [float(v) if not np.isnan(v) else None for v in c_source["onset_doy"][:, pi, pj]]
     cs_ts  = [float(v) if not np.isnan(v) else None for v in c_source["cessation_doy"][:, pi, pj]]

@@ -16,6 +16,8 @@ const PRESET_FARMS_ETHIOPIA = [
   { site_name: 'Melkassa Agricultural Research Center', lat: 8.410, lon: 39.310 },
   { site_name: 'Bako Agricultural Research Center', lat: 9.130, lon: 37.050 },
   { site_name: 'Hawassa Agricultural Research Center', lat: 7.060, lon: 38.500 },
+  { site_name: 'Yabello Pastoral Research Station', lat: 4.880, lon: 38.080 },
+  { site_name: 'Kobo Agricultural Sub-Center', lat: 12.150, lon: 39.630 },
 ]
 
 const FORECAST_MODELS = [
@@ -36,13 +38,19 @@ const KIREMT_MODELS = [
   { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Kiremt May 01)', centre: 'European Centre' },
 ]
 
+const FMAM_MODELS = [
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Belg Jan 01)', centre: 'European Centre' },
+]
+
 export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026, country = 'kenya' }) {
-  const isKiremt = selectedSeason === 'kiremt' || country === 'ethiopia'
-  const isShort = !isKiremt && selectedSeason === 'short_rains'
-  const isSingle = isKiremt || isShort
-  const [siteName, setSiteName] = useState(isKiremt ? 'Holetta Agricultural Research Center' : 'KALRO Kiboko, Makueni Farm')
-  const [lat, setLat] = useState(isKiremt ? 9.060 : -2.21046)
-  const [lon, setLon] = useState(isKiremt ? 38.500 : 37.7190)
+  const isEthiopia = country === 'ethiopia' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg'
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || country === 'ethiopia')
+  const isShort = !isEthiopia && selectedSeason === 'short_rains'
+  const isSingle = isEthiopia || isShort
+  const [siteName, setSiteName] = useState(isEthiopia ? 'Holetta Agricultural Research Center' : 'KALRO Kiboko, Makueni Farm')
+  const [lat, setLat] = useState(isEthiopia ? 9.060 : -2.21046)
+  const [lon, setLon] = useState(isEthiopia ? 38.500 : 37.7190)
   const [bulletinType, setBulletinType] = useState(isSingle ? 'single' : 'multi')
   const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
   const [fmt, setFmt] = useState('pdf')
@@ -51,8 +59,8 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
-  const activePresets = isKiremt ? PRESET_FARMS_ETHIOPIA : PRESET_FARMS_KENYA
-  const activeModelsList = isKiremt ? KIREMT_MODELS : (isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS)
+  const activePresets = isEthiopia ? PRESET_FARMS_ETHIOPIA : PRESET_FARMS_KENYA
+  const activeModelsList = isFmam ? FMAM_MODELS : (isKiremt ? KIREMT_MODELS : (isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS))
 
   useEffect(() => {
     if (isSingle) {
@@ -106,7 +114,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
       return
     }
 
-    if (isKiremt) {
+    if (isEthiopia) {
       if (parsedLat < 3.0 || parsedLat > 15.0 || parsedLon < 33.0 || parsedLon > 48.0) {
         setError('Note: Coordinates appear outside the Ethiopia domain (3.0° to 15.0°N, 33.0° to 48.0°E). The model will match the nearest land boundary pixel.')
       }
@@ -143,7 +151,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
         fmt,
         bulletin_type: isSingle ? 'single' : bulletinType,
         model_name: isSingle ? 'ECMWF SEAS5' : selectedModel,
-        season: isKiremt ? 'kiremt' : (selectedSeason || (isShort ? 'short_rains' : 'long_rains')),
+        season: isFmam ? 'fmam' : (isKiremt ? 'kiremt' : (selectedSeason || (isShort ? 'short_rains' : 'long_rains'))),
         year: Number(selectedYear) || 2026,
       })
       clearTimeout(msgTimer1)
@@ -153,11 +161,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
       clearTimeout(msgTimer1)
       clearTimeout(msgTimer2)
       console.error('[Bulletin generation error]', err)
-      let displayError = err.message || 'Bulletin generation failed. Please try again.'
-      if (displayError.includes('Failed to fetch')) {
-        displayError = 'Could not reach the forecast server. The backend may still be starting up or rendering. Please try again in 15 seconds.'
-      }
-      setError(displayError)
+      setError(err?.response?.data?.detail || err.message || 'Bulletin generation failed. Check server logs.')
     } finally {
       setIsGenerating(false)
       setProgressMsg('')
@@ -165,14 +169,11 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" style={{ background: 'rgba(5, 10, 20, 0.78)', backdropFilter: 'blur(6px)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
       <div
-        className="w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl border"
+        className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         style={{
-          background: 'var(--bg-base, #0b1727)',
-          borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.12))',
-          color: 'var(--text-primary, #f1f5f9)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px -10px rgba(245, 158, 11, 0.15)'
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
         }}
       >
         {/* Modal Header */}
@@ -185,7 +186,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
               <h3 className="text-xs sm:text-sm font-bold tracking-wide uppercase text-slate-100 flex items-center gap-2 flex-wrap">
                 Generate Seasonal Forecast Bulletin
                 <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  {isKiremt ? `Kiremt ${selectedYear || 2026}` : (isShort ? `OND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`)}
+                  {isFmam ? `Belg ${selectedYear || 2026}` : isKiremt ? `Kiremt ${selectedYear || 2026}` : (isShort ? `OND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`)}
                 </span>
               </h3>
               <p className="text-[10px] sm:text-[11px] text-slate-400">Official ILRI publication template • Onset, Cessation &amp; LGP</p>
@@ -215,7 +216,9 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
-                    {isKiremt
+                    {isFmam
+                      ? `Belg (Feb-May ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members, Jan 01 init)`
+                      : isKiremt
                       ? `Kiremt (Jun-Sep ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members, May 01 init)`
                       : `Short Rains (OND ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)`}
                   </div>
@@ -239,15 +242,15 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     value="multi"
                     checked={bulletinType === 'multi'}
                     onChange={() => setBulletinType('multi')}
-                    className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                    className="mt-0.5 accent-amber-500"
                   />
                   <div>
                     <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
                       Multi-Model Consensus
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">Weighted</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono">Full (7 Models)</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      7 WMO global models combined with optimal RPSS skill weights
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                      Combined 7-model multi-model ensemble forecast with Equal / HR / RPSS weighting options.
                     </div>
                   </div>
                 </label>
@@ -265,15 +268,15 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     value="single"
                     checked={bulletinType === 'single'}
                     onChange={() => setBulletinType('single')}
-                    className="mt-0.5 text-amber-500 focus:ring-amber-500"
+                    className="mt-0.5 accent-amber-500"
                   />
                   <div>
                     <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                      Single Model Forecast
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
+                      Single-Model Diagnostic
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">Individual</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      Official single-model template with 44-yr historical series & plume
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                      Detailed diagnostic bulletin focusing specifically on one chosen operational centre.
                     </div>
                   </div>
                 </label>
@@ -289,7 +292,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                   <span>🛰️</span> Select Forecast System Model
                 </label>
                 <span className="text-[10px] text-slate-400">
-                  {isKiremt ? '1 Available Model for Kiremt (May 01 Init)' : (isShort ? '1 Available Model for OND' : '7 WMO GPC Models')}
+                  {isFmam ? '1 Available Model for Belg (Jan 01 Init)' : isKiremt ? '1 Available Model for Kiremt (May 01 Init)' : (isShort ? '1 Available Model for OND' : '7 WMO GPC Models')}
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -324,7 +327,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                {isKiremt ? 'Monitored Ethiopian Research Centers' : 'Monitored Farm Site Presets'}
+                {isEthiopia ? 'Monitored Ethiopian Research Centers' : 'Monitored Farm Site Presets'}
               </label>
               {selectedSite && (
                 <button
@@ -368,7 +371,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                 type="text"
                 value={siteName}
                 onChange={e => setSiteName(e.target.value)}
-                placeholder={isKiremt ? 'e.g. Holetta Agricultural Research Center' : 'e.g. KALRO Kiboko, Makueni Farm'}
+                placeholder={isEthiopia ? 'e.g. Holetta Agricultural Research Center' : 'e.g. KALRO Kiboko, Makueni Farm'}
                 className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono"
                 required
               />
@@ -384,7 +387,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                   step="any"
                   value={lat}
                   onChange={e => setLat(e.target.value)}
-                  placeholder={isKiremt ? '9.060' : '-2.210'}
+                  placeholder={isEthiopia ? '9.060' : '-2.210'}
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono"
                   required
                 />
@@ -398,7 +401,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                   step="any"
                   value={lon}
                   onChange={e => setLon(e.target.value)}
-                  placeholder={isKiremt ? '38.500' : '37.719'}
+                  placeholder={isEthiopia ? '38.500' : '37.719'}
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono"
                   required
                 />

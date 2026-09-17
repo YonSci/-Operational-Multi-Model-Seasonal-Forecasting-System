@@ -29,6 +29,7 @@ function pct(v){ return v!=null&&!isNaN(v)?(v*100).toFixed(0)+'%':'--' }
 const DOY_MONTHS_MAM=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
 const DOY_MONTHS_OND=[{doy:244,label:'Sep'},{doy:274,label:'Oct'},{doy:305,label:'Nov'},{doy:335,label:'Dec'}]
 const DOY_MONTHS_KIREMT=[{doy:122,label:'May'},{doy:152,label:'Jun'},{doy:182,label:'Jul'},{doy:213,label:'Aug'},{doy:244,label:'Sep'},{doy:274,label:'Oct'}]
+const DOY_MONTHS_FMAM=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
 const DOY_MONTHS=DOY_MONTHS_MAM
 
 // --- Country / season -> primary initialization date ----------------------
@@ -38,8 +39,8 @@ const SEASONS = {
     { id:'long_rains',  label:'Long Rains (MAM: Mar-May)',   init:'0201', initLabel:'Feb 01' },
   ],
   ethiopia: [
+    { id:'fmam',   label:'Belg (FMAM: Feb-May)',         init:'0101', initLabel:'Jan 01' },
     { id:'kiremt', label:'Kiremt (Main Rains: Jun-Sep)', init:'0501', initLabel:'May 01' },
-    { id:'belg',   label:'Belg (Short Rains: Feb-May)',  init:'0101', initLabel:'Jan 01' },
   ],
 }
 const INIT_LABELS = Object.fromEntries(
@@ -84,20 +85,30 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
   const { models } = pixelData
   const opYear = selectedYear ?? pixelData?.op_year ?? 2026
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
-  const monthTicks = isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM)
-  const winStart = isKiremt ? 122 : (isShort ? 244 : 32)
-  const winEnd   = isKiremt ? 304 : (isShort ? 365 : 213)
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
+  const monthTicks = isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM))
+  const winStart = isFmam ? 32 : (isKiremt ? 122 : (isShort ? 244 : 32))
+  const winEnd   = isFmam ? 166 : (isKiremt ? 304 : (isShort ? 365 : 213))
   const Q_bar    = pixelData.Q_bar_pixel   ?? 0   // pixel climatological daily rainfall mean
   const C_vec    = pixelData.C_clim_vec    ?? []  // CHIRPS CAL C(d) -- already cumulative, plot directly
-  const d_s_chirps = (isSingle && pixelData.d_s_pixel != null && (isKiremt ? (pixelData.d_s_pixel < 122 || pixelData.d_s_pixel > 304) : pixelData.d_s_pixel < 200)) ? null : pixelData.d_s_pixel          // CHIRPS OP onset DOY
-  const d_e_chirps = (isSingle && pixelData.d_e_pixel != null && (isKiremt ? (pixelData.d_e_pixel < 122 || pixelData.d_e_pixel > 304) : pixelData.d_e_pixel < 200)) ? null : pixelData.d_e_pixel          // CHIRPS OP cessation DOY
+  const d_s_chirps = (isSingle && pixelData.d_s_pixel != null && (
+    isFmam ? (pixelData.d_s_pixel < 32 || pixelData.d_s_pixel > 166) :
+    isKiremt ? (pixelData.d_s_pixel < 122 || pixelData.d_s_pixel > 304) :
+    pixelData.d_s_pixel < 200
+  )) ? null : pixelData.d_s_pixel          // CHIRPS OP onset DOY
+  const d_e_chirps = (isSingle && pixelData.d_e_pixel != null && (
+    isFmam ? (pixelData.d_e_pixel < 32 || pixelData.d_e_pixel > 166) :
+    isKiremt ? (pixelData.d_e_pixel < 122 || pixelData.d_e_pixel > 304) :
+    pixelData.d_e_pixel < 200
+  )) ? null : pixelData.d_e_pixel          // CHIRPS OP cessation DOY
 
   const nDays = winEnd - winStart + 1
 
   const allActiveEntries = Object.entries(models).filter(([n]) => {
+    if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
     return selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
@@ -171,8 +182,16 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   const med = arr => arr.length ? [...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)] : null
   const mmm_on_raw = med(activeEntries.map(([,m])=>m.on_med).filter(v=>v!=null))
   const mmm_cs_raw = med(activeEntries.map(([,m])=>m.cs_med).filter(v=>v!=null))
-  const mmm_on = (isSingle && mmm_on_raw != null && (isKiremt ? (mmm_on_raw < 122 || mmm_on_raw > 304) : mmm_on_raw < 200)) ? null : mmm_on_raw
-  const mmm_cs = (isSingle && mmm_cs_raw != null && (isKiremt ? (mmm_cs_raw < 122 || mmm_cs_raw > 304) : mmm_cs_raw < 200)) ? null : mmm_cs_raw
+  const mmm_on = (isSingle && mmm_on_raw != null && (
+    isFmam ? (mmm_on_raw < 32 || mmm_on_raw > 166) :
+    isKiremt ? (mmm_on_raw < 122 || mmm_on_raw > 304) :
+    mmm_on_raw < 200
+  )) ? null : mmm_on_raw
+  const mmm_cs = (isSingle && mmm_cs_raw != null && (
+    isFmam ? (mmm_cs_raw < 32 || mmm_cs_raw > 166) :
+    isKiremt ? (mmm_cs_raw < 122 || mmm_cs_raw > 304) :
+    mmm_cs_raw < 200
+  )) ? null : mmm_cs_raw
 
 
   // -- Weighted ensemble curves (equal / HR / RPSS) ---------------------
@@ -280,18 +299,20 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
 // --- Precip Plume (BC daily) ----------------------------------------------
 function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_rains'}) {
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
-  const DOY_START = isKiremt ? 122 : (isShort ? 244 : 32)
-  const N_DAYS = isKiremt ? 183 : (isShort ? 122 : 150)
-  const MONTH_TICKS = isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM)
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
+  const DOY_START = isFmam ? 32 : (isKiremt ? 122 : (isShort ? 244 : 32))
+  const N_DAYS = isFmam ? 135 : (isKiremt ? 183 : (isShort ? 122 : 150))
+  const MONTH_TICKS = isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM))
   const DRY_THRESHOLD = 0.5
 
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
 
   const models = pixelData.models ?? {}
   const allEntries = Object.entries(models).filter(([n]) => {
+    if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
     return selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
@@ -307,8 +328,8 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
       const dBase = cCurve.map((v, i) => i === 0 ? v : Math.max(0, v - cCurve[i-1]))
       const bMax = Math.max(...dBase, 0.1)
       const scaled = dBase.map(v => (v / bMax) * 5.5)
-      const onMed = ms.on_med ?? (isKiremt ? 170 : (isShort ? 315 : 80))
-      const csMed = ms.cs_med ?? (isKiremt ? 270 : (isShort ? 350 : 140))
+      const onMed = ms.on_med ?? (isFmam ? 75 : (isKiremt ? 170 : (isShort ? 315 : 80)))
+      const csMed = ms.cs_med ?? (isFmam ? 145 : (isKiremt ? 270 : (isShort ? 350 : 140)))
       bc = Array.from({length: 10}, (_, mIdx) => {
         return scaled.map((val, dIdx) => {
           const doy = DOY_START + dIdx
@@ -405,6 +426,17 @@ const RISK_DEFS_KIREMT=[
   {key:'agree_on_max',group:'Forecast Confidence',label:'Ensemble Confidence', icon:'\u25CE',sub:'Max agreement on onset category', def:'Fraction of ensemble members agreeing on dominant onset category (BN/NN/AN). Above 50% = meaningful consensus.', thresh:0.5, warn:false,higher_better:true},
 ]
 
+const RISK_DEFS_FMAM=[
+  {key:'p_late_on',   group:'Onset Timing',      label:'Late Onset Risk',      icon:'\u23F0',sub:'P(Onset after ~25 Mar)',  def:'Probability the Belg season begins later than the climatological upper tercile (~DOY 84 / late March). Delayed planting threatens short-cycle food crops.', thresh:0.333,warn:true, doy:84, warningLevel:0.5},
+  {key:'p_early_on',  group:'Onset Timing',      label:'Early Onset Risk',     icon:'\uD83C\uDF31',sub:'P(Onset before ~25 Feb)', def:'Probability of an unusually early Belg onset (before late February). Potential false start risk in pastoral and agro-pastoral zones.', thresh:0.333,warn:false,doy:56},
+  {key:'p_lgp_lt30',  group:'Season Length',     label:'Critically Short Season', icon:'\u26A0', sub:'P(Season Length < 30 days)',   def:'Belg season under 30 days is critically shortened -- acute risk of crop failure for pulses, barley, and early maize.', thresh:0.20, warn:true, warningLevel:0.35},
+  {key:'p_lgp_lt45',  group:'Season Length',     label:'Short Season Risk',    icon:'\uD83D\uDCC9',sub:'P(Season Length < 45 days)',   def:'Season under 45 days is below the minimum maturity requirement for typical Belg varieties.', thresh:0.333,warn:true},
+  {key:'p_lgp_lt60',  group:'Season Length',     label:'Below-Normal Season',  icon:'\uD83C\uDF26',sub:'P(Season Length < 60 days)',   def:'Season under 60 days is below the climatological median for Belg (~65-75 days in central/eastern highlands).', thresh:0.333,warn:true},
+  {key:'p_fail',      group:'Season Failure',    label:'Season Failure',       icon:'\u2715', sub:'P(No detectable onset)',           def:'Fraction of ensemble members with no detectable rainfall onset during the Feb-Jun window.', thresh:0.10, warn:true, warningLevel:0.20},
+  {key:'p_dry_spell', group:'Season Failure',    label:'Dry Spell Risk',       icon:'\uD83C\uDFDC',sub:'Proxy: P(Season < 30d)',          def:'Proxy indicator using P(LGP<30d) as surrogate for intraseasonal dry spells during Belg growing period.', thresh:0.333,warn:true},
+  {key:'agree_on_max',group:'Forecast Confidence',label:'Ensemble Confidence', icon:'\u25CE',sub:'Max agreement on onset category', def:'Fraction of ensemble members agreeing on dominant onset category (BN/NN/AN). Above 50% = meaningful consensus.', thresh:0.5, warn:false,higher_better:true},
+]
+
 function GaugeCard({def:rd,vals,entries}) {
   const [showDef,setShowDef]=useState(false)
   if (!vals||!vals.length) return (
@@ -459,30 +491,32 @@ function GaugeCard({def:rd,vals,entries}) {
 
 function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedSeason='long_rains'}) {
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
   const allEntries = Object.entries(pixelData.models ?? {}).filter(([n]) => {
+    if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
     return selectedModel === 'multimodel' ? activeModels.has(n) : n === selectedModel
   })
   const entries = (isSingle && allEntries.length > 1) ? [allEntries[0]] : allEntries
   const groups = {}
-  const defs = isKiremt ? RISK_DEFS_KIREMT : (isShort ? RISK_DEFS_OND : RISK_DEFS)
+  const defs = isFmam ? RISK_DEFS_FMAM : (isKiremt ? RISK_DEFS_KIREMT : (isShort ? RISK_DEFS_OND : RISK_DEFS))
   defs.forEach(rd => {
     if (!groups[rd.group]) groups[rd.group] = []
     let vals
     if (rd.key === 'p_late_on') {
       vals = entries.map(([,ms]) => {
         const v = ms.on_v ?? []
-        const thr = ms.t67?.onset ?? (isKiremt ? 186 : (isShort ? 322 : 89))
+        const thr = ms.t67?.onset ?? (isFmam ? 84 : (isKiremt ? 186 : (isShort ? 322 : 89)))
         return v.length ? v.filter(x => x > thr).length / v.length : null
       }).filter(v => v != null)
     } else if (rd.key === 'p_early_on') {
       vals = entries.map(([,ms]) => {
         const v = ms.on_v ?? []
-        const thr = ms.t33?.onset ?? (isKiremt ? 166 : (isShort ? 306 : 74))
+        const thr = ms.t33?.onset ?? (isFmam ? 56 : (isKiremt ? 166 : (isShort ? 306 : 74)))
         return v.length ? v.filter(x => x < thr).length / v.length : null
       }).filter(v => v != null)
     } else if (rd.key === 'p_lgp_lt20') {
@@ -502,7 +536,7 @@ function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedS
     } else if (rd.key === 'p_lgp_lt90') {
       vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; return v.length ? v.filter(x => x < 90).length / v.length : null }).filter(v => v != null)
     } else if (rd.key === 'p_dry_spell') {
-      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; const thr = isKiremt ? 60 : (isShort ? 20 : 35); return v.length ? v.filter(x => x < thr).length / v.length : null }).filter(v => v != null)
+      vals = entries.map(([,ms]) => { const v = ms.lg_v ?? []; const thr = isFmam ? 30 : (isKiremt ? 60 : (isShort ? 20 : 35)); return v.length ? v.filter(x => x < thr).length / v.length : null }).filter(v => v != null)
     } else if (rd.key === 'agree_on_max') {
       vals = [Math.max(...entries.map(([,ms]) => ms.agree_on ?? (ms.p_on ? Math.max(...ms.p_on) : 1/3)).filter(v => !isNaN(v)))]
     } else if (rd.key === 'p_fail') {
@@ -515,7 +549,7 @@ function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedS
   return (
     <div style={{padding:'8px 10px',overflowY:'auto',height:'100%'}}>
       <p style={{fontSize:9,color:'var(--text-faint)',marginBottom:10,lineHeight:1.5}}>
-        {isKiremt ? 'Kiremt (Main Rains) risk indicators relative to 1993-2016 climatological terciles.' : isShort ? 'Short Rains (OND) risk indicators relative to 1993-2016 climatological terciles.' : 'Click any card to see the definition. Threshold line shown on bar.'}
+        {isFmam ? 'Belg (FMAM) risk indicators relative to 1993-2016 climatological terciles.' : isKiremt ? 'Kiremt (Main Rains) risk indicators relative to 1993-2016 climatological terciles.' : isShort ? 'Short Rains (OND) risk indicators relative to 1993-2016 climatological terciles.' : 'Click any card to see the definition. Threshold line shown on bar.'}
       </p>
       {Object.entries(groups).map(([grp,items])=>(
         <div key={grp} style={{marginBottom:16}}>
@@ -565,16 +599,18 @@ function TercileBar({values}) {
 
 function ProbabilisticOutlook({pixelData,activeModels,selectedModel='multimodel',selectedSeason='long_rains'}) {
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
   const allEntries = Object.entries(pixelData.models ?? {}).filter(([n]) => {
+    if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
     return selectedModel === 'multimodel' ? activeModels.has(n) : n === selectedModel
   })
   const entries = (isSingle && allEntries.length > 1) ? [allEntries[0]] : allEntries
-  const climLabel = (isShort || isKiremt) ? '1993-2016' : '1981-2016'
+  const climLabel = (isShort || isKiremt || isFmam) ? '1993-2016' : '1981-2016'
   const secs=[
     {key:'p_on', label:'Onset Timing', icon:'\uD83C\uDF27', def:`BN=late onset, AN=early onset vs ${climLabel} climatological terciles`},
     {key:'p_cs', label:'Cessation Timing', icon:'\u2600', def:'AN=late cessation (longer rains)'},
@@ -624,10 +660,12 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',
                  height:'100%',color:'var(--text-faint)',fontSize:11}}>No data</div>
   )
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
   const allEntries = Object.entries(pixelData.models ?? {}).filter(([n]) => {
+    if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
     return selectedModel === 'multimodel' ? activeModels.has(n) : n === selectedModel
@@ -672,7 +710,7 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       {isSingle && (
         <div style={{padding:'4px 8px',background:'rgba(59,130,246,0.08)',borderBottom:'1px solid var(--border-primary)',fontSize:8.5,color:'var(--accent-blue)',fontWeight:600,textAlign:'center'}}>
-          {isKiremt ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Kiremt May 01)' : 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Ensemble Members)'}
+          {isFmam ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Belg Jan 01)' : isKiremt ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Kiremt May 01)' : 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Ensemble Members)'}
         </div>
       )}
       {/* Dial summary row */}
@@ -741,12 +779,14 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
       <span className="text-sm tracking-wide">Click any pixel on the map to load forecast data</span>
     </div>
   )
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
-  const seasonCode = isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
+  const seasonCode = isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM'))
   const models = pixelData?.models ?? {}
   const allEntries = Object.entries(models).filter(([n]) => {
+    if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
     return selectedModel === 'multimodel' ? (activeModels.size > 0 ? activeModels.has(n) : true) : n === selectedModel
@@ -755,12 +795,20 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
 
   const activeClim = entries[0]?.[1]?.chirps_clim ?? pixelData?.chirps_clim
   const chirpsOnRaw = activeClim?.onset, chirpsCsRaw = activeClim?.cessation, chirpsLg = activeClim?.lgp
-  const chirpsOn = (isSingle && chirpsOnRaw != null && (isKiremt ? (chirpsOnRaw < 100 || chirpsOnRaw > 304) : chirpsOnRaw < 200)) ? null : chirpsOnRaw
-  const chirpsCs = (isSingle && chirpsCsRaw != null && (isKiremt ? (chirpsCsRaw < 100 || chirpsCsRaw > 304) : chirpsCsRaw < 200)) ? null : chirpsCsRaw
+  const chirpsOn = (isSingle && chirpsOnRaw != null && (
+    isFmam ? (chirpsOnRaw < 32 || chirpsOnRaw > 166) :
+    isKiremt ? (chirpsOnRaw < 100 || chirpsOnRaw > 304) :
+    chirpsOnRaw < 200
+  )) ? null : chirpsOnRaw
+  const chirpsCs = (isSingle && chirpsCsRaw != null && (
+    isFmam ? (chirpsCsRaw < 32 || chirpsCsRaw > 166) :
+    isKiremt ? (chirpsCsRaw < 100 || chirpsCsRaw > 304) :
+    chirpsCsRaw < 200
+  )) ? null : chirpsCsRaw
 
   const med = arr => arr.length ? [...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)] : null
-  const onMeds = entries.map(([,m]) => m.on_med).filter(v => v != null && (!isShort || v >= 200))
-  const csMeds = entries.map(([,m]) => m.cs_med).filter(v => v != null && (!isShort || v >= 200))
+  const onMeds = entries.map(([,m]) => m.on_med).filter(v => v != null && (!isShort || v >= 200) && (!isFmam || (v >= 32 && v <= 166)))
+  const csMeds = entries.map(([,m]) => m.cs_med).filter(v => v != null && (!isShort || v >= 200) && (!isFmam || (v >= 32 && v <= 166)))
   const lgMeds = entries.map(([,m]) => m.lg_med).filter(v => v != null)
 
   const mmmOn = med(onMeds)
@@ -770,10 +818,10 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const mmmCsAnom = mmmCs != null && chirpsCs ? mmmCs - chirpsCs : null
   const mmmLgAnom = mmmLg != null && chirpsLg ? mmmLg - chirpsLg : null
   const domTiming = mmmAnom != null ? (mmmAnom > 5 ? 'Late' : mmmAnom < -5 ? 'Early' : 'Normal') : 'Normal'
-  const allOnP10 = entries.map(([,m]) => m.on_p10).filter(v => v != null && (!isShort || v >= 200))
-  const allOnP90 = entries.map(([,m]) => m.on_p90).filter(v => v != null && (!isShort || v >= 200))
-  const allCsP10 = entries.map(([,m]) => m.cs_p10).filter(v => v != null && (!isShort || v >= 200))
-  const allCsP90 = entries.map(([,m]) => m.cs_p90).filter(v => v != null && (!isShort || v >= 200))
+  const allOnP10 = entries.map(([,m]) => m.on_p10).filter(v => v != null && (!isShort || v >= 200) && (!isFmam || (v >= 32 && v <= 166)))
+  const allOnP90 = entries.map(([,m]) => m.on_p90).filter(v => v != null && (!isShort || v >= 200) && (!isFmam || (v >= 32 && v <= 166)))
+  const allCsP10 = entries.map(([,m]) => m.cs_p10).filter(v => v != null && (!isShort || v >= 200) && (!isFmam || (v >= 32 && v <= 166)))
+  const allCsP90 = entries.map(([,m]) => m.cs_p90).filter(v => v != null && (!isShort || v >= 200) && (!isFmam || (v >= 32 && v <= 166)))
   const allLgP10 = entries.map(([,m]) => m.lg_p10).filter(v => v != null)
   const allLgP90 = entries.map(([,m]) => m.lg_p90).filter(v => v != null)
   const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
@@ -825,12 +873,13 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
 
 // --- Probabilistic Tab ----------------------------------------------------
 function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel,modelsData,selectedYear,setSelectedYear,country,selectedSeason,onSeasonChange,selectedInit}) {
-  const isKiremt = selectedSeason === 'kiremt'
-  const isShort = !isKiremt && selectedSeason === 'short_rains'
-  const isSingle = isKiremt || isShort
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg'
+  const isKiremt = !isFmam && selectedSeason === 'kiremt'
+  const isShort = !isFmam && !isKiremt && selectedSeason === 'short_rains'
+  const isSingle = isFmam || isKiremt || isShort
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const yearOptions = [2026, 2025, 2024, 2023]
-  const seasonCode = isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')
+  const seasonCode = isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM'))
   const opYear = selectedYear ?? 2026
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
   const selStyle={background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
@@ -880,7 +929,7 @@ function ValidationTab({ pixelData, activeModels, validationData,
                           selectedModel, setSelectedModel, modelsData,
                           selectedYear,  setSelectedYear,
                           country, selectedSeason, onSeasonChange, selectedInit }) {
-  const isSingle = selectedSeason === 'short_rains' || selectedSeason === 'kiremt'
+  const isSingle = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const selStyle = {
     background:'var(--bg-surface)', border:'1px solid var(--accent-blue)',
@@ -1059,15 +1108,15 @@ function ValidationTab({ pixelData, activeModels, validationData,
 
 // --- HistoricalTimeSeries --------------------------------------------------
 function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
-                                pixelData, selectedModel, varKey, unit, isShort, isKiremt, opYear }) {
+                                pixelData, selectedModel, varKey, unit, isShort, isKiremt, isFmam, opYear }) {
   if (!data || !years) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',
                  height:'100%',color:'var(--text-faint)',fontSize:11}}>No data</div>
   )
   const isLGP = varKey === 'lgp'
-  const isSingle = isShort || isKiremt
+  const isSingle = isShort || isKiremt || isFmam
   const activeModel = isSingle ? 'ECMWF SEAS5' : selectedModel
-  const modelEntry = pixelData?.models?.[activeModel] || (isSingle ? (pixelData?.models?.['ECMWF SEAS5'] || pixelData?.models?.['ECMWF SEAS5 (Kiremt)'] || pixelData?.models?.['ECMWF SEAS5 (Sep)']) : null)
+  const modelEntry = pixelData?.models?.[activeModel] || (isSingle ? (pixelData?.models?.['ECMWF SEAS5'] || pixelData?.models?.['ECMWF SEAS5 (FMAM)'] || pixelData?.models?.['ECMWF SEAS5 (Kiremt)'] || pixelData?.models?.['ECMWF SEAS5 (Sep)']) : null)
   const fcastP10 = varKey==='onset'?modelEntry?.on_p10:varKey==='cessation'?modelEntry?.cs_p10:modelEntry?.lg_p10
   const fcastP90 = varKey==='onset'?modelEntry?.on_p90:varKey==='cessation'?modelEntry?.cs_p90:modelEntry?.lg_p90
   const fcastP50 = varKey==='onset'?modelEntry?.on_med:varKey==='cessation'?modelEntry?.cs_med:modelEntry?.lg_med
@@ -1136,7 +1185,7 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
     const entry=pl?.find(p=>p.dataKey==='val'), pt=entry?.payload
     if (!pt) return String(yr)
     if (pt.isLatest) return yr+'  (forecast year)'
-    const calPeriodStr = (isShort || isKiremt) ? '1993-2016' : '1981-2016'
+    const calPeriodStr = (isShort || isKiremt || isFmam) ? '1993-2016' : '1981-2016'
     return yr+(pt.isCal?`  - cal period (${calPeriodStr})`:'  - validation period')
   }
   const valFmt = (val,name,entry) => {
@@ -1146,7 +1195,7 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
       if (!pt) return [fmtV(val),'Observed']
       if (pt.isLatest) {
         const parts=[pt.hasObs?'Obs: '+fmtV(pt.val):null, fcastP50!=null?(activeModel||'Model')+' P50: '+fmtV(fcastP50):null, hasIQR?'IQR: '+fmtV(fcastP10)+' - '+fmtV(fcastP90):null].filter(Boolean)
-        const seasonCode = isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')
+        const seasonCode = isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM'))
         return [parts.join('  |  ')||fmtV(val),`${seasonCode} ${targetLatestYear} Forecast`]
       }
       return [fmtV(val),'Observed']
@@ -1175,15 +1224,16 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
 
 // --- HistoricalTab ------------------------------------------------------------
 function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel, modelsData, selectedYear, setSelectedYear, country, selectedSeason, onSeasonChange, selectedInit }) {
-  const isKiremt = selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt')
-  const isShort = !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
-  const isSingle = isKiremt || isShort
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg'))
+  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isShort = !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
+  const isSingle = isFmam || isKiremt || isShort
   const opYear = selectedYear || 2026
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const yearOptions = [2026, 2025, 2024, 2023]
   const activeModelName = isSingle ? 'ECMWF SEAS5' : selectedModel
-  const seasonCode = isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')
-  const calPeriodStr = (isShort || isKiremt) ? '1993-2016' : '1981-2016'
+  const seasonCode = isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM'))
+  const calPeriodStr = (isShort || isKiremt || isFmam) ? '1993-2016' : '1981-2016'
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
   const vars = [{key:'onset',label:'Onset DOY',color:'#34d399',unit:'DOY'},{key:'cessation',label:'Cessation DOY',color:'#f97316',unit:'DOY'},{key:'lgp',label:'Season Length',color:'#4a8fc4',unit:'days'}]
   return (
@@ -1205,7 +1255,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
             {yearOptions.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,color:'var(--text-faint)'}}>Init {INIT_LABELS[selectedInit]??(isKiremt ? 'May 01' : (isShort ? 'Sep 01' : 'Feb 01'))}</span></div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,color:'var(--text-faint)'}}>Init {INIT_LABELS[selectedInit]??(isFmam ? 'Jan 01' : (isKiremt ? 'May 01' : (isShort ? 'Sep 01' : 'Feb 01')))}</span></div>
         <div className="sm:ml-auto text-[9px] text-[var(--text-faint)] w-full sm:w-auto mt-1 sm:mt-0">{chirpsHist?'':'Click a pixel on the map to load data'}</div>
       </div>
       <div style={{flexShrink:0,background:'var(--bg-surface)',border:'1px solid var(--border-primary)',borderRadius:10,maxHeight:'35%',overflow:'hidden',display:'flex',flexDirection:'column'}}>
@@ -1219,7 +1269,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
             <tbody>
               {vars.map((v,i)=>{
                 const d=chirpsHist?.[v.key]
-                const modelEntry = pixelData?.models?.[activeModelName] || (isSingle ? (pixelData?.models?.['ECMWF SEAS5'] || pixelData?.models?.['ECMWF SEAS5 (Kiremt)'] || pixelData?.models?.['ECMWF SEAS5 (Sep)']) : null)
+                const modelEntry = pixelData?.models?.[activeModelName] || (isSingle ? (pixelData?.models?.['ECMWF SEAS5'] || pixelData?.models?.['ECMWF SEAS5 (FMAM)'] || pixelData?.models?.['ECMWF SEAS5 (Kiremt)'] || pixelData?.models?.['ECMWF SEAS5 (Sep)']) : null)
                 const fcastP50 = v.key==='onset'?modelEntry?.on_med:v.key==='cessation'?modelEntry?.cs_med:modelEntry?.lg_med
                 const dispVal = fcastP50 ?? d?.latest_val
                 const anom = (dispVal != null && d?.mean != null) ? Number((dispVal - d.mean).toFixed(1)) : (d?.latest_anom ?? null)
@@ -1254,7 +1304,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
                   <HistoricalTimeSeries data={d?.ts} years={chirpsHist.years} label={v.label} color={v.color}
                     calYears={chirpsHist.cal_years} latestYear={chirpsHist.latest_year}
                     pixelData={pixelData} selectedModel={activeModelName} varKey={v.key} unit={v.unit}
-                    isShort={isShort} isKiremt={isKiremt} opYear={opYear}/>}
+                    isShort={isShort} isKiremt={isKiremt} isFmam={isFmam} opYear={opYear}/>}
               </div>
             </div>
           )
@@ -1611,7 +1661,7 @@ const TABS = [
 ]
 
 function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
-  const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt'
+  const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
     : (modelsData?.models ? Object.keys(modelsData.models) : [])
@@ -1772,7 +1822,7 @@ export default function App() {
     const s = seasons.find(x=>x.id===seasonId) ?? seasons[0]
     setSelectedSeason(s.id)
     setSelectedInit(s.init)
-    if (s.id === 'kiremt' || s.id === 'short_rains') {
+    if (s.id === 'kiremt' || s.id === 'short_rains' || s.id === 'fmam' || s.id === 'belg') {
       setSelectedYear(2026)
       setSelectedModel('ECMWF SEAS5')
     } else if (s.id === 'long_rains') {
@@ -1787,7 +1837,7 @@ export default function App() {
   const setActiveModels = useDashboardStore(s=>s.setActiveModels)
 
   useEffect(() => {
-    if (selectedSeason === 'short_rains' || selectedSeason === 'kiremt') {
+    if (selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg') {
       if (selectedModel !== 'ECMWF SEAS5') setSelectedModel('ECMWF SEAS5')
       if (activeTab === 'multimodel') setActiveTab('forecast')
     }
@@ -1806,11 +1856,14 @@ export default function App() {
 
   const querySite = selectedSite??{lat:-1.62,lon:37.12}
   const isKiremt = selectedSeason === 'kiremt'
-  const effectiveModel = isKiremt
-    ? 'ECMWF SEAS5 (Kiremt)'
-    : ((selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
-      ? 'ECMWF SEAS5 (Sep)'
-      : (selectedModel !== 'multimodel' ? selectedModel : ''))
+  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg'
+  const effectiveModel = isFmam
+    ? 'ECMWF SEAS5 (FMAM)'
+    : (isKiremt
+      ? 'ECMWF SEAS5 (Kiremt)'
+      : ((selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
+        ? 'ECMWF SEAS5 (Sep)'
+        : (selectedModel !== 'multimodel' ? selectedModel : '')))
   const { data: pixelData,  isLoading: pixelLoading } = usePixelStats(querySite, selectedSeason, effectiveModel)
   const { data: chirpsHist }                           = useChirpsHistorical(querySite, selectedSeason)
   const { data: validationData }                       = useValidation()
@@ -1819,7 +1872,9 @@ export default function App() {
   useEffect(()=>{
     if (!modelsLoaded||!selectedModel) return
     let model = selectedModel!=='multimodel'?selectedModel:''
-    if (selectedSeason === 'kiremt') {
+    if (selectedSeason === 'fmam' || selectedSeason === 'belg') {
+      model = 'ECMWF SEAS5 (FMAM)'
+    } else if (selectedSeason === 'kiremt') {
       model = 'ECMWF SEAS5 (Kiremt)'
     } else if (selectedSeason === 'short_rains' && (model === 'ECMWF SEAS5' || !model)) {
       model = 'ECMWF SEAS5 (Sep)'
