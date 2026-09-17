@@ -221,8 +221,12 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     op_year = dl._OP_YEAR
 
     models_dict = s.get("MODELS", {})
-    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower() or "kiremt" in str(model_name).lower() or float(lat_q) > 5.0 or float(lon_q) > 42.5)
-    if is_kiremt:
+    is_fmam = (season in ("fmam", "belg") or "fmam" in str(season).lower() or "belg" in str(season).lower() or "fmam" in str(model_name).lower())
+    is_kiremt = not is_fmam and (season in ("kiremt", "jjas") or "kiremt" in str(season).lower() or "kiremt" in str(model_name).lower() or ((float(lat_q) > 5.0 or float(lon_q) > 42.5) and season not in ("fmam", "belg", "short_rains", "long_rains", "ond", "mam")))
+    if is_fmam:
+        if "ECMWF SEAS5 (FMAM)" in models_dict:
+            model_name = "ECMWF SEAS5 (FMAM)"
+    elif is_kiremt:
         if "ECMWF SEAS5 (Kiremt)" in models_dict:
             model_name = "ECMWF SEAS5 (Kiremt)"
     elif season == "short_rains" or "Sep" in model_name or "sep" in model_name:
@@ -237,9 +241,14 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
 
     md = models_dict[model_name]
 
-    # Coordinate system routing: use chirps_kiremt grid if Kiremt/Ethiopia
+    # Coordinate system routing: use chirps_fmam or chirps_kiremt grid if Ethiopia
+    c_f = s.get("chirps_fmam")
     c_k = s.get("chirps_kiremt")
-    if is_kiremt and c_k:
+    if is_fmam and c_f:
+        target_lat = c_f["target_lat"]
+        target_lon = c_f["target_lon"]
+        lm = c_f["lm"]
+    elif is_kiremt and c_k:
         target_lat = c_k["target_lat"]
         target_lon = c_k["target_lon"]
         lm = c_k["lm"]
@@ -284,9 +293,71 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     if f_year is None:
         f_year = int(md["model_years"][oi]) if "model_years" in md and len(md["model_years"]) > oi else op_year
 
-    is_sep = not is_kiremt and (season == "short_rains" or "Sep" in model_name or "sep" in model_name or "short" in str(model_name).lower() or (not np.isnan(on_med) and on_med > 200))
+    is_sep = not is_kiremt and not is_fmam and (season == "short_rains" or "Sep" in model_name or "sep" in model_name or "short" in str(model_name).lower() or (not np.isnan(on_med) and on_med > 200))
 
-    if is_kiremt:
+    if is_fmam:
+        season_name = "Belg Secondary Rains (Feb–May)"
+        season_code = "BELG"
+        init_date_str = f"01 January {f_year}"
+        valid_date_str = f"February – May {f_year}"
+        win_start = 32
+        win_end = 166
+        cal_label = "1993-2016"
+        cal_start = 1993
+        cal_end = 2016
+        cal_detail = f"CAL: 1993–2016 (24 yrs)   |   VAL: 2017–2025 (9 yrs)   |   OP year: {f_year}   |   Ensemble: {nm} members"
+        sub_window_str = f"Forecast window: DOY {win_start} (01 Feb) – DOY {win_end} (15 Jun)"
+
+        c_src = s.get("chirps_fmam")
+        if c_src is not None:
+            c_on_hist = c_src["onset_doy"][:, pi, pj]
+            c_cs_hist = c_src["cessation_doy"][:, pi, pj]
+            c_lg_hist = c_src["lgp_days"][:, pi, pj]
+            chirps_years = np.array(c_src["chirps_years"], dtype=int)
+            cal_mask_f = (chirps_years >= 1993) & (chirps_years <= 2016)
+            cal_idx = np.where(cal_mask_f)[0]
+            c_on_clim = float(c_src["chirps_clim"]["onset"][pi, pj])
+            c_cs_clim = float(c_src["chirps_clim"]["cessation"][pi, pj])
+            c_lg_clim = float(c_src["chirps_clim"]["lgp"][pi, pj])
+        else:
+            fmam_dir = os.path.join(s.get("base_dir", "."), "outputs", "ecmwf_fmam")
+            if not os.path.isdir(fmam_dir):
+                fmam_dir = os.path.join(os.path.dirname(__file__), "..", "outputs", "ecmwf_fmam")
+            if os.path.isdir(fmam_dir):
+                try:
+                    import xarray as xr
+                    ds_con = xr.open_dataset(os.path.join(fmam_dir, "CHIRPS_onset_doy_1993_2026.nc"))
+                    ds_ccs = xr.open_dataset(os.path.join(fmam_dir, "CHIRPS_cessation_doy_1993_2026.nc"))
+                    ds_clg = xr.open_dataset(os.path.join(fmam_dir, "CHIRPS_lgp_days_1993_2026.nc"))
+                    c_on_hist = ds_con[list(ds_con.data_vars)[0]].values[:, pi, pj]
+                    c_cs_hist = ds_ccs[list(ds_ccs.data_vars)[0]].values[:, pi, pj]
+                    c_lg_hist = ds_clg[list(ds_clg.data_vars)[0]].values[:, pi, pj]
+                    chirps_years = ds_con["year"].values.astype(int)
+                    cal_mask_f = (chirps_years >= 1993) & (chirps_years <= 2016)
+                    cal_idx = np.where(cal_mask_f)[0]
+                    c_on_clim = float(np.nanmean(c_on_hist[cal_idx]))
+                    c_cs_clim = float(np.nanmean(c_cs_hist[cal_idx]))
+                    c_lg_clim = float(np.nanmean(c_lg_hist[cal_idx]))
+                    ds_con.close(); ds_ccs.close(); ds_clg.close()
+                except Exception:
+                    c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
+                    c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
+                    c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
+                    chirps_years = np.array(s["chirps_years"], dtype=int)
+                    cal_idx = s["cal_idx"]
+                    c_on_hist = s["onset_doy"][:, pi, pj]
+                    c_cs_hist = s["cessation_doy"][:, pi, pj]
+                    c_lg_hist = s["lgp_days"][:, pi, pj]
+            else:
+                c_on_clim = float(s["chirps_clim"]["onset"][pi, pj])
+                c_cs_clim = float(s["chirps_clim"]["cessation"][pi, pj])
+                c_lg_clim = float(s["chirps_clim"]["lgp"][pi, pj])
+                chirps_years = np.array(s["chirps_years"], dtype=int)
+                cal_idx = s["cal_idx"]
+                c_on_hist = s["onset_doy"][:, pi, pj]
+                c_cs_hist = s["cessation_doy"][:, pi, pj]
+                c_lg_hist = s["lgp_days"][:, pi, pj]
+    elif is_kiremt:
         season_name = "Kiremt Main Rains (Jun–Sep)"
         season_code = "KIREMT"
         init_date_str = f"01 May {f_year}"
@@ -481,7 +552,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     sow_chirps_clim   = _doy_to_date_str(c_on_clim, f_year)
 
     # Risk Metrics
-    if is_kiremt or is_sep:
+    if is_kiremt or is_sep or is_fmam:
         p_late_on  = float(np.mean(on_v > (c_on_clim + 7))) if len(on_v) > 0 else 0.0
         p_early_on = float(np.mean(on_v < (c_on_clim - 7))) if len(on_v) > 0 else 0.0
     else:
@@ -574,7 +645,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         facecolor=COL_SUBHDR_BG, edgecolor="none",
         transform=fig.transFigure, zorder=10, clip_on=False
     ))
-    country_name = "Ethiopia" if is_kiremt else "Kenya"
+    country_name = "Ethiopia" if (is_kiremt or is_fmam) else "Kenya"
     fig.text(0.04, SUB_TOP - 0.009,
              f"{country_name} {season_name} {f_year}   |   Site: {lat_q:+.4f}, {lon_q:+.4f}   |   Nearest 0.25° pixel: ({pi},{pj}) [{glat:.2f}, {glon:.2f}]  D={dkm:.1f} km   |   Detection Ruleset v2.3   |   CHIRPS 0.25   |   CAL {cal_label}",
              fontsize=9.2, color="#FFFFFF", va="center", transform=fig.transFigure, zorder=11)
@@ -585,7 +656,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     # =========================================================================
     # ROW 0: GRID LOCATION MAP + ENSEMBLE TIMING SUMMARY TABLE
     # =========================================================================
-    ax_map = _draw_grid_location_map(fig, gs[0, 0], glat, glon, lat_q=lat_q, lon_q=lon_q, dkm=dkm, is_ethiopia=is_kiremt)
+    ax_map = _draw_grid_location_map(fig, gs[0, 0], glat, glon, lat_q=lat_q, lon_q=lon_q, dkm=dkm, is_ethiopia=(is_kiremt or is_fmam))
 
     # Table: Ensemble Timing Summary
     ax_tbl = fig.add_subplot(gs[0, 1:4])

@@ -107,6 +107,8 @@ export const MONITORED_SITES_ETHIOPIA = [
   { site_name: "Melkassa Agricultural Research Center", lat: 8.410, lon: 39.320, county: "Oromia", country: "ethiopia", desc: "Semi-Arid Lowland Ag Research Center" },
   { site_name: "Bako Agricultural Research Center",     lat: 9.120, lon: 37.050, county: "Oromia", country: "ethiopia", desc: "Western Maize & Grain Research Center" },
   { site_name: "Hawassa Farm Station",                  lat: 7.050, lon: 38.480, county: "Sidama", country: "ethiopia", desc: "Southern Rift Valley Farm Station" },
+  { site_name: "Yabello Pastoral Research Center",      lat: 4.880, lon: 38.090, county: "Borana", country: "ethiopia", desc: "EIAR Southern Pastoral Rangeland Center" },
+  { site_name: "Kobo Agricultural Research Center",     lat: 12.140, lon: 39.630, county: "North Wollo", country: "ethiopia", desc: "Dryland Lowland Agricultural Center" },
 ]
 
 export const MONITORED_SITES = [...MONITORED_SITES_KENYA, ...MONITORED_SITES_ETHIOPIA]
