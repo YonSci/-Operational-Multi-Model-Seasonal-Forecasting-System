@@ -92,30 +92,46 @@ const BASEMAPS = {
 }
 
 // -- Monitored Farm Sites ---------------------------------------------------
-export const MONITORED_SITES = [
-  { site_name: "Kapiti Research Station Farm",   lat: -1.63209, lon: 37.1479, county: "Machakos",   desc: "ILRI Research Farm" },
-  { site_name: "KALRO Kiboko, Makueni Farm",     lat: -2.21046, lon: 37.7190, county: "Makueni",    desc: "KALRO Dryland Station" },
-  { site_name: "El Karama Sahiwals Farm",         lat: -2.38710, lon: 37.4851, county: "Kajiado",    desc: "Livestock Breeding Farm" },
-  { site_name: "LiveMo LTD, Memerush, Kajiado",  lat: -2.38726, lon: 37.4850, county: "Kajiado",    desc: "Commercial Pastoral Ranch" },
-  { site_name: "Genco LTD Maralal Samburu Farm", lat:  0.92730, lon: 36.5690, county: "Samburu",    desc: "Northern Pastoral Hub" },
-  { site_name: "Genco LTD Tana River Farm",      lat: -2.21314, lon: 40.0517, county: "Tana River", desc: "Coast Rangeland Site" },
+export const MONITORED_SITES_KENYA = [
+  { site_name: "Kapiti Research Station Farm",   lat: -1.63209, lon: 37.1479, county: "Machakos",   country: "kenya",    desc: "ILRI Research Farm" },
+  { site_name: "KALRO Kiboko, Makueni Farm",     lat: -2.21046, lon: 37.7190, county: "Makueni",    country: "kenya",    desc: "KALRO Dryland Station" },
+  { site_name: "El Karama Sahiwals Farm",         lat: -2.38710, lon: 37.4851, county: "Kajiado",    country: "kenya",    desc: "Livestock Breeding Farm" },
+  { site_name: "LiveMo LTD, Memerush, Kajiado",  lat: -2.38726, lon: 37.4850, county: "Kajiado",    country: "kenya",    desc: "Commercial Pastoral Ranch" },
+  { site_name: "Genco LTD Maralal Samburu Farm", lat:  0.92730, lon: 36.5690, county: "Samburu",    country: "kenya",    desc: "Northern Pastoral Hub" },
+  { site_name: "Genco LTD Tana River Farm",      lat: -2.21314, lon: 40.0517, county: "Tana River", country: "kenya",    desc: "Coast Rangeland Site" },
 ]
 
-const SITES_GEOJSON = {
-  type: 'FeatureCollection',
-  features: MONITORED_SITES.map(s => ({
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-    properties: {
-      site_name: s.site_name,
-      short_name: s.site_name.replace(' Farm', '').replace(' Station', '').split(',')[0].slice(0, 15),
-      lat: s.lat,
-      lon: s.lon,
-      county: s.county,
-      desc: s.desc
-    }
-  }))
+export const MONITORED_SITES_ETHIOPIA = [
+  { site_name: "Holetta Agricultural Research Center", lat: 9.060, lon: 38.500, county: "Oromia", country: "ethiopia", desc: "EIAR Central Highland Research Hub" },
+  { site_name: "Debre Zeit / Bishoftu Station",        lat: 8.750, lon: 38.980, county: "Oromia", country: "ethiopia", desc: "Tef & Pulse Research Center" },
+  { site_name: "Melkassa Agricultural Research Center", lat: 8.410, lon: 39.320, county: "Oromia", country: "ethiopia", desc: "Semi-Arid Lowland Ag Research Center" },
+  { site_name: "Bako Agricultural Research Center",     lat: 9.120, lon: 37.050, county: "Oromia", country: "ethiopia", desc: "Western Maize & Grain Research Center" },
+  { site_name: "Hawassa Farm Station",                  lat: 7.050, lon: 38.480, county: "Sidama", country: "ethiopia", desc: "Southern Rift Valley Farm Station" },
+]
+
+export const MONITORED_SITES = [...MONITORED_SITES_KENYA, ...MONITORED_SITES_ETHIOPIA]
+
+function getSitesGeoJSON(country = 'kenya') {
+  const sites = country === 'ethiopia' ? MONITORED_SITES_ETHIOPIA : MONITORED_SITES_KENYA
+  return {
+    type: 'FeatureCollection',
+    features: sites.map(s => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+      properties: {
+        site_name: s.site_name,
+        short_name: s.site_name.replace(' Farm', '').replace(' Station', '').replace(' Center', '').split(',')[0].slice(0, 16),
+        lat: s.lat,
+        lon: s.lon,
+        county: s.county,
+        country: s.country,
+        desc: s.desc
+      }
+    }))
+  }
 }
+
+const SITES_GEOJSON = getSitesGeoJSON('kenya')
 
 // Strip obsolete or non-standard CRS from GeoJSON to prevent MapLibre parsing issues
 function cleanGeoJSON(data) {
@@ -296,12 +312,10 @@ const HIST_LAYERS = [
 ]
 
 // -- Country map views -------------------------------------------------------
-// bounds: [[west,south],[east,north]]. `available` gates real forecast data --
-// Ethiopia's processed onset/cessation/LGP outputs are not produced yet, only
-// Kenya's, so its map is a recenter-only preview until that pipeline lands.
+// bounds: [[west,south],[east,north]]. Live forecast data operational for both Kenya & Ethiopia.
 const COUNTRY_VIEWS = {
   kenya:    { label:'Kenya',    bounds:[[33.5,-5],[42.5,5]],     available:true  },
-  ethiopia: { label:'Ethiopia', bounds:[[32.9,3.4],[48.0,14.9]], available:false },
+  ethiopia: { label:'Ethiopia', bounds:[[32.9,3.4],[48.0,14.9]], available:true  },
 }
 
 function doyToDate(doy, year=2026) {
@@ -747,13 +761,23 @@ export default function MapPanel({
         }
       } catch(_) {}
 
-      // 3. Fallback: Any click within Kenya bounds
+      // 3. Fallback: Any click within domain bounds
       const { lng, lat } = e.lngLat
-      if (lat >= -5.0 && lat <= 5.0 && lng >= 33.0 && lng <= 42.5) {
-        const rLat = parseFloat(lat.toFixed(3))
-        const rLon = parseFloat(lng.toFixed(3))
-        const site_name = `${Math.abs(rLat).toFixed(3)}°${rLat >= 0 ? 'N' : 'S'}, ${Math.abs(rLon).toFixed(3)}°E`
-        setSelectedSite({ site_name, lat: rLat, lon: rLon })
+      const isEth = countryRef.current === 'ethiopia' || (lat > 5.0 || lng > 42.5)
+      if (isEth) {
+        if (lat >= 3.0 && lat <= 15.0 && lng >= 33.0 && lng <= 48.0) {
+          const rLat = parseFloat(lat.toFixed(3))
+          const rLon = parseFloat(lng.toFixed(3))
+          const site_name = `${Math.abs(rLat).toFixed(3)}°${rLat >= 0 ? 'N' : 'S'}, ${Math.abs(rLon).toFixed(3)}°E`
+          setSelectedSite({ site_name, lat: rLat, lon: rLon })
+        }
+      } else {
+        if (lat >= -5.0 && lat <= 5.0 && lng >= 33.0 && lng <= 42.5) {
+          const rLat = parseFloat(lat.toFixed(3))
+          const rLon = parseFloat(lng.toFixed(3))
+          const site_name = `${Math.abs(rLat).toFixed(3)}°${rLat >= 0 ? 'N' : 'S'}, ${Math.abs(rLon).toFixed(3)}°E`
+          setSelectedSite({ site_name, lat: rLat, lon: rLon })
+        }
       }
     }
 
@@ -911,6 +935,7 @@ export default function MapPanel({
     setTooltip(null)
     if(!mapReadyRef.current) return
     try{ map.setPaintProperty('forecast-img','raster-opacity',countryView.available?0.85:0) }catch(_){}
+    try{ map.getSource('monitored-farm-sites')?.setData(getSitesGeoJSON(country)) }catch(_){}
   },[country])
 
   // -- Selected site -----------------------------------------------------
@@ -1168,29 +1193,32 @@ export default function MapPanel({
         )}
 
         {/* Farm Quick Selector -- top-right (next to MapLibre nav controls) */}
-        {countryView.available && (
-          <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto',maxWidth:'min(180px, 45vw)'}}>
-            <select
-              value={MONITORED_SITES.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
-              onChange={(e) => {
-                const site = MONITORED_SITES.find(s => s.site_name === e.target.value)
-                if (site) {
-                  setSelectedSite({ site_name: site.site_name, lat: site.lat, lon: site.lon })
-                  mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
-                }
-              }}
-              style={{padding:'5px 8px',borderRadius:8,fontSize:9,cursor:'pointer',
-                      backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,
-                      color:'var(--text-secondary)',fontWeight:600,outline:'none',width:'100%',textOverflow:'ellipsis'}}>
-              <option value="">🎯 Farms ({MONITORED_SITES.length})...</option>
-              {MONITORED_SITES.map(s => (
-                <option key={s.site_name} value={s.site_name}>
-                  {s.site_name.replace(' Farm', '')} ({s.county})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {countryView.available && (() => {
+          const activeSites = country === 'ethiopia' ? MONITORED_SITES_ETHIOPIA : MONITORED_SITES_KENYA
+          return (
+            <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto',maxWidth:'min(180px, 45vw)'}}>
+              <select
+                value={activeSites.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
+                onChange={(e) => {
+                  const site = activeSites.find(s => s.site_name === e.target.value)
+                  if (site) {
+                    setSelectedSite({ site_name: site.site_name, lat: site.lat, lon: site.lon })
+                    mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
+                  }
+                }}
+                style={{padding:'5px 8px',borderRadius:8,fontSize:9,cursor:'pointer',
+                        backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,
+                        color:'var(--text-secondary)',fontWeight:600,outline:'none',width:'100%',textOverflow:'ellipsis'}}>
+                <option value="">🎯 Stations ({activeSites.length})...</option>
+                {activeSites.map(s => (
+                  <option key={s.site_name} value={s.site_name}>
+                    {s.site_name.replace(' Farm', '').replace(' Station', '').replace(' Agricultural Research Center', ' ARC')} ({s.county})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        })()}
 
         {/* Selected Site Indicator Badge -- top-left underneath layer dropdown */}
         {selectedSite && countryView.available && (

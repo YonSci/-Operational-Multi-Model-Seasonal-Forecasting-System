@@ -41,21 +41,32 @@ def get_pixel(
     """All model stats for the nearest land pixel to (lat, lon)."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
-    if not (-5.0 <= lat <= 5.0 and 33.0 <= lon <= 42.5):
-        raise HTTPException(400, f"({lat},{lon}) is outside the Kenya domain.")
+    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower() or lat > 5.0 or lon > 42.5)
+    if is_kiremt:
+        if not (3.0 <= lat <= 15.0 and 33.0 <= lon <= 48.0):
+            raise HTTPException(400, f"({lat},{lon}) is outside the Ethiopia domain.")
+    else:
+        if not (-5.0 <= lat <= 5.0 and 33.0 <= lon <= 42.5):
+            raise HTTPException(400, f"({lat},{lon}) is outside the Kenya domain.")
     return _json(dl.get_pixel_stats(lat, lon, season=season, model=model, year=year))
 
 
 @router.get("/chirps")
 def get_chirps(
-    season: str = Query("long_rains", description="Season: 'long_rains' or 'short_rains'"),
+    season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', or 'kiremt'"),
 ):
     """CHIRPS CAL domain-mean climatology and grid metadata."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
     s  = dl.get_state()
+    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower())
     is_short = (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
-    c_source = (s.get("chirps_sep") if is_short and s.get("chirps_sep") else s)
+    if is_kiremt and s.get("chirps_kiremt"):
+        c_source = s["chirps_kiremt"]
+    elif is_short and s.get("chirps_sep"):
+        c_source = s["chirps_sep"]
+    else:
+        c_source = s
     lm = c_source.get("lm", s["lm"])
     clim = c_source.get("chirps_clim", s["chirps_clim"])
     target_lat = c_source.get("target_lat", s["target_lat"])
@@ -87,20 +98,30 @@ def get_taylor():
 def get_chirps_historical(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
-    season: str = Query("long_rains", description="Season: 'long_rains' or 'short_rains'"),
+    season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', or 'kiremt'"),
 ):
     """Full CHIRPS time series (onset, cessation, LGP) for the nearest pixel."""
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
-    if not (-5.0 <= lat <= 5.0 and 33.0 <= lon <= 42.5):
-        raise HTTPException(400, f"({lat},{lon}) is outside the Kenya domain.")
+    is_kiremt = (season == "kiremt" or "kiremt" in str(season).lower() or lat > 5.0 or lon > 42.5)
+    if is_kiremt:
+        if not (3.0 <= lat <= 15.0 and 33.0 <= lon <= 48.0):
+            raise HTTPException(400, f"({lat},{lon}) is outside the Ethiopia domain.")
+    else:
+        if not (-5.0 <= lat <= 5.0 and 33.0 <= lon <= 42.5):
+            raise HTTPException(400, f"({lat},{lon}) is outside the Kenya domain.")
 
     import numpy as np
     import warnings
 
     s = dl.get_state()
     is_short = (season == "short_rains" or "short" in str(season).lower() or "sep" in str(season).lower() or "ond" in str(season).lower())
-    c_source = (s.get("chirps_sep") if is_short and s.get("chirps_sep") else s)
+    if is_kiremt and s.get("chirps_kiremt"):
+        c_source = s["chirps_kiremt"]
+    elif is_short and s.get("chirps_sep"):
+        c_source = s["chirps_sep"]
+    else:
+        c_source = s
 
     # Nearest pixel
     lat_arr = np.array(c_source.get("target_lat", s["target_lat"]))

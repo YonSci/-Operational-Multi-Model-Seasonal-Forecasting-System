@@ -38,6 +38,7 @@ MODEL_DIRS:   dict = {}
 _MODEL_DIR_ALIASES = {
     "ECMWF SEAS5": ["outputs_dunning_v3", "outputs_ECMWF_SEAS5_v3", "outputs/dunning_v3", "outputs/seas5_v3", "outputs/ecmwf_v3"],
     "ECMWF SEAS5 (Sep)": ["outputs/ecmwf_sep", "outputs_ecmwf_sep"],
+    "ECMWF SEAS5 (Kiremt)": ["outputs/ecmwf_kiremt", "outputs_ecmwf_kiremt", "data/outputs_ETHIOPIA_KIREMT_v1"],
     "UKMO GloSea6": ["outputs_ukmo_v3", "outputs_UKMO_GloSea6_v3", "outputs/ukmo_v3"],
     "Meteo-France Sys8": ["outputs_mf_v3", "outputs_Meteo-France_Sys8_v3", "outputs/mf_v3"],
     "DWD GCFS2.1": ["outputs_dwd_v3", "outputs_DWD_GCFS2.1_v3", "outputs/dwd_v3"],
@@ -46,22 +47,28 @@ _MODEL_DIR_ALIASES = {
     "ECCC CanSIPS": ["outputs_eccc_v3", "outputs_ECCC_CanSIPS_v3", "outputs/eccc_v3"],
 }
 MODEL_COLORS: dict = {
-    "ECMWF SEAS5"       : "#1B5EA6",
-    "ECMWF SEAS5 (Sep)" : "#0284C7",
-    "UKMO GloSea6"      : "#C0392B",
-    "Meteo-France Sys8" : "#1E6B45",
-    "DWD GCFS2.1"       : "#8B4513",
-    "CMCC-SPS4"         : "#7B0EA6",
-    "NCEP CFSv2"        : "#C9920A",
-    "ECCC CanSIPS"      : "#0E7490",
+    "ECMWF SEAS5"          : "#1B5EA6",
+    "ECMWF SEAS5 (Sep)"    : "#0284C7",
+    "ECMWF SEAS5 (Kiremt)" : "#1B5EA6",
+    "UKMO GloSea6"         : "#C0392B",
+    "Meteo-France Sys8"    : "#1E6B45",
+    "DWD GCFS2.1"          : "#8B4513",
+    "CMCC-SPS4"            : "#7B0EA6",
+    "NCEP CFSv2"           : "#C9920A",
+    "ECCC CanSIPS"         : "#0E7490",
 }
 SITES: list = [
-    {"site_name": "El Karama Sahiwals Farm",        "lat": -2.3871,  "lon": 37.4851},
-    {"site_name": "Genco LTD Maralal Samburu Farm", "lat":  0.9273,  "lon": 36.5690},
-    {"site_name": "Genco LTD Tana River Farm",      "lat": -2.21314, "lon": 40.0517},
-    {"site_name": "KALRO Kiboko, Makueni Farm",     "lat": -2.21046, "lon": 37.7190},
-    {"site_name": "Kapiti Research Station Farm",   "lat": -1.63209, "lon": 37.1479},
-    {"site_name": "LiveMo LTD, Memerush, Kajiado",  "lat": -2.38726, "lon": 37.4850},
+    {"site_name": "El Karama Sahiwals Farm",              "lat": -2.3871,  "lon": 37.4851, "country": "kenya"},
+    {"site_name": "Genco LTD Maralal Samburu Farm",       "lat":  0.9273,  "lon": 36.5690, "country": "kenya"},
+    {"site_name": "Genco LTD Tana River Farm",            "lat": -2.21314, "lon": 40.0517, "country": "kenya"},
+    {"site_name": "KALRO Kiboko, Makueni Farm",           "lat": -2.21046, "lon": 37.7190, "country": "kenya"},
+    {"site_name": "Kapiti Research Station Farm",         "lat": -1.63209, "lon": 37.1479, "country": "kenya"},
+    {"site_name": "LiveMo LTD, Memerush, Kajiado",        "lat": -2.38726, "lon": 37.4850, "country": "kenya"},
+    {"site_name": "Holetta Agricultural Research Center", "lat":  9.0600,  "lon": 38.5000, "country": "ethiopia"},
+    {"site_name": "Debre Zeit / Bishoftu Station",        "lat":  8.7500,  "lon": 38.9800, "country": "ethiopia"},
+    {"site_name": "Melkassa Agricultural Research Center","lat":  8.4100,  "lon": 39.3200, "country": "ethiopia"},
+    {"site_name": "Bako Agricultural Research Center",    "lat":  9.1200,  "lon": 37.0500, "country": "ethiopia"},
+    {"site_name": "Hawassa Farm Station",                 "lat":  7.0500,  "lon": 38.4800, "country": "ethiopia"},
 ]
 WIN_DOY_START = 32
 WIN_DOY_END   = 213
@@ -69,7 +76,7 @@ CAL_YEARS     = np.arange(1981, 2017)
 _PREFIX_MAP   = {
     "dunning_v3":"SEAS5","bom_v3":"BOM","ukmo_v3":"UKMO","mf_v3":"MF",
     "dwd_v3":"DWD","cmcc_v3":"CMCC","ncep_v3":"NCEP","eccc_v3":"ECCC",
-    "ecmwf_v3":"ECMWF","ecmwf_sep":"ECMWF",
+    "ecmwf_v3":"ECMWF","ecmwf_sep":"ECMWF","ecmwf_kiremt":"ECMWF",
 }
 
 
@@ -126,6 +133,15 @@ def _resolve_sep_chirps_dir(base_dir):
     ]
     return _first_existing_dir(candidates)
 
+
+def _resolve_kiremt_chirps_dir(base_dir):
+    candidates = [
+        os.path.join(base_dir, "outputs", "ecmwf_kiremt"),
+        os.path.join(base_dir, "outputs_ecmwf_kiremt"),
+        os.path.join(base_dir, "data", "outputs_ETHIOPIA_KIREMT_v1"),
+    ]
+    return _first_existing_dir(candidates)
+
 # ── Configuration ──────────────────────────────────────────────────────────
 def configure(base_dir=None, op_year=None, load_bc_daily=None, extra_model_dirs=None):
     global _BASE_DIR, _OP_YEAR, _LOAD_BC, MODEL_DIRS, _configured
@@ -177,11 +193,11 @@ def _safe_load(path, var=None):
 def _load_chirps(chirps_dir):
     print(f"[data_loader] CHIRPS dir: {chirps_dir}")
     onset_doy = _load_any(chirps_dir,
-        "CHIRPS_onset_doy_1981_2025.nc","CHIRPS_onset_doy_all_years.nc","CHIRPS_onset_doy.nc")
+        "CHIRPS_onset_doy_1981_2026.nc","CHIRPS_onset_doy_1981_2025.nc","CHIRPS_onset_doy_1993_2026.nc","CHIRPS_onset_doy_all_years.nc","CHIRPS_onset_doy.nc")
     cessation_doy = _load_any(chirps_dir,
-        "CHIRPS_cessation_doy_1981_2025.nc","CHIRPS_cessation_doy_all_years.nc","CHIRPS_cessation_doy.nc")
+        "CHIRPS_cessation_doy_1981_2026.nc","CHIRPS_cessation_doy_1981_2025.nc","CHIRPS_cessation_doy_1993_2026.nc","CHIRPS_cessation_doy_all_years.nc","CHIRPS_cessation_doy.nc")
     lgp_days = _load_any(chirps_dir,
-        "CHIRPS_lgp_days_1981_2025.nc","CHIRPS_lgp_days_all_years.nc","CHIRPS_lgp_days.nc")
+        "CHIRPS_lgp_days_1981_2026.nc","CHIRPS_lgp_days_1981_2025.nc","CHIRPS_lgp_days_1993_2026.nc","CHIRPS_lgp_days_all_years.nc","CHIRPS_lgp_days.nc")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         _mx = np.nanmax(np.abs(lgp_days))
@@ -204,11 +220,11 @@ def _load_chirps(chirps_dir):
 
     # Grid coords
     _ref_ds = None
-    for _c in ["SEAS5_bc_daily_all_years.nc","SEAS5_BC_daily_all_years.nc"]:
+    for _c in ["ECMWF_bc_daily_all_years.nc","SEAS5_bc_daily_all_years.nc","SEAS5_BC_daily_all_years.nc"]:
         _p = os.path.join(chirps_dir,_c)
         if os.path.exists(_p): _ref_ds = xr.open_dataset(_p,decode_timedelta=False); break
     if _ref_ds is None:
-        for _c in ["CHIRPS_onset_doy_1981_2025.nc","CHIRPS_onset_doy.nc"]:
+        for _c in ["CHIRPS_onset_doy_1981_2026.nc","CHIRPS_onset_doy_1981_2025.nc","CHIRPS_onset_doy_1993_2026.nc","CHIRPS_onset_doy.nc"]:
             _p = os.path.join(chirps_dir,_c)
             if os.path.exists(_p): _ref_ds = xr.open_dataset(_p,decode_timedelta=False); break
     target_lat = target_lon = None
@@ -221,9 +237,18 @@ def _load_chirps(chirps_dir):
     lm = np.isfinite(onset_doy).any(axis=0)
 
     # Year array
-    _op = os.path.join(chirps_dir,
-          "CHIRPS_onset_doy_1981_2025.nc" if os.path.exists(os.path.join(chirps_dir,"CHIRPS_onset_doy_1981_2025.nc"))
-          else "CHIRPS_onset_doy.nc")
+    _cand_ops = [
+        "CHIRPS_onset_doy_1981_2026.nc",
+        "CHIRPS_onset_doy_1981_2025.nc",
+        "CHIRPS_onset_doy_1993_2026.nc",
+        "CHIRPS_onset_doy_all_years.nc",
+        "CHIRPS_onset_doy.nc",
+    ]
+    _op = None
+    for _c in _cand_ops:
+        if os.path.exists(os.path.join(chirps_dir, _c)):
+            _op = os.path.join(chirps_dir, _c)
+            break
     _ds2 = xr.open_dataset(_op, decode_timedelta=False)
     if "year" in _ds2.coords:
         chirps_years = _ds2["year"].values.astype(int)
@@ -349,6 +374,9 @@ def _load_model(name, out_dir, chirps, season="long_rains", win_doy_start=32, wi
                 color=MODEL_COLORS.get(name,"#888888"), model_years=model_years,
                 season=season, win_doy_start=win_doy_start, win_doy_end=win_doy_end,
                 chirps_clim=chirps.get("chirps_clim"),
+                lm=chirps.get("lm"),
+                target_lat=chirps.get("target_lat"),
+                target_lon=chirps.get("target_lon"),
                 C_clim=chirps.get("C_clim"), Q_bar=chirps.get("Q_bar"),
                 d_s=chirps.get("d_s"), d_e=chirps.get("d_e"),
                 t33_onset=chirps.get("t33_onset"), t67_onset=chirps.get("t67_onset"),
@@ -546,8 +574,105 @@ def _load_demo_npz():
             d_e=chirps_sep["d_e"] if chirps_sep else None,
         )
 
-    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (including Short Rains OND: {bool(chirps_sep)}).")
-    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep}
+    # ── Ethiopia Kiremt demo support ───────────────────────────────────────
+    chirps_kiremt = None
+    if "kiremt_chirps_onset" in data:
+        k_onset = data["kiremt_chirps_onset"]
+        k_cess  = data["kiremt_chirps_cessation"]
+        k_lgp   = data["kiremt_chirps_lgp"]
+        k_target_lat = data["kiremt_target_lat"]
+        k_target_lon = data["kiremt_target_lon"]
+        k_n_lat, k_n_lon = len(k_target_lat), len(k_target_lon)
+        k_lm = data["kiremt_lm"].astype(bool) if "kiremt_lm" in data else np.isfinite(k_onset).any(axis=0)
+        k_years = data["kiremt_chirps_years"] if "kiremt_chirps_years" in data else np.arange(1993, 1993 + len(k_onset))
+        k_cal_mask = np.isin(k_years, CAL_YEARS)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            k_clim = {
+                "onset": np.where(k_lm, np.nanmean(k_onset[k_cal_mask], axis=0), np.nan).astype(np.float32),
+                "cessation": np.where(k_lm, np.nanmean(k_cess[k_cal_mask], axis=0), np.nan).astype(np.float32),
+                "lgp": np.where(k_lm, np.nanmean(k_lgp[k_cal_mask], axis=0), np.nan).astype(np.float32),
+            }
+        chirps_kiremt = dict(
+            onset_doy=k_onset, cessation_doy=k_cess, lgp_days=k_lgp,
+            C_clim=data["kiremt_C_clim"], Q_bar=data["kiremt_Q_bar"], d_s=data["kiremt_d_s"], d_e=data["kiremt_d_e"],
+            t33_onset=data["kiremt_t33_on"], t67_onset=data["kiremt_t67_on"],
+            t33_cess=data["kiremt_t33_cs"], t67_cess=data["kiremt_t67_cs"],
+            t33_lgp=data["kiremt_t33_lg"], t67_lgp=data["kiremt_t67_lg"],
+            target_lat=k_target_lat, target_lon=k_target_lon,
+            n_lat=k_n_lat, n_lon=k_n_lon, lm=k_lm,
+            chirps_years=k_years,
+            cal_idx=np.where(k_cal_mask)[0],
+            cal_mask=k_cal_mask,
+            chirps_clim=k_clim,
+        )
+
+    if "kiremt_ecmwf_onset" in data:
+        m_on = data["kiremt_ecmwf_onset"]
+        m_cs = data["kiremt_ecmwf_cessation"]
+        m_lg = data["kiremt_ecmwf_lgp"]
+        m_years = data["kiremt_ecmwf_years"]
+        target_op_year = 2026 if (2026 in m_years) else 2025
+        op_mask = m_years == target_op_year
+        op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
+        n_members = int(m_on.shape[0])
+
+        k_bc_daily = {}
+        if "kiremt_ecmwf_bc_daily_2026" in data:
+            k_bc_daily[2026] = data["kiremt_ecmwf_bc_daily_2026"].astype(np.float32)
+
+        MODELS["ECMWF SEAS5 (Kiremt)"] = dict(
+            onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
+            bc_daily=k_bc_daily,
+            probs_damped={
+                "onset": data["kiremt_ecmwf_p_on"],
+                "cessation": data["kiremt_ecmwf_p_cs"],
+                "lgp": data["kiremt_ecmwf_p_lg"],
+            },
+            alpha={
+                "onset": data["kiremt_ecmwf_a_on"],
+                "cessation": data["kiremt_ecmwf_a_cs"],
+                "lgp": data["kiremt_ecmwf_a_lg"],
+            },
+            hitrate_cal={
+                "onset": data["kiremt_ecmwf_h_on"],
+                "cessation": data["kiremt_ecmwf_h_cs"],
+                "lgp": data["kiremt_ecmwf_h_lg"],
+            },
+            hitrate_val={
+                "onset": data["kiremt_ecmwf_h_on"],
+                "cessation": data["kiremt_ecmwf_h_cs"],
+                "lgp": data["kiremt_ecmwf_h_lg"],
+            },
+            rpss_val={
+                "onset": data["kiremt_ecmwf_r_on"],
+                "cessation": data["kiremt_ecmwf_r_cs"],
+                "lgp": data["kiremt_ecmwf_r_lg"],
+            },
+            op_idx=op_idx, n_members=n_members,
+            color=MODEL_COLORS.get("ECMWF SEAS5 (Kiremt)", "#1B5EA6"),
+            model_years=m_years,
+            season="kiremt",
+            win_doy_start=122,
+            win_doy_end=304,
+            chirps_clim=chirps_kiremt["chirps_clim"] if chirps_kiremt else chirps_clim,
+            t33_onset=chirps_kiremt["t33_onset"] if chirps_kiremt else None,
+            t67_onset=chirps_kiremt["t67_onset"] if chirps_kiremt else None,
+            t33_cess=chirps_kiremt["t33_cess"] if chirps_kiremt else None,
+            t67_cess=chirps_kiremt["t67_cess"] if chirps_kiremt else None,
+            t33_lgp=chirps_kiremt["t33_lgp"] if chirps_kiremt else None,
+            t67_lgp=chirps_kiremt["t67_lgp"] if chirps_kiremt else None,
+            C_clim=chirps_kiremt["C_clim"] if chirps_kiremt else None,
+            Q_bar=chirps_kiremt["Q_bar"] if chirps_kiremt else None,
+            d_s=chirps_kiremt["d_s"] if chirps_kiremt else None,
+            d_e=chirps_kiremt["d_e"] if chirps_kiremt else None,
+            lm=chirps_kiremt["lm"] if chirps_kiremt else None,
+            target_lat=chirps_kiremt["target_lat"] if chirps_kiremt else None,
+            target_lon=chirps_kiremt["target_lon"] if chirps_kiremt else None,
+        )
+
+    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}).")
+    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt}
 
 # ── Main load ──────────────────────────────────────────────────────────────
 def load(force=False):
@@ -559,20 +684,35 @@ def load(force=False):
         chirps = _load_chirps(chirps_dir)
         sep_dir = _resolve_sep_chirps_dir(_BASE_DIR)
         chirps_sep = _load_chirps(sep_dir) if sep_dir else None
+        kiremt_dir = _resolve_kiremt_chirps_dir(_BASE_DIR)
+        chirps_kiremt = _load_chirps(kiremt_dir) if kiremt_dir else None
+
         print("[data_loader] Loading model outputs ...")
         MODELS = {}
         for name, out_dir in MODEL_DIRS.items():
             is_sep = ("sep" in name.lower()) or ("sep" in out_dir.lower())
-            m_chirps = (chirps_sep if (is_sep and chirps_sep) else chirps)
-            m_season = "short_rains" if is_sep else "long_rains"
-            m_start  = 244 if is_sep else 32
-            m_end    = 365 if is_sep else 213
+            is_kiremt = ("kiremt" in name.lower()) or ("kiremt" in out_dir.lower())
+            if is_kiremt:
+                m_chirps = (chirps_kiremt if chirps_kiremt else chirps)
+                m_season = "kiremt"
+                m_start  = 122
+                m_end    = 304
+            elif is_sep:
+                m_chirps = (chirps_sep if (is_sep and chirps_sep) else chirps)
+                m_season = "short_rains"
+                m_start  = 244
+                m_end    = 365
+            else:
+                m_chirps = chirps
+                m_season = "long_rains"
+                m_start  = 32
+                m_end    = 213
             entry = _load_model(name, out_dir, m_chirps, season=m_season, win_doy_start=m_start, win_doy_end=m_end)
             if entry is not None: MODELS[name] = entry
         if not MODELS:
             raise RuntimeError("No models loaded from NetCDF files.")
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
-        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep}
+        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt}
         _loaded = True
     except Exception as exc:
         print(f"[data_loader] Raw NetCDF data not available ({type(exc).__name__}: {exc})")
@@ -592,23 +732,35 @@ def get_state():
 
 # ── Model info ─────────────────────────────────────────────────────────────
 def get_model_info(season=None):
-    s, lm = get_state(), get_state()["lm"]
+    s = get_state()
     out = []
     is_short = (season == "short_rains")
+    is_kiremt = (season == "kiremt")
     for name, md in s["MODELS"].items():
         md_season = md.get("season", "long_rains")
         if season is not None:
-            if is_short:
+            if is_kiremt:
+                if md_season != "kiremt" and "kiremt" not in name.lower():
+                    continue
+            elif is_short:
                 if md_season != "short_rains" and "Sep" not in name:
                     continue
             else:
-                if md_season == "short_rains" or "Sep" in name:
+                if md_season in ("short_rains", "kiremt") or "Sep" in name or "Kiremt" in name:
                     continue
+
+        if md_season == "kiremt" and s.get("chirps_kiremt"):
+            m_lm = s["chirps_kiremt"]["lm"]
+        elif md_season == "short_rains" and s.get("chirps_sep"):
+            m_lm = s["chirps_sep"]["lm"]
+        else:
+            m_lm = s["lm"]
+
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore",RuntimeWarning)
-            hr = float(np.nanmean(md["hitrate_cal"]["onset"][lm]))
+            warnings.simplefilter("ignore", RuntimeWarning)
+            hr = float(np.nanmean(md["hitrate_cal"]["onset"][m_lm]))
         
-        display_name = "ECMWF SEAS5" if (is_short and "Sep" in name) else name
+        display_name = "ECMWF SEAS5" if ((is_short and "Sep" in name) or (is_kiremt and "Kiremt" in name)) else name
         op_y = int(md["model_years"][md["op_idx"]]) if ("op_idx" in md and "model_years" in md and md["op_idx"] < len(md["model_years"])) else (2025 if is_short else 2026)
         out.append(dict(name=display_name, raw_name=name, n_members=md["n_members"], op_idx=md["op_idx"],
                         op_year=op_y,
@@ -618,20 +770,23 @@ def get_model_info(season=None):
                         year_start=int(md["model_years"][0]),
                         year_end=int(md["model_years"][-1]),
                         season=md_season,
-                        win_doy_start=md.get("win_doy_start", 244 if is_short else 32),
-                        win_doy_end=md.get("win_doy_end", 365 if is_short else 213)))
+                        win_doy_start=md.get("win_doy_start", 122 if is_kiremt else (244 if is_short else 32)),
+                        win_doy_end=md.get("win_doy_end", 304 if is_kiremt else (365 if is_short else 213))))
     return out
 
 # ── Pixel stats ────────────────────────────────────────────────────────────
-def _nearest_pixel(lat, lon):
+def _nearest_pixel(lat, lon, target_lat=None, target_lon=None, lm=None):
     s = _state
-    lat_arr, lon_arr, lm = s["target_lat"], s["target_lon"], s["lm"]
+    lat_arr = s["target_lat"] if target_lat is None else target_lat
+    lon_arr = s["target_lon"] if target_lon is None else target_lon
+    mask    = s["lm"] if lm is None else lm
+
     dlat = np.abs(lat_arr - lat); dlon = np.abs(lon_arr - lon)
-    lat_near = np.where(dlat < 2.0)[0]; lon_near = np.where(dlon < 2.0)[0]
+    lat_near = np.where(dlat < 2.5)[0]; lon_near = np.where(dlon < 2.5)[0]
     best_dist, best_pi, best_pj = np.inf, int(np.argmin(dlat)), int(np.argmin(dlon))
     for i in lat_near:
         for j in lon_near:
-            if not lm[i,j]: continue
+            if not mask[i, j]: continue
             dist = np.sqrt(((lat_arr[i]-lat)*111)**2 +
                            ((lon_arr[j]-lon)*111*np.cos(np.radians(lat_arr[i])))**2)
             if dist < best_dist: best_dist, best_pi, best_pj = dist, i, j
@@ -640,8 +795,17 @@ def _nearest_pixel(lat, lon):
 def _pct(arr, q): return float(np.percentile(arr,q)) if len(arr)>0 else float("nan")
 
 def _model_pixel_stats(mkey, pi, pj, year=None):
-    s, lm = _state, _state["lm"]
+    s = _state
     md = s["MODELS"][mkey]
+    is_kiremt = (md.get("season") == "kiremt") or ("Kiremt" in mkey)
+    c_k = s.get("chirps_kiremt")
+    if is_kiremt and c_k and "lm" in c_k:
+        lm = c_k["lm"]
+    elif md.get("lm") is not None:
+        lm = md["lm"]
+    else:
+        lm = s["lm"]
+
     if year is not None and "model_years" in md and year in md["model_years"]:
         oi = int(np.where(md["model_years"] == year)[0][0])
     else:
@@ -762,13 +926,65 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     """Return per-model stats for the nearest land pixel to (lat, lon)."""
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     s = _state
+
+    is_kiremt = (season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]) or (lat > 5.0)
+    is_short  = not is_kiremt and ((season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+
+    kiremt_md     = s["MODELS"].get("ECMWF SEAS5 (Kiremt)")
+    chirps_kiremt = s.get("chirps_kiremt")
+    sep_md        = s["MODELS"].get("ECMWF SEAS5 (Sep)")
+
+    if is_kiremt and (kiremt_md or chirps_kiremt):
+        c_ref = chirps_kiremt if chirps_kiremt else kiremt_md
+        lat_arr = c_ref["target_lat"]
+        lon_arr = c_ref["target_lon"]
+        lm_arr  = c_ref["lm"]
+        pi, pj  = _nearest_pixel(lat, lon, target_lat=lat_arr, target_lon=lon_arr, lm=lm_arr)
+        glat    = float(lat_arr[pi]); glon = float(lon_arr[pj])
+        delta_km = float(np.sqrt(((glat-lat)*111)**2 + ((glon-lon)*111*np.cos(np.radians(glat)))**2))
+
+        c_clim = kiremt_md.get("chirps_clim") if (kiremt_md and kiremt_md.get("chirps_clim")) else chirps_kiremt.get("chirps_clim")
+        t33_on = float(kiremt_md["t33_onset"][pi,pj]) if (kiremt_md and kiremt_md.get("t33_onset") is not None) else float(chirps_kiremt["t33_onset"][pi,pj])
+        t33_cs = float(kiremt_md["t33_cess"][pi,pj])  if (kiremt_md and kiremt_md.get("t33_cess") is not None)  else float(chirps_kiremt["t33_cess"][pi,pj])
+        t33_lg = float(kiremt_md["t33_lgp"][pi,pj])   if (kiremt_md and kiremt_md.get("t33_lgp") is not None)   else float(chirps_kiremt["t33_lgp"][pi,pj])
+        t67_on = float(kiremt_md["t67_onset"][pi,pj]) if (kiremt_md and kiremt_md.get("t67_onset") is not None) else float(chirps_kiremt["t67_onset"][pi,pj])
+        t67_cs = float(kiremt_md["t67_cess"][pi,pj])  if (kiremt_md and kiremt_md.get("t67_cess") is not None)  else float(chirps_kiremt["t67_cess"][pi,pj])
+        t67_lg = float(kiremt_md["t67_lgp"][pi,pj])   if (kiremt_md and kiremt_md.get("t67_lgp") is not None)   else float(chirps_kiremt["t67_lgp"][pi,pj])
+        q_bar  = float(kiremt_md["Q_bar"][pi,pj])     if (kiremt_md and kiremt_md.get("Q_bar") is not None)     else float(chirps_kiremt["Q_bar"][pi,pj])
+        d_s_px = float(kiremt_md["d_s"][pi,pj])       if (kiremt_md and kiremt_md.get("d_s") is not None)       else (float(chirps_kiremt["d_s"][pi,pj]) if chirps_kiremt.get("d_s") is not None else None)
+        d_e_px = float(kiremt_md["d_e"][pi,pj])       if (kiremt_md and kiremt_md.get("d_e") is not None)       else (float(chirps_kiremt["d_e"][pi,pj]) if chirps_kiremt.get("d_e") is not None else None)
+        c_vec  = kiremt_md["C_clim"][:,pi,pj].tolist() if (kiremt_md and kiremt_md.get("C_clim") is not None) else (chirps_kiremt["C_clim"][:,pi,pj].tolist() if chirps_kiremt.get("C_clim") is not None else [])
+        win_start = kiremt_md.get("win_doy_start", 122) if kiremt_md else 122
+        win_end   = kiremt_md.get("win_doy_end", 304) if kiremt_md else 304
+
+        models_dict = {}
+        if "ECMWF SEAS5 (Kiremt)" in s["MODELS"]:
+            kiremt_stats = _model_pixel_stats("ECMWF SEAS5 (Kiremt)", pi, pj, year=year)
+            models_dict["ECMWF SEAS5"] = kiremt_stats
+            models_dict["ECMWF SEAS5 (Kiremt)"] = kiremt_stats
+
+        return dict(
+            pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
+            season="kiremt",
+            win_doy_start=win_start,
+            win_doy_end=win_end,
+            models=models_dict,
+            chirps_clim=dict(onset=float(c_clim["onset"][pi,pj]),
+                             cessation=float(c_clim["cessation"][pi,pj]),
+                             lgp=float(c_clim["lgp"][pi,pj])),
+            t33=dict(onset=t33_on, cessation=t33_cs, lgp=t33_lg),
+            t67=dict(onset=t67_on, cessation=t67_cs, lgp=t67_lg),
+            Q_bar_pixel=q_bar,
+            d_s_pixel=d_s_px,
+            d_e_pixel=d_e_px,
+            C_clim_vec=c_vec,
+        )
+
     pi, pj   = _nearest_pixel(lat, lon)
     glat     = float(s["target_lat"][pi]); glon = float(s["target_lon"][pj])
     delta_km = float(np.sqrt(((glat-lat)*111)**2 + ((glon-lon)*111*np.cos(np.radians(glat)))**2))
 
     # Determine active season climatology
-    is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
-    sep_md = s["MODELS"].get("ECMWF SEAS5 (Sep)")
     if is_short and sep_md:
         c_clim = sep_md.get("chirps_clim") or s["chirps_clim"]
         t33_on = float(sep_md["t33_onset"][pi,pj]) if sep_md.get("t33_onset") is not None else float(s["t33_onset"][pi,pj])
@@ -805,7 +1021,7 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             models_dict["ECMWF SEAS5"] = sep_stats
             models_dict["ECMWF SEAS5 (Sep)"] = sep_stats
     else:
-        models_dict = {n: _model_pixel_stats(n, pi, pj, year=year) for n in s["MODELS"] if "(Sep)" not in n}
+        models_dict = {n: _model_pixel_stats(n, pi, pj, year=year) for n in s["MODELS"] if "(Sep)" not in n and "(Kiremt)" not in n}
 
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
@@ -828,18 +1044,29 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
 def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_rains"):
     """2-D spatial array for Mapbox fill layer.  layer: anomaly|spread|median|prob_bn|prob_an|failure
     model: optional model name for single-model grid instead of MMM.
-    season: 'long_rains' or 'short_rains'.
+    season: 'long_rains', 'short_rains', or 'kiremt'.
     """
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
-    s, lm = _state, _state["lm"]
-    n_lat, n_lon = s["n_lat"], s["n_lon"]
+    s = _state
     _vmap  = {"onset":("onset","onset_doy"),"cessation":("cessation","cessation_doy"),"lgp":("lgp","lgp_days")}
     if variable not in _vmap: raise ValueError(f"variable must be one of {list(_vmap)}")
     if layer not in ("anomaly","spread","median","prob_bn","prob_nn","prob_an","failure","chirps_p50","chirps_spread","bias","detection_rate","rpss_val","hitrate_val","alpha","hr_weighted","rpss_weighted"): raise ValueError(f"invalid layer {layer!r}")
     clim_key, arr_key = _vmap[variable]
 
-    is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
-    if is_short:
+    is_kiremt = (season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"])
+    is_short  = not is_kiremt and ((season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+
+    if is_kiremt:
+        target_name = "ECMWF SEAS5 (Kiremt)" if "ECMWF SEAS5 (Kiremt)" in s["MODELS"] else list(s["MODELS"].keys())[0]
+        MODELS = {target_name: s["MODELS"][target_name]}
+        kiremt_md = s["MODELS"][target_name]
+        c_ref = s.get("chirps_kiremt", s)
+        clim_map = kiremt_md.get("chirps_clim", c_ref["chirps_clim"])[clim_key]
+        grid_lat = c_ref["target_lat"]
+        grid_lon = c_ref["target_lon"]
+        lm = c_ref["lm"]
+        n_lat, n_lon = len(grid_lat), len(grid_lon)
+    elif is_short:
         # Route to September models
         if model in (None, "", "multimodel", "ECMWF SEAS5"):
             target_name = "ECMWF SEAS5 (Sep)" if "ECMWF SEAS5 (Sep)" in s["MODELS"] else list(s["MODELS"].keys())[0]
@@ -854,14 +1081,22 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
             if not MODELS: MODELS = s["MODELS"]
             first_md = list(MODELS.values())[0]
             clim_map = first_md.get("chirps_clim", s["chirps_clim"])[clim_key]
+        grid_lat = s["target_lat"]
+        grid_lon = s["target_lon"]
+        lm = s["lm"]
+        n_lat, n_lon = s["n_lat"], s["n_lon"]
     else:
         # Long Rains (MAM)
         if model and model in s["MODELS"]:
             MODELS = {model: s["MODELS"][model]}
         else:
-            MODELS = {k: v for k, v in s["MODELS"].items() if v.get("season") != "short_rains" and "Sep" not in k}
+            MODELS = {k: v for k, v in s["MODELS"].items() if v.get("season") not in ("short_rains", "kiremt") and "Sep" not in k and "Kiremt" not in k}
             if not MODELS: MODELS = s["MODELS"]
         clim_map = s["chirps_clim"][clim_key]
+        grid_lat = s["target_lat"]
+        grid_lon = s["target_lon"]
+        lm = s["lm"]
+        n_lat, n_lon = s["n_lat"], s["n_lon"]
     out = np.full((n_lat, n_lon), np.nan, np.float32)
     units = "days"
     if layer == "anomaly":
@@ -989,19 +1224,23 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         units = "days (model − CHIRPS)"
     elif layer == "detection_rate":
         # CHIRPS CAL detection rate — fraction of cal years with valid (non-NaN) detection
-        obs = s["onset_doy"] if arr_key=="onset_doy" else (s["cessation_doy"] if arr_key=="cessation_doy" else s["lgp_days"])
-        cal_obs = obs[s["cal_mask"],:,:]
+        c_src = s.get("chirps_kiremt") if is_kiremt else (s.get("chirps_sep") if is_short else s)
+        obs = c_src["onset_doy"] if arr_key=="onset_doy" else (c_src["cessation_doy"] if arr_key=="cessation_doy" else c_src["lgp_days"])
+        c_mask = c_src.get("cal_mask")
+        if c_mask is None:
+            c_mask = np.isin(np.array(c_src["chirps_years"], dtype=int), np.arange(1993, 2017) if (is_kiremt or is_short) else np.arange(1981, 2017))
+        cal_obs = obs[c_mask,:,:]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore",RuntimeWarning)
             n_cal = cal_obs.shape[0]
-            out = np.where(lm, np.sum(~np.isnan(cal_obs), axis=0) / n_cal, np.nan).astype(np.float32)
+            out = np.where(lm, np.sum(~np.isnan(cal_obs), axis=0) / max(n_cal, 1), np.nan).astype(np.float32)
         units = "fraction (0–1)"
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",RuntimeWarning)
         lv = out[lm]; vmin, vmax = float(np.nanmin(lv)), float(np.nanmax(lv))
     return dict(variable=variable, layer=layer,
-                lats=s["target_lat"].tolist(), lons=s["target_lon"].tolist(),
+                lats=grid_lat.tolist(), lons=grid_lon.tolist(),
                 values=[[None if np.isnan(v) else round(float(v),3) for v in row] for row in out],
                 vmin=round(vmin,3), vmax=round(vmax,3), units=units)
 

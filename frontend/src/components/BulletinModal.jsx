@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react'
 import { downloadBulletin } from '../api/queries'
 
-const PRESET_FARMS = [
+const PRESET_FARMS_KENYA = [
   { site_name: 'KALRO Kiboko, Makueni Farm', lat: -2.21046, lon: 37.7190 },
   { site_name: 'Kapiti Research Station Farm', lat: -1.63209, lon: 37.1479 },
   { site_name: 'El Karama Sahiwals Farm', lat: -2.3871, lon: 37.4851 },
   { site_name: 'Genco LTD Maralal Samburu Farm', lat: 0.9273, lon: 36.5690 },
   { site_name: 'Genco LTD Tana River Farm', lat: -2.21314, lon: 40.0517 },
   { site_name: 'LiveMo LTD, Memerush, Kajiado Farm', lat: -2.38726, lon: 37.4850 },
+]
+
+const PRESET_FARMS_ETHIOPIA = [
+  { site_name: 'Holetta Agricultural Research Center', lat: 9.060, lon: 38.500 },
+  { site_name: 'Debre Zeit Agricultural Research Center', lat: 8.720, lon: 38.980 },
+  { site_name: 'Melkassa Agricultural Research Center', lat: 8.410, lon: 39.310 },
+  { site_name: 'Bako Agricultural Research Center', lat: 9.130, lon: 37.050 },
+  { site_name: 'Hawassa Agricultural Research Center', lat: 7.060, lon: 38.500 },
 ]
 
 const FORECAST_MODELS = [
@@ -24,12 +32,18 @@ const SHORT_RAINS_MODELS = [
   { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (OND)', centre: 'European Centre' },
 ]
 
-export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026 }) {
-  const isShort = selectedSeason === 'short_rains'
-  const [siteName, setSiteName] = useState('KALRO Kiboko, Makueni Farm')
-  const [lat, setLat] = useState(-2.21046)
-  const [lon, setLon] = useState(37.7190)
-  const [bulletinType, setBulletinType] = useState(isShort ? 'single' : 'multi')
+const KIREMT_MODELS = [
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Kiremt May 01)', centre: 'European Centre' },
+]
+
+export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026, country = 'kenya' }) {
+  const isKiremt = selectedSeason === 'kiremt' || country === 'ethiopia'
+  const isShort = !isKiremt && selectedSeason === 'short_rains'
+  const isSingle = isKiremt || isShort
+  const [siteName, setSiteName] = useState(isKiremt ? 'Holetta Agricultural Research Center' : 'KALRO Kiboko, Makueni Farm')
+  const [lat, setLat] = useState(isKiremt ? 9.060 : -2.21046)
+  const [lon, setLon] = useState(isKiremt ? 38.500 : 37.7190)
+  const [bulletinType, setBulletinType] = useState(isSingle ? 'single' : 'multi')
   const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
   const [fmt, setFmt] = useState('pdf')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -37,14 +51,15 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
-  const activeModelsList = isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS
+  const activePresets = isKiremt ? PRESET_FARMS_ETHIOPIA : PRESET_FARMS_KENYA
+  const activeModelsList = isKiremt ? KIREMT_MODELS : (isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS)
 
   useEffect(() => {
-    if (isShort) {
+    if (isSingle) {
       setBulletinType('single')
       setSelectedModel('ECMWF SEAS5')
     }
-  }, [isShort])
+  }, [isSingle])
 
   // Initialize or update fields when selectedSite changes or modal opens
   useEffect(() => {
@@ -91,8 +106,14 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
       return
     }
 
-    if (parsedLat < -5.5 || parsedLat > 5.5 || parsedLon < 33.0 || parsedLon > 42.5) {
-      setError('Note: Coordinates appear outside the Kenya / East Africa domain (-5.5° to 5.5°N, 33.0° to 42.5°E). The model will match the nearest land boundary pixel.')
+    if (isKiremt) {
+      if (parsedLat < 3.0 || parsedLat > 15.0 || parsedLon < 33.0 || parsedLon > 48.0) {
+        setError('Note: Coordinates appear outside the Ethiopia domain (3.0° to 15.0°N, 33.0° to 48.0°E). The model will match the nearest land boundary pixel.')
+      }
+    } else {
+      if (parsedLat < -5.5 || parsedLat > 5.5 || parsedLon < 33.0 || parsedLon > 42.5) {
+        setError('Note: Coordinates appear outside the Kenya / East Africa domain (-5.5° to 5.5°N, 33.0° to 42.5°E). The model will match the nearest land boundary pixel.')
+      }
     }
 
     setIsGenerating(true)
@@ -120,9 +141,9 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
         lat: parsedLat,
         lon: parsedLon,
         fmt,
-        bulletin_type: isShort ? 'single' : bulletinType,
-        model_name: isShort ? 'ECMWF SEAS5' : selectedModel,
-        season: selectedSeason || (isShort ? 'short_rains' : 'long_rains'),
+        bulletin_type: isSingle ? 'single' : bulletinType,
+        model_name: isSingle ? 'ECMWF SEAS5' : selectedModel,
+        season: isKiremt ? 'kiremt' : (selectedSeason || (isShort ? 'short_rains' : 'long_rains')),
         year: Number(selectedYear) || 2026,
       })
       clearTimeout(msgTimer1)
@@ -164,7 +185,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
               <h3 className="text-xs sm:text-sm font-bold tracking-wide uppercase text-slate-100 flex items-center gap-2 flex-wrap">
                 Generate Seasonal Forecast Bulletin
                 <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  {isShort ? `OND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`}
+                  {isKiremt ? `Kiremt ${selectedYear || 2026}` : (isShort ? `OND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`)}
                 </span>
               </h3>
               <p className="text-[10px] sm:text-[11px] text-slate-400">Official ILRI publication template • Onset, Cessation &amp; LGP</p>
@@ -186,7 +207,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
             <label className="block text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
               Select Bulletin Type
             </label>
-            {isShort ? (
+            {isSingle ? (
               <div className="p-3 rounded-xl border border-amber-500/60 bg-amber-500/10 flex items-center justify-between">
                 <div>
                   <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
@@ -194,7 +215,9 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
-                    Short Rains (OND {selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)
+                    {isKiremt
+                      ? `Kiremt (Jun-Sep ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members, May 01 init)`
+                      : `Short Rains (OND ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members)`}
                   </div>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
@@ -259,13 +282,15 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
           </div>
 
           {/* Model Selector */}
-          {(bulletinType === 'single' || isShort) && (
+          {(bulletinType === 'single' || isSingle) && (
             <div className="bg-blue-950/20 border border-blue-800/40 p-3.5 rounded-xl space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-bold tracking-wider text-blue-300 uppercase flex items-center gap-1.5">
                   <span>🛰️</span> Select Forecast System Model
                 </label>
-                <span className="text-[10px] text-slate-400">{isShort ? '1 Available Model for OND' : '7 WMO GPC Models'}</span>
+                <span className="text-[10px] text-slate-400">
+                  {isKiremt ? '1 Available Model for Kiremt (May 01 Init)' : (isShort ? '1 Available Model for OND' : '7 WMO GPC Models')}
+                </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {activeModelsList.map(m => {
@@ -298,7 +323,9 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
           {/* Farm Preset Quick Selector */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Monitored Farm Site Presets</label>
+              <label className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                {isKiremt ? 'Monitored Ethiopian Research Centers' : 'Monitored Farm Site Presets'}
+              </label>
               {selectedSite && (
                 <button
                   type="button"
@@ -310,7 +337,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {PRESET_FARMS.map(farm => {
+              {activePresets.map(farm => {
                 const isSelected = Math.abs(lat - farm.lat) < 0.001 && Math.abs(lon - farm.lon) < 0.001
                 return (
                   <button
@@ -324,7 +351,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     }`}
                     title={farm.site_name}
                   >
-                    {farm.site_name.replace(' Farm', '')}
+                    {farm.site_name.replace(' Farm', '').replace(' Agricultural Research Center', '')}
                   </button>
                 )
               })}
@@ -341,7 +368,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                 type="text"
                 value={siteName}
                 onChange={e => setSiteName(e.target.value)}
-                placeholder="e.g. KALRO Kiboko, Makueni Farm"
+                placeholder={isKiremt ? 'e.g. Holetta Agricultural Research Center' : 'e.g. KALRO Kiboko, Makueni Farm'}
                 className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono"
                 required
               />
@@ -357,7 +384,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                   step="any"
                   value={lat}
                   onChange={e => setLat(e.target.value)}
-                  placeholder="-2.210"
+                  placeholder={isKiremt ? '9.060' : '-2.210'}
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono"
                   required
                 />
@@ -371,7 +398,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                   step="any"
                   value={lon}
                   onChange={e => setLon(e.target.value)}
-                  placeholder="37.719"
+                  placeholder={isKiremt ? '38.500' : '37.719'}
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-950/80 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono"
                   required
                 />

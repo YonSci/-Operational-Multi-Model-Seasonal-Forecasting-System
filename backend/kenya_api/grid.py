@@ -77,9 +77,15 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     # Enrich features with tooltip data using appropriate season CHIRPS clim
     try:
         import numpy as np
+        is_kiremt = (season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"])
         is_short = (season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"])
+        kiremt_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Kiremt)")
         sep_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Sep)")
-        if is_short and sep_md and "chirps_clim" in sep_md:
+        if is_kiremt and kiremt_md and "chirps_clim" in kiremt_md:
+            c_clim = kiremt_md["chirps_clim"]
+        elif is_kiremt and dl.get_state().get("chirps_kiremt"):
+            c_clim = dl.get_state()["chirps_kiremt"]["chirps_clim"]
+        elif is_short and sep_md and "chirps_clim" in sep_md:
             c_clim = sep_md["chirps_clim"]
         else:
             c_clim = dl.get_state().get("chirps_clim", {})

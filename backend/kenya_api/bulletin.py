@@ -61,9 +61,22 @@ def generate_bulletin(req: BulletinRequest):
         raise HTTPException(400, "fmt must be png or pdf")
     
     s = dl.get_state()
-    is_short = (req.season == "short_rains") or ("Sep" in (req.model_name or "")) or (req.year in (2025, 2026) and req.season != "long_rains")
-    btype = "single" if is_short else (req.bulletin_type.lower().strip() if req.bulletin_type else "multi")
-    req_model = "ECMWF SEAS5 (Sep)" if (is_short and "ECMWF SEAS5 (Sep)" in s["MODELS"]) else (req.model_name or "ECMWF SEAS5")
+    is_kiremt = (req.season == "kiremt") or ("kiremt" in str(req.season).lower()) or ("Kiremt" in (req.model_name or "")) or (float(req.lat) > 5.0 or float(req.lon) > 42.5)
+    is_short = not is_kiremt and ((req.season == "short_rains") or ("Sep" in (req.model_name or "")) or (req.year in (2025, 2026) and req.season != "long_rains"))
+    btype = "single" if (is_short or is_kiremt) else (req.bulletin_type.lower().strip() if req.bulletin_type else "multi")
+    
+    if is_kiremt:
+        req_model = "ECMWF SEAS5 (Kiremt)" if "ECMWF SEAS5 (Kiremt)" in s["MODELS"] else (req.model_name or "ECMWF SEAS5 (Kiremt)")
+        season_str = "kiremt"
+        season_tag = f"Kiremt{req.year}"
+    elif is_short:
+        req_model = "ECMWF SEAS5 (Sep)" if "ECMWF SEAS5 (Sep)" in s["MODELS"] else (req.model_name or "ECMWF SEAS5")
+        season_str = "short_rains"
+        season_tag = f"OND{req.year}"
+    else:
+        req_model = req.model_name or "ECMWF SEAS5"
+        season_str = "long_rains"
+        season_tag = f"MAM{dl._OP_YEAR}"
 
     import gc
     gc.collect()
@@ -96,7 +109,7 @@ def generate_bulletin(req: BulletinRequest):
                     site_name, float(req.lat), float(req.lon),
                     model_name=req_model,
                     out_dir=tmpdir, dpi=75,
-                    season="short_rains" if is_short else "long_rains",
+                    season=season_str,
                     f_year=req.year
                 )
                 plt.close("all")
@@ -162,7 +175,6 @@ def generate_bulletin(req: BulletinRequest):
             _png_to_pdf(png_path, out_path, site_name, dpi=100)
             media = "application/pdf"; suffix = ".pdf"
 
-        season_tag = f"OND{req.year}" if is_short else f"MAM{dl._OP_YEAR}"
         fname = f"{fname_prefix}_{season_tag}{suffix}"
         with open(out_path, "rb") as f: content = f.read()
 
