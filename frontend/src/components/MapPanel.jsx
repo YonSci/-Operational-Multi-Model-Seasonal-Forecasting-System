@@ -922,6 +922,16 @@ export default function MapPanel({
     try{map.getSource('selected')?.setData(fc)}catch(_){}
   },[selectedSite,mapReady])
 
+  // -- Resize observer for responsive layout adaptivity ------------------
+  useEffect(() => {
+    if (!mapContainer.current) return
+    const ro = new ResizeObserver(() => {
+      try { mapRef.current?.resize() } catch (_) {}
+    })
+    ro.observe(mapContainer.current)
+    return () => ro.disconnect()
+  }, [])
+
   const tipLines=tooltip?fmtTip(tooltip.props,activeLayer,opYear):null
   const brd='1px solid var(--border-primary)'
 
@@ -1159,7 +1169,7 @@ export default function MapPanel({
 
         {/* Farm Quick Selector -- top-right (next to MapLibre nav controls) */}
         {countryView.available && (
-          <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto'}}>
+          <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto',maxWidth:'min(180px, 45vw)'}}>
             <select
               value={MONITORED_SITES.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
               onChange={(e) => {
@@ -1169,10 +1179,10 @@ export default function MapPanel({
                   mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
                 }
               }}
-              style={{padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',
+              style={{padding:'5px 8px',borderRadius:8,fontSize:9,cursor:'pointer',
                       backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,
-                      color:'var(--text-secondary)',fontWeight:600,outline:'none'}}>
-              <option value="">🎯 Monitored Farms ({MONITORED_SITES.length})...</option>
+                      color:'var(--text-secondary)',fontWeight:600,outline:'none',width:'100%',textOverflow:'ellipsis'}}>
+              <option value="">🎯 Farms ({MONITORED_SITES.length})...</option>
               {MONITORED_SITES.map(s => (
                 <option key={s.site_name} value={s.site_name}>
                   {s.site_name.replace(' Farm', '')} ({s.county})
@@ -1185,16 +1195,17 @@ export default function MapPanel({
         {/* Selected Site Indicator Badge -- top-left underneath layer dropdown */}
         {selectedSite && countryView.available && (
           <div style={{position:'absolute',top:38,left:8,pointerEvents:'auto',
-                       display:'flex',alignItems:'center',gap:6,padding:'4px 9px',
-                       borderRadius:6,fontSize:9,background:'var(--bg-elevated)',
-                       border:brd,backdropFilter:'blur(4px)',boxShadow:'0 2px 8px rgba(0,0,0,0.2)'}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444'}}/>
+                       display:'flex',alignItems:'center',gap:4,padding:'3px 7px',
+                       borderRadius:6,fontSize:8,background:'var(--bg-elevated)',
+                       border:brd,backdropFilter:'blur(4px)',boxShadow:'0 2px 8px rgba(0,0,0,0.2)',
+                       maxWidth:'calc(100% - 16px)',flexWrap:'wrap'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444',flexShrink:0}}/>
             <span style={{color:'var(--text-muted)',fontWeight:700}}>ACTIVE:</span>
-            <span style={{color:'var(--text-primary)',fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            <span style={{color:'var(--text-primary)',fontWeight:600,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
               {selectedSite.site_name}
             </span>
-            <span style={{color:'var(--text-faint)'}}>
-              ({selectedSite.lat.toFixed(2)}°, {selectedSite.lon.toFixed(2)}°)
+            <span style={{color:'var(--text-faint)',fontSize:8}}>
+              ({Number(selectedSite.lat).toFixed(2)}°, {Number(selectedSite.lon).toFixed(2)}°)
             </span>
             {onOpenBulletin && (
               <button
@@ -1202,8 +1213,8 @@ export default function MapPanel({
                 onClick={onOpenBulletin}
                 title="Generate PDF/PNG Bulletin for this point"
                 style={{
-                  marginLeft: 4,
-                  padding: '2px 7px',
+                  marginLeft: 2,
+                  padding: '2px 6px',
                   borderRadius: 4,
                   fontSize: 8,
                   fontWeight: 700,
@@ -1230,57 +1241,58 @@ export default function MapPanel({
         </div>
         )}
 
-        {/* Basemap picker -- bottom-left */}
-        <div style={{position:'absolute',bottom:8,left:8,pointerEvents:'auto'}}>
-          <button onClick={()=>setShowBasemaps(v=>!v)}
-            style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
-            <span style={{fontSize:9,fontWeight:700,color:'var(--text-muted)'}}>MAP</span>
-            <span style={{fontSize:9,color:'var(--accent-blue)'}}>{BASEMAPS[basemapId].label}</span>
-            <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
-          </button>
-          {showBasemaps && (
-            <div style={{position:'absolute',bottom:'100%',left:0,marginBottom:4,borderRadius:8,
-                         boxShadow:'0 8px 24px rgba(0,0,0,0.35)',background:'var(--bg-elevated)',
-                         border:brd,padding:6,minWidth:140}}>
-              {Object.entries(BASEMAPS).map(([id,{label}])=>{
-                const active=id===basemapId
-                return (
-                  <button key={id} onClick={()=>{setBasemapId(id);setShowBasemaps(false)}}
-                    style={{display:'block',width:'100%',padding:'6px 8px',borderRadius:5,fontSize:10,
-                            cursor:'pointer',textAlign:'left',marginBottom:2,
-                            border:'1px solid '+(active?'var(--accent-blue)':'transparent'),
-                            background:active?'var(--accent-blue)':'transparent',
-                            color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        {/* Bottom controls: Basemap & Boundary toggles */}
+        <div style={{position:'absolute',bottom:8,left:8,pointerEvents:'auto',display:'flex',alignItems:'center',flexWrap:'wrap',gap:4,maxWidth:'calc(100% - 145px)',zIndex:10}}>
+          {/* Basemap picker */}
+          <div style={{position:'relative'}}>
+            <button onClick={()=>setShowBasemaps(v=>!v)}
+              style={{display:'flex',alignItems:'center',gap:4,padding:'4px 8px',borderRadius:8,fontSize:9,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
+              <span style={{fontSize:8,fontWeight:700,color:'var(--text-muted)'}}>MAP</span>
+              <span style={{fontSize:8,color:'var(--accent-blue)'}}>{BASEMAPS[basemapId].label}</span>
+              <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
+            </button>
+            {showBasemaps && (
+              <div style={{position:'absolute',bottom:'100%',left:0,marginBottom:4,borderRadius:8,
+                           boxShadow:'0 8px 24px rgba(0,0,0,0.35)',background:'var(--bg-elevated)',
+                           border:brd,padding:6,minWidth:130,zIndex:30}}>
+                {Object.entries(BASEMAPS).map(([id,{label}])=>{
+                  const active=id===basemapId
+                  return (
+                    <button key={id} onClick={()=>{setBasemapId(id);setShowBasemaps(false)}}
+                      style={{display:'block',width:'100%',padding:'5px 7px',borderRadius:5,fontSize:9,
+                              cursor:'pointer',textAlign:'left',marginBottom:2,
+                              border:'1px solid '+(active?'var(--accent-blue)':'transparent'),
+                              background:active?'var(--accent-blue)':'transparent',
+                              color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
-        {/* Boundary toggles -- bottom-left, next to basemap picker */}
-        <div style={{position:'absolute',bottom:8,left:110,pointerEvents:'auto',display:'flex',gap:5}}>
+          {/* Boundary toggles */}
           <button onClick={()=>setShowAdmin0(v=>!v)}
             title="Toggle Kenya National Border"
-            style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',borderRadius:8,fontSize:9,cursor:'pointer',
+            style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
                     backdropFilter:'blur(4px)',
                     background: showAdmin0 ? (darkMode ? 'rgba(56,189,248,0.2)' : '#e0f2fe') : 'var(--bg-elevated)',
                     border: '1px solid ' + (showAdmin0 ? 'var(--accent-blue)' : 'var(--border-primary)'),
                     color: showAdmin0 ? 'var(--accent-blue)' : 'var(--text-secondary)',
                     fontWeight: showAdmin0 ? 700 : 500}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:showAdmin0?'var(--accent-blue)':'var(--text-faint)'}}/>
+            <span style={{width:5,height:5,borderRadius:'50%',background:showAdmin0?'var(--accent-blue)':'var(--text-faint)'}}/>
             BORDER: {showAdmin0 ? 'ON' : 'OFF'}
           </button>
           <button onClick={()=>setShowAdmin1(v=>!v)}
             title="Toggle County / District Boundaries"
-            style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',borderRadius:8,fontSize:9,cursor:'pointer',
+            style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
                     backdropFilter:'blur(4px)',
                     background: showAdmin1 ? (darkMode ? 'rgba(16,185,129,0.2)' : '#d1fae5') : 'var(--bg-elevated)',
                     border: '1px solid ' + (showAdmin1 ? '#10b981' : 'var(--border-primary)'),
                     color: showAdmin1 ? (darkMode ? '#34d399' : '#059669') : 'var(--text-secondary)',
                     fontWeight: showAdmin1 ? 700 : 500}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:showAdmin1?'#10b981':'var(--text-faint)'}}/>
+            <span style={{width:5,height:5,borderRadius:'50%',background:showAdmin1?'#10b981':'var(--text-faint)'}}/>
             COUNTIES: {showAdmin1 ? 'ON' : 'OFF'}
           </button>
         </div>

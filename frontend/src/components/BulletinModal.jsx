@@ -144,7 +144,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(5, 10, 20, 0.78)', backdropFilter: 'blur(6px)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" style={{ background: 'rgba(5, 10, 20, 0.78)', backdropFilter: 'blur(6px)' }}>
       <div
         className="w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl border"
         style={{
@@ -155,32 +155,32 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
         }}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.08))', background: 'var(--bg-elevated, #0f1f38)' }}>
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.08))', background: 'var(--bg-elevated, #0f1f38)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-400 font-bold border border-amber-500/30" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-400 font-bold border border-amber-500/30 shrink-0" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
               📄
             </div>
             <div>
-              <h3 className="text-sm font-bold tracking-wide uppercase text-slate-100 flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-bold tracking-wide uppercase text-slate-100 flex items-center gap-2 flex-wrap">
                 Generate Seasonal Forecast Bulletin
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   {isShort ? `OND ${selectedYear || 2025}` : `MAM ${selectedYear || 2026}`}
                 </span>
               </h3>
-              <p className="text-[11px] text-slate-400">Official ILRI publication template • Onset, Cessation & LGP</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-400">Official ILRI publication template • Onset, Cessation &amp; LGP</p>
             </div>
           </div>
           <button
             onClick={onClose}
             disabled={isGenerating}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors text-lg"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors text-lg shrink-0"
           >
             ×
           </button>
         </div>
 
         {/* Modal Body / Form */}
-        <form onSubmit={handleGenerate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+        <form onSubmit={handleGenerate} className="p-4 sm:p-6 space-y-4 max-h-[86vh] overflow-y-auto touch-scroll">
           {/* Bulletin Type (Multi-Model vs Single Model) */}
           <div>
             <label className="block text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
