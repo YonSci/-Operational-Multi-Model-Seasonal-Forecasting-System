@@ -99,7 +99,7 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
           </h1>
 
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 660, marginTop: 18, lineHeight: 1.7, padding: '0 8px' }}>
-            Operational seasonal climate forecasting for Kenya and Ethiopia -- multi-model C3S ensemble and single-model operational runs (Long Rains MAM &amp; Short Rains OND), calibrated against CHIRPS observations to deliver onset, cessation, and season-length outlooks.
+            Operational seasonal climate forecasting for Kenya and Ethiopia -- multi-model C3S ensemble and single-model operational runs, calibrated against CHIRPS observations to deliver onset, cessation, and season-length outlooks.
           </p>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: 440 }}>
