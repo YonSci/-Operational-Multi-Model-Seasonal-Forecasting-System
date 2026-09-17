@@ -1602,12 +1602,12 @@ function AboutTab() {
 
 // --- TABS + TopNav ------------------------------------------------------------
 const TABS = [
-  {id:'forecast',      label:'Forecasting',  icon:'F'},
-  {id:'probabilistic', label:'Probabilistic', icon:'P'},
-  {id:'multimodel',    label:'Multi-Model',   icon:'M'},
-  {id:'validation',    label:'Validation',    icon:'V'},
-  {id:'historical',    label:'Historical',    icon:'H'},
-  {id:'about',         label:'About',         icon:'?'},
+  {id:'forecast',      label:'Forecasting',   icon:'📊'},
+  {id:'probabilistic', label:'Probabilistic', icon:'🎲'},
+  {id:'multimodel',    label:'Multi-Model',   icon:'🌐'},
+  {id:'validation',    label:'Validation',    icon:'🛡️'},
+  {id:'historical',    label:'Historical',    icon:'⏳'},
+  {id:'about',         label:'About',         icon:'ℹ️'},
 ]
 
 function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
@@ -1689,14 +1689,38 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
         )}
       </div>
 
-      {/* Swipeable Tabs Navigation Bar */}
-      <div className="flex px-2 sm:px-5 gap-1 overflow-x-auto no-scrollbar touch-scroll border-t border-[var(--border-primary)]">
-        {tabs.map(t=>(
-          <button key={t.id} onClick={()=>setActiveTab(t.id)}
-            style={{display:'flex',alignItems:'center',gap:5,padding:'7px 12px sm:8px 16px',fontSize:11,fontWeight:600,letterSpacing:'0.04em',cursor:'pointer',background:'transparent',borderBottom:'2px solid '+(activeTab===t.id?'var(--accent-blue)':'transparent'),marginBottom:-1,color:activeTab===t.id?'var(--accent-blue)':'var(--header-muted)',transition:'all 0.15s',whiteSpace:'nowrap',flexShrink:0}}>
-            {t.label}
-          </button>
-        ))}
+      {/* Modern Tabs Navigation Bar */}
+      <div
+        className="flex items-center px-2.5 sm:px-5 py-2 gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar touch-scroll border-t"
+        style={{
+          borderColor: 'var(--border-primary)',
+          background: 'var(--bg-sunken, #08101d)'
+        }}
+      >
+        {tabs.map(t => {
+          const isActive = activeTab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-semibold tracking-wide transition-all whitespace-nowrap shrink-0 ${
+                isActive
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+              }`}
+              style={{
+                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+              }}
+            >
+              <span className="text-xs sm:text-sm shrink-0">{t.icon}</span>
+              <span>{t.label}</span>
+              {isActive && (
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse hidden sm:inline-block ml-0.5" />
+              )}
+            </button>
+          )
+        })}
       </div>
     </header>
   )
