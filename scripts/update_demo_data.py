@@ -262,13 +262,16 @@ def update_demo_data():
     combined.update(data_fmam)
     combined.update(data_bega)
 
-    # Add seasonal masks if available
+    # Add seasonal masks and regime map if available
     masks_path = os.path.join('outputs', 'masks', 'seasonal_masks.npz')
     if os.path.exists(masks_path):
-        print("Loading seasonal masks from", masks_path)
+        print("Loading seasonal masks and regime map from", masks_path)
         m_data = np.load(masks_path)
         for k in m_data.files:
-            combined[k] = m_data[k].astype(bool)
+            if k == 'regime_map':
+                combined[k] = m_data[k].astype(np.int8)
+            else:
+                combined[k] = m_data[k].astype(bool)
 
     np.savez_compressed(out_file, **combined)
     size_mb = os.path.getsize(out_file) / (1024 * 1024)

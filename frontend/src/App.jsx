@@ -40,9 +40,9 @@ const SEASONS = {
     { id:'long_rains',  label:'Long Rains (MAM: Mar-May)',   init:'0201', initLabel:'Feb 01' },
   ],
   ethiopia: [
-    { id:'bega',   label:'Bega / Deyr (ONDJ: Oct-Jan)',  init:'0901', initLabel:'Sep 01' },
-    { id:'fmam',   label:'Belg (FMAM: Feb-May)',         init:'0101', initLabel:'Jan 01' },
-    { id:'kiremt', label:'Kiremt (Main Rains: Jun-Sep)', init:'0501', initLabel:'May 01' },
+    { id:'bega',   label:'Deyr (SON-OND) - Pastoral Rains',  init:'0901', initLabel:'Sep 01' },
+    { id:'fmam',   label:'Belg (FMAM) - Highland Early Rains', init:'0101', initLabel:'Jan 01' },
+    { id:'kiremt', label:'Kiremt (JJAS) - Main Rains',        init:'0501', initLabel:'May 01' },
   ],
 }
 const INIT_LABELS = Object.fromEntries(
@@ -87,7 +87,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
   const { models } = pixelData
   const opYear = selectedYear ?? pixelData?.op_year ?? 2026
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj' || pixelData?.season === 'deyr')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
@@ -307,7 +307,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
 
 // --- Precip Plume (BC daily) ----------------------------------------------
 function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_rains'}) {
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj' || pixelData?.season === 'deyr')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
@@ -448,13 +448,13 @@ const RISK_DEFS_FMAM=[
 ]
 
 const RISK_DEFS_BEGA=[
-  {key:'p_late_on',   group:'Onset Timing',      label:'Late Onset Risk',      icon:'\u23F0',sub:'P(Onset after ~20 Oct)',  def:'Probability the Bega/Deyr rains begin later than the climatological upper tercile (~DOY 293 / late October). Delayed onset impacts pastoral browse rejuvenation and recessional agriculture.', thresh:0.333,warn:true, doy:293, warningLevel:0.5},
-  {key:'p_early_on',  group:'Onset Timing',      label:'Early Onset Risk',     icon:'\uD83C\uDF31',sub:'P(Onset before ~20 Sep)', def:'Probability of an unusually early onset (before late September). Potential false start risk in southern/southeastern lowlands.', thresh:0.333,warn:false,doy:263},
-  {key:'p_lgp_lt30',  group:'Season Length',     label:'Critically Short Season', icon:'\u26A0', sub:'P(Season Length < 30 days)',   def:'Bega/Deyr wet period under 30 days is critically shortened -- acute fodder and water scarcity risk for pastoral communities.', thresh:0.20, warn:true, warningLevel:0.35},
-  {key:'p_lgp_lt45',  group:'Season Length',     label:'Short Season Risk',    icon:'\uD83D\uDCC9',sub:'P(Season Length < 45 days)',   def:'Season under 45 days is below the minimum moisture duration for rangeland recovery.', thresh:0.333,warn:true},
-  {key:'p_lgp_lt60',  group:'Season Length',     label:'Below-Normal Season',  icon:'\uD83C\uDF26',sub:'P(Season Length < 60 days)',   def:'Season under 60 days is below the climatological median for Deyr (~55-65 days in Somali/Borana lowlands).', thresh:0.333,warn:true},
-  {key:'p_fail',      group:'Season Failure',    label:'Season Failure',       icon:'\u2715', sub:'P(No detectable onset)',           def:'Fraction of ensemble members with no detectable rainfall onset during the Sep-Jan window.', thresh:0.10, warn:true, warningLevel:0.20},
-  {key:'p_dry_spell', group:'Season Failure',    label:'Dry Spell Risk',       icon:'\uD83C\uDFDC',sub:'Proxy: P(Season < 30d)',          def:'Proxy indicator using P(LGP<30d) as surrogate for intraseasonal dry spells during Bega/Deyr season.', thresh:0.333,warn:true},
+  {key:'p_late_on',   group:'Onset Timing',      label:'Late Onset Risk',      icon:'\u23F0',sub:'P(Onset after ~20 Oct)',  def:'Probability the Deyr rains begin later than the climatological upper tercile (~DOY 293 / late October). Delayed onset impacts pastoral browse rejuvenation and recessional agriculture.', thresh:0.333,warn:true, doy:293, warningLevel:0.5},
+  {key:'p_early_on',  group:'Onset Timing',      label:'Early Onset Risk',     icon:'\uD83C\uDF31',sub:'P(Onset before ~20 Sep)', def:'Probability of early onset before climatological lower tercile (~DOY 263 / late September). May indicate unseasonable early rains or extended browsing cycle.', thresh:0.333,warn:false,doy:263},
+  {key:'p_lgp_lt30',  group:'Season Length',     label:'Critically Short Season', icon:'\u26A0', sub:'P(Season Length < 30 days)',   def:'Deyr wet period under 30 days is critically shortened -- acute fodder and water scarcity risk for pastoral communities.', thresh:0.20, warn:true, warningLevel:0.35},
+  {key:'p_lgp_lt45',  group:'Season Length',     label:'Below-Normal Season',  icon:'\uD83D\uDCC5',sub:'P(Season Length < 45 days)',   def:'Deyr wet period under 45 days (climatological median in pastoral south/SE). Signals marginal rangeland recharge.', thresh:0.333,warn:true, warningLevel:0.5},
+  {key:'p_early_cs',  group:'Cessation Timing',  label:'Early Cessation Risk', icon:'\u2600', sub:'P(Cessation before ~15 Nov)',def:'Probability rains cease before climatological lower tercile (~DOY 319 / mid-November). Early cessation truncates grass maturation.', thresh:0.333,warn:true,doy:319, warningLevel:0.5},
+  {key:'p_fail',      group:'Season Failure',    label:'Season Failure Risk',  icon:'\uD83D\uDD34',sub:'P(No Defined Season Detected)',  def:'Probability that A(D) cumulative anomaly detects no valid wet season within the Sep-Jan window.', thresh:0.25, warn:true, warningLevel:0.4},
+  {key:'p_dry_spell', group:'Season Failure',    label:'Dry Spell Risk',       icon:'\uD83C\uDFDC',sub:'Proxy: P(Season < 30d)',          def:'Proxy indicator using P(LGP<30d) as surrogate for intraseasonal dry spells during Deyr pastoral season.', thresh:0.333,warn:true},
   {key:'agree_on_max',group:'Forecast Confidence',label:'Ensemble Confidence', icon:'\u25CE',sub:'Max agreement on onset category', def:'Fraction of ensemble members agreeing on dominant onset category (BN/NN/AN). Above 50% = meaningful consensus.', thresh:0.5, warn:false,higher_better:true},
 ]
 
@@ -512,7 +512,7 @@ function GaugeCard({def:rd,vals,entries}) {
 
 function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedSeason='long_rains'}) {
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj' || pixelData?.season === 'deyr')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
@@ -572,7 +572,7 @@ function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedS
   return (
     <div style={{padding:'8px 10px',overflowY:'auto',height:'100%'}}>
       <p style={{fontSize:9,color:'var(--text-faint)',marginBottom:10,lineHeight:1.5}}>
-        {isBega ? 'Bega / Deyr (ONDJ) risk indicators relative to 1993-2016 climatological terciles.' : isFmam ? 'Belg (FMAM) risk indicators relative to 1993-2016 climatological terciles.' : isKiremt ? 'Kiremt (Main Rains) risk indicators relative to 1993-2016 climatological terciles.' : isShort ? 'Short Rains (OND) risk indicators relative to 1993-2016 climatological terciles.' : 'Click any card to see the definition. Threshold line shown on bar.'}
+        {isBega ? 'Deyr (Pastoral Rains: SON-OND) risk indicators relative to 1993-2016 climatological terciles.' : isFmam ? 'Belg (FMAM) risk indicators relative to 1993-2016 climatological terciles.' : isKiremt ? 'Kiremt (Main Rains) risk indicators relative to 1993-2016 climatological terciles.' : isShort ? 'Short Rains (OND) risk indicators relative to 1993-2016 climatological terciles.' : 'Click any card to see the definition. Threshold line shown on bar.'}
       </p>
       {Object.entries(groups).map(([grp,items])=>(
         <div key={grp} style={{marginBottom:16}}>
@@ -622,7 +622,7 @@ function TercileBar({values}) {
 
 function ProbabilisticOutlook({pixelData,activeModels,selectedModel='multimodel',selectedSeason='long_rains'}) {
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj' || pixelData?.season === 'deyr')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
@@ -685,7 +685,7 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',
                  height:'100%',color:'var(--text-faint)',fontSize:11}}>No data</div>
   )
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj' || pixelData?.season === 'deyr')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
@@ -737,7 +737,7 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       {isSingle && (
         <div style={{padding:'4px 8px',background:'rgba(59,130,246,0.08)',borderBottom:'1px solid var(--border-primary)',fontSize:8.5,color:'var(--accent-blue)',fontWeight:600,textAlign:'center'}}>
-          {isBega ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Bega Sep 01)' : isFmam ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Belg Jan 01)' : isKiremt ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Kiremt May 01)' : 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Ensemble Members)'}
+          {isBega ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Deyr Sep 01)' : isFmam ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Belg Jan 01)' : isKiremt ? 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Members, Kiremt May 01)' : 'Single-Model Operational Ensemble: ECMWF SEAS5 (25 Ensemble Members)'}
         </div>
       )}
       {/* Dial summary row */}
@@ -806,15 +806,15 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
       <span className="text-sm tracking-wide">Click any pixel on the map to load forecast data</span>
     </div>
   )
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'deyr' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'deyr' || pixelData?.season === 'ondj')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
   const isSingle = isBega || isFmam || isKiremt || isShort
-  const seasonCode = isBega ? 'Bega (ONDJ)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
+  const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
   const models = pixelData?.models ?? {}
   const allEntries = Object.entries(models).filter(([n]) => {
-    if (isBega) return n.includes('ECMWF SEAS5') || n.includes('Bega')
+    if (isBega) return n.includes('ECMWF SEAS5') || n.includes('Bega') || n.includes('Deyr')
     if (isFmam) return n.includes('ECMWF SEAS5') || n.includes('FMAM')
     if (isKiremt) return n.includes('ECMWF SEAS5') || n.includes('Kiremt')
     if (isShort) return n === 'ECMWF SEAS5' || n === 'ECMWF SEAS5 (Sep)'
@@ -861,16 +861,42 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
 
   return (
     <div className="flex flex-col h-full gap-2 overflow-y-auto lg:overflow-hidden p-0.5">
+      {/* Regime Pill & Seasonal Domain Status */}
+      {pixelData && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6,
+          padding: '4px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: 8
+        }}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: 10}}>
+            <span style={{color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase'}}>Climate Regime:</span>
+            <span style={{fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 4}}>
+              <span>{pixelData.regime_id === 1 ? '🌾' : (pixelData.regime_id === 2 ? '🏔️' : (pixelData.regime_id === 3 ? '🐪' : '🏜️'))}</span>
+              <span>{pixelData.regime_name || 'Classified Rainfall Regime'}</span>
+            </span>
+          </div>
+          <div style={{fontSize: 9, display: 'flex', alignItems: 'center', gap: 4}}>
+            <span style={{width: 6, height: 6, borderRadius: '50%', background: pixelData.is_in_seasonal_zone !== false ? '#10b981' : '#f59e0b'}}/>
+            <span style={{fontWeight: 600, color: pixelData.is_in_seasonal_zone !== false ? '#10b981' : '#f59e0b'}}>
+              {pixelData.is_in_seasonal_zone !== false ? `Within ${seasonCode} Active Domain` : `Outside ${seasonCode} Domain`}
+            </span>
+          </div>
+        </div>
+      )}
+
       {pixelData?.is_in_seasonal_zone === false && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
           borderRadius: 8, fontSize: 10, background: 'rgba(245, 158, 11, 0.15)',
           border: '1px solid rgba(245, 158, 11, 0.4)', color: '#fbbf24',
           flexShrink: 0
         }}>
-          <span style={{fontSize: 13}}>⚠️</span>
+          <span style={{fontSize: 14}}>⚠️</span>
           <span>
-            <strong>Climatological Notice:</strong> This site ({Number(pixelData.glat).toFixed(2)}°N, {Number(pixelData.glon).toFixed(2)}°E) is outside the primary rainfall zone for {seasonCode} (season depth, seasonality ratio, or detectability threshold not met).
+            <strong>Climatological Regime Notice:</strong> This site ({Number(pixelData.glat).toFixed(2)}°N, {Number(pixelData.glon).toFixed(2)}°E, {pixelData.regime_name || 'Unclassified'}) is outside the active seasonal envelope for {seasonCode}.
+            {isBega ? ' In Northern & Central Ethiopia, this period corresponds to dry Bega harvest; Deyr pastoral rains are confined to the Southern & SE Lowlands (Regime 3).' :
+             isFmam ? ' Western Ethiopia experiences an uninterrupted unimodal wet season, and Southern Ethiopia experiences Gu (MAM) rains. Distinct Belg early rains are unique to the Central/Eastern Highlands (Regime 2).' :
+             isKiremt ? ' Kiremt summer monsoon rains are confined to the Highlands and Western Ethiopia; southern pastoral lowlands remain dry during JJAS.' :
+             ' Threshold criteria for this season are not met at this coordinate.'}
           </span>
         </div>
       )}
@@ -919,14 +945,14 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
 
 // --- Probabilistic Tab ----------------------------------------------------
 function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel,modelsData,selectedYear,setSelectedYear,country,selectedSeason,onSeasonChange,selectedInit}) {
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj'
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
   const isKiremt = !isBega && !isFmam && selectedSeason === 'kiremt'
   const isShort = !isBega && !isFmam && !isKiremt && selectedSeason === 'short_rains'
   const isSingle = isBega || isFmam || isKiremt || isShort
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const yearOptions = [2026, 2025, 2024, 2023]
-  const seasonCode = isBega ? 'Bega (ONDJ)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
+  const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
   const opYear = selectedYear ?? 2026
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
   const selStyle={background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
@@ -976,7 +1002,7 @@ function ValidationTab({ pixelData, activeModels, validationData,
                           selectedModel, setSelectedModel, modelsData,
                           selectedYear,  setSelectedYear,
                           country, selectedSeason, onSeasonChange, selectedInit }) {
-  const isSingle = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj'
+  const isSingle = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const selStyle = {
     background:'var(--bg-surface)', border:'1px solid var(--accent-blue)',
@@ -1242,7 +1268,7 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
       if (!pt) return [fmtV(val),'Observed']
       if (pt.isLatest) {
         const parts=[pt.hasObs?'Obs: '+fmtV(pt.val):null, fcastP50!=null?(activeModel||'Model')+' P50: '+fmtV(fcastP50):null, hasIQR?'IQR: '+fmtV(fcastP10)+' - '+fmtV(fcastP90):null].filter(Boolean)
-        const seasonCode = isBega ? 'Bega (ONDJ)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
+        const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
         return [parts.join('  |  ')||fmtV(val),`${seasonCode} ${targetLatestYear} Forecast`]
       }
       return [fmtV(val),'Observed']
@@ -1271,7 +1297,7 @@ function HistoricalTimeSeries({ data, years, label, color, calYears, latestYear,
 
 // --- HistoricalTab ------------------------------------------------------------
 function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel, modelsData, selectedYear, setSelectedYear, country, selectedSeason, onSeasonChange, selectedInit }) {
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'ondj' || pixelData?.season === 'deyr')
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
@@ -1280,7 +1306,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const yearOptions = [2026, 2025, 2024, 2023]
   const activeModelName = isSingle ? 'ECMWF SEAS5' : selectedModel
-  const seasonCode = isBega ? 'Bega (ONDJ)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
+  const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
   const calPeriodStr = (isShort || isKiremt || isFmam || isBega) ? '1993-2016' : '1981-2016'
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
   const vars = [{key:'onset',label:'Onset DOY',color:'#34d399',unit:'DOY'},{key:'cessation',label:'Cessation DOY',color:'#f97316',unit:'DOY'},{key:'lgp',label:'Season Length',color:'#4a8fc4',unit:'days'}]
@@ -1646,7 +1672,8 @@ function AboutTab() {
           <KV label="System" value="Operational Seasonal Climate Forecast Dashboard (Onset, Cessation & LGP)"/>
           <KV label="Version" value="v3.0.0  Operational" mono/>
           <KV label="Developer" value="ILRI Climate Services in collaboration with ICPAC"/>
-          <KV label="Seasons" value="Short Rains (OND) & Long Rains (MAM), East Africa"/>
+          <KV label="Seasons" value="Kenya: MAM (Long Rains) & OND (Short Rains); Ethiopia: Kiremt (JJAS), Belg (FMAM) & Deyr (SON-OND Pastoral)"/>
+          <KV label="Regimes" value="Dunning (2016) Harmonic Classification: Unimodal West (R1), Bimodal Highlands (R2), Bimodal Pastoral (R3)"/>
           <KV label="Domain" value="Kenya & Ethiopia  (0.25 deg CHIRPS-native resolution)" mono/>
           <KV label="Resolution" value="0.25 (~28 km) -- CHIRPS native resolution"/>
           <KV label="Calibration" value="1981-2016 (36 years)"/>
@@ -1709,7 +1736,7 @@ const TABS = [
 ]
 
 function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
-  const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj'
+  const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
     : (modelsData?.models ? Object.keys(modelsData.models) : [])

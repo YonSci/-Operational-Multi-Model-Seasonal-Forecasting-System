@@ -43,11 +43,11 @@ const FMAM_MODELS = [
 ]
 
 const BEGA_MODELS = [
-  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Bega Sep 01)', centre: 'European Centre' },
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Deyr Sep 01)', centre: 'European Centre' },
 ]
 
 export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026, country = 'kenya' }) {
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj'
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'deyr' || selectedSeason === 'ondj'
   const isEthiopia = country === 'ethiopia' || isBega || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (country === 'ethiopia' && selectedSeason !== 'bega' && selectedSeason !== 'fmam'))
@@ -221,7 +221,9 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-400/20 text-blue-300 font-mono">ILRI PDF</span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">
-                    {isFmam
+                    {isBega
+                      ? `Deyr Pastoral Rains (Oct-Dec ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members, Sep 01 init)`
+                      : isFmam
                       ? `Belg (Feb-May ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members, Jan 01 init)`
                       : isKiremt
                       ? `Kiremt (Jun-Sep ${selectedYear || 2026}) official forecast based on ECMWF SEAS5 System 51 (25 ensemble members, May 01 init)`

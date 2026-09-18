@@ -890,12 +890,13 @@ def _load_demo_npz():
         )
 
     masks = {}
-    for mkey in ["mask_kiremt", "mask_belg", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
+    for mkey in ["mask_kiremt", "mask_belg", "mask_deyr", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
         if mkey in data:
             masks[mkey] = data[mkey].astype(bool)
+    regime_map = data["regime_map"].astype(np.int8) if "regime_map" in data else None
 
-    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}).")
-    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks}
+    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Deyr/Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}, RegimeMap: {regime_map is not None}).")
+    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
 
 # ── Main load ──────────────────────────────────────────────────────────────
 def load(force=False):
@@ -953,18 +954,24 @@ def load(force=False):
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
 
         masks = {}
+        regime_map = None
         masks_path = os.path.join(_REPO_ROOT, "outputs", "masks", "seasonal_masks.npz")
         if os.path.exists(masks_path):
             m_data = np.load(masks_path)
             for mkey in m_data.files:
-                masks[mkey] = m_data[mkey].astype(bool)
+                if mkey == "regime_map":
+                    regime_map = m_data[mkey].astype(np.int8)
+                else:
+                    masks[mkey] = m_data[mkey].astype(bool)
         elif os.path.exists(os.path.join(_REPO_ROOT, "backend", "demo_data.npz")):
             m_data = np.load(os.path.join(_REPO_ROOT, "backend", "demo_data.npz"))
-            for mkey in ["mask_kiremt", "mask_belg", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
+            for mkey in ["mask_kiremt", "mask_belg", "mask_deyr", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
                 if mkey in m_data:
                     masks[mkey] = m_data[mkey].astype(bool)
+            if "regime_map" in m_data:
+                regime_map = m_data["regime_map"].astype(np.int8)
 
-        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks}
+        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
         _loaded = True
     except Exception as exc:
         print(f"[data_loader] Raw NetCDF data not available ({type(exc).__name__}: {exc})")
@@ -1191,10 +1198,18 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     s = _state
 
-    is_bega   = (season in ["bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ecmwf_bega"])
+    is_bega   = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
     is_fmam   = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
     is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "jjas"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]) or (lat > 5.0 and season not in ["long_rains", "short_rains"]))
     is_short  = not is_bega and not is_fmam and not is_kiremt and ((season in ["short_rains", "ond"]) or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+
+    REGIME_NAMES = {
+        1: "Western Unimodal (Single Extended Season)",
+        2: "Bimodal Type 1 (Belg & Kiremt Highlands)",
+        3: "Bimodal Type 2 (Gu & Deyr Pastoral Lowlands)",
+        0: "Arid / Marginal Non-Seasonal",
+    }
+    reg_map = s.get("regime_map")
 
     bega_md       = s["MODELS"].get("ECMWF SEAS5 (Bega)")
     chirps_bega   = s.get("chirps_bega")
@@ -1232,14 +1247,20 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             bega_stats = _model_pixel_stats("ECMWF SEAS5 (Bega)", pi, pj, year=year)
             models_dict["ECMWF SEAS5"] = bega_stats
             models_dict["ECMWF SEAS5 (Bega)"] = bega_stats
+            models_dict["ECMWF SEAS5 (Deyr)"] = bega_stats
 
-        m_bega = s.get("seasonal_masks", {}).get("mask_bega")
-        in_bega_zone = bool(m_bega[pi, pj]) if (m_bega is not None and pi < m_bega.shape[0] and pj < m_bega.shape[1]) else True
+        m_deyr = s.get("seasonal_masks", {}).get("mask_deyr", s.get("seasonal_masks", {}).get("mask_bega"))
+        in_deyr_zone = bool(m_deyr[pi, pj]) if (m_deyr is not None and pi < m_deyr.shape[0] and pj < m_deyr.shape[1]) else True
+
+        reg_id = int(reg_map[pi, pj]) if (reg_map is not None and pi < reg_map.shape[0] and pj < reg_map.shape[1]) else None
+        reg_name = REGIME_NAMES.get(reg_id, "Unclassified") if reg_id is not None else None
 
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
-            season="bega",
-            is_in_seasonal_zone=in_bega_zone,
+            season="deyr",
+            regime_id=reg_id,
+            regime_name=reg_name,
+            is_in_seasonal_zone=in_deyr_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
             models=models_dict,
@@ -1286,9 +1307,14 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
         m_belg = s.get("seasonal_masks", {}).get("mask_belg")
         in_belg_zone = bool(m_belg[pi, pj]) if (m_belg is not None and pi < m_belg.shape[0] and pj < m_belg.shape[1]) else True
 
+        reg_id = int(reg_map[pi, pj]) if (reg_map is not None and pi < reg_map.shape[0] and pj < reg_map.shape[1]) else None
+        reg_name = REGIME_NAMES.get(reg_id, "Unclassified") if reg_id is not None else None
+
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
             season="fmam",
+            regime_id=reg_id,
+            regime_name=reg_name,
             is_in_seasonal_zone=in_belg_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
@@ -1336,9 +1362,14 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
         m_kir = s.get("seasonal_masks", {}).get("mask_kiremt")
         in_kir_zone = bool(m_kir[pi, pj]) if (m_kir is not None and pi < m_kir.shape[0] and pj < m_kir.shape[1]) else True
 
+        reg_id = int(reg_map[pi, pj]) if (reg_map is not None and pi < reg_map.shape[0] and pj < reg_map.shape[1]) else None
+        reg_name = REGIME_NAMES.get(reg_id, "Unclassified") if reg_id is not None else None
+
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
             season="kiremt",
+            regime_id=reg_id,
+            regime_name=reg_name,
             is_in_seasonal_zone=in_kir_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
@@ -1404,6 +1435,8 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
         season=season,
+        regime_id=3,
+        regime_name="Bimodal Equatorial (Long & Short Rains)",
         is_in_seasonal_zone=in_kenya_zone,
         win_doy_start=win_start,
         win_doy_end=win_end,
@@ -1432,7 +1465,7 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
     if layer not in ("anomaly","spread","median","prob_bn","prob_nn","prob_an","failure","chirps_p50","chirps_spread","bias","detection_rate","rpss_val","hitrate_val","alpha","hr_weighted","rpss_weighted"): raise ValueError(f"invalid layer {layer!r}")
     clim_key, arr_key = _vmap[variable]
 
-    is_bega   = (season in ["bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ecmwf_bega"])
+    is_bega   = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
     is_fmam   = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
     is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "jjas"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
     is_short  = not is_bega and not is_fmam and not is_kiremt and ((season in ["short_rains", "ond"]) or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
@@ -1639,7 +1672,7 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
 
     s_masks = s.get("seasonal_masks", {})
     if is_bega:
-        m_arr = s_masks.get("mask_bega")
+        m_arr = s_masks.get("mask_deyr", s_masks.get("mask_bega"))
     elif is_fmam:
         m_arr = s_masks.get("mask_belg")
     elif is_kiremt:
@@ -1657,6 +1690,11 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         seasonal_mask_list = [[bool(b) for b in row] for row in lm]
         n_seasonal = int(np.sum(lm))
 
+    reg_map = s.get("regime_map")
+    regime_list = None
+    if reg_map is not None and reg_map.shape == (n_lat, n_lon):
+        regime_list = [[int(v) for v in row] for row in reg_map]
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",RuntimeWarning)
         lv = out[lm]; vmin, vmax = float(np.nanmin(lv)), float(np.nanmax(lv))
@@ -1665,6 +1703,7 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
                 values=[[None if np.isnan(v) else round(float(v),3) for v in row] for row in out],
                 seasonal_mask=seasonal_mask_list,
                 n_seasonal=n_seasonal,
+                regime_map=regime_list,
                 vmin=round(vmin,3), vmax=round(vmax,3), units=units)
 
 # ── Taylor stats ───────────────────────────────────────────────────────────

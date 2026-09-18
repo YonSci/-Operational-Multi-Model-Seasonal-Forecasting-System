@@ -45,6 +45,15 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     features = []
     n_seasonal_cells = 0
 
+    reg_map = grid.get("regime_map")
+    REGIME_NAMES = {
+        1: "Western Unimodal (Single Extended Season)",
+        2: "Bimodal Type 1 (Belg & Kiremt Highlands)",
+        3: "Bimodal Type 2 (Gu & Deyr Pastoral Lowlands)",
+        0: "Arid / Marginal Non-Seasonal",
+    }
+    reg_counts = {1: 0, 2: 0, 3: 0, 0: 0}
+
     for ii, lat in enumerate(lats):
         for jj, lon in enumerate(lons):
             try:
@@ -66,6 +75,17 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
             if in_season:
                 n_seasonal_cells += 1
 
+            regime_id = None
+            regime_name = None
+            if reg_map is not None:
+                try:
+                    regime_id = int(reg_map[ii][jj])
+                    regime_name = REGIME_NAMES.get(regime_id, "Unclassified")
+                    if regime_id in reg_counts:
+                        reg_counts[regime_id] += 1
+                except Exception:
+                    pass
+
             coords = [[[lon-half, lat-half], [lon+half, lat-half],
                         [lon+half, lat+half], [lon-half, lat+half],
                         [lon-half, lat-half]]]
@@ -79,6 +99,8 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
                     "pj"     : jj,
                     "map_val": round(float(val), 3),
                     "in_season_mask": in_season,
+                    "regime_id": regime_id,
+                    "regime_name": regime_name,
                     # Tooltip fields - derived fresh per-pixel
                     "label"  : grid.get("variable", ""),
                     "layer"  : grid.get("layer", ""),
@@ -89,10 +111,10 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     # Enrich features with tooltip data using appropriate season CHIRPS clim
     try:
         import numpy as np
-        is_bega = (season in ["bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ecmwf_bega"])
+        is_bega = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
         is_fmam = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
         is_kiremt = not is_bega and not is_fmam and ((season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
-        is_short = not is_bega and not is_fmam and not is_kiremt and ((season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+        is_short = not is_bega and not is_fmam and not is_kiremt and ((season in ["short_rains", "ond"]) or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
         bega_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Bega)")
         fmam_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (FMAM)")
         kiremt_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Kiremt)")
@@ -148,6 +170,12 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
             "n_pixels": len(features),
             "n_seasonal_pixels": n_seasonal_cells,
             "seasonal_pct": round(float(n_seasonal_cells / len(features) * 100), 1) if features else 100.0,
+            "regime_counts": {
+                "unimodal": reg_counts[1],
+                "bimodal_highlands": reg_counts[2],
+                "bimodal_pastoral": reg_counts[3],
+                "arid": reg_counts[0],
+            },
             "vmin"    : round(float(grid["vmin"]), 3) if grid["vmin"] is not None else None,
             "vmax"    : round(float(grid["vmax"]), 3) if grid["vmax"] is not None else None,
             "units"   : grid["units"],

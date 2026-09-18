@@ -302,22 +302,22 @@ const CS_BEGA = {
 }
 
 function detectSeason(selectedSeason, country, gridData) {
-  if (selectedSeason === 'bega' || selectedSeason === 'ondj') return 'bega'
+  if (selectedSeason === 'deyr' || selectedSeason === 'bega' || selectedSeason === 'ondj') return 'deyr'
   if (selectedSeason === 'fmam' || selectedSeason === 'belg') return 'fmam'
   if (selectedSeason === 'kiremt') return 'kiremt'
   if (selectedSeason === 'short_rains') return 'short_rains'
   const vmin = gridData?.meta?.vmin
   if (vmin != null) {
-    if (vmin >= 250) return country === 'ethiopia' ? 'bega' : 'short_rains'
+    if (vmin >= 250) return country === 'ethiopia' ? 'deyr' : 'short_rains'
     if (vmin >= 130) return 'kiremt'
     if (vmin >= 30 && vmin <= 130 && country === 'ethiopia') return 'fmam'
   }
-  if (country === 'ethiopia') return 'bega'
+  if (country === 'ethiopia') return 'kiremt'
   return 'long_rains'
 }
 
 function getScale(scaleId, season = 'long_rains') {
-  if ((season === 'bega' || season === 'ondj') && CS_BEGA[scaleId]) {
+  if ((season === 'deyr' || season === 'bega' || season === 'ondj') && CS_BEGA[scaleId]) {
     return CS_BEGA[scaleId]
   }
   if (season === 'fmam' && CS_FMAM[scaleId]) {
@@ -457,13 +457,33 @@ function buildRaster(gridData, scale, seasonalMaskOnly = false) {
   return {dataUrl:canvas.toDataURL(),coords:[[OMNA,LMXA],[OMXA,LMXA],[OMXA,LMNA],[OMNA,LMNA]]}
 }
 
-function fmtTip(props, L, year = 2026) {
+function fmtTip(props, L, year = 2026, activeSeason = '') {
   if (!props) return null
   const lines = [], mv = props.map_val
   L = L ?? ''
 
+  // 1. Objective Rainfall Regime Tag (Dunning et al. 2016)
+  if (props.regime_name) {
+    const icon = props.regime_id === 1 ? '🌾' : (props.regime_id === 2 ? '🏔️' : (props.regime_id === 3 ? '🐪' : '🏜️'))
+    lines.push(`${icon} Regime: ${props.regime_name}`)
+  }
+
+  // 2. Climatological envelope advisory if outside seasonal zone
   if (props.in_season_mask === false) {
-    lines.push('⚠️ Outside Primary Seasonal Rainfall Zone')
+    if (activeSeason === 'fmam' || activeSeason === 'belg') {
+      lines.push('⚠️ Outside Belg Highland Domain')
+      lines.push('ℹ️ Belg rains are confined to Central/Eastern Highlands (Regime 2).')
+      lines.push('   Western Ethiopia is Unimodal; Southern Ethiopia receives Gu (MAM).')
+    } else if (activeSeason === 'bega' || activeSeason === 'deyr' || activeSeason === 'ondj') {
+      lines.push('⚠️ Outside Deyr Pastoral Domain')
+      lines.push('ℹ️ Deyr rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
+      lines.push('   Northern & Central Highlands are in dry Bega harvest season.')
+    } else if (activeSeason === 'kiremt' || activeSeason === 'jjas') {
+      lines.push('⚠️ Outside Kiremt Domain')
+      lines.push('ℹ️ Kiremt monsoon rains are confined to Highlands & Western Ethiopia.')
+    } else {
+      lines.push('⚠️ Outside Primary Seasonal Rainfall Zone')
+    }
   }
 
   // Determine variable from layer id prefix
@@ -1060,7 +1080,7 @@ export default function MapPanel({
     return () => ro.disconnect()
   }, [])
 
-  const tipLines=tooltip?fmtTip(tooltip.props,activeLayer,opYear):null
+  const tipLines=tooltip?fmtTip(tooltip.props,activeLayer,opYear,activeSeason):null
   const brd='1px solid var(--border-primary)'
 
   return (
@@ -1298,7 +1318,7 @@ export default function MapPanel({
         {/* Seasonal Area Toggle Button */}
         <button
           onClick={() => setSeasonalMaskOnly(v => !v)}
-          title={seasonalMaskOnly ? "Showing primary seasonal rainfall area only. Click to show all domain." : "Showing all domain. Click to filter to primary seasonal rainfall area only."}
+          title={seasonalMaskOnly ? "Showing primary seasonal rainfall domain only. Click to show all domain." : "Showing all domain. Click to filter to primary seasonal rainfall domain only."}
           style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
             borderRadius: 8, fontSize: 10, cursor: 'pointer', backdropFilter: 'blur(4px)',
@@ -1311,7 +1331,7 @@ export default function MapPanel({
           }}
         >
           <span style={{fontSize: 10}}>{seasonalMaskOnly ? '🎯' : '🌐'}</span>
-          <span>{seasonalMaskOnly ? 'Seasonal Area Only' : (country === 'ethiopia' ? 'All Ethiopia' : 'All Domain')}</span>
+          <span>{seasonalMaskOnly ? 'Seasonal Domain Only' : (country === 'ethiopia' ? 'All Ethiopia' : 'All Domain')}</span>
         </button>
 
         {/* Active pixel metric pill */}
