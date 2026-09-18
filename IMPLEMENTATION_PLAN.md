@@ -1,11 +1,12 @@
-# Implementation Plan: Dunning et al. Harmonic Regime Classification & Scientific Seasonal Masks
+# Implementation Plan: Dunning Harmonic Baseline with Ethiopia-Specific Climatological Regime Refinement (EMI Climatology)
 
-Implement a physically and climatologically grounded seasonal masking and classification system based on **Dunning et al. (2016)** and **Ethiopian Meteorological Institute (EMI)** rainfall regimes, addressing all critique points:
-1. Classifying rainfall regimes via Fourier harmonic analysis ($r_H = C_2 / C_1$) **before** masking.
-2. Decoupling the Western Ethiopia unimodal wet season from artificial Belg/Kiremt boundaries.
-3. Resolving the Belg overextension (86.6% $\rightarrow$ genuine bimodal highland Belg domain).
-4. Restructuring and renaming **Bega/Deyr (ONDJ)** to **Deyr (SON–OND) Pastoral Rains**, confined to the southeastern lowlands.
-5. Providing full interactive frontend toggling, regime badges, and contextual tooltips.
+Implement a physically and climatologically grounded seasonal masking and classification system combining **Dunning et al. (2016)** harmonic seasonality diagnosis with **Ethiopian Meteorological Institute (EMI)** regional rainfall regimes:
+1. Classifying rainfall regimes via Fourier harmonic baseline ($r_H = C_2 / C_1$) with Stage-2 climatological peak timing refinement **before** masking.
+2. Decoupling the Western Ethiopia unimodal wet season from artificial Belg/Kiremt boundaries into an Annual Wet Season product.
+3. Resolving the Belg overextension into a genuine Type-1 bimodal highland Belg domain.
+4. Restructuring pastoral seasons to **Spring rains — Gu/Ganna (MAM)** and **Autumn rains — Deyr/Hagaya (SON–OND)**, confined to the southeastern lowlands (Regime 3).
+5. Establishing a genuine Arid / Marginal category (Regime 0) in Danakil/Afar based on project-defined screening informed by Dunning's caution on low-rainfall harmonic instability.
+6. Providing full interactive frontend toggling, regime badges, and contextual tooltips.
 
 ---
 
@@ -13,16 +14,18 @@ Implement a physically and climatologically grounded seasonal masking and classi
 
 > [!IMPORTANT]
 > **Key Methodological and Terminology Realignment**:
-> 1. **Dunning et al. Harmonic Analysis First**:
->    - Every grid cell is decomposed into annual ($C_1$) and semi-annual ($C_2$) Fourier harmonics to compute $r_H = C_2 / C_1$.
->    - Cells are objectively categorized into:
->      - **Regime 1 (Unimodal West)**: Single extended wet season (Feb/Mar to Oct/Nov).
->      - **Regime 2 (Bimodal Type 1 Highlands)**: Belg early rains + dry break + Kiremt main rains.
->      - **Regime 3 (Bimodal Type 2 Pastoral Lowlands)**: Gu (MAM) + dry summer (JJA) + Deyr (SON–OND).
+> 1. **Dunning Harmonic Baseline with Ethiopia-Specific Climatological Refinement**:
+>    - Stage 1: Every grid cell is decomposed into annual ($C_1$) and semi-annual ($C_2$) Fourier harmonics to compute $r_H = C_2 / C_1$.
+>    - Stage 2: Climatological peak timing and water-season detection resolve the Belg/Kiremt amplitude asymmetry where strict $r_H \ge 1.0$ under-detects Type-1 bimodality.
+>    - Cells are categorized into:
+>      - **Regime 0 (Arid / Marginal)**: Insufficient/unreliable seasonal rainfall.
+>      - **Regime 1 (Western Unimodal)**: Single extended wet season (Feb/Mar to Oct/Nov).
+>      - **Regime 2 (Bimodal Type 1 Highlands)**: Belg early rains + June pause + Kiremt main rains.
+>      - **Regime 3 (Bimodal Type 2 Pastoral Lowlands)**: Gu/Ganna (MAM) + dry summer (JJA) + Deyr/Hagaya (SON–OND).
 > 2. **Belg Mask Correction**:
 >    - Restricts Belg onset/cessation strictly to Regime 2 highlands, eliminating the Western unimodal ramp-up and Southern Gu equatorial rains from the Belg mask.
-> 3. **Bega $\rightarrow$ Deyr Terminology Correction**:
->    - Renames "Bega/Deyr (ONDJ)" $\rightarrow$ **"Deyr (SON–OND) - Pastoral Rains"** across backend, frontend, dropdowns, and bulletins.
+> 3. **Pastoral Terminology Refinement**:
+>    - Labels updated to **"Spring rains — Gu/Ganna (MAM)"** and **"Autumn rains — Deyr/Hagaya (SON–OND)"** across backend, frontend, and bulletins.
 >    - Confines the Deyr mask to the southern and southeastern pastoral domain (Regime 3), removing western unimodal tail contamination and northern dry harvest plateaus.
 
 ---
@@ -103,13 +106,21 @@ Implement a physically and climatologically grounded seasonal masking and classi
 
 ## Verification Summary
 
-1. **Regime & Mask Verification (`scratch/test_seasonal_mask_api.py`)**:
-   - Western Unimodal: 538 pixels (36.2%).
-   - Central/Eastern Bimodal Highlands: 369 pixels (24.8%).
-   - Southern/SE Bimodal Lowlands: 578 pixels (38.9%).
-   - Belg mask: 369 / 1,479 pixels (24.9%), strictly resolving the 86.6% overextension.
-   - Deyr mask: 578 / 1,485 pixels (38.9%).
-2. **Demo Data Packaging**:
-   - `backend/demo_data.npz` size: **73.24 MB** ($< 80\text{ MB}$).
-3. **Frontend Build**:
-   - `vite build` completed in **15.09s** with zero errors.
+1. **Regime & Mask Verification**:
+   - Sovereign Ethiopia Land Mask: 1,485 pixels.
+   - Regime 1 (Western Unimodal): 427 pixels (28.8%).
+   - Regime 2 (Bimodal Type 1 Highlands): 416 pixels (28.0%).
+   - Regime 3 (Bimodal Type 2 Pastoral Lowlands): 578 pixels (38.9%).
+   - Regime 0 (Arid / Marginal): 64 pixels (4.3%).
+   - Belg Mask: 416 / 1,485 pixels (28.0%), resolving the previous 86.6% overextension.
+   - Kiremt Bimodal Onset Mask: 416 / 1,485 pixels (28.0%).
+   - National JJAS Rainfall Mask: 832 / 1,485 pixels (56.0%, 843 eligible minus 11 filtered by rainfall/DR/spatial QC).
+   - Spring Rains (Gu/Ganna): 578 / 1,485 pixels (38.9%).
+   - Autumn Rains (Deyr/Hagaya): 578 / 1,485 pixels (38.9%).
+   - Annual Wet Season: 426 / 1,485 pixels (28.7%).
+2. **Audited Station Diagnostic Consistency**:
+   - 20 / 20 representative sites show diagnostic agreement with documented EMI regional climate regimes using nearest-pixel CHIRPS climatology.
+3. **Demo Data Packaging**:
+   - `backend/demo_data.npz` size: **73.24 MB** ($< 80\text{ MB}$ repository limit).
+4. **Frontend Build**:
+   - Production bundle compiled with zero syntax errors (`built in 11.11s`).

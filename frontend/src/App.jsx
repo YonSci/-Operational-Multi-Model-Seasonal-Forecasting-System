@@ -43,8 +43,8 @@ const SEASONS = {
     { id:'kiremt', label:'Kiremt (JJAS) - Highlands Main Rains',        init:'0501', initLabel:'May 01' },
     { id:'belg',   label:'Belg (FMAM) - Highlands Early Rains',         init:'0101', initLabel:'Jan 01' },
     { id:'annual', label:'Annual Wet Season (Western Unimodal)',        init:'0501', initLabel:'May 01' },
-    { id:'gu',     label:'Gu (MAM) - Pastoral Spring Rains',            init:'0101', initLabel:'Jan 01' },
-    { id:'deyr',   label:'Deyr (SON-OND) - Pastoral Autumn Rains',      init:'0901', initLabel:'Sep 01' },
+    { id:'gu',     label:'Spring rains — Gu/Ganna (MAM)',               init:'0101', initLabel:'Jan 01' },
+    { id:'deyr',   label:'Autumn rains — Deyr/Hagaya (SON–OND)',        init:'0901', initLabel:'Sep 01' },
   ],
 }
 const INIT_LABELS = Object.fromEntries(

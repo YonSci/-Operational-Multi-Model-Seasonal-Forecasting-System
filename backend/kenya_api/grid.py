@@ -50,7 +50,7 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
         0: "Arid / Marginal (No Reliable Rainy Season)",
         1: "Western Unimodal (Single Extended Season)",
         2: "Bimodal Type 1 (Belg & Kiremt Highlands)",
-        3: "Bimodal Type 2 (Gu & Deyr Pastoral Lowlands)",
+        3: "Bimodal Type 2 (Gu/Ganna & Deyr/Hagaya Pastoral Lowlands)",
     }
     reg_counts = {1: 0, 2: 0, 3: 0, 0: 0}
 

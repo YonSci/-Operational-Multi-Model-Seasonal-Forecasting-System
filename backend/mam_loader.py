@@ -1207,23 +1207,23 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
         0: "Arid / Marginal (No Reliable Rainy Season)",
         1: "Western Unimodal (Single Extended Annual Season)",
         2: "Bimodal Type 1 (Belg Early Rains & Kiremt Main Rains)",
-        3: "Bimodal Type 2 (Gu Spring Rains & Deyr Autumn Rains)",
+        3: "Bimodal Type 2 (Gu/Ganna Spring Rains & Deyr/Hagaya Autumn Rains)",
     }
     reg_map = s.get("regime_map")
 
     def _get_regime_guidance(r_id, s_req):
         if r_id == 0:
-            return "Arid / Marginal Zone: Climatologically insufficient rainfall (<200–300 mm/year) to sustain a reliable onset/cessation cycle (Dunning et al. 2016). Metrics are not operationally reliable."
+            return "Arid / Marginal: Project-defined rainfall screening indicates insufficient and/or unreliable seasonal rainfall for robust onset/cessation estimation. Low-rainfall regions are excluded because harmonic seasonality measures may become unstable or misleading."
         if r_id == 1 and s_req in ["belg", "fmam"]:
             return "Western Unimodal Zone: Climatologically an extended Annual Wet Season from spring to autumn (Mar/Apr to Oct/Nov), not a separate Belg early onset. View under Annual Wet Season product."
         if r_id == 1 and s_req in ["kiremt", "jjas"]:
             return "Western Unimodal Zone: Single continuous wet season; onset occurs earlier in spring (May) and extends to Oct/Nov, rather than a second distinct Kiremt onset."
         if r_id == 2 and s_req in ["gu", "deyr", "bega"]:
-            return "Bimodal Highlands Zone (Type 1): The two rainy seasons are Belg (FMAM) and Kiremt (JJAS). Pastoral Gu and Deyr seasons do not apply here."
+            return "Bimodal Highlands Zone (Type 1): The two rainy seasons are Belg (FMAM) and Kiremt (JJAS). Pastoral Gu/Ganna and Deyr/Hagaya seasons do not apply here."
         if r_id == 3 and s_req in ["belg", "fmam"]:
-            return "Bimodal Pastoral Zone (Type 2): The spring rainy season is Gu (MAM), followed by autumn Deyr (SON/OND). Belg and Kiremt do not occur here."
+            return "Bimodal Pastoral Zone (Type 2): The spring rainy season is Gu/Ganna (MAM), followed by autumn Deyr/Hagaya (SON/OND). Belg and Kiremt do not occur here."
         if r_id == 3 and s_req in ["kiremt", "jjas"]:
-            return "Bimodal Pastoral Zone (Type 2): Southern/southeastern lowlands experience a dry summer during Kiremt (JJAS). Rainy seasons are Gu (MAM) and Deyr (SON/OND)."
+            return "Bimodal Pastoral Zone (Type 2): Southern/southeastern lowlands experience a dry summer during Kiremt (JJAS). Rainy seasons are Gu/Ganna (MAM) and Deyr/Hagaya (SON/OND)."
         return None
 
     bega_md       = s["MODELS"].get("ECMWF SEAS5 (Bega)")

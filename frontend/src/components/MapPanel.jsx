@@ -471,21 +471,21 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
   // 2. Climatological envelope advisory if outside seasonal zone or in Arid Regime
   if (props.regime_id === 0) {
     lines.push('🏜️ Arid / Marginal Non-Seasonal Zone')
-    lines.push('ℹ️ Annual rainfall <200–300 mm; no reliable rainy season detected (Dunning / EMI).')
+    lines.push('ℹ️ Project-defined rainfall screening indicates insufficient and/or unreliable seasonal rainfall for robust onset/cessation estimation. Low-rainfall regions are excluded because harmonic seasonality measures may become unstable or misleading.')
   } else if (props.in_season_mask === false) {
     if (activeSeason === 'fmam' || activeSeason === 'belg') {
       lines.push('⚠️ Outside Belg Highland Domain')
       lines.push('ℹ️ Belg rains are confined to Central/Eastern Highlands (Regime 2).')
-      lines.push('   Western Ethiopia is Unimodal; Southern Ethiopia receives Gu (MAM).')
+      lines.push('   Western Ethiopia is Unimodal; Southern Ethiopia receives Gu/Ganna (MAM).')
     } else if (activeSeason === 'gu') {
-      lines.push('⚠️ Outside Gu Pastoral Domain')
-      lines.push('ℹ️ Gu spring rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
+      lines.push('⚠️ Outside Gu/Ganna Pastoral Domain')
+      lines.push('ℹ️ Gu/Ganna spring rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
     } else if (activeSeason === 'annual') {
       lines.push('⚠️ Outside Western Unimodal Domain')
       lines.push('ℹ️ Extended Annual Wet Season is confined to Western Ethiopia (Regime 1).')
     } else if (activeSeason === 'bega' || activeSeason === 'deyr' || activeSeason === 'ondj') {
-      lines.push('⚠️ Outside Deyr Pastoral Domain')
-      lines.push('ℹ️ Deyr rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
+      lines.push('⚠️ Outside Deyr/Hagaya Pastoral Domain')
+      lines.push('ℹ️ Deyr/Hagaya autumn rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
       lines.push('   Northern & Central Highlands are in dry Bega harvest season.')
     } else if (activeSeason === 'kiremt' || activeSeason === 'jjas') {
       lines.push('⚠️ Outside Kiremt Highland Domain')
