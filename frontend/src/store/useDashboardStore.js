@@ -46,9 +46,9 @@ const useDashboardStore = create((set, get) => ({
   // -- OP year -------------------------------------------------------------
   opYear: 2026,
 
-  // -- Seasonal Mask toggle -------------------------------------------------
-  seasonalMaskOnly: false,
-  setSeasonalMaskOnly: (val) => set((s) => ({ seasonalMaskOnly: typeof val === 'function' ? val(s.seasonalMaskOnly) : val })),
+  // -- Seasonal Mask enforcement (All-Ethiopia unmasked view removed for scientific validity)
+  seasonalMaskOnly: true,
+  setSeasonalMaskOnly: () => set({ seasonalMaskOnly: true }),
 }))
 
 export default useDashboardStore

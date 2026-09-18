@@ -428,7 +428,7 @@ function v2rgb(v,scale){
   return rgbs[rgbs.length-1]
 }
 
-function buildRaster(gridData, scale, seasonalMaskOnly = false) {
+function buildRaster(gridData, scale, seasonalMaskOnly = true) {
   if (!gridData?.features?.length) return null
   const latSet=new Set(),lonSet=new Set(),raw={},inMask={}
   for(const f of gridData.features){
@@ -1324,35 +1324,33 @@ export default function MapPanel({
         )}
         </div>
 
-        {/* Seasonal Area Toggle Button */}
-        <button
-          onClick={() => setSeasonalMaskOnly(v => !v)}
-          title={seasonalMaskOnly ? "Showing primary seasonal rainfall domain only. Click to show all domain." : "Showing all domain. Click to filter to primary seasonal rainfall domain only."}
+        {/* Permanent Seasonal Domain Badge (All-Ethiopia unmasked view removed for scientific validity) */}
+        <div
+          title="Operationally constrained to the climatologically valid seasonal rainfall receiving domain."
           style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-            borderRadius: 8, fontSize: 10, cursor: 'pointer', backdropFilter: 'blur(4px)',
-            background: seasonalMaskOnly ? (darkMode ? 'rgba(16, 185, 129, 0.25)' : '#d1fae5') : 'var(--bg-elevated)',
-            border: '1px solid ' + (seasonalMaskOnly ? '#10b981' : 'var(--border-primary)'),
-            color: seasonalMaskOnly ? (darkMode ? '#34d399' : '#047857') : 'var(--text-secondary)',
-            fontWeight: seasonalMaskOnly ? 700 : 500,
-            boxShadow: seasonalMaskOnly ? '0 0 10px rgba(16, 185, 129, 0.3)' : 'none',
-            transition: 'all 0.15s ease'
+            borderRadius: 8, fontSize: 10, backdropFilter: 'blur(4px)',
+            background: darkMode ? 'rgba(16, 185, 129, 0.2)' : '#d1fae5',
+            border: '1px solid #10b981',
+            color: darkMode ? '#34d399' : '#047857',
+            fontWeight: 700,
+            boxShadow: '0 0 10px rgba(16, 185, 129, 0.2)'
           }}
         >
-          <span style={{fontSize: 10}}>{seasonalMaskOnly ? '🎯' : '🌐'}</span>
-          <span>{seasonalMaskOnly ? 'Seasonal Domain Only' : (country === 'ethiopia' ? 'All Ethiopia' : 'All Domain')}</span>
-        </button>
+          <span style={{fontSize: 10}}>🎯</span>
+          <span>Climatological Seasonal Domain</span>
+        </div>
 
         {/* Active pixel metric pill */}
         {gridData?.meta?.n_seasonal_pixels != null && (
           <div style={{
             fontSize: 9, padding: '4px 8px', borderRadius: 8, backdropFilter: 'blur(4px)',
             background: 'var(--bg-elevated)', border: brd,
-            color: seasonalMaskOnly ? (darkMode ? '#34d399' : '#059669') : 'var(--text-faint)',
+            color: darkMode ? '#34d399' : '#059669',
             display: 'flex', alignItems: 'center', gap: 4
           }}>
             <span style={{fontWeight: 600}}>
-              {seasonalMaskOnly ? `${gridData.meta.n_seasonal_pixels} / ${gridData.meta.n_pixels} active (${gridData.meta.seasonal_pct}%)` : `${gridData.meta.n_pixels} px`}
+              {gridData.meta.n_seasonal_pixels} / {gridData.meta.n_pixels} active ({gridData.meta.seasonal_pct}%)
             </span>
           </div>
         )}

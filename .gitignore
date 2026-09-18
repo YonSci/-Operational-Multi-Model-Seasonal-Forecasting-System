@@ -16,7 +16,10 @@ __pycache__/
 
 # Data (large NetCDF, Zarr, and pipeline outputs)
 !backend/demo_data.npz
-outputs/
+!outputs/
+outputs/*
+!outputs/shapefiles/
+!outputs/shapefiles/**
 outputs_*/
 CHIRPS/
 *.nc
@@ -38,10 +41,14 @@ Thumbs.db
 
 # Scratch & temporary artifacts
 scratch/
+files/mnt/
 *.png
 !backend/ilri_logo.png
 !ILRI_logo.png
 !docs/scientific_masking/figures/*.png
+!frontend/public/figures/*.png
+!frontend/public/shapefiles/**
+!outputs/shapefiles/**
 
 # Docker build artifacts
 docker/.env

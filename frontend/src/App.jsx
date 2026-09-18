@@ -1695,10 +1695,11 @@ function AboutTab() {
 
   const SUB_TABS = [
     { id: 'blueprint',    label: '🏛️ Scientific Blueprint & Regimes' },
+    { id: 'maps',         label: '🗺️ Regimes & Seasonal Maps (Images & GIS)' },
     { id: 'algorithm',    label: '⚙️ Detection Algorithm (8 Steps)' },
     { id: 'stations',     label: '📍 20-Site Diagnostic Agreement' },
     { id: 'gauges',       label: '🛡️ Risk Gauges & Models' },
-    { id: 'architecture', label: '💻 System Architecture & API' },
+    { id: 'architecture', label: '💻 System Architecture & General Workflow' },
   ]
 
   return (
@@ -1721,6 +1722,23 @@ function AboutTab() {
         </div>
         <div style={{fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5}}>
           An objective, peer-reviewed meteorological framework unifying Fourier harmonic analysis (Dunning et al. 2016), local peak-timing physics, and Ethiopian Meteorological Institute (EMI) regional rainfall climatology across Kenya and Ethiopia.
+        </div>
+        <div style={{
+          marginTop: 4,
+          padding: '8px 12px',
+          borderRadius: 8,
+          background: 'rgba(239, 68, 68, 0.12)',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 10,
+          color: '#fca5a5',
+          fontWeight: 600,
+          lineHeight: 1.5
+        }}>
+          <span style={{fontSize: 14}}>⚠️</span>
+          <span><strong>CRITICAL REGIONAL SPECIFICATION:</strong> The Four Objective Climate Regimes (Regimes 0, 1, 2, 3) apply <strong>STRICTLY to Ethiopia</strong> to resolve its micro-climates, complex orography, and asynchronous monsoon vs pastoral cycles. <strong>Kenya</strong> operates under its standard East African Equatorial dual regime (MAM Long Rains and OND Short Rains).</span>
         </div>
       </div>
 
@@ -1865,6 +1883,162 @@ function AboutTab() {
         </div>
       )}
 
+      {/* SUB-TAB: MAPS & GIS SHAPEFILES */}
+      {subTab === 'maps' && (
+        <div className="w-full flex flex-col gap-5">
+          {/* Top Info Banner & Download Shapefiles */}
+          <div style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 10,
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12
+          }}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10}}>
+              <div>
+                <div style={{fontSize:13, fontWeight:800, color:'var(--text-primary)', marginBottom:4}}>
+                  🗺️ Climatological Regimes &amp; Seasonal Domain Shapefiles (Ethiopia Only)
+                </div>
+                <div style={{fontSize:10, color:'var(--text-secondary)', lineHeight:1.5, maxWidth:720}}>
+                  Standard ESRI Shapefiles (.shp, .shx, .dbf, .prj) and GeoJSON (.geojson) files in <strong>WGS 84 (EPSG:4326)</strong> for GIS analysis in QGIS, ArcGIS, Python (GeoPandas), and R.
+                  These boundary datasets define the sovereign meteorological domains used in operational onset/cessation tracking.
+                </div>
+              </div>
+              <a
+                href="/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip"
+                download="ethiopia_climate_regimes_and_masks_shp.zip"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  background: 'var(--accent-blue)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: 11,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>📦</span>
+                <span>Download Shapefiles Package (.zip, 20 KB)</span>
+              </a>
+            </div>
+
+            {/* Shapefiles Inventory Table */}
+            <div style={{overflowX:'auto', borderTop:'1px solid var(--border-primary)', paddingTop:10}}>
+              <table style={{width:'100%', borderCollapse:'collapse', fontSize:9}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border-primary)', background:'var(--bg-surface)'}}>
+                    {['Dataset Layer', 'Shapefile (.shp)', 'GeoJSON', 'Pixels', 'Land %', 'Climatological Description'].map(h=>(
+                      <th key={h} style={{padding:'5px 8px', textAlign:'left', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase', fontSize:8}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['Four Objective Regimes', 'ethiopia_four_climate_regimes.shp', 'ethiopia_four_climate_regimes.geojson', '1,485', '100%', 'Complete 4-class partition: Regime 0, 1, 2, 3 (ETHIOPIA ONLY)'],
+                    ['Kiremt / Main Rains', 'mask_kiremt_jjas.shp', 'mask_kiremt_jjas.geojson', '832', '56.0%', 'National summer monsoon domain (Regime 1 + Regime 2; P_JJAS ≥ 120 mm)'],
+                    ['Belg Early Rains', 'mask_belg_early_rains.shp', 'mask_belg_early_rains.geojson', '416', '28.0%', 'Highlands Type-1 spring rains (Regime 2 only; P_FMAM ≥ 80 mm)'],
+                    ['Deyr / Short Rains & Gu', 'mask_deyr_autumn_rains.shp', 'mask_deyr_autumn_rains.geojson', '578', '38.9%', 'Pastoral lowlands biannual domain (Regime 3 only; Somali, Borana, Guji)'],
+                    ['Western Extended Season', 'mask_western_annual.shp', 'mask_western_annual.geojson', '426', '28.7%', 'Western unimodal prolonged season (Regime 1 only; Gambella, Assosa, Jimma)'],
+                  ].map(([title, shp, geojson, px, pct, desc], i) => (
+                    <tr key={shp} style={{borderBottom:'1px solid var(--border-primary)', background: i%2===0?'transparent':'var(--bg-elevated)'}}>
+                      <td style={{padding:'5px 8px', color:'var(--text-primary)', fontWeight:700}}>{title}</td>
+                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>{shp}</td>
+                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'#34d399'}}>{geojson}</td>
+                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'var(--text-primary)'}}>{px}</td>
+                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'var(--text-secondary)'}}>{pct}</td>
+                      <td style={{padding:'5px 8px', color:'var(--text-secondary)'}}>{desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* High-Resolution Maps Grid */}
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(340px, 1fr))', gap:16}}>
+            {/* Map 1: Four Regimes */}
+            <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
+                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🗺️ The Four Objective Climate Regimes</span>
+                <span style={{fontSize:9, background:'rgba(239, 68, 68, 0.15)', color:'#f87171', border:'1px solid rgba(239, 68, 68, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>ETHIOPIA ONLY</span>
+              </div>
+              <img src="/figures/ethiopia_four_climate_regimes_map.png" alt="Four Objective Climate Regimes of Ethiopia" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Classification Basis:</strong> Dunning Fourier decomposition (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_H = C_2 / C_1</span>) + EMI local peak-timing rules.
+                Partitions Ethiopia into 4 disjoint meteorological domains: Regime 1 (Western Unimodal, 28.7%), Regime 2 (Bimodal Type-1 Highlands, 28.0%), Regime 3 (Bimodal Type-2 Lowlands, 38.9%), and Regime 0 (Arid/Marginal Afar, 4.4%).
+              </div>
+            </div>
+
+            {/* Diagram: Workflow & Architecture */}
+            <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
+                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>⚙️ Scientific Architecture &amp; Operational Workflow</span>
+                <span style={{fontSize:9, background:'rgba(37, 99, 235, 0.15)', color:'#60a5fa', border:'1px solid rgba(37, 99, 235, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>END-TO-END PIPELINE</span>
+              </div>
+              <img src="/figures/scientific_architecture_workflow.png" alt="Scientific Architecture & Workflow Diagram" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Five-Stage Architecture:</strong> Stage 1 (Data Ingestion) &rarr; Stage 2 (Fourier Diagnostics) &rarr; Stage 3 (Regime Partition — Ethiopia Only) &rarr; Stage 4 (Dynamic Domain Masking) &rarr; Stage 5 (Onset/Cessation Anomalous Accumulation Calculation &amp; GIS Products).
+              </div>
+            </div>
+
+            {/* Map 2: Kiremt JJAS */}
+            <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
+                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🌧️ Kiremt / Main Rains Operational Domain (JJAS)</span>
+                <span style={{fontSize:9, background:'rgba(2, 132, 199, 0.15)', color:'#38bdf8', border:'1px solid rgba(2, 132, 199, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>832 PIXELS (56.0%)</span>
+              </div>
+              <img src="/figures/mask_kiremt_jjas.png" alt="Kiremt Main Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Summer Monsoon Footprint:</strong> Encompasses the Highlands (Regime 2) and Western Unimodal belt (Regime 1). Screened by <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>P_JJAS &ge; 120 mm</span> and <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_JJAS &ge; 20%</span>. Eliminates southern/southeastern pastoral lowlands where summer is a cold dry pause.
+              </div>
+            </div>
+
+            {/* Map 3: Belg Early Rains */}
+            <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
+                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🌱 Belg Early Rains Operational Domain (FMAM)</span>
+                <span style={{fontSize:9, background:'rgba(5, 150, 105, 0.15)', color:'#34d399', border:'1px solid rgba(5, 150, 105, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>416 PIXELS (28.0%)</span>
+              </div>
+              <img src="/figures/mask_belg_early_rains.png" alt="Belg Early Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Central &amp; Eastern Highlands Belg:</strong> Strictly limited to Regime 2 (Type-1 Highlands) where spring rains represent a discrete agricultural cycle followed by a June pause. Western unimodal zone is excluded to avoid artificial cessation dates in June.
+              </div>
+            </div>
+
+            {/* Map 4: Deyr & Gu Pastoral Lowlands */}
+            <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
+                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🐪 Deyr / Short Rains &amp; Gu Domain (SON–OND &amp; MAM)</span>
+                <span style={{fontSize:9, background:'rgba(217, 119, 6, 0.15)', color:'#fbbf24', border:'1px solid rgba(217, 119, 6, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>578 PIXELS (38.9%)</span>
+              </div>
+              <img src="/figures/mask_deyr_short_rains.png" alt="Deyr Autumn and Gu Spring Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Bimodal Pastoral Rangelands:</strong> Somali Region, Borana, Guji, and Bale lowlands. Driven by the equatorial biannual cycle (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#fbbf24'}}>r_H &ge; 1.0</span>) with major Gu/Ganna rains (MAM) and secondary Deyr/Hagaya rains (SON–OND).
+              </div>
+            </div>
+
+            {/* Map 5: Western Extended Season */}
+            <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+              <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
+                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🌾 Western Ethiopia Extended Annual Wet Season</span>
+                <span style={{fontSize:9, background:'rgba(99, 102, 241, 0.15)', color:'#a5b4fc', border:'1px solid rgba(99, 102, 241, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>426 PIXELS (28.7%)</span>
+              </div>
+              <img src="/figures/mask_western_extended_season.png" alt="Western Ethiopia Extended Annual Wet Season Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Single Prolonged Season:</strong> Gambella, Benishangul-Gumuz (Assosa), Jimma, Bedele, Gondar/Bahir Dar western slopes. Rains begin in Feb/Mar, intensify continuously through summer without a June dry break, and end in Oct/Nov.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SUB-TAB 2: ONSET DETECTION ALGORITHM */}
       {subTab === 'algorithm' && (
         <div className="w-full max-w-4xl">
@@ -1949,44 +2123,87 @@ function AboutTab() {
         </div>
       )}
 
-      {/* SUB-TAB 5: ARCHITECTURE & API */}
+      {/* SUB-TAB 5: ARCHITECTURE, WORKFLOW & API */}
       {subTab === 'architecture' && (
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="w-full lg:w-[50%] min-w-0">
-            <S title="Technical Architecture">
-              <KV label="Frontend" value="React 18 + Vite + Tailwind CSS + MapLibre GL JS"/>
-              <KV label="Data Visualization" value="Recharts custom SVG plume charts + Taylor diagrams"/>
-              <KV label="Backend Engine" value="FastAPI + Uvicorn + NumPy + Xarray + SciPy"/>
-              <KV label="Raster Delivery" value="Pre-computed GeoJSON Grid + Cached demo_data.npz (73.2 MB)"/>
-              <KV label="Boundary Assets" value="Sovereign borders (GeoJSON) from UN-OCHA / GADM"/>
-              <KV label="Hosting / Runtime" value="Uvicorn ASGI port 8765, local/cloud scalable"/>
-            </S>
-
-            <S title="REST API Endpoints">
-              <KV label="GET /grid" value="Fetch spatial GeoJSON grid filtered by variable, season &amp; regime mask" mono/>
-              <KV label="GET /pixel" value="Extract ensemble plumes, A(D) curves &amp; statistics for clicked coordinate" mono/>
-              <KV label="GET /chirps_historical" value="Extract 33-year CHIRPS observed onset/cessation time series" mono/>
-              <KV label="GET /validation" value="Fetch C3S hindcast skill validation metrics (Hit-Rate, RPSS)" mono/>
-              <KV label="GET /health" value="System status, active models loaded, and memory envelope" mono/>
-            </S>
-          </div>
-
-          <div className="w-full lg:w-[50%] min-w-0">
-            <S title="Institutional Leadership & Contacts">
-              <KV label="Project Lead" value="Dr. Teferi Demissie (ILRI)  |  t.demissie@cgiar.org" mono/>
-              <KV label="Technical Lead" value="Yonas Mersha (ILRI)  |  y.mersha@cgiar.org" mono/>
-              <KV label="Host Institution" value="International Livestock Research Institute (ILRI), Addis Ababa, Ethiopia"/>
-              <KV label="Partner Agencies" value="ICPAC, Ethiopian Meteorological Institute (EMI), Kenya Meteorological Department (KMD)"/>
-            </S>
-
-            <S title="Citation & Usage Guidelines">
-              <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:9, lineHeight:1.6, color:'var(--text-secondary)'}}>
-                <div style={{fontWeight:700, color:'var(--text-primary)', marginBottom:4}}>Recommended Citation:</div>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>
-                  Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v3.1.0). ILRI / ICPAC.
+        <div className="flex flex-col gap-6">
+          {/* General Workflow & Scientific Architecture Details */}
+          <div className="flex flex-col lg:flex-row gap-6">
+            <div className="w-full lg:w-[50%] min-w-0 flex flex-col gap-4">
+              <S title="End-to-End General Workflow">
+                <div style={{background:'var(--bg-elevated)', padding:'12px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:9.5, lineHeight:1.6, color:'var(--text-secondary)', display:'flex', flexDirection:'column', gap:8}}>
+                  <div>
+                    <strong style={{color:'var(--accent-blue)'}}>1. Daily Climatology Ingestion:</strong>
+                    <div>33-year daily CHIRPS rainfall records (1993–2025) sampled at 0.25° resolution across Ethiopia (1,485 sovereign land pixels) and Kenya (842 pixels).</div>
+                  </div>
+                  <div>
+                    <strong style={{color:'#60a5fa'}}>2. Fourier Harmonic Decomposition (Dunning et al. 2016):</strong>
+                    <div>Calculates annual fundamental C_1 (365d) and semi-annual harmonic C_2 (182d). Evaluates harmonic ratio <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>r_H = C_2 / C_1</span> (cutoff = 1.0).</div>
+                  </div>
+                  <div>
+                    <strong style={{color:'#34d399'}}>3. Climatological Regime Partition (ETHIOPIA ONLY):</strong>
+                    <div>Combines harmonic ratio with EMI peak-timing criteria (April vs August vs October) to assign every grid cell to one of the 4 disjoint Ethiopian regimes (Regimes 0, 1, 2, 3).</div>
+                  </div>
+                  <div>
+                    <strong style={{color:'#fbbf24'}}>4. Dynamic Operational Domain Masking:</strong>
+                    <div>Applies agro-climatic thresholds (P_season &ge; 80–120 mm, Seasonality Ratio &ge; 20%) to create active masks. Ensures metrics are never displayed outside climatologically valid zones.</div>
+                  </div>
+                  <div>
+                    <strong style={{color:'#f472b6'}}>5. Anomalous Accumulation Calculation &amp; Products:</strong>
+                    <div>Evaluates Dunning cumulative anomaly curve A(D) for individual years and ensemble hindcasts. Detects onset, cessation, and LGP. Outputs web rasters and GIS Shapefiles.</div>
+                  </div>
                 </div>
-              </div>
-            </S>
+              </S>
+
+              <S title="Removal of 'All Ethiopia' Unmasked View">
+                <div style={{background:'rgba(239, 68, 68, 0.08)', padding:'10px 14px', borderRadius:8, border:'1px solid rgba(239, 68, 68, 0.3)', fontSize:9.5, lineHeight:1.6, color:'var(--text-secondary)'}}>
+                  <strong style={{color:'#f87171'}}>Scientific Rationale for Enforced Masking:</strong>
+                  <div style={{marginTop:4}}>
+                    In previous prototypes, users could toggle an &quot;All Ethiopia&quot; unmasked raster view. However, peer review confirmed that running onset/cessation algorithms across regions where the season does not physically occur generates spurious artifacts:
+                  </div>
+                  <ul style={{marginTop:4, paddingLeft:14, listStyleType:'disc'}}>
+                    <li>Calculating <em>Belg</em> onset in Western Ethiopia detects the start of a prolonged 8-month season, not a discrete Belg agricultural window.</li>
+                    <li>Calculating <em>Kiremt</em> in southern/southeastern pastoral lowlands searches for monsoon rain during their coldest, driest months, returning random noise.</li>
+                  </ul>
+                  <div style={{marginTop:4, fontWeight:600, color:'var(--text-primary)'}}>
+                    Therefore, the unmasked option was permanently eradicated from the dashboard. The system strictly and permanently restricts spatial rendering to validated climatological footprints.
+                  </div>
+                </div>
+              </S>
+            </div>
+
+            <div className="w-full lg:w-[50%] min-w-0 flex flex-col gap-4">
+              <S title="Technical Stack & Architecture">
+                <KV label="Frontend Engine" value="React 18 + Vite + Tailwind CSS + MapLibre GL JS"/>
+                <KV label="Data Visualization" value="Recharts custom SVG plume charts + Taylor diagrams"/>
+                <KV label="Backend Engine" value="FastAPI + Uvicorn + NumPy + Xarray + SciPy"/>
+                <KV label="Raster Delivery" value="Pre-computed GeoJSON Grid + Cached demo_data.npz (73.2 MB)"/>
+                <KV label="GIS Products" value="ESRI Shapefiles (.shp, .shx, .dbf, .prj) + GeoJSON (WGS 84 EPSG:4326)"/>
+                <KV label="Hosting / Runtime" value="Uvicorn ASGI port 8765, local/cloud scalable"/>
+              </S>
+
+              <S title="REST API Endpoints">
+                <KV label="GET /grid" value="Fetch spatial GeoJSON grid filtered by variable, season &amp; regime mask" mono/>
+                <KV label="GET /pixel" value="Extract ensemble plumes, A(D) curves &amp; statistics for clicked coordinate" mono/>
+                <KV label="GET /chirps_historical" value="Extract 33-year CHIRPS observed onset/cessation time series" mono/>
+                <KV label="GET /validation" value="Fetch C3S hindcast skill validation metrics (Hit-Rate, RPSS)" mono/>
+                <KV label="GET /health" value="System status, active models loaded, and memory envelope" mono/>
+              </S>
+
+              <S title="Institutional Leadership & Contacts">
+                <KV label="Project Lead" value="Dr. Teferi Demissie (ILRI)  |  t.demissie@cgiar.org" mono/>
+                <KV label="Technical Lead" value="Yonas Mersha (ILRI)  |  y.mersha@cgiar.org" mono/>
+                <KV label="Host Institution" value="International Livestock Research Institute (ILRI), Addis Ababa, Ethiopia"/>
+                <KV label="Partner Agencies" value="ICPAC, Ethiopian Meteorological Institute (EMI), Kenya Meteorological Department (KMD)"/>
+              </S>
+
+              <S title="Recommended Citation">
+                <div style={{background:'var(--bg-elevated)', padding:'8px 12px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:9, lineHeight:1.5, color:'var(--text-secondary)'}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>
+                    Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v3.1.0). ILRI / ICPAC.
+                  </div>
+                </div>
+              </S>
+            </div>
           </div>
         </div>
       )}
