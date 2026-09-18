@@ -860,10 +860,24 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
 
   return (
-    <div className="flex flex-col lg:flex-row h-full gap-2 overflow-y-auto lg:overflow-hidden p-0.5">
-      <div className="flex flex-col gap-2 min-w-0 flex-1">
-        <Card title={'Ensemble Precipitation Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
-              className="flex-1 min-h-[280px]">
+    <div className="flex flex-col h-full gap-2 overflow-y-auto lg:overflow-hidden p-0.5">
+      {pixelData?.is_in_seasonal_zone === false && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+          borderRadius: 8, fontSize: 10, background: 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid rgba(245, 158, 11, 0.4)', color: '#fbbf24',
+          flexShrink: 0
+        }}>
+          <span style={{fontSize: 13}}>⚠️</span>
+          <span>
+            <strong>Climatological Notice:</strong> This site ({Number(pixelData.glat).toFixed(2)}°N, {Number(pixelData.glon).toFixed(2)}°E) is outside the primary rainfall zone for {seasonCode} (season depth, seasonality ratio, or detectability threshold not met).
+          </span>
+        </div>
+      )}
+      <div className="flex flex-col lg:flex-row flex-1 gap-2 min-h-0 overflow-y-auto lg:overflow-hidden">
+        <div className="flex flex-col gap-2 min-w-0 flex-1">
+          <Card title={'Ensemble Precipitation Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
+                className="flex-1 min-h-[280px]">
           <div className="w-full h-[260px] sm:h-[280px] lg:h-full min-h-[240px] p-2">
             <PrecipPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason}/>
           </div>
@@ -897,6 +911,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
             </div>
           </div>
         </Card>
+      </div>
       </div>
     </div>
   )

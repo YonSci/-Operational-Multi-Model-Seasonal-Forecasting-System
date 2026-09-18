@@ -45,6 +45,10 @@ const useDashboardStore = create((set, get) => ({
 
   // -- OP year -------------------------------------------------------------
   opYear: 2026,
+
+  // -- Seasonal Mask toggle -------------------------------------------------
+  seasonalMaskOnly: false,
+  setSeasonalMaskOnly: (val) => set((s) => ({ seasonalMaskOnly: typeof val === 'function' ? val(s.seasonalMaskOnly) : val })),
 }))
 
 export default useDashboardStore

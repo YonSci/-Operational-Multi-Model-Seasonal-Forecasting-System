@@ -889,8 +889,13 @@ def _load_demo_npz():
             target_lon=chirps_bega["target_lon"] if chirps_bega else None,
         )
 
-    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Bega: {bool(chirps_bega)}).")
-    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega}
+    masks = {}
+    for mkey in ["mask_kiremt", "mask_belg", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
+        if mkey in data:
+            masks[mkey] = data[mkey].astype(bool)
+
+    print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}).")
+    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks}
 
 # ── Main load ──────────────────────────────────────────────────────────────
 def load(force=False):
@@ -946,7 +951,20 @@ def load(force=False):
         if not MODELS:
             raise RuntimeError("No models loaded from NetCDF files.")
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
-        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega}
+
+        masks = {}
+        masks_path = os.path.join(_REPO_ROOT, "outputs", "masks", "seasonal_masks.npz")
+        if os.path.exists(masks_path):
+            m_data = np.load(masks_path)
+            for mkey in m_data.files:
+                masks[mkey] = m_data[mkey].astype(bool)
+        elif os.path.exists(os.path.join(_REPO_ROOT, "backend", "demo_data.npz")):
+            m_data = np.load(os.path.join(_REPO_ROOT, "backend", "demo_data.npz"))
+            for mkey in ["mask_kiremt", "mask_belg", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
+                if mkey in m_data:
+                    masks[mkey] = m_data[mkey].astype(bool)
+
+        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks}
         _loaded = True
     except Exception as exc:
         print(f"[data_loader] Raw NetCDF data not available ({type(exc).__name__}: {exc})")
@@ -1215,9 +1233,13 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             models_dict["ECMWF SEAS5"] = bega_stats
             models_dict["ECMWF SEAS5 (Bega)"] = bega_stats
 
+        m_bega = s.get("seasonal_masks", {}).get("mask_bega")
+        in_bega_zone = bool(m_bega[pi, pj]) if (m_bega is not None and pi < m_bega.shape[0] and pj < m_bega.shape[1]) else True
+
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
             season="bega",
+            is_in_seasonal_zone=in_bega_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
             models=models_dict,
@@ -1261,9 +1283,13 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             models_dict["ECMWF SEAS5"] = fmam_stats
             models_dict["ECMWF SEAS5 (FMAM)"] = fmam_stats
 
+        m_belg = s.get("seasonal_masks", {}).get("mask_belg")
+        in_belg_zone = bool(m_belg[pi, pj]) if (m_belg is not None and pi < m_belg.shape[0] and pj < m_belg.shape[1]) else True
+
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
             season="fmam",
+            is_in_seasonal_zone=in_belg_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
             models=models_dict,
@@ -1307,9 +1333,13 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             models_dict["ECMWF SEAS5"] = kiremt_stats
             models_dict["ECMWF SEAS5 (Kiremt)"] = kiremt_stats
 
+        m_kir = s.get("seasonal_masks", {}).get("mask_kiremt")
+        in_kir_zone = bool(m_kir[pi, pj]) if (m_kir is not None and pi < m_kir.shape[0] and pj < m_kir.shape[1]) else True
+
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
             season="kiremt",
+            is_in_seasonal_zone=in_kir_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
             models=models_dict,
@@ -1367,9 +1397,14 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     else:
         models_dict = {n: _model_pixel_stats(n, pi, pj, year=year) for n in s["MODELS"] if "(Sep)" not in n and "(Kiremt)" not in n and "(FMAM)" not in n}
 
+    s_masks = s.get("seasonal_masks", {})
+    m_active = s_masks.get("mask_kenya_ond") if is_short else s_masks.get("mask_kenya_mam")
+    in_kenya_zone = bool(m_active[pi, pj]) if (m_active is not None and pi < m_active.shape[0] and pj < m_active.shape[1]) else True
+
     return dict(
         pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
         season=season,
+        is_in_seasonal_zone=in_kenya_zone,
         win_doy_start=win_start,
         win_doy_end=win_end,
         models=models_dict,
@@ -1602,12 +1637,34 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
             out = np.where(lm, np.sum(~np.isnan(cal_obs), axis=0) / max(n_cal, 1), np.nan).astype(np.float32)
         units = "fraction (0–1)"
 
+    s_masks = s.get("seasonal_masks", {})
+    if is_bega:
+        m_arr = s_masks.get("mask_bega")
+    elif is_fmam:
+        m_arr = s_masks.get("mask_belg")
+    elif is_kiremt:
+        m_arr = s_masks.get("mask_kiremt")
+    elif is_short:
+        m_arr = s_masks.get("mask_kenya_ond")
+    else:
+        m_arr = s_masks.get("mask_kenya_mam")
+
+    if m_arr is not None and m_arr.shape == (n_lat, n_lon):
+        active_mask = m_arr & lm
+        seasonal_mask_list = [[bool(b) for b in row] for row in active_mask]
+        n_seasonal = int(np.sum(active_mask))
+    else:
+        seasonal_mask_list = [[bool(b) for b in row] for row in lm]
+        n_seasonal = int(np.sum(lm))
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",RuntimeWarning)
         lv = out[lm]; vmin, vmax = float(np.nanmin(lv)), float(np.nanmax(lv))
     return dict(variable=variable, layer=layer,
                 lats=grid_lat.tolist(), lons=grid_lon.tolist(),
                 values=[[None if np.isnan(v) else round(float(v),3) for v in row] for row in out],
+                seasonal_mask=seasonal_mask_list,
+                n_seasonal=n_seasonal,
                 vmin=round(vmin,3), vmax=round(vmax,3), units=units)
 
 # ── Taylor stats ───────────────────────────────────────────────────────────

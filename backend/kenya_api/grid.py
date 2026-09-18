@@ -40,8 +40,10 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     lats   = grid["lats"]
     lons   = grid["lons"]
     values = grid["values"]
+    s_mask = grid.get("seasonal_mask")
     half   = 0.125
     features = []
+    n_seasonal_cells = 0
 
     for ii, lat in enumerate(lats):
         for jj, lon in enumerate(lons):
@@ -55,6 +57,15 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
             if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
                 continue
 
+            in_season = True
+            if s_mask is not None:
+                try:
+                    in_season = bool(s_mask[ii][jj])
+                except (IndexError, TypeError):
+                    in_season = True
+            if in_season:
+                n_seasonal_cells += 1
+
             coords = [[[lon-half, lat-half], [lon+half, lat-half],
                         [lon+half, lat+half], [lon-half, lat+half],
                         [lon-half, lat-half]]]
@@ -67,6 +78,7 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
                     "pi"     : ii,
                     "pj"     : jj,
                     "map_val": round(float(val), 3),
+                    "in_season_mask": in_season,
                     # Tooltip fields - derived fresh per-pixel
                     "label"  : grid.get("variable", ""),
                     "layer"  : grid.get("layer", ""),
@@ -77,13 +89,19 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     # Enrich features with tooltip data using appropriate season CHIRPS clim
     try:
         import numpy as np
-        is_fmam = (season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"])
-        is_kiremt = not is_fmam and ((season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
-        is_short = not is_fmam and not is_kiremt and ((season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+        is_bega = (season in ["bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ecmwf_bega"])
+        is_fmam = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
+        is_kiremt = not is_bega and not is_fmam and ((season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
+        is_short = not is_bega and not is_fmam and not is_kiremt and ((season == "short_rains") or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
+        bega_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Bega)")
         fmam_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (FMAM)")
         kiremt_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Kiremt)")
         sep_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Sep)")
-        if is_fmam and fmam_md and "chirps_clim" in fmam_md:
+        if is_bega and bega_md and "chirps_clim" in bega_md:
+            c_clim = bega_md["chirps_clim"]
+        elif is_bega and dl.get_state().get("chirps_bega"):
+            c_clim = dl.get_state()["chirps_bega"]["chirps_clim"]
+        elif is_fmam and fmam_md and "chirps_clim" in fmam_md:
             c_clim = fmam_md["chirps_clim"]
         elif is_fmam and dl.get_state().get("chirps_fmam"):
             c_clim = dl.get_state()["chirps_fmam"]["chirps_clim"]
@@ -128,6 +146,8 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
             "variable": variable,
             "layer"   : layer,
             "n_pixels": len(features),
+            "n_seasonal_pixels": n_seasonal_cells,
+            "seasonal_pct": round(float(n_seasonal_cells / len(features) * 100), 1) if features else 100.0,
             "vmin"    : round(float(grid["vmin"]), 3) if grid["vmin"] is not None else None,
             "vmax"    : round(float(grid["vmax"]), 3) if grid["vmax"] is not None else None,
             "units"   : grid["units"],

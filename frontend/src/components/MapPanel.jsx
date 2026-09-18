@@ -428,12 +428,13 @@ function v2rgb(v,scale){
   return rgbs[rgbs.length-1]
 }
 
-function buildRaster(gridData, scale) {
+function buildRaster(gridData, scale, seasonalMaskOnly = false) {
   if (!gridData?.features?.length) return null
-  const latSet=new Set(),lonSet=new Set(),raw={}
+  const latSet=new Set(),lonSet=new Set(),raw={},inMask={}
   for(const f of gridData.features){
-    const{lat,lon,map_val}=f.properties; if(map_val==null) continue
+    const{lat,lon,map_val,in_season_mask}=f.properties; if(map_val==null) continue
     latSet.add(lat); lonSet.add(lon); raw[lat+','+lon]=map_val
+    inMask[lat+','+lon] = in_season_mask !== false
   }
   const lats=[...latSet].sort((a,b)=>b-a),lons=[...lonSet].sort((a,b)=>a-b)
   const nL=lats.length,nO=lons.length; if(!nL||!nO) return null
@@ -443,8 +444,10 @@ function buildRaster(gridData, scale) {
   const ctx=canvas.getContext('2d'),img=ctx.createImageData(nO,nL),d=img.data
   for(let i=0;i<nL;i++){
     for(let j=0;j<nO;j++){
-      const v=raw[lats[i]+','+lons[j]],idx=(i*nO+j)*4
+      const key=lats[i]+','+lons[j]
+      const v=raw[key],idx=(i*nO+j)*4
       if(v==null){d[idx+3]=0;continue}
+      if(seasonalMaskOnly && inMask[key] === false){d[idx+3]=0;continue}
       const rgb=v2rgb(v,scale)
       if(!rgb){d[idx+3]=0;continue}
       d[idx]=rgb[0];d[idx+1]=rgb[1];d[idx+2]=rgb[2];d[idx+3]=210
@@ -458,6 +461,10 @@ function fmtTip(props, L, year = 2026) {
   if (!props) return null
   const lines = [], mv = props.map_val
   L = L ?? ''
+
+  if (props.in_season_mask === false) {
+    lines.push('⚠️ Outside Primary Seasonal Rainfall Zone')
+  }
 
   // Determine variable from layer id prefix
   const isOnset = L.includes('onset') || L.startsWith('onset')
@@ -747,6 +754,8 @@ export default function MapPanel({
 
   const setSelectedSite = useDashboardStore(s=>s.setSelectedSite)
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
+  const seasonalMaskOnly = useDashboardStore(s=>s.seasonalMaskOnly)
+  const setSeasonalMaskOnly = useDashboardStore(s=>s.setSeasonalMaskOnly)
   // Active layer list: strict tab-based selection
   const ALL_LAYERS = (
     activeTab === 'validation'    ? VAL_LAYERS :
@@ -775,7 +784,7 @@ export default function MapPanel({
   // Build raster
   const [raster, setRaster] = useState(null)
   useEffect(()=>{
-    console.log('[Raster build] gridData:', gridData?.features?.length, 'activeLayer:', activeLayer, 'activeSeason:', activeSeason)
+    console.log('[Raster build] gridData:', gridData?.features?.length, 'activeLayer:', activeLayer, 'activeSeason:', activeSeason, 'seasonalMaskOnly:', seasonalMaskOnly)
     const csKey2 = activeLayer.startsWith('h_') ? (
         activeLayer.includes('p50')  ? (activeLayer.includes('onset')?'onset_med':activeLayer.includes('cess')?'cess_med':'lgp_med')
       : activeLayer.includes('spr')  ? 'onset_spread'
@@ -784,10 +793,10 @@ export default function MapPanel({
       : activeLayer) : activeLayer
     const scale = getScale(csKey2, activeSeason)
     if(!gridData||!scale){ console.log('[Raster build] SKIP - no data/scale'); return }
-    const r = buildRaster(gridData,scale)
+    const r = buildRaster(gridData, scale, seasonalMaskOnly)
     console.log('[Raster build] result:', r ? 'OK dataUrl len='+r.dataUrl.length : 'NULL')
     if(r) setRaster(r)
-  },[gridData,activeLayer,activeSeason])
+  },[gridData, activeLayer, activeSeason, seasonalMaskOnly])
 
   // -- Map init ----------------------------------------------------------
   useEffect(()=>{
@@ -1077,16 +1086,17 @@ export default function MapPanel({
           </div>
         )}
 
-        {/* Layer picker -- top-left */}
+        {/* Layer picker & Seasonal Area toggle -- top-left */}
         {countryView.available && (
-        <div style={{position:'absolute',top:8,left:8,pointerEvents:'auto'}}>
+        <div style={{position:'absolute',top:8,left:8,pointerEvents:'auto',display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',zIndex:30}}>
 
-        <button onClick={()=>setShowLayers(v=>!v)}
-          style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
-          <span style={{fontSize:9,fontWeight:700,color:'var(--text-muted)'}}>LAYERS</span>
-          <span style={{fontSize:9,maxWidth:110,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--accent-blue)'}}>{layerCfg.label}</span>
-          <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
-        </button>
+        <div style={{position:'relative'}}>
+          <button onClick={()=>setShowLayers(v=>!v)}
+            style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
+            <span style={{fontSize:9,fontWeight:700,color:'var(--text-muted)'}}>LAYERS</span>
+            <span style={{fontSize:9,maxWidth:110,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--accent-blue)'}}>{layerCfg.label}</span>
+            <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
+          </button>
         {showLayers && (
           activeTab === 'probabilistic' ? (
             <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
@@ -1282,6 +1292,40 @@ export default function MapPanel({
               ))}
             </div>
           ) : null
+        )}
+        </div>
+
+        {/* Seasonal Area Toggle Button */}
+        <button
+          onClick={() => setSeasonalMaskOnly(v => !v)}
+          title={seasonalMaskOnly ? "Showing primary seasonal rainfall area only. Click to show all domain." : "Showing all domain. Click to filter to primary seasonal rainfall area only."}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+            borderRadius: 8, fontSize: 10, cursor: 'pointer', backdropFilter: 'blur(4px)',
+            background: seasonalMaskOnly ? (darkMode ? 'rgba(16, 185, 129, 0.25)' : '#d1fae5') : 'var(--bg-elevated)',
+            border: '1px solid ' + (seasonalMaskOnly ? '#10b981' : 'var(--border-primary)'),
+            color: seasonalMaskOnly ? (darkMode ? '#34d399' : '#047857') : 'var(--text-secondary)',
+            fontWeight: seasonalMaskOnly ? 700 : 500,
+            boxShadow: seasonalMaskOnly ? '0 0 10px rgba(16, 185, 129, 0.3)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <span style={{fontSize: 10}}>{seasonalMaskOnly ? '🎯' : '🌐'}</span>
+          <span>{seasonalMaskOnly ? 'Seasonal Area Only' : (country === 'ethiopia' ? 'All Ethiopia' : 'All Domain')}</span>
+        </button>
+
+        {/* Active pixel metric pill */}
+        {gridData?.meta?.n_seasonal_pixels != null && (
+          <div style={{
+            fontSize: 9, padding: '4px 8px', borderRadius: 8, backdropFilter: 'blur(4px)',
+            background: 'var(--bg-elevated)', border: brd,
+            color: seasonalMaskOnly ? (darkMode ? '#34d399' : '#059669') : 'var(--text-faint)',
+            display: 'flex', alignItems: 'center', gap: 4
+          }}>
+            <span style={{fontWeight: 600}}>
+              {seasonalMaskOnly ? `${gridData.meta.n_seasonal_pixels} / ${gridData.meta.n_pixels} active (${gridData.meta.seasonal_pct}%)` : `${gridData.meta.n_pixels} px`}
+            </span>
+          </div>
         )}
         </div>
         )}

@@ -253,7 +253,7 @@ def update_demo_data():
             data_bega['bega_ecmwf_bc_daily_2026'] = ds_bc26[vbc].values.astype(np.float16)
             ds_bc26.close()
 
-    print("[7/7] Combining with existing MAM, OND, Kiremt, and Belg data in backend/demo_data.npz...")
+    print("[7/7] Combining with existing MAM, OND, Kiremt, Belg, and Bega data in backend/demo_data.npz...")
     out_file = os.path.join('backend', 'demo_data.npz')
     orig = np.load(out_file)
     combined = {k: orig[k] for k in orig.files}
@@ -261,9 +261,18 @@ def update_demo_data():
     combined.update(data_kiremt)
     combined.update(data_fmam)
     combined.update(data_bega)
+
+    # Add seasonal masks if available
+    masks_path = os.path.join('outputs', 'masks', 'seasonal_masks.npz')
+    if os.path.exists(masks_path):
+        print("Loading seasonal masks from", masks_path)
+        m_data = np.load(masks_path)
+        for k in m_data.files:
+            combined[k] = m_data[k].astype(bool)
+
     np.savez_compressed(out_file, **combined)
     size_mb = os.path.getsize(out_file) / (1024 * 1024)
-    print(f"Successfully updated {out_file} ({size_mb:.2f} MB) with Kenya MAM, Kenya OND, Ethiopia Kiremt, Ethiopia Belg, and Ethiopia Bega.")
+    print(f"Successfully updated {out_file} ({size_mb:.2f} MB) with Kenya MAM, Kenya OND, Ethiopia Kiremt, Ethiopia Belg, Ethiopia Bega, and seasonal masks.")
 
 if __name__ == '__main__':
     update_demo_data()
