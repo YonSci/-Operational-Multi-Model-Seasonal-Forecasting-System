@@ -1,46 +1,41 @@
-# Operational Multi-Model Seasonal Forecasting System (MAM & Kiremt)
+# Operational Multi-Model Seasonal Forecasting System
 
-
-## Probabilistic & Deterministic forecasts of Rainfall Onset (ONS), Cessation (CESS), and Season Length (SL) for Ethiopia and Kenya 
+## Probabilistic & Deterministic Forecasts of Rainfall Onset (ONS), Cessation (CESS), and Season Length (SL) for East Africa (Kenya & Ethiopia)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://reactjs.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.2-646CFF.svg)](https://vitejs.dev/)
+[![Vite](https://img.shields.io/badge/Vite-5.4-646CFF.svg)](https://vitejs.dev/)
+[![MapLibre GL](https://img.shields.io/badge/MapLibre_GL-6.1-blueviolet.svg)](https://maplibre.org/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg)](https://www.docker.com/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-Active-success.svg)](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/)
+[![Render](https://img.shields.io/badge/Render-Operational_API-46E3B7.svg)](https://operational-multi-model-seasonal-1t6w.onrender.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An operational, end-to-end seasonal climate forecasting and decision-support system designed for East Africa (**Kenya MAM "Long Rains"**, **Kenya OND "Short Rains"**, **Ethiopia "Kiremt" (June - September) and "Belg" (February - May)** seasons). 
+An operational, end-to-end seasonal climate forecasting and agro-pastoral decision-support platform designed for East Africa. Developed for **ILRI (International Livestock Research Institute) Climate Services** and **CGIAR**, this platform moves beyond traditional seasonal rainfall totals by delivering high-resolution probabilistic forecasts of **Rainfall Onset (ONS)**, **Cessation (CESS)**, and **Length of Growing Period (LGP / Season Length)** derived from Copernicus Climate Change Service (C3S) multi-model global ensembles and calibrated against CHIRPS daily precipitation records.
 
-Developed for **ILRI (International Livestock Research Institute) Climate Services** and **CGIAR**, this platform moves beyond traditional seasonal rainfall totals by delivering high-resolution probabilistic forecasts of **Rainfall Onset (ONS)**, **Cessation (CESS)**, and **Length of Growing Period (LGP / Season Length)** derived from Copernicus Climate Change Service (C3S) multi-model ensembles and calibrated against CHIRPS observations.
+### 🌐 Live System Access
+- **Interactive Web Dashboard**: [GitHub Pages Deployment](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/)
+- **Live Operational API**: [Render Backend Service](https://operational-multi-model-seasonal-1t6w.onrender.com)
+- **Interactive API Documentation (Swagger)**: [API Swagger Docs](https://operational-multi-model-seasonal-1t6w.onrender.com/docs)
+- **Open GIS Shapefile Bundle**: [`/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip`](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip)
 
 ---
 
-## Table of Contents
+## Operational Seasonal Scope
 
-- [Scientific Methodology](#scientific-methodology)
-  - [The Dunning et al. (2016) Detection Method](#the-dunning-et-al-2016-detection-method)
-  - [Multi-Model Ensembles & Bias Correction](#multi-model-ensembles--bias-correction)
-  - [Probabilistic Terciles & Skill Weighting](#probabilistic-terciles--skill-weighting)
-- [System Architecture](#system-architecture)
-- [Repository Structure](#repository-structure)
-- [Data Sources](#data-sources)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Environment Configuration](#environment-configuration)
-  - [Local Development](#local-development)
-  - [Docker Deployment](#docker-deployment)
-  - [Cloud Deployment (Render & Vercel)](#cloud-deployment-render--vercel)
-- [API Documentation](#api-documentation)
-- [Dashboard Features](#dashboard-features)
-- [Contributors & Attribution](#contributors--attribution)
-- [License](#license)
+| Region / Country | Season Code | Local / Climatological Name | Forecast Search Window | Primary Global Models / Ensembles |
+| :--- | :---: | :--- | :---: | :--- |
+| **Kenya** | `MAM` | Long Rains | DOY 45 – 175 (Feb 14 – Jun 24) | 8-Model C3S Consensus (ECMWF, UKMO, Météo-France, DWD, CMCC, NCEP, ECCC, BOM) |
+| **Kenya** | `OND` | Short Rains | DOY 244 – 365 (Sep 01 – Dec 31) | ECMWF SEAS5 System 51 (September Init, 25 members) |
+| **Ethiopia** | `Kiremt` | Main Summer Rains (`JJAS`) | DOY 122 – 304 (May 02 – Oct 31) | ECMWF SEAS5 System 51 (May 01 Init, 25 members) |
+| **Ethiopia** | `Belg` | Early Spring Rains (`FMAM`) | DOY 32 – 166 (Feb 01 – Jun 15) | ECMWF SEAS5 System 51 (Jan 01 Init, 25 members) |
+| **Ethiopia** | `Bega / Deyr` | Autumn–Winter Rains (`ONDJ`) | DOY 244 – 396 (Sep 01 – Jan 31) | ECMWF SEAS5 System 51 (Sep 01 Init, 25 members) |
+| **Ethiopia (West)** | `Annual` | Western Extended Season | DOY 100 – 320 (Apr 10 – Nov 16) | Climatological Monsoonal Continuum (May–October) |
 
 ---
 
 ## Scientific Methodology
-
-Agricultural and pastoral livelihoods in East Africa are acutely sensitive to the timing of seasonal rainfall. Early or delayed onsets, false starts, and premature cessations often lead to crop failure or pasture depletion regardless of total cumulative seasonal precipitation.
 
 ```
        Cumulative Anomalous Rainfall: A(d) = Σ [R(t) - Q_bar]
@@ -59,44 +54,144 @@ Agricultural and pastoral livelihoods in East Africa are acutely sensitive to th
                             ◄──── LGP (Season Length) ────►
 ```
 
-### The Dunning et al. (2016) Detection Method
+### 1. Vectorized Dunning et al. (2016) Detection Method
 
-The pipeline implements a vectorized implementation of the **Dunning et al. (2016)** cumulative anomalous rainfall algorithm (`notebook/dunning_lib.py`):
+The core pipeline implements the cumulative anomalous rainfall method of **Dunning et al. (2016)** (`notebook/dunning_lib.py`):
 
 $$A(d) = \sum_{t=1}^d \left( R(t) - \bar{Q} \right)$$
 
-where $R(t)$ is daily precipitation on day $t$, and $\bar{Q}$ is the climatological mean daily rainfall rate across the operational search window.
-
+where $R(t)$ is the daily precipitation on day $t$, and $\bar{Q}$ is the climatological mean daily rainfall rate across the operational search window.
 - **Onset ($d_s$)**: The minimum of the cumulative anomaly curve $A(d)$, marking the day rainfall consistently begins exceeding the climatological daily average.
 - **Cessation ($d_e$)**: The maximum of $A(d)$ after onset, representing the cessation of meaningful moisture influx.
 - **LGP**: Length of Growing Period in days ($d_e - d_s$).
-- **Quality Flags**: Identifies normal seasons (`FLAG_VALID = 0`), onset failures / false starts (`FLAG_NO_ONSET = 1`), cessation failures (`FLAG_NO_CESSATION = 2`), and marginal/short seasons (`FLAG_SHORT_SEASON = 3`).
+- **Quality Flags**: Rigorous validation separating genuine seasons (`FLAG_VALID = 0`), onset failures (`FLAG_NO_ONSET = 1`), cessation failures (`FLAG_NO_CESSATION = 2`), and marginal/short seasons (`FLAG_SHORT_SEASON = 3`).
 
-### Multi-Model Ensembles & Bias Correction
+### 2. Multi-Model Ensembles & Daily Bias Correction (EQM)
 
 The system ingests hindcasts and operational runs across **8 Global Climate Models (GCMs)** from C3S:
-1. **ECMWF SEAS5** (Europe)
-2. **UK Met Office GloSea6** (UKMO)
-3. **Météo-France System 8 / 9**
-4. **DWD GCFS2.1 / 2.2** (Germany)
-5. **CMCC-SPS4** (Italy)
-6. **NCEP CFSv2** (NOAA / USA)
-7. **ECCC CanSIPS** (Canada)
-8. **BOM ACCESS-S2** (Australia)
+1. **ECMWF SEAS5** (ECMWF, Europe)
+2. **UK Met Office GloSea6** (UKMO, UK)
+3. **Météo-France System 8 / 9** (Météo-France, France)
+4. **DWD GCFS2.1 / 2.2** (Deutscher Wetterdienst, Germany)
+5. **CMCC-SPS4** (Euro-Mediterranean Center on Climate Change, Italy)
+6. **NCEP CFSv2** (NOAA, USA)
+7. **ECCC CanSIPS** (Environment and Climate Change Canada)
+8. **BOM ACCESS-S2** (Bureau of Meteorology, Australia)
 
-All model forecast members are bias-corrected daily using empirical quantile mapping and empirical CDF matching against the **CHIRPS v2.0** climatology before computing onset and cessation dates.
+All model forecast members are bias-corrected daily using **Empirical Quantile Mapping (EQM)** with cube-root power transformation against **CHIRPS v2.0** daily climatology (1981–2016) before calculating onset and cessation dates.
 
-### Probabilistic Terciles & Skill Weighting
+### 3. Probabilistic Terciles & Optimal Linear Pooling ($\alpha^*$)
 
-- **Tercile Partitioning**: Onset, cessation, and LGP are categorized against the 1981–2016 historical climatology into:
-  - **Below Normal (BN)** (Early onset / Short season)
-  - **Near Normal (NN)** (Normal timing)
-  - **Above Normal (AN)** (Delayed onset / Extended season)
-- **Probability Shrinkage ($\alpha$)**: Dampens raw ensemble frequencies toward climatology ($1/3, 1/3, 1/3$) in regions where model hindcast skill is low to prevent overconfident warnings.
-- **Ensemble Aggregation Modes** (`skill_weighted_ensemble.py`):
-  - **Equal Weighting**: Unweighted multi-model mean.
-  - **Hit Rate (HR) Weighted**: Weights proportional to historical categorical hit rate.
-  - **RPSS (Ranked Probability Skill Score) Weighted**: Weights based on cross-validated probabilistic skill against climatology.
+- **Tercile Partitioning**: Onset, cessation, and LGP are categorized against the historical baseline into **Below Normal (BN)**, **Near Normal (NN)**, and **Above Normal (AN)**.
+- **Optimal Probability Shrinkage ($\alpha^*$)**:
+  $$\vec{P}_{\text{calibrated}} = \alpha^* \vec{P}_{\text{raw}} + (1 - \alpha^*) \left[\frac{1}{3}, \frac{1}{3}, \frac{1}{3}\right]$$
+  where $\alpha^* = \operatorname{clip}(0.50 + 0.50 \times \max(\text{RPSS}, 0), 0.35, 0.85)$ systematically prevents overconfident warnings in regions with marginal hindcast skill.
+
+---
+
+## Ethiopian Climate Regimes & Climatological Masking Framework
+
+### 1. Fourier Harmonic Regime Classification
+
+Ethiopia features some of the most complex topography and rainfall regimes on Earth. Following Dunning et al. (2016) and operational meteorological practices of the **Ethiopian Meteorological Institute (EMI)**, rainfall seasonality is mathematically partitioned using Fourier harmonic decomposition:
+
+$$r_H = \frac{C_2}{C_1}$$
+
+where $C_1$ is the amplitude of the annual cycle (first harmonic, period = 365 days), and $C_2$ is the amplitude of the semi-annual cycle (second harmonic, period = 182.5 days).
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                           ETHIOPIAN RAINFALL REGIME MAP                                 │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│  Regime 1: Western Unimodal (May–Oct)          │ 427 land pixels (28.8%)                │
+│  Regime 2: Bimodal Type-1 Highlands (Belg+Kir) │ 416 land pixels (28.0%)                │
+│  Regime 3: Bimodal Type-2 Pastoral (Gu+Deyr)   │ 578 land pixels (38.9%)                │
+│  Regime 0: Arid / Marginal Afar Basin          │  64 land pixels  (4.3%)                │
+│  TOTAL SOVEREIGN LAND CELLS (0.25° grid)       │ 1,485 pixels  (100.0%)                 │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Regime 1: Western Unimodal ($r_H < 1.0$)**:
+   - *Core Zones*: Gambella, Benishangul-Gumuz, western Oromia (Bedele, Gore, Jimma), Lake Tana basin, and western Amhara.
+   - *Climatology*: Monsoonal Atlantic/Congo airmasses drive a single continuous rainy season spanning May through October (DOY ~120–300).
+2. **Regime 2: Bimodal Type-1 Highlands ($r_H < 1.0$)**:
+   - *Core Zones*: Central highlands (Addis Ababa, Shewa), northeastern escarpment (Kombolcha, Dessie), Tigray (Mekelle), eastern highlands (Dire Dawa, Harar).
+   - *Climatology*: Two distinct rainy seasons driven by Indian Ocean easterlies and the ITCZ: **Belg** (early spring rains, FMAM) and **Kiremt** (main summer rains, JJAS), separated by a distinct dry **Bega** season (ONDJ).
+3. **Regime 3: Bimodal Type-2 Pastoral Lowlands ($r_H > 1.0$)**:
+   - *Core Zones*: Somali Region (Gode, Kebri Dehar, Korahe, Shabelle, Liben), Borana and Guji lowlands, southern SNNPR (Omo valley, Arba Minch).
+   - *Climatology*: Equatorial biannual regime governed by ITCZ north/south migration: **Gu / Genna** (spring rains, MAM) and **Deyr / Hagaya** (autumn rains, OND). The summer Kiremt (JJAS) is intensely dry.
+4. **Regime 0: Arid / Marginal Afar Basin**:
+   - *Core Zones*: Danakil Depression, central and northern Afar lowlands.
+   - *Climatology*: Hyper-arid ($P_{\text{ann}} < 300\text{mm}$) lacking well-defined, agronomically reliable rainfall seasons.
+
+### 2. The Necessity of Climatological Seasonal Domain Masking
+
+> [!IMPORTANT]
+> Running onset and cessation algorithms across regions during their climatologically dry periods produces misleading, non-physical artifacts. For example, running a Belg (FMAM) pipeline across the southeastern lowlands captures the pastoral Gu season under a false label; running an ONDJ pipeline over the central highlands captures insignificant winter showers while masking the true Deyr pastoral season.
+
+The platform enforces **Climatological Seasonal Domain Masking** across all 1,485 sovereign land pixels:
+- **Belg (FMAM)**: Restricted strictly to Regime 2 Highlands.
+- **Kiremt (JJAS)**: Spans Regime 2 Highlands and Regime 1 Western Unimodal.
+- **Bega / Deyr (ONDJ)**: Focuses strictly on Regime 3 Pastoral Lowlands where meaningful autumn rainfall occurs.
+- **Western Extended Season**: Covers Regime 1 Western Unimodal.
+
+---
+
+## Audited 20-Site Representative Climatological Diagnostic Agreement
+
+To validate spatial grid representations against in-situ meteorological station records, all 20 representative meteorological stations across Ethiopia were audited. The results show **100% concordance (20/20 sites)** between Fourier harmonic ratios ($r_H$), EMI operational climatology, and in-situ historical observations:
+
+| Station Name | Region / Zone | Latitude | Longitude | Elevation | Annual Rain ($P_{\text{ann}}$) | Harmonic Ratio ($r_H$) | Verified Climatological Regime |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Gambella** | Gambella | 8.25°N | 34.58°E | 526 m | 1,189 mm | 0.03 | **Regime 1: Western Unimodal** |
+| **Assosa** | Benishangul-Gumuz | 10.07°N | 34.53°E | 1,570 m | 1,197 mm | 0.14 | **Regime 1: Western Unimodal** |
+| **Jimma** | Oromia / Jimma | 7.67°N | 36.83°E | 1,780 m | 1,599 mm | 0.10 | **Regime 1: Western Unimodal** |
+| **Bahir Dar** | Amhara / Lake Tana | 11.60°N | 37.38°E | 1,820 m | 1,385 mm | 0.44 | **Regime 1: Western Unimodal** |
+| **Gondar** | Amhara / North Gondar | 12.60°N | 37.47°E | 2,133 m | 1,198 mm | 0.39 | **Regime 1: Western Unimodal** |
+| **Bedele** | Oromia / Buno Bedele | 8.45°N | 36.35°E | 2,011 m | 1,811 mm | 0.07 | **Regime 1: Western Unimodal** |
+| **Addis Ababa (Bole)** | Addis Ababa | 9.03°N | 38.74°E | 2,355 m | 1,181 mm | 0.55 | **Regime 2: Bimodal Type-1 Highlands** |
+| **Kombolcha / Dessie** | Amhara / South Wollo | 11.08°N | 39.73°E | 1,857 m | 1,150 mm | 0.74 | **Regime 2: Bimodal Type-1 Highlands** |
+| **Mekelle** | Tigray / Mekelle | 13.50°N | 39.47°E | 2,254 m | 690 mm | 0.69 | **Regime 2: Bimodal Type-1 Highlands** |
+| **Dire Dawa** | Dire Dawa Council | 9.60°N | 41.87°E | 1,260 m | 626 mm | 0.84 | **Regime 2: Bimodal Type-1 Highlands** |
+| **Jijiga** | Somali / Fafan | 9.35°N | 42.80°E | 1,609 m | 545 mm | 0.64 | **Regime 2: Bimodal Type-1 Highlands** |
+| **Hawassa** | Sidama | 7.05°N | 38.48°E | 1,708 m | 1,050 mm | 0.41 | **Regime 2: Bimodal Type-1 Highlands** |
+| **Arba Minch** | Gamo / SNNPR | 6.03°N | 37.55°E | 1,285 m | 1,002 mm | 1.65 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Goba / Bale** | Oromia / Bale | 7.00°N | 39.98°E | 2,743 m | 1,127 mm | 1.76 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Negelle Borana** | Oromia / Guji-Borana | 5.33°N | 39.58°E | 1,475 m | 667 mm | 2.94 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Yabello** | Oromia / Borana | 4.88°N | 38.09°E | 1,630 m | 644 mm | 2.31 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Moyale** | Borana / Somali border | 3.53°N | 39.05°E | 1,113 m | 629 mm | 3.08 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Kebri Dehar** | Somali / Korahe | 6.73°N | 44.28°E | 493 m | 426 mm | 35.76 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Gode** | Somali / Shabelle | 5.95°N | 43.58°E | 290 m | 281 mm | 23.04 | **Regime 3: Bimodal Type-2 Lowlands** |
+| **Semera** | Afar / Zone 1 | 11.79°N | 41.00°E | 433 m | 264 mm | 0.97 | **Regime 0: Arid / Marginal Afar** |
+
+The interactive dashboard includes an **Audited 20-Site Agreement Modal** (`📊 20-Site Audited Agreement (20/20 ✓)`), enabling researchers to inspect diagnostic plots, filter by regime, and fly directly to any station on the map.
+
+---
+
+## Dynamic Percentile-Adaptive Color Scaling
+
+To prevent artificial color saturation clipping across regions with widely differing climatological timing, the dashboard applies **Percentile-Adaptive Dynamic Scaling**:
+
+$$\text{vmin}_{\text{eff}} = \mathcal{P}_2(\text{active\_data}), \quad \text{vmax}_{\text{eff}} = \mathcal{P}_{98}(\text{active\_data})$$
+
+- **Anomalies**: Kept strictly symmetric around zero: $\text{abs\_max} = \max(|\mathcal{P}_2|, |\mathcal{P}_{98}|)$ to maintain neutral midpoints.
+- **Fidelity**: Both the WebGL canvas rasterizer (`buildRaster`) and the interactive color legend (`<Legend />`) evaluate identical scale parameters in real time.
+
+---
+
+## GIS Shapefiles & Geospatial Data Downloads
+
+All four climate regimes and five seasonal masks are packaged in open GIS formats:
+- **Download Location**: [`frontend/public/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip`](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip)
+- **Local Directory**: `outputs/shapefiles/`
+- **Projection**: WGS84 Geographic Coordinate System (`EPSG:4326`)
+- **Included Layers**:
+  1. `ethiopia_four_climate_regimes` (`.shp`, `.geojson`): 4-regime spatial classification.
+  2. `mask_belg_early_rains` (`.shp`, `.geojson`): Belg domain (Regime 2).
+  3. `mask_kiremt_jjas` (`.shp`, `.geojson`): Main Kiremt domain (Regimes 1 & 2).
+  4. `mask_deyr_autumn_rains` (`.shp`, `.geojson`): Pastoral Deyr domain (Regime 3).
+  5. `mask_gu_spring_rains` (`.shp`, `.geojson`): Pastoral Gu domain (Regime 3).
+  6. `mask_western_annual` (`.shp`, `.geojson`): Western unimodal continuum (Regime 1).
 
 ---
 
@@ -104,23 +199,30 @@ All model forecast members are bias-corrected daily using empirical quantile map
 
 ```mermaid
 flowchart TD
-    subgraph Pipeline["Data & Pipeline"]
-        CDS["Copernicus CDS C3S Models"] --> Ingest["scripts/download_seasonal_forecasts_daily_c3s.py"]
-        CHIRPS["CHIRPS 0.25° Daily Obs"] --> Ingest
-        Ingest --> DunningEngine["notebook/dunning_lib.py & Stage 8 Pipeline"]
-        DunningEngine --> Processed["Processed NetCDF & Diagnostic Arrays"]
+    subgraph Ingestion["Data Ingestion & Pre-processing"]
+        CDS["Copernicus C3S Forecasts (ECMWF, UKMO, etc.)"] --> BiasCorrection["Daily Empirical Quantile Mapping (EQM)"]
+        CHIRPS["CHIRPS 0.25° Daily Rainfall (1981–present)"] --> BiasCorrection
     end
 
-    subgraph Backend["Backend - FastAPI"]
-        Processed --> Loader["backend/mam_loader.py: In-Memory Multi-Array Cache"]
-        Loader --> API["FastAPI Endpoints: /grid, /pixel, /models, /sites, /bulletin"]
+    subgraph ScientificCore["Scientific Core Engine"]
+        BiasCorrection --> DunningAlgorithm["Vectorized Dunning Cumulative Anomaly Algorithm"]
+        DunningAlgorithm --> HarmonicRegimes["Harmonic Regime Classification (r_H = C2/C1)"]
+        HarmonicRegimes --> SeasonalMasks["Climatological Seasonal Domain Enforcement"]
+        SeasonalMasks --> Terciles["Tercile Partitioning & Linear Pooling Damping (alpha*)"]
     end
 
-    subgraph Frontend["Frontend - React + Vite"]
-        API --> QueryCache["TanStack Query & Zustand Store"]
-        QueryCache --> MapEngine["MapPanel.jsx: MapLibre GL Raster/Choropleths"]
-        QueryCache --> PlumeCharts["App.jsx: Recharts A(D) Plumes & Time Series"]
-        QueryCache --> Gauges["Tercile Risk Gauges & Ensemble Agreement Dials"]
+    subgraph BackendEngine["Backend Engine (FastAPI)"]
+        Terciles --> NetCDFStore["Standardized NetCDF & Compressed NPZ Data Stores"]
+        NetCDFStore --> MemoryCache["mam_loader.py: High-Speed In-Memory Cache"]
+        MemoryCache --> Endpoints["FastAPI REST Endpoints (/grid, /pixel, /bulletin, /sites)"]
+    end
+
+    subgraph FrontendApp["Frontend Dashboard (React 18 + MapLibre GL)"]
+        Endpoints --> QueryEngine["TanStack Query Cache & Zustand State"]
+        QueryEngine --> DynamicScaling["Percentile-Adaptive Dynamic Scaling (P2 - P98)"]
+        DynamicScaling --> MapLibreCanvas["WebGL Rasterization & Choropleths"]
+        QueryEngine --> PlumeVisualizer["Ensemble Plumes & Anomaly Curves (Recharts)"]
+        QueryEngine --> AuditModal["20-Site Representative Diagnostic Agreement Modal"]
     end
 ```
 
@@ -129,126 +231,84 @@ flowchart TD
 ## Repository Structure
 
 ```
+├── .github/workflows/              # CI/CD Automation
+│   └── deploy-pages.yml            # Automated GitHub Pages build & deployment
+│
 ├── backend/                        # FastAPI REST API
 │   ├── main.py                     # API entry point & CORS configuration
 │   ├── mam_loader.py               # Multidimensional data loader & layer engine
+│   ├── demo_data.npz               # Compressed multi-season operational cache (73 MB)
 │   ├── requirements.txt            # Python dependencies
-│   ├── skill_weighted_ensemble.py  # Stage 8 skill-weighting integration
+│   ├── bulletin_singlemodel_v1.py  # Publication-grade bulletin generator
 │   └── kenya_api/                  # Modular route handlers
 │       ├── grid.py                 # GET /grid (GeoJSON raster layers)
 │       ├── pixel.py                # GET /pixel, /chirps, /taylor, /validation
 │       ├── models.py               # GET /models
 │       ├── sites.py                # GET /sites
-│       └── bulletin.py             # GET /bulletin (Automated PDF/PNG advisories)
+│       └── bulletin.py             # POST /bulletin (Automated PDF/PNG advisories)
 │
 ├── frontend/                       # Modern React 18 + Vite SPA
+│   ├── vite.config.js              # Relative base routing & chunk splitting
 │   ├── package.json
-│   ├── vite.config.js              # Chunk splitting & proxy configuration
-│   ├── tailwind.config.js          # Styling tokens
 │   ├── public/
-│   │   └── boundaries/             # Kenya & Ethiopia administrative boundaries
+│   │   ├── boundaries/             # Sovereign admin boundaries (eth_admin0, ke_admin0)
+│   │   ├── figures/                # Regime classification & validation profile figures
+│   │   └── shapefiles/             # Downloadable GIS shapefile bundles & GeoJSONs
 │   └── src/
 │       ├── App.jsx                 # Dashboard views, charts, and gauge panels
-│       ├── main.jsx                # React root
-│       ├── index.css               # Design system tokens (light/dark mode)
-│       ├── api/queries.js          # TanStack Query server state hooks
-│       ├── store/useDashboardStore.js # Zustand state store
+│       ├── api/queries.js          # Auto-resolving API client (Render fallback)
 │       └── components/
-│           ├── MapPanel.jsx        # MapLibre GL interactive mapping component
+│           ├── MapPanel.jsx        # MapLibre GL interactive mapping & dynamic scaling
+│           ├── DiagnosticAgreementModal.jsx # 20-site audited agreement modal
 │           └── LandingPage.jsx     # Landing overview & country selector
 │
-├── docker/                         # Production & Cloud deployment
-│   ├── Dockerfile.backend          # Python 3.11 backend container
-│   ├── Dockerfile.frontend         # Nginx multi-stage build for frontend
-│   ├── Dockerfile.huggingface      # Single-container image for HF Spaces
-│   ├── docker-compose.yml          # Local multi-service orchestration
-│   ├── nginx.conf                  # Reverse proxy & SPA routing config
-│   ├── DEPLOYMENT_GUIDE.md         # Deployment instructions (Docker/HF/Vercel)
-│   └── test_deployment.py         # Automated deployment verification script
+├── outputs/
+│   ├── ecmwf_v3/                   # Kenya MAM operational NetCDFs
+│   ├── ecmwf_sep/                  # Kenya OND operational NetCDFs
+│   ├── ecmwf_kiremt/               # Ethiopia Kiremt operational NetCDFs
+│   ├── ecmwf_fmam/                 # Ethiopia Belg operational NetCDFs
+│   ├── ecmwf_bega/                 # Ethiopia Bega / Deyr operational NetCDFs
+│   ├── masks/                      # Seasonal regime masks & regime_map.nc
+│   └── shapefiles/                 # Standardized GIS shapefiles & GeoJSONs
 │
-├── data/
-│   └── shapefiles/                 # Administrative boundaries (Kenya & Ethiopia)
+├── scripts/                        # Automated Processing Pipelines
+│   ├── process_ecmwf_kiremt.py     # Ethiopia Kiremt operational processing
+│   ├── process_ecmwf_ethiopia_fmam.py # Ethiopia Belg operational processing
+│   ├── process_ecmwf_ethiopia_bega.py # Ethiopia Bega operational processing
+│   ├── process_ecmwf_september.py  # Kenya OND operational processing
+│   ├── compute_seasonal_masks.py   # Two-stage Dunning harmonic masking engine
+│   ├── export_regime_shapefiles.py # GIS Shapefile & GeoJSON export pipeline
+│   └── update_demo_data.py         # Multi-season demo data compiler
 │
-├── notebook/                       # Research, validation, and calibration notebooks
-│   ├── dunning_lib.py              # Core vectorized Dunning algorithm library
-│   ├── notebook_multimodel_stage8.ipynb # Multi-model aggregation pipeline
-│   └── onset-cessation-lgp_*.ipynb # Model-specific calibration notebooks
+├── docs/                           # Scientific Documentation & Blueprints
+│   └── scientific_masking/         # Detailed implementation plan & walkthroughs
 │
-├── scripts/                        # Automation & Data Ingestion
-│   ├── download_chirps.py          # CHIRPS daily download & clip script
-│   ├── download_seasonal_forecasts_daily_c3s.py # C3S CDS download pipeline
-│   └── inspect_netcdf.py           # NetCDF metadata & variable inspector
-│
-├── bulletin_multimodel_v1.py       # Publication-ready bulletin generator
-├── skill_weighted_ensemble.py      # Standalone ensemble weighting script
-├── setup.py                        # Automated project setup script
-└── vercel.json                     # Vercel SPA routing & API proxy rules
+├── docker/                         # Docker & Container Orchestration
+├── WALKTHROUGH.md                  # Comprehensive engineering walkthrough
+└── README.md                       # Project landing documentation
 ```
-
----
-
-## Data Sources
-
-1. **Observational Baseline**:
-   - **CHIRPS v2.0** (Climate Hazards Group InfraRed Precipitation with Station data).
-   - Spatial resolution: **0.25°** (~27 km grid).
-   - Historical period: **1981–present**.
-2. **Seasonal Climate Model Hindcasts & Operational Forecasts**:
-   - Copernicus Climate Change Service (C3S) Data Store (CDS).
-   - Daily precipitation fields with 20 to 51 ensemble members per model.
-3. **Administrative Boundaries**:
-   - Kenya (Admin Levels 0, 1, 2) & Ethiopia (Admin Levels 0, 1, 2, 3) from UN OCHA / Humanitarian Data Exchange (HDX).
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-
 - **Python 3.10+** (Python 3.11 recommended)
 - **Node.js 18+** and **npm**
-- **Docker & Docker Compose** (optional, for containerized execution)
+- **Docker** (optional)
 
-### Environment Configuration
+### 1. Local Development Setup
 
-1. **Root Environment (`.env`)**:
-   ```bash
-   cp .env.example .env
-   ```
-   Configure your pipeline output directory and operational forecast year:
-   ```ini
-   DATA_DIR=D:/dashboard_ons_cess_sl/data
-   OP_YEAR=2026
-   LOAD_BC_DAILY=1
-   ```
-
-2. **Frontend Environment (`frontend/.env`)**:
-   ```bash
-   cp frontend_env_example.txt frontend/.env
-   ```
-   *(Note: The map interface is powered by MapLibre GL with open CARTO basemaps. A Mapbox token is optional).*
-
----
-
-### Local Development
-
-#### 1. Automated Setup
-You can run the one-shot setup script to configure folders, dependencies, and verify code integrity:
-```bash
-python setup.py
-```
-
-#### 2. Start Backend API
+#### Start Backend Dev Server
 ```bash
 cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8765
 ```
-- API interactive docs: `http://localhost:8765/docs`
-- Health endpoint: `http://localhost:8765/health`
+- Interactive Swagger UI: `http://localhost:8765/docs`
+- Health Check: `http://localhost:8765/health`
 
-#### 3. Start Frontend UI
-In a separate terminal:
+#### Start Frontend Dev Server
 ```bash
 cd frontend
 npm install
@@ -258,89 +318,44 @@ Open your browser at `http://localhost:5173`.
 
 ---
 
-### Docker Deployment
+### 2. Cloud & Production Deployments
 
-To launch the full stack (FastAPI backend + Nginx frontend) via Docker Compose:
+#### A. Automated GitHub Pages (Frontend)
+Pushing to `main` triggers `.github/workflows/deploy-pages.yml`, building the Vite application and publishing to:
+`https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/`
 
+#### B. Render (Backend Web Service)
+- **Root Directory**: `backend`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- **Environment Variables**:
+  - `PYTHON_VERSION`: `3.11.9`
+  - `OP_YEAR`: `2026`
+  - `LOAD_BC_DAILY`: `0` *(Conserves RAM on free-tier Render instances)*
+
+#### C. Docker Deployment
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 ```
-
-Test the container deployment:
-```bash
-python docker/test_deployment.py
-```
-
----
-
-### Cloud Deployment (Render & Vercel)
-
-The system is architected for decoupled cloud deployment: **FastAPI backend on Render** and **React frontend on Vercel**.
-
-#### 1. Backend Deployment on Render (Web Service)
-1. Sign in to [Render](https://render.com) and click **"New +"** $\rightarrow$ **"Web Service"**.
-2. Select **"Build and deploy from a Git repository"** and choose `YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System`.
-3. Configure the service settings:
-   - **Root Directory**: `backend`
-   - **Runtime**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - **Instance Type**: `Free`
-4. Add Environment Variables:
-   - `PYTHON_VERSION`: `3.11.9`
-   - `OP_YEAR`: `2026`
-   - `LOAD_BC_DAILY`: `0` *(Crucial on Render free tier (512MB RAM): prevents loading 4GB of daily precipitation arrays into RAM to eliminate Out-of-Memory crashes).*
-5. Click **"Create Web Service"**. Once deployed, copy your backend URL (e.g. `https://seasonal-forecast-backend.onrender.com`).
-
-#### 2. Frontend Deployment on Vercel
-1. Sign in to [Vercel](https://vercel.com) and click **"Add New..."** $\rightarrow$ **"Project"**.
-2. Import `YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System`.
-3. Build Settings:
-   - The repository includes root-level redirection scripts and `vercel.json` so you can leave the **Root Directory** as default `./` or set it to **`frontend`**.
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist` (or `frontend/dist`)
-4. Add Environment Variables:
-   - `VITE_API_BASE`: `https://<your-backend-name>.onrender.com` *(paste your live Render backend URL from step 1, without a trailing slash)*
-5. Click **"Deploy"**. Vercel will build the frontend and provide your production URL (e.g. `https://<project-name>.vercel.app`).
 
 ---
 
 ## API Documentation
 
-The FastAPI backend exposes the following primary endpoints:
+| Endpoint | Method | Parameters | Description |
+| :--- | :---: | :--- | :--- |
+| `/health` | `GET` | — | System status, loaded models count, and land cell counts. |
+| `/models` | `GET` | — | Active models, member counts, and operational year. |
+| `/grid` | `GET` | `variable`, `layer`, `model`, `season`, `year` | Spatial GeoJSON FeatureCollection of forecast values. |
+| `/pixel` | `GET` | `lat`, `lon`, `season`, `model`, `year` | Point-level statistics, member plumes, cumulative anomalies, and terciles. |
+| `/sites` | `GET` | `country` | Pre-configured monitored agricultural & pastoral locations. |
+| `/chirps_historical` | `GET` | `lat`, `lon`, `season` | CHIRPS historical onset/cessation/LGP time series (1981–present). |
+| `/validation` | `GET` | `season`, `model` | Domain-mean hindcast validation metrics (RPSS, Hit Rate). |
+| `/bulletin` | `POST` | `site_name`, `lat`, `lon`, `season`, `fmt` | Generates official single-model or multi-model advisory bulletin (PNG/PDF). |
 
-| Endpoint | Method | Description |
-| :--- | :---: | :--- |
-| `/health` | `GET` | System status, loaded models count, and CHIRPS mean statistics. |
-| `/models` | `GET` | List active C3S models, member counts, and operational years. |
-| `/grid` | `GET` | GeoJSON FeatureCollection of spatial grid values for any variable and layer. |
-| `/pixel` | `GET` | Point-level statistics, member plumes, cumulative anomalies, and terciles for a coordinate (`lat`, `lon`). |
-| `/sites` | `GET` | Pre-configured monitored agricultural & pastoral locations. |
-| `/chirps_historical`| `GET` | CHIRPS historical onset/cessation/LGP time-series and trend slope. |
-| `/validation` | `GET` | Domain-mean hindcast validation metrics (RPSS, Hit Rate) per year. |
-| `/bulletin` | `GET` | Generates a high-resolution seasonal forecast bulletin for a given site. |
-
-### Valid Spatial Grid Layers (16 Layers)
-`anomaly`, `spread`, `median`, `prob_bn`, `prob_nn`, `prob_an`, `failure`, `chirps_p50`, `chirps_spread`, `bias`, `detection_rate`, `rpss_val`, `hitrate_val`, `alpha`, `hr_weighted`, `rpss_weighted`.
-
----
-
-## Dashboard Features
-
-1. **Forecast Overview**:
-   - Spatial choropleths of expected onset DOY, cessation DOY, and season length anomalies.
-   - Interactive pixel inspector showing ensemble plume spread (P10, P50, P90).
-2. **Probabilistic Outlook**:
-   - Spatial tercile probabilities (Below, Near, Above Normal) with false onset risk flags.
-   - Risk dials showing categorical distribution for any clicked coordinate.
-3. **Multi-Model Comparison**:
-   - Compare Equal, Hit-Rate Weighted, and RPSS-Weighted ensemble projections side-by-side.
-   - Plume overlays showing individual model contributions and consensus.
-4. **Model Skill & Validation**:
-   - Historical Ranked Probability Skill Scores (RPSS) and Hit Rates against CHIRPS.
-   - Taylor diagrams indicating standard deviation ratios and correlation coefficients.
-5. **Field Bulletins**:
-   - One-click export of publication-quality seasonal advisories tailored for agricultural extension officers and livestock managers.
+### Supported Grid Variables & Layers
+- **Variables**: `onset`, `cessation`, `lgp`
+- **Layers**: `median`, `anomaly`, `spread`, `prob_bn`, `prob_nn`, `prob_an`, `failure`, `chirps_p50`, `chirps_spread`, `bias`, `detection_rate`, `rpss_val`, `hitrate_val`, `alpha`, `hr_weighted`, `rpss_weighted`.
 
 ---
 
@@ -350,11 +365,12 @@ The FastAPI backend exposes the following primary endpoints:
 - **Principal Developer & Data Scientist:** Yonas Mersha · [y.mersha@cgiar.org](mailto:y.mersha@cgiar.org)
 - **Affiliation:** [ILRI Climate Services](https://www.ilri.org/) · [CGIAR Research Program](https://www.cgiar.org/)
 
-If you utilize this software or methodology in research or operational climate services, please cite:
+### Citation
+If you utilize this software, data, or scientific methodology in research or operational climate services, please cite:
 > Dunning, C. M., Black, E. C. L., & Allan, R. P. (2016). *The onset and cessation of seasonal rainfall over Africa*. Journal of Geophysical Research: Atmospheres, 121(19), 11-405. https://doi.org/10.1002/2016JD025428
 
 ---
 
 ## License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
