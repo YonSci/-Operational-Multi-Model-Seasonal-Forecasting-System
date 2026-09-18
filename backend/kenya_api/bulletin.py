@@ -61,12 +61,17 @@ def generate_bulletin(req: BulletinRequest):
         raise HTTPException(400, "fmt must be png or pdf")
     
     s = dl.get_state()
-    is_fmam = (req.season in ("fmam", "belg")) or ("fmam" in str(req.season).lower()) or ("belg" in str(req.season).lower()) or ("FMAM" in (req.model_name or ""))
-    is_kiremt = not is_fmam and ((req.season in ("kiremt", "jjas")) or ("kiremt" in str(req.season).lower()) or ("Kiremt" in (req.model_name or "")) or ((float(req.lat) > 5.0 or float(req.lon) > 42.5) and req.season not in ("fmam", "belg", "short_rains", "ond", "long_rains", "mam")))
-    is_short = not is_kiremt and not is_fmam and ((req.season in ("short_rains", "ond")) or ("Sep" in (req.model_name or "")) or (req.year in (2025, 2026) and req.season not in ("long_rains", "mam", "fmam", "belg", "kiremt", "jjas")))
-    btype = "single" if (is_short or is_kiremt or is_fmam) else (req.bulletin_type.lower().strip() if req.bulletin_type else "multi")
+    is_bega = (req.season in ("bega", "ondj")) or ("bega" in str(req.season).lower()) or ("ondj" in str(req.season).lower()) or ("Bega" in (req.model_name or ""))
+    is_fmam = not is_bega and ((req.season in ("fmam", "belg")) or ("fmam" in str(req.season).lower()) or ("belg" in str(req.season).lower()) or ("FMAM" in (req.model_name or "")))
+    is_kiremt = not is_bega and not is_fmam and ((req.season in ("kiremt", "jjas")) or ("kiremt" in str(req.season).lower()) or ("Kiremt" in (req.model_name or "")) or ((float(req.lat) > 5.0 or float(req.lon) > 42.5) and req.season not in ("fmam", "belg", "short_rains", "ond", "long_rains", "mam")))
+    is_short = not is_bega and not is_kiremt and not is_fmam and ((req.season in ("short_rains", "ond")) or ("Sep" in (req.model_name or "")) or (req.year in (2025, 2026) and req.season not in ("long_rains", "mam", "fmam", "belg", "kiremt", "jjas")))
+    btype = "single" if (is_short or is_kiremt or is_fmam or is_bega) else (req.bulletin_type.lower().strip() if req.bulletin_type else "multi")
     
-    if is_fmam:
+    if is_bega:
+        req_model = "ECMWF SEAS5 (Bega)" if "ECMWF SEAS5 (Bega)" in s["MODELS"] else (req.model_name or "ECMWF SEAS5 (Bega)")
+        season_str = "bega"
+        season_tag = f"Bega{req.year}"
+    elif is_fmam:
         req_model = "ECMWF SEAS5 (FMAM)" if "ECMWF SEAS5 (FMAM)" in s["MODELS"] else (req.model_name or "ECMWF SEAS5 (FMAM)")
         season_str = "fmam"
         season_tag = f"Belg{req.year}"

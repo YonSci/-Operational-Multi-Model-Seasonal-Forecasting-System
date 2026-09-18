@@ -42,10 +42,15 @@ const FMAM_MODELS = [
   { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Belg Jan 01)', centre: 'European Centre' },
 ]
 
+const BEGA_MODELS = [
+  { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Bega Sep 01)', centre: 'European Centre' },
+]
+
 export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026, country = 'kenya' }) {
-  const isEthiopia = country === 'ethiopia' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
-  const isFmam = selectedSeason === 'fmam' || selectedSeason === 'belg'
-  const isKiremt = !isFmam && (selectedSeason === 'kiremt' || country === 'ethiopia')
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj'
+  const isEthiopia = country === 'ethiopia' || isBega || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
+  const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
+  const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (country === 'ethiopia' && selectedSeason !== 'bega' && selectedSeason !== 'fmam'))
   const isShort = !isEthiopia && selectedSeason === 'short_rains'
   const isSingle = isEthiopia || isShort
   const [siteName, setSiteName] = useState(isEthiopia ? 'Holetta Agricultural Research Center' : 'KALRO Kiboko, Makueni Farm')
@@ -60,7 +65,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
   const [success, setSuccess] = useState(null)
 
   const activePresets = isEthiopia ? PRESET_FARMS_ETHIOPIA : PRESET_FARMS_KENYA
-  const activeModelsList = isFmam ? FMAM_MODELS : (isKiremt ? KIREMT_MODELS : (isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS))
+  const activeModelsList = isBega ? BEGA_MODELS : (isFmam ? FMAM_MODELS : (isKiremt ? KIREMT_MODELS : (isShort ? SHORT_RAINS_MODELS : FORECAST_MODELS)))
 
   useEffect(() => {
     if (isSingle) {
@@ -151,7 +156,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
         fmt,
         bulletin_type: isSingle ? 'single' : bulletinType,
         model_name: isSingle ? 'ECMWF SEAS5' : selectedModel,
-        season: isFmam ? 'fmam' : (isKiremt ? 'kiremt' : (selectedSeason || (isShort ? 'short_rains' : 'long_rains'))),
+        season: isBega ? 'bega' : (isFmam ? 'fmam' : (isKiremt ? 'kiremt' : (selectedSeason || (isShort ? 'short_rains' : 'long_rains')))),
         year: Number(selectedYear) || 2026,
       })
       clearTimeout(msgTimer1)

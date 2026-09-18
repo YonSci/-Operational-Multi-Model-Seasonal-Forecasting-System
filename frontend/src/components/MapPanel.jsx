@@ -279,21 +279,47 @@ const CS_KIREMT = {
   h_lgp_p50:    { s:[35,55,75,95,110,125,150],     c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
 }
 
+// Dedicated Bega / Deyr (ONDJ: Oct-Jan, Ethiopia) colour scales:
+const CS_BEGA = {
+  onset_med:    { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
+  cess_med:     { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble cessation P50 (DOY)' },
+  lgp_med:      { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length P50 (days)' },
+  onset_anom:   { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset anomaly (days)' },
+  cess_anom:    { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation anomaly (days)' },
+  lgp_anom:     { s:[-25,-15,-5,0,5,15,25],        c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length anomaly (days)' },
+  onset_hr_w:   { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 HR-Weighted (DOY)' },
+  cess_hr_w:    { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 HR-Weighted (DOY)' },
+  lgp_hr_w:     { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length HR-Weighted (days)' },
+  onset_rpss_w: { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 RPSS-Weighted (DOY)' },
+  cess_rpss_w:  { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 RPSS-Weighted (DOY)' },
+  lgp_rpss_w:   { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length RPSS-Weighted (days)' },
+  chirps_p50_onset: { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
+  chirps_p50_cess:  { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Cessation P50 (DOY)' },
+  chirps_p50_lgp:   { s:[15,25,40,55,70,85,105],   c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'CHIRPS Season Length P50 (days)' },
+  h_onset_p50:  { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 (DOY)' },
+  h_cess_p50:   { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 (DOY)' },
+  h_lgp_p50:    { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
+}
+
 function detectSeason(selectedSeason, country, gridData) {
+  if (selectedSeason === 'bega' || selectedSeason === 'ondj') return 'bega'
   if (selectedSeason === 'fmam' || selectedSeason === 'belg') return 'fmam'
   if (selectedSeason === 'kiremt') return 'kiremt'
   if (selectedSeason === 'short_rains') return 'short_rains'
   const vmin = gridData?.meta?.vmin
   if (vmin != null) {
-    if (vmin >= 250) return 'short_rains'
+    if (vmin >= 250) return country === 'ethiopia' ? 'bega' : 'short_rains'
     if (vmin >= 130) return 'kiremt'
     if (vmin >= 30 && vmin <= 130 && country === 'ethiopia') return 'fmam'
   }
-  if (country === 'ethiopia') return 'fmam'
+  if (country === 'ethiopia') return 'bega'
   return 'long_rains'
 }
 
 function getScale(scaleId, season = 'long_rains') {
+  if ((season === 'bega' || season === 'ondj') && CS_BEGA[scaleId]) {
+    return CS_BEGA[scaleId]
+  }
   if (season === 'fmam' && CS_FMAM[scaleId]) {
     return CS_FMAM[scaleId]
   }
