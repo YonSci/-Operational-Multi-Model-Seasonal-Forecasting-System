@@ -890,7 +890,7 @@ def _load_demo_npz():
         )
 
     masks = {}
-    for mkey in ["mask_kiremt", "mask_belg", "mask_deyr", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
+    for mkey in ["mask_kiremt", "mask_kiremt_jjas", "mask_belg", "mask_gu", "mask_deyr", "mask_bega", "mask_annual", "mask_kenya_mam", "mask_kenya_ond"]:
         if mkey in data:
             masks[mkey] = data[mkey].astype(bool)
     regime_map = data["regime_map"].astype(np.int8) if "regime_map" in data else None
@@ -965,7 +965,7 @@ def load(force=False):
                     masks[mkey] = m_data[mkey].astype(bool)
         elif os.path.exists(os.path.join(_REPO_ROOT, "backend", "demo_data.npz")):
             m_data = np.load(os.path.join(_REPO_ROOT, "backend", "demo_data.npz"))
-            for mkey in ["mask_kiremt", "mask_belg", "mask_deyr", "mask_bega", "mask_kenya_mam", "mask_kenya_ond"]:
+            for mkey in ["mask_kiremt", "mask_kiremt_jjas", "mask_belg", "mask_gu", "mask_deyr", "mask_bega", "mask_annual", "mask_kenya_mam", "mask_kenya_ond"]:
                 if mkey in m_data:
                     masks[mkey] = m_data[mkey].astype(bool)
             if "regime_map" in m_data:
@@ -1199,17 +1199,32 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     s = _state
 
     is_bega   = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
-    is_fmam   = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
-    is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "jjas"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]) or (lat > 5.0 and season not in ["long_rains", "short_rains"]))
+    is_fmam   = not is_bega and ((season in ["fmam", "belg", "gu"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
+    is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "jjas", "annual"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]) or (lat > 5.0 and season not in ["long_rains", "short_rains"]))
     is_short  = not is_bega and not is_fmam and not is_kiremt and ((season in ["short_rains", "ond"]) or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
 
     REGIME_NAMES = {
-        1: "Western Unimodal (Single Extended Season)",
-        2: "Bimodal Type 1 (Belg & Kiremt Highlands)",
-        3: "Bimodal Type 2 (Gu & Deyr Pastoral Lowlands)",
-        0: "Arid / Marginal Non-Seasonal",
+        0: "Arid / Marginal (No Reliable Rainy Season)",
+        1: "Western Unimodal (Single Extended Annual Season)",
+        2: "Bimodal Type 1 (Belg Early Rains & Kiremt Main Rains)",
+        3: "Bimodal Type 2 (Gu Spring Rains & Deyr Autumn Rains)",
     }
     reg_map = s.get("regime_map")
+
+    def _get_regime_guidance(r_id, s_req):
+        if r_id == 0:
+            return "Arid / Marginal Zone: Climatologically insufficient rainfall (<200–300 mm/year) to sustain a reliable onset/cessation cycle (Dunning et al. 2016). Metrics are not operationally reliable."
+        if r_id == 1 and s_req in ["belg", "fmam"]:
+            return "Western Unimodal Zone: Climatologically an extended Annual Wet Season from spring to autumn (Mar/Apr to Oct/Nov), not a separate Belg early onset. View under Annual Wet Season product."
+        if r_id == 1 and s_req in ["kiremt", "jjas"]:
+            return "Western Unimodal Zone: Single continuous wet season; onset occurs earlier in spring (May) and extends to Oct/Nov, rather than a second distinct Kiremt onset."
+        if r_id == 2 and s_req in ["gu", "deyr", "bega"]:
+            return "Bimodal Highlands Zone (Type 1): The two rainy seasons are Belg (FMAM) and Kiremt (JJAS). Pastoral Gu and Deyr seasons do not apply here."
+        if r_id == 3 and s_req in ["belg", "fmam"]:
+            return "Bimodal Pastoral Zone (Type 2): The spring rainy season is Gu (MAM), followed by autumn Deyr (SON/OND). Belg and Kiremt do not occur here."
+        if r_id == 3 and s_req in ["kiremt", "jjas"]:
+            return "Bimodal Pastoral Zone (Type 2): Southern/southeastern lowlands experience a dry summer during Kiremt (JJAS). Rainy seasons are Gu (MAM) and Deyr (SON/OND)."
+        return None
 
     bega_md       = s["MODELS"].get("ECMWF SEAS5 (Bega)")
     chirps_bega   = s.get("chirps_bega")
@@ -1253,6 +1268,8 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
         in_deyr_zone = bool(m_deyr[pi, pj]) if (m_deyr is not None and pi < m_deyr.shape[0] and pj < m_deyr.shape[1]) else True
 
         reg_id = int(reg_map[pi, pj]) if (reg_map is not None and pi < reg_map.shape[0] and pj < reg_map.shape[1]) else None
+        if reg_id == 0:
+            in_deyr_zone = False
         reg_name = REGIME_NAMES.get(reg_id, "Unclassified") if reg_id is not None else None
 
         return dict(
@@ -1260,6 +1277,7 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             season="deyr",
             regime_id=reg_id,
             regime_name=reg_name,
+            regime_guidance=_get_regime_guidance(reg_id, "deyr"),
             is_in_seasonal_zone=in_deyr_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
@@ -1304,17 +1322,23 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             models_dict["ECMWF SEAS5"] = fmam_stats
             models_dict["ECMWF SEAS5 (FMAM)"] = fmam_stats
 
-        m_belg = s.get("seasonal_masks", {}).get("mask_belg")
-        in_belg_zone = bool(m_belg[pi, pj]) if (m_belg is not None and pi < m_belg.shape[0] and pj < m_belg.shape[1]) else True
+        if season == "gu":
+            m_spring = s.get("seasonal_masks", {}).get("mask_gu")
+        else:
+            m_spring = s.get("seasonal_masks", {}).get("mask_belg")
+        in_belg_zone = bool(m_spring[pi, pj]) if (m_spring is not None and pi < m_spring.shape[0] and pj < m_spring.shape[1]) else True
 
         reg_id = int(reg_map[pi, pj]) if (reg_map is not None and pi < reg_map.shape[0] and pj < reg_map.shape[1]) else None
+        if reg_id == 0:
+            in_belg_zone = False
         reg_name = REGIME_NAMES.get(reg_id, "Unclassified") if reg_id is not None else None
 
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
-            season="fmam",
+            season="gu" if season == "gu" else "fmam",
             regime_id=reg_id,
             regime_name=reg_name,
+            regime_guidance=_get_regime_guidance(reg_id, season),
             is_in_seasonal_zone=in_belg_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
@@ -1359,17 +1383,23 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
             models_dict["ECMWF SEAS5"] = kiremt_stats
             models_dict["ECMWF SEAS5 (Kiremt)"] = kiremt_stats
 
-        m_kir = s.get("seasonal_masks", {}).get("mask_kiremt")
+        if season == "annual":
+            m_kir = s.get("seasonal_masks", {}).get("mask_annual")
+        else:
+            m_kir = s.get("seasonal_masks", {}).get("mask_kiremt")
         in_kir_zone = bool(m_kir[pi, pj]) if (m_kir is not None and pi < m_kir.shape[0] and pj < m_kir.shape[1]) else True
 
         reg_id = int(reg_map[pi, pj]) if (reg_map is not None and pi < reg_map.shape[0] and pj < reg_map.shape[1]) else None
+        if reg_id == 0:
+            in_kir_zone = False
         reg_name = REGIME_NAMES.get(reg_id, "Unclassified") if reg_id is not None else None
 
         return dict(
             pi=pi, pj=pj, glat=glat, glon=glon, delta_km=round(delta_km,2),
-            season="kiremt",
+            season="annual" if season == "annual" else "kiremt",
             regime_id=reg_id,
             regime_name=reg_name,
+            regime_guidance=_get_regime_guidance(reg_id, season),
             is_in_seasonal_zone=in_kir_zone,
             win_doy_start=win_start,
             win_doy_end=win_end,
@@ -1466,8 +1496,8 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
     clim_key, arr_key = _vmap[variable]
 
     is_bega   = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
-    is_fmam   = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
-    is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "jjas"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
+    is_fmam   = not is_bega and ((season in ["fmam", "belg", "gu"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
+    is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "jjas", "annual"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
     is_short  = not is_bega and not is_fmam and not is_kiremt and ((season in ["short_rains", "ond"]) or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
 
     if is_bega:
@@ -1673,10 +1703,17 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
     s_masks = s.get("seasonal_masks", {})
     if is_bega:
         m_arr = s_masks.get("mask_deyr", s_masks.get("mask_bega"))
+    elif season == "gu":
+        m_arr = s_masks.get("mask_gu")
+    elif season == "annual":
+        m_arr = s_masks.get("mask_annual")
     elif is_fmam:
         m_arr = s_masks.get("mask_belg")
     elif is_kiremt:
-        m_arr = s_masks.get("mask_kiremt")
+        if season == "jjas":
+            m_arr = s_masks.get("mask_kiremt_jjas", s_masks.get("mask_kiremt"))
+        else:
+            m_arr = s_masks.get("mask_kiremt")
     elif is_short:
         m_arr = s_masks.get("mask_kenya_ond")
     else:

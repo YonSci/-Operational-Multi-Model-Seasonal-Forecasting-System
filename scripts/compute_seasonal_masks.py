@@ -3,19 +3,28 @@ compute_seasonal_masks.py
 -------------------------
 Scientifically computes seasonal rainfall masks and rainfall regime classifications
 for Ethiopia and Kenya based on:
-  1. Dunning et al. (2016) Fourier Harmonic Decomposition (r_H = C_2 / C_1) of 33-year daily CHIRPS.
-  2. Objective Rainfall Regime Delineation:
-     - Regime 1 (Unimodal West): Single prolonged wet season (Mar/Apr to Oct/Nov).
+  1. Two-Stage Harmonic & Climatological Regime Classification (Dunning et al. 2016 & EMI):
+     - Stage 1: Fourier Harmonic Decomposition (rH = C_2 / C_1).
+     - Stage 2: Climatological Peak Timing & Water-Season Detection.
+     - Regime 0 (Arid / Marginal): Pre-filter for hyper-arid Afar/Danakil (P_ann < 200mm or dry autumn).
+     - Regime 1 (Western Unimodal): Single prolonged wet season (Mar/Apr to Oct/Nov).
      - Regime 2 (Bimodal Type 1 Highlands): Belg early rains + dry pause + Kiremt main rains.
      - Regime 3 (Bimodal Type 2 Pastoral Lowlands): Gu MAM + dry summer (JJA) + Deyr SON/OND.
-     - Regime 0 (Arid / Marginal): Annual rainfall < 100mm.
-  3. Physical Water-Balance Detectability & Climatological Precipitation Envelopes.
-  4. Morphological connected-component cleanup.
+  2. Regime-Aware Seasonal Masks:
+     - Belg (FMAM): Confined strictly to Regime 2 Highlands.
+     - Gu (MAM): Confined strictly to Regime 3 Pastoral Lowlands.
+     - Kiremt (JJAS): Regime 2 (bimodal onset) + Regime 1 (national JJAS rainfall).
+     - Deyr (SON-OND): Confined strictly to Regime 3 Pastoral Lowlands.
+     - Annual Wet Season: Confined strictly to Regime 1 Western Unimodal.
+  3. Morphological connected-component cleanup (removing isolated single/double pixels < 3 px).
+  4. Unified sovereign land mask (1,485 pixels).
 
 Outputs:
   outputs/masks/mask_kiremt.nc     (48, 60) boolean
   outputs/masks/mask_belg.nc       (48, 60) boolean (also mask_fmam.nc)
+  outputs/masks/mask_gu.nc         (48, 60) boolean (Gu spring pastoral rains)
   outputs/masks/mask_deyr.nc       (48, 60) boolean (also mask_bega.nc)
+  outputs/masks/mask_annual.nc     (48, 60) boolean (Western Unimodal long season)
   outputs/masks/regime_map.nc      (48, 60) int8 (0: Arid, 1: Unimodal, 2: Bimodal Highlands, 3: Bimodal Lowlands)
   outputs/masks/mask_kenya_mam.nc  (42, 34) boolean
   outputs/masks/mask_kenya_ond.nc  (42, 34) boolean
@@ -33,8 +42,19 @@ from shapely.geometry import shape, Point
 sys.path.insert(0, os.path.abspath("backend"))
 import mam_loader as dl
 
+def remove_small_objects(mask, min_size=3):
+    """Purges isolated noise clusters while preserving narrow ecological corridors."""
+    labeled, num_features = ndi.label(mask)
+    if num_features == 0:
+        return mask.copy()
+    sizes = ndi.sum(mask, labeled, range(num_features + 1))
+    small = sizes < min_size
+    mask_clean = mask.copy()
+    mask_clean[small[labeled]] = False
+    return mask_clean
+
 def compute_ethiopia_masks():
-    print("=== Computing Ethiopia Seasonal Regimes and Masks (Dunning et al. 2016) ===")
+    print("=== Computing Ethiopia Seasonal Regimes and Masks (Dunning et al. 2016 & EMI) ===")
     chirps_path = "data/chirps_pr_et/et_chirps_pr_r25_1993_2025.nc"
     ds = xr.open_dataset(chirps_path)
     p = ds["precip"]  # (time, lat, lon)
@@ -42,7 +62,7 @@ def compute_ethiopia_masks():
     lons = ds["lon"].values
     n_lat, n_lon = len(lats), len(lons)
 
-    # 1. Sovereign Ethiopia Land Mask
+    # 1. Sovereign Ethiopia Land Mask (Unified 1,485 pixels)
     with open("frontend/public/boundaries/eth_admin0.geojson", "r", encoding="utf-8") as f:
         b_data = json.load(f)
     poly = shape(b_data["features"][0]["geometry"])
@@ -63,7 +83,13 @@ def compute_ethiopia_masks():
     for d in range(1, 366):
         q_clim[d-1] = np.mean(p_clean[doy_clean == d], axis=0)
 
-    # 3. Fourier Harmonic Decomposition
+    # Monthly Climatology (mm/month)
+    month_starts = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365]
+    q_month = np.zeros((12, n_lat, n_lon), dtype=np.float32)
+    for m in range(12):
+        q_month[m] = np.sum(q_clim[month_starts[m]:month_starts[m+1]], axis=0)
+
+    # 3. Fourier Harmonic Decomposition (Dunning et al. 2016)
     theta = 2.0 * np.pi * (np.arange(1, 366) - 0.5) / 365.0
     cos1 = np.cos(theta)[:, None, None]
     sin1 = np.sin(theta)[:, None, None]
@@ -83,30 +109,72 @@ def compute_ethiopia_masks():
     p_ann  = np.sum(q_clim, axis=0)
     p_fmam = np.sum(q_clim[31:151], axis=0)   # Feb-May (Belg / Gu)
     p_jjas = np.sum(q_clim[151:273], axis=0)  # Jun-Sep (Kiremt)
-    p_ond  = np.sum(q_clim[273:365], axis=0)  # Oct-Dec (Deyr / Bega)
+    p_ond  = np.sum(q_clim[273:365], axis=0)  # Oct-Dec (Deyr)
     p_jja  = np.sum(q_clim[151:243], axis=0)  # Jun-Aug (Summer)
-    p_jun  = np.sum(q_clim[151:181], axis=0)  # June
-    p_may  = np.sum(q_clim[120:151], axis=0)  # May
-    p_apr  = np.sum(q_clim[90:120], axis=0)   # April
 
     with np.errstate(divide="ignore", invalid="ignore"):
         r_jjas = np.where(p_ann > 10, p_jjas / p_ann, 0.0)
         r_fmam = np.where(p_ann > 10, p_fmam / p_ann, 0.0)
         r_ond  = np.where(p_ann > 10, p_ond  / p_ann, 0.0)
 
+    # Peak timing detection
+    q_smooth = np.zeros_like(q_month)
+    for m in range(12):
+        prev_m = (m - 1) % 12
+        next_m = (m + 1) % 12
+        q_smooth[m] = 0.25 * q_month[prev_m] + 0.5 * q_month[m] + 0.25 * q_month[next_m]
+
+    peak1_month = np.argmax(q_smooth, axis=0) + 1  # 1-indexed (Jan=1..Dec=12)
+
+    peak2_month = np.zeros((n_lat, n_lon), dtype=int)
+    for i in range(n_lat):
+        for j in range(n_lon):
+            local_max = []
+            for m in range(12):
+                prev_m = (m - 1) % 12
+                next_m = (m + 1) % 12
+                if q_smooth[m, i, j] > q_smooth[prev_m, i, j] and q_smooth[m, i, j] > q_smooth[next_m, i, j]:
+                    local_max.append((m + 1, q_smooth[m, i, j]))
+            local_max.sort(key=lambda x: x[1], reverse=True)
+            if len(local_max) > 1:
+                peak2_month[i, j] = local_max[1][0]
+            elif len(local_max) == 1:
+                peak2_month[i, j] = local_max[0][0]
+
     LON, LAT = np.meshgrid(lons, lats)
 
-    # 5. Objective Rainfall Regime Classification
-    # Regime 3: Bimodal Type 2 - Southern / SE Pastoral Lowlands (Gu + Deyr)
-    reg_3 = (p_ond >= 35.0) & (r_ond >= 0.10) & (p_jja < 1.3 * p_ond) & (rH >= 0.65) & lm
-    # Regime 0: Arid / Marginal
-    reg_0 = (p_ann < 100.0) & lm & (~reg_3)
-    # Regime 2: Bimodal Type 1 - Central/Eastern Highlands (Belg + Kiremt)
-    reg_2 = (p_fmam >= 70.0) & (r_fmam >= 0.15) & (p_jjas >= 150.0) & (
-        (LON >= 38.2) & ((p_jun < 1.25 * p_may) | (p_jun < 1.25 * p_apr) | (rH >= 0.42))
-    ) & (~reg_3) & (~reg_0) & lm
-    # Regime 1: Unimodal West (single extended wet season)
-    reg_1 = lm & (~reg_3) & (~reg_2) & (~reg_0)
+    # 5. TWO-STAGE REGIME CLASSIFICATION
+    # Step 1: Pre-filter Regime 0: Arid / Marginal (Hyper-arid Danakil Depression / Afar)
+    reg_0 = ((p_ann < 200.0) | ((p_ann < 300.0) & (p_ond < 30.0))) & lm
+
+    # Step 2: Regime 3: Bimodal Type 2 - Southern / SE Pastoral Lowlands (Gu + Deyr)
+    reg_3 = (
+        (p_ond >= 30.0) & (r_ond >= 0.08) &
+        (p_jja < 1.3 * p_ond) &
+        ((rH >= 0.70) | np.isin(peak1_month, [10, 11]) | np.isin(peak2_month, [10, 11])) &
+        (~reg_0) & lm
+    )
+
+    # Step 3: Regime 2: Bimodal Type 1 - Central/Eastern Highlands (Belg + Kiremt)
+    has_belg_peak = (p_fmam >= 50.0) & (r_fmam >= 0.10)
+    has_kiremt_peak = (p_jjas >= 120.0) & (r_jjas >= 0.25)
+    highland_lon = (LON >= 38.0) | ((LON >= 37.5) & (LAT >= 10.0))
+
+    reg_2 = (
+        has_belg_peak & has_kiremt_peak &
+        highland_lon &
+        ((rH >= 0.38) | np.isin(peak2_month, [3, 4, 5])) &
+        (~reg_0) & (~reg_3) & lm
+    )
+
+    # Step 4: Regime 1: Western Unimodal (Single Prolonged Wet Season)
+    reg_1 = lm & (~reg_0) & (~reg_2) & (~reg_3)
+
+    # Morphological cleanup (remove isolated clusters < 3 pixels)
+    reg_0 = remove_small_objects(reg_0, min_size=2)
+    reg_2 = remove_small_objects(reg_2, min_size=3)
+    reg_3 = remove_small_objects(reg_3, min_size=3)
+    reg_1 = lm & (~reg_0) & (~reg_2) & (~reg_3)
 
     regime_map = np.zeros((n_lat, n_lon), dtype=np.int8)
     regime_map[reg_1] = 1
@@ -132,36 +200,38 @@ def compute_ethiopia_masks():
     dr_fmam   = np.sum(~np.isnan(c_fmam["onset_doy"]),   axis=0) / c_fmam["onset_doy"].shape[0]   if c_fmam   else np.ones((n_lat, n_lon))
     dr_bega   = np.sum(~np.isnan(c_bega["onset_doy"]),   axis=0) / c_bega["onset_doy"].shape[0]   if c_bega   else np.ones((n_lat, n_lon))
 
-    # 7. Composite Seasonal Masks
-    # Kiremt (JJAS): Main rains across Regime 1 & Regime 2
-    m_kiremt_raw = (reg_1 | reg_2) & (p_jjas >= 150.0) & (r_jjas >= 0.25) & (dr_kiremt >= 0.65) & lm
+    # 7. Regime-Aware Composite Seasonal Masks
     # Belg (FMAM): Confined strictly to Regime 2 Highlands
-    m_belg_raw   = reg_2 & (p_fmam >= 70.0) & (r_fmam >= 0.15) & (dr_fmam >= 0.60) & lm
+    mask_belg   = remove_small_objects(reg_2 & (p_fmam >= 50.0) & (r_fmam >= 0.10) & (dr_fmam >= 0.55) & lm, min_size=3)
+    # Gu (MAM): Confined strictly to Regime 3 Pastoral Lowlands
+    mask_gu     = remove_small_objects(reg_3 & (p_fmam >= 40.0) & (r_fmam >= 0.10) & (dr_fmam >= 0.50) & lm, min_size=3)
     # Deyr (SON-OND): Confined strictly to Regime 3 Pastoral Lowlands
-    m_deyr_raw   = reg_3 & (p_ond >= 35.0) & (r_ond >= 0.10) & (dr_bega >= 0.55) & lm
+    mask_deyr   = remove_small_objects(reg_3 & (p_ond >= 30.0) & (r_ond >= 0.08) & (dr_bega >= 0.50) & lm, min_size=3)
+    # Kiremt Onset (JJAS): Confined strictly to Regime 2 Highlands bimodal onset domain
+    mask_kiremt = remove_small_objects(reg_2 & (p_jjas >= 120.0) & (r_jjas >= 0.20) & (dr_kiremt >= 0.60) & lm, min_size=3)
+    # National JJAS Rainfall Domain: Regime 1 + Regime 2
+    mask_kiremt_jjas = remove_small_objects((reg_1 | reg_2) & (p_jjas >= 120.0) & (r_jjas >= 0.20) & (dr_kiremt >= 0.60) & lm, min_size=3)
+    # Annual Wet Season: Confined strictly to Regime 1 Western Unimodal
+    mask_annual = remove_small_objects(reg_1 & lm, min_size=3)
 
-    # Morphological connected component cleanup
-    struct = np.ones((3, 3), dtype=bool)
-    mask_kiremt = ndi.binary_opening(m_kiremt_raw, structure=struct)
-    mask_belg   = ndi.binary_opening(m_belg_raw, structure=struct)
-    mask_deyr   = ndi.binary_opening(m_deyr_raw, structure=struct)
-
-    for m_clean, m_raw in [(mask_kiremt, m_kiremt_raw), (mask_belg, m_belg_raw), (mask_deyr, m_deyr_raw)]:
-        nbrs = ndi.convolve(m_raw.astype(int), np.array([[1,1,1],[1,0,1],[1,1,1]]), mode='constant')
-        m_clean[m_raw & (nbrs >= 2)] = True
-
-    print(f"\nFinal Kiremt Mask: {np.sum(mask_kiremt)}/{n_land} ({np.sum(mask_kiremt)/n_land*100:.1f}%)")
-    print(f"Final Belg Mask:   {np.sum(mask_belg)}/{n_land} ({np.sum(mask_belg)/n_land*100:.1f}%)")
-    print(f"Final Deyr Mask:   {np.sum(mask_deyr)}/{n_land} ({np.sum(mask_deyr)/n_land*100:.1f}%)")
+    print(f"\nFinal Kiremt Onset Mask (Regime 2): {np.sum(mask_kiremt)}/{n_land} ({np.sum(mask_kiremt)/n_land*100:.1f}%)")
+    print(f"Final JJAS Rainfall Mask (R1+R2):  {np.sum(mask_kiremt_jjas)}/{n_land} ({np.sum(mask_kiremt_jjas)/n_land*100:.1f}%)")
+    print(f"Final Belg Mask (Regime 2):        {np.sum(mask_belg)}/{n_land} ({np.sum(mask_belg)/n_land*100:.1f}%)")
+    print(f"Final Gu Mask (Regime 3):          {np.sum(mask_gu)}/{n_land} ({np.sum(mask_gu)/n_land*100:.1f}%)")
+    print(f"Final Deyr Mask (Regime 3):        {np.sum(mask_deyr)}/{n_land} ({np.sum(mask_deyr)/n_land*100:.1f}%)")
+    print(f"Final Annual Mask (Regime 1):      {np.sum(mask_annual)}/{n_land} ({np.sum(mask_annual)/n_land*100:.1f}%)")
 
     return {
         "lats": lats,
         "lons": lons,
         "regime_map": regime_map,
         "mask_kiremt": mask_kiremt,
+        "mask_kiremt_jjas": mask_kiremt_jjas,
         "mask_belg": mask_belg,
+        "mask_gu": mask_gu,
         "mask_deyr": mask_deyr,
-        "mask_bega": mask_deyr,  # backward-compatible alias
+        "mask_bega": mask_deyr,    # backward-compatible alias
+        "mask_annual": mask_annual,
     }
 
 def compute_kenya_masks():
@@ -204,13 +274,8 @@ def compute_kenya_masks():
     # Kenya Short Rains (OND): P >= 60mm AND R >= 15% AND DR >= 60%
     mask_ond_raw = (p_ond >= 60.0) & (r_ond >= 0.15) & (dr_ond >= 0.60) & lm
 
-    struct = np.ones((3, 3), dtype=bool)
-    mask_mam = ndi.binary_opening(mask_mam_raw, structure=struct)
-    mask_ond = ndi.binary_opening(mask_ond_raw, structure=struct)
-
-    for m_clean, m_raw in [(mask_mam, mask_mam_raw), (mask_ond, mask_ond_raw)]:
-        nbrs = ndi.convolve(m_raw.astype(int), np.array([[1,1,1],[1,0,1],[1,1,1]]), mode='constant')
-        m_clean[m_raw & (nbrs >= 2)] = True
+    mask_mam = remove_small_objects(mask_mam_raw, min_size=3)
+    mask_ond = remove_small_objects(mask_ond_raw, min_size=3)
 
     print(f"Kenya Long Rains (MAM) Mask:  {np.sum(mask_mam)}/{n_land} ({np.sum(mask_mam)/n_land*100:.1f}%)")
     print(f"Kenya Short Rains (OND) Mask: {np.sum(mask_ond)}/{n_land} ({np.sum(mask_ond)/n_land*100:.1f}%)")
@@ -238,9 +303,15 @@ def main():
     ds_belg.to_netcdf("outputs/masks/mask_belg.nc")
     ds_belg.to_netcdf("outputs/masks/mask_fmam.nc")
 
+    ds_gu = xr.Dataset({"mask": (["lat", "lon"], et_res["mask_gu"].astype(np.int8))}, coords={"lat": et_res["lats"], "lon": et_res["lons"]})
+    ds_gu.to_netcdf("outputs/masks/mask_gu.nc")
+
     ds_deyr = xr.Dataset({"mask": (["lat", "lon"], et_res["mask_deyr"].astype(np.int8))}, coords={"lat": et_res["lats"], "lon": et_res["lons"]})
     ds_deyr.to_netcdf("outputs/masks/mask_deyr.nc")
     ds_deyr.to_netcdf("outputs/masks/mask_bega.nc")
+
+    ds_annual = xr.Dataset({"mask": (["lat", "lon"], et_res["mask_annual"].astype(np.int8))}, coords={"lat": et_res["lats"], "lon": et_res["lons"]})
+    ds_annual.to_netcdf("outputs/masks/mask_annual.nc")
 
     ds_mam = xr.Dataset({"mask": (["lat", "lon"], ke_res["mask_kenya_mam"].astype(np.int8))}, coords={"lat": ke_res["lats"], "lon": ke_res["lons"]})
     ds_mam.to_netcdf("outputs/masks/mask_kenya_mam.nc")
@@ -255,8 +326,10 @@ def main():
         regime_map=et_res["regime_map"],
         mask_kiremt=et_res["mask_kiremt"],
         mask_belg=et_res["mask_belg"],
+        mask_gu=et_res["mask_gu"],
         mask_deyr=et_res["mask_deyr"],
         mask_bega=et_res["mask_bega"],
+        mask_annual=et_res["mask_annual"],
         mask_kenya_mam=ke_res["mask_kenya_mam"],
         mask_kenya_ond=ke_res["mask_kenya_ond"],
     )

@@ -40,9 +40,11 @@ const SEASONS = {
     { id:'long_rains',  label:'Long Rains (MAM: Mar-May)',   init:'0201', initLabel:'Feb 01' },
   ],
   ethiopia: [
-    { id:'bega',   label:'Deyr (SON-OND) - Pastoral Rains',  init:'0901', initLabel:'Sep 01' },
-    { id:'fmam',   label:'Belg (FMAM) - Highland Early Rains', init:'0101', initLabel:'Jan 01' },
-    { id:'kiremt', label:'Kiremt (JJAS) - Main Rains',        init:'0501', initLabel:'May 01' },
+    { id:'kiremt', label:'Kiremt (JJAS) - Highlands Main Rains',        init:'0501', initLabel:'May 01' },
+    { id:'belg',   label:'Belg (FMAM) - Highlands Early Rains',         init:'0101', initLabel:'Jan 01' },
+    { id:'annual', label:'Annual Wet Season (Western Unimodal)',        init:'0501', initLabel:'May 01' },
+    { id:'gu',     label:'Gu (MAM) - Pastoral Spring Rains',            init:'0101', initLabel:'Jan 01' },
+    { id:'deyr',   label:'Deyr (SON-OND) - Pastoral Autumn Rains',      init:'0901', initLabel:'Sep 01' },
   ],
 }
 const INIT_LABELS = Object.fromEntries(
@@ -807,11 +809,11 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
     </div>
   )
   const isBega = selectedSeason === 'bega' || selectedSeason === 'deyr' || selectedSeason === 'ondj' || (pixelData?.win_doy_start === 244 && pixelData?.win_doy_end === 396) || (pixelData?.season === 'bega' || pixelData?.season === 'deyr' || pixelData?.season === 'ondj')
-  const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg')))
-  const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
+  const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'gu' || (pixelData?.win_doy_start === 32 && (pixelData?.season === 'fmam' || pixelData?.season === 'belg' || pixelData?.season === 'gu')))
+  const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || selectedSeason === 'annual' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt' || pixelData?.season === 'annual'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
   const isSingle = isBega || isFmam || isKiremt || isShort
-  const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
+  const seasonCode = isBega ? 'Deyr (SON-OND)' : (selectedSeason === 'gu' ? 'Gu (MAM)' : (isFmam ? 'Belg (FMAM)' : (selectedSeason === 'annual' ? 'Annual Wet Season' : (isKiremt ? 'Kiremt (JJAS)' : (isShort ? 'OND' : 'MAM')))))
   const models = pixelData?.models ?? {}
   const allEntries = Object.entries(models).filter(([n]) => {
     if (isBega) return n.includes('ECMWF SEAS5') || n.includes('Bega') || n.includes('Deyr')
@@ -886,17 +888,17 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
       {pixelData?.is_in_seasonal_zone === false && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
-          borderRadius: 8, fontSize: 10, background: 'rgba(245, 158, 11, 0.15)',
-          border: '1px solid rgba(245, 158, 11, 0.4)', color: '#fbbf24',
+          borderRadius: 8, fontSize: 10,
+          background: pixelData.regime_id === 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid ' + (pixelData.regime_id === 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'),
+          color: pixelData.regime_id === 0 ? '#fca5a5' : '#fbbf24',
           flexShrink: 0
         }}>
-          <span style={{fontSize: 14}}>⚠️</span>
+          <span style={{fontSize: 14}}>{pixelData.regime_id === 0 ? '🏜️' : '⚠️'}</span>
           <span>
-            <strong>Climatological Regime Notice:</strong> This site ({Number(pixelData.glat).toFixed(2)}°N, {Number(pixelData.glon).toFixed(2)}°E, {pixelData.regime_name || 'Unclassified'}) is outside the active seasonal envelope for {seasonCode}.
-            {isBega ? ' In Northern & Central Ethiopia, this period corresponds to dry Bega harvest; Deyr pastoral rains are confined to the Southern & SE Lowlands (Regime 3).' :
-             isFmam ? ' Western Ethiopia experiences an uninterrupted unimodal wet season, and Southern Ethiopia experiences Gu (MAM) rains. Distinct Belg early rains are unique to the Central/Eastern Highlands (Regime 2).' :
-             isKiremt ? ' Kiremt summer monsoon rains are confined to the Highlands and Western Ethiopia; southern pastoral lowlands remain dry during JJAS.' :
-             ' Threshold criteria for this season are not met at this coordinate.'}
+            <strong>{pixelData.regime_id === 0 ? 'Arid / Marginal Alert:' : 'Climatological Regime Notice:'}</strong> {pixelData.regime_guidance || (
+              `This site (${Number(pixelData.glat).toFixed(2)}°N, ${Number(pixelData.glon).toFixed(2)}°E, ${pixelData.regime_name || 'Unclassified'}) is outside the active seasonal envelope for ${seasonCode}.`
+            )}
           </span>
         </div>
       )}

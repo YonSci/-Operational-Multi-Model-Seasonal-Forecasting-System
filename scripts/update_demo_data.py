@@ -160,7 +160,11 @@ def update_demo_data():
         data_fmam['fmam_target_lat'] = ds_ref.lat.values.astype(np.float64)
         data_fmam['fmam_target_lon'] = ds_ref.lon.values.astype(np.float64)
         data_fmam['fmam_chirps_years'] = ds_ref.year.values.astype(int)
-        data_fmam['fmam_lm'] = np.isfinite(data_fmam['fmam_chirps_onset']).any(axis=0)
+        # Unify to sovereign 1,485 land mask (remedies 6 hyper-arid cells in Danakil where FMAM had NaN calibration)
+        if 'kiremt_lm' in data_kiremt:
+            data_fmam['fmam_lm'] = data_kiremt['kiremt_lm'].copy()
+        else:
+            data_fmam['fmam_lm'] = np.isfinite(data_fmam['fmam_chirps_onset']).any(axis=0)
         ds_ref.close()
 
         data_fmam['fmam_ecmwf_onset'] = get_var(os.path.join(fmam_dir, 'ECMWF_onset_doy_all_years.nc')).astype(np.float16)

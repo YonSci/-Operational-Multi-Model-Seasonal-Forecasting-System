@@ -468,19 +468,28 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
     lines.push(`${icon} Regime: ${props.regime_name}`)
   }
 
-  // 2. Climatological envelope advisory if outside seasonal zone
-  if (props.in_season_mask === false) {
+  // 2. Climatological envelope advisory if outside seasonal zone or in Arid Regime
+  if (props.regime_id === 0) {
+    lines.push('🏜️ Arid / Marginal Non-Seasonal Zone')
+    lines.push('ℹ️ Annual rainfall <200–300 mm; no reliable rainy season detected (Dunning / EMI).')
+  } else if (props.in_season_mask === false) {
     if (activeSeason === 'fmam' || activeSeason === 'belg') {
       lines.push('⚠️ Outside Belg Highland Domain')
       lines.push('ℹ️ Belg rains are confined to Central/Eastern Highlands (Regime 2).')
       lines.push('   Western Ethiopia is Unimodal; Southern Ethiopia receives Gu (MAM).')
+    } else if (activeSeason === 'gu') {
+      lines.push('⚠️ Outside Gu Pastoral Domain')
+      lines.push('ℹ️ Gu spring rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
+    } else if (activeSeason === 'annual') {
+      lines.push('⚠️ Outside Western Unimodal Domain')
+      lines.push('ℹ️ Extended Annual Wet Season is confined to Western Ethiopia (Regime 1).')
     } else if (activeSeason === 'bega' || activeSeason === 'deyr' || activeSeason === 'ondj') {
       lines.push('⚠️ Outside Deyr Pastoral Domain')
       lines.push('ℹ️ Deyr rains are confined to Southern/SE Pastoral Lowlands (Regime 3).')
       lines.push('   Northern & Central Highlands are in dry Bega harvest season.')
     } else if (activeSeason === 'kiremt' || activeSeason === 'jjas') {
-      lines.push('⚠️ Outside Kiremt Domain')
-      lines.push('ℹ️ Kiremt monsoon rains are confined to Highlands & Western Ethiopia.')
+      lines.push('⚠️ Outside Kiremt Highland Domain')
+      lines.push('ℹ️ Kiremt bimodal onset is confined to Highlands (Regime 2).')
     } else {
       lines.push('⚠️ Outside Primary Seasonal Rainfall Zone')
     }

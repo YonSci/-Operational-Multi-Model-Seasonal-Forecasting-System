@@ -47,10 +47,10 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
 
     reg_map = grid.get("regime_map")
     REGIME_NAMES = {
+        0: "Arid / Marginal (No Reliable Rainy Season)",
         1: "Western Unimodal (Single Extended Season)",
         2: "Bimodal Type 1 (Belg & Kiremt Highlands)",
         3: "Bimodal Type 2 (Gu & Deyr Pastoral Lowlands)",
-        0: "Arid / Marginal Non-Seasonal",
     }
     reg_counts = {1: 0, 2: 0, 3: 0, 0: 0}
 
@@ -112,8 +112,8 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     try:
         import numpy as np
         is_bega = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
-        is_fmam = not is_bega and ((season in ["fmam", "belg"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
-        is_kiremt = not is_bega and not is_fmam and ((season == "kiremt") or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
+        is_fmam = not is_bega and ((season in ["fmam", "belg", "gu"]) or (model in ["ECMWF SEAS5 (FMAM)", "ecmwf_fmam"]))
+        is_kiremt = not is_bega and not is_fmam and ((season in ["kiremt", "annual", "jjas"]) or (model in ["ECMWF SEAS5 (Kiremt)", "ecmwf_kiremt"]))
         is_short = not is_bega and not is_fmam and not is_kiremt and ((season in ["short_rains", "ond"]) or (model in ["ECMWF SEAS5 (Sep)", "ecmwf_sep"]))
         bega_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Bega)")
         fmam_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (FMAM)")

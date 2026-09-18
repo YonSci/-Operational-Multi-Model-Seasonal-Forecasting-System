@@ -31,7 +31,7 @@ Implement a physically and climatologically grounded seasonal masking and classi
 
 ### 1. Data Pipeline & Mask Computation Engine
 
-#### [`scripts/compute_seasonal_masks.py`](scripts/compute_seasonal_masks.py)
+#### [`scripts/compute_seasonal_masks.py`](../../scripts/compute_seasonal_masks.py)
 - Ingest daily CHIRPS 1993–2025 (`et_chirps_pr_r25_1993_2025.nc`).
 - Compute daily climatology $Q(d)$ for $d = 1, \dots, 365$.
 - Compute Fourier harmonics:
@@ -49,7 +49,7 @@ Implement a physically and climatologically grounded seasonal masking and classi
 - Apply morphological cleanup (`scipy.ndimage.binary_opening` / `label`) to purge isolated single-pixel noise.
 - Save to `outputs/masks/seasonal_masks.npz`.
 
-#### [`scripts/update_demo_data.py`](scripts/update_demo_data.py)
+#### [`scripts/update_demo_data.py`](../../scripts/update_demo_data.py)
 - Package `mask_kiremt`, `mask_belg`, `mask_deyr`, `mask_bega` (alias for backward compatibility), `mask_kenya_mam`, `mask_kenya_ond`, and `regime_map` (as `int8`) into `backend/demo_data.npz`.
 - Ensure total NPZ file size remains strictly $< 75\text{ MB}$ (achieved 73.24 MB).
 
@@ -57,7 +57,7 @@ Implement a physically and climatologically grounded seasonal masking and classi
 
 ### 2. Backend API & Loader
 
-#### [`backend/mam_loader.py`](backend/mam_loader.py)
+#### [`backend/mam_loader.py`](../../backend/mam_loader.py)
 - Support `"deyr"` season parameter (with `"bega"` and `"ondj"` as aliases).
 - Load `regime_map` into `_state["regime_map"]`.
 - In `get_pixel_stats(lat, lon, season)`:
@@ -72,7 +72,7 @@ Implement a physically and climatologically grounded seasonal masking and classi
   - Route `"belg"` / `"fmam"` to the refined `mask_belg`.
   - Route `"kiremt"` / `"jjas"` to `mask_kiremt`.
 
-#### [`backend/kenya_api/grid.py`](backend/kenya_api/grid.py)
+#### [`backend/kenya_api/grid.py`](../../backend/kenya_api/grid.py)
 - Attach `regime_id`, `regime_name`, and `in_season_mask` to each GeoJSON feature's `properties`.
 - Include `regime_counts` in the `meta` response.
 
@@ -80,7 +80,7 @@ Implement a physically and climatologically grounded seasonal masking and classi
 
 ### 3. Frontend UI & Experience
 
-#### [`frontend/src/components/MapPanel.jsx`](frontend/src/components/MapPanel.jsx)
+#### [`frontend/src/components/MapPanel.jsx`](../../frontend/src/components/MapPanel.jsx)
 - Update tooltip `fmtTip()`:
   - Display rainfall regime badge: e.g. `🏔️ Regime: Bimodal Highlands (Belg & Kiremt)` or `🌾 Regime: Western Unimodal`.
   - Provide tailored advisory when outside the seasonal envelope:
@@ -90,13 +90,13 @@ Implement a physically and climatologically grounded seasonal masking and classi
   - Label: `🎯 Seasonal Domain Only` vs `🌐 All Domain`.
   - Badge: displays active pixels and regime context.
 
-#### [`frontend/src/App.jsx`](frontend/src/App.jsx)
+#### [`frontend/src/App.jsx`](../../frontend/src/App.jsx)
 - In `ForecastingTab`:
   - Show a regime badge (`Unimodal`, `Bimodal Highlands`, or `Bimodal Pastoral`).
   - Render a clear climatological notice when selected site is outside the seasonal regime.
 - Update headers, navigation, and chart titles to display `Deyr (SON-OND)` instead of `Bega (ONDJ)`.
 
-#### [`frontend/src/components/BulletinModal.jsx`](frontend/src/components/BulletinModal.jsx)
+#### [`frontend/src/components/BulletinModal.jsx`](../../frontend/src/components/BulletinModal.jsx)
 - Update season label for Deyr: `Deyr (SON-OND) Pastoral Rains`.
 
 ---
