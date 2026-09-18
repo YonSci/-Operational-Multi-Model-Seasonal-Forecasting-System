@@ -340,6 +340,15 @@ def run_pipeline():
         op_idx = len(file_years) - 1
         xr.DataArray(p_damped[:, op_idx, :, :], dims=["category", "lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"probs_op_{file_years[op_idx]}_{var_name}.nc")
 
+        cal_mask_ov = np.isin(overlap_years, CAL_YEARS)
+        if np.sum(cal_mask_ov) > 0:
+            rps_cal = dl.rps_batch(p_damped[:, e_idx[cal_mask_ov]], obs_cat[cal_mask_ov])
+            rps_clim_c = dl.rps_clim_batch(obs_cat[cal_mask_ov])
+            rpss_cal = dl.compute_rpss(np.nanmean(rps_cal, axis=0), np.nanmean(rps_clim_c, axis=0))
+            hr_cal = dl.compute_hitrate(p_damped[:, e_idx[cal_mask_ov]], obs_cat[cal_mask_ov])
+            xr.DataArray(rpss_cal, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"rpss_{var_name}_cal.nc")
+            xr.DataArray(hr_cal, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}).to_netcdf(OUT_DIR / f"hitrate_{var_name}_cal.nc")
+
         val_mask_ov = np.isin(overlap_years, VAL_YEARS)
         if np.sum(val_mask_ov) > 0:
             rps_val = dl.rps_batch(p_damped[:, e_idx[val_mask_ov]], obs_cat[val_mask_ov])

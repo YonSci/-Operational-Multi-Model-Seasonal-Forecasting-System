@@ -3,6 +3,7 @@ import * as mapboxgl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import useDashboardStore from '../store/useDashboardStore'
+import DiagnosticAgreementModal, { AUDITED_20_SITES_ETHIOPIA } from './DiagnosticAgreementModal'
 
 if (typeof mapboxgl.setWorkerUrl === 'function') {
   mapboxgl.setWorkerUrl(workerUrl)
@@ -101,15 +102,7 @@ export const MONITORED_SITES_KENYA = [
   { site_name: "Genco LTD Tana River Farm",      lat: -2.21314, lon: 40.0517, county: "Tana River", country: "kenya",    desc: "Coast Rangeland Site" },
 ]
 
-export const MONITORED_SITES_ETHIOPIA = [
-  { site_name: "Holetta Agricultural Research Center", lat: 9.060, lon: 38.500, county: "Oromia", country: "ethiopia", desc: "EIAR Central Highland Research Hub" },
-  { site_name: "Debre Zeit / Bishoftu Station",        lat: 8.750, lon: 38.980, county: "Oromia", country: "ethiopia", desc: "Tef & Pulse Research Center" },
-  { site_name: "Melkassa Agricultural Research Center", lat: 8.410, lon: 39.320, county: "Oromia", country: "ethiopia", desc: "Semi-Arid Lowland Ag Research Center" },
-  { site_name: "Bako Agricultural Research Center",     lat: 9.120, lon: 37.050, county: "Oromia", country: "ethiopia", desc: "Western Maize & Grain Research Center" },
-  { site_name: "Hawassa Farm Station",                  lat: 7.050, lon: 38.480, county: "Sidama", country: "ethiopia", desc: "Southern Rift Valley Farm Station" },
-  { site_name: "Yabello Pastoral Research Center",      lat: 4.880, lon: 38.090, county: "Borana", country: "ethiopia", desc: "EIAR Southern Pastoral Rangeland Center" },
-  { site_name: "Kobo Agricultural Research Center",     lat: 12.140, lon: 39.630, county: "North Wollo", country: "ethiopia", desc: "Dryland Lowland Agricultural Center" },
-]
+export const MONITORED_SITES_ETHIOPIA = AUDITED_20_SITES_ETHIOPIA
 
 export const MONITORED_SITES = [...MONITORED_SITES_KENYA, ...MONITORED_SITES_ETHIOPIA]
 
@@ -127,7 +120,12 @@ function getSitesGeoJSON(country = 'kenya') {
         lon: s.lon,
         county: s.county,
         country: s.country,
-        desc: s.desc
+        desc: s.desc,
+        regime_id: s.regime_id,
+        regime_name: s.regime_name,
+        rh: s.rh,
+        pann: s.pann,
+        dunning_type: s.dunning_type
       }
     }))
   }
@@ -281,35 +279,58 @@ const CS_KIREMT = {
 
 // Dedicated Bega / Deyr (ONDJ: Oct-Jan, Ethiopia) colour scales:
 const CS_BEGA = {
-  onset_med:    { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
+  onset_med:    { s:[245,260,275,290,305,320,335], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
   cess_med:     { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble cessation P50 (DOY)' },
   lgp_med:      { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length P50 (days)' },
   onset_anom:   { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset anomaly (days)' },
   cess_anom:    { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation anomaly (days)' },
   lgp_anom:     { s:[-25,-15,-5,0,5,15,25],        c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length anomaly (days)' },
-  onset_hr_w:   { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 HR-Weighted (DOY)' },
+  onset_hr_w:   { s:[245,260,275,290,305,320,335], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 HR-Weighted (DOY)' },
   cess_hr_w:    { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 HR-Weighted (DOY)' },
   lgp_hr_w:     { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length HR-Weighted (days)' },
-  onset_rpss_w: { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 RPSS-Weighted (DOY)' },
+  onset_rpss_w: { s:[245,260,275,290,305,320,335], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 RPSS-Weighted (DOY)' },
   cess_rpss_w:  { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 RPSS-Weighted (DOY)' },
   lgp_rpss_w:   { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length RPSS-Weighted (days)' },
-  chirps_p50_onset: { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
+  chirps_p50_onset: { s:[245,260,275,290,305,320,335], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
   chirps_p50_cess:  { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Cessation P50 (DOY)' },
   chirps_p50_lgp:   { s:[15,25,40,55,70,85,105],   c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'CHIRPS Season Length P50 (days)' },
-  h_onset_p50:  { s:[265,280,295,310,325,340,355], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 (DOY)' },
+  h_onset_p50:  { s:[245,260,275,290,305,320,335], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 (DOY)' },
   h_cess_p50:   { s:[320,335,350,365,375,385,396], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 (DOY)' },
   h_lgp_p50:    { s:[15,25,40,55,70,85,105],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
 }
 
+// Dedicated Western Unimodal (Annual Wet Season, Ethiopia: May-Oct) colour scales:
+const CS_ANNUAL = {
+  onset_med:    { s:[135,150,165,180,195,210,225], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
+  cess_med:     { s:[250,265,275,285,295,305,320], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble cessation P50 (DOY)' },
+  lgp_med:      { s:[60,75,90,105,120,135,160],    c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length P50 (days)' },
+  onset_anom:   { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset anomaly (days)' },
+  cess_anom:    { s:[-25,-15,-5,0,5,15,25],        c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation anomaly (days)' },
+  lgp_anom:     { s:[-25,-15,-5,0,5,15,25],        c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season length anomaly (days)' },
+  onset_hr_w:   { s:[135,150,165,180,195,210,225], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 HR-Weighted (DOY)' },
+  cess_hr_w:    { s:[250,265,275,285,295,305,320], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 HR-Weighted (DOY)' },
+  lgp_hr_w:     { s:[60,75,90,105,120,135,160],    c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length HR-Weighted (days)' },
+  onset_rpss_w: { s:[135,150,165,180,195,210,225], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 RPSS-Weighted (DOY)' },
+  cess_rpss_w:  { s:[250,265,275,285,295,305,320], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 RPSS-Weighted (DOY)' },
+  lgp_rpss_w:   { s:[60,75,90,105,120,135,160],    c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length RPSS-Weighted (days)' },
+  chirps_p50_onset: { s:[135,150,165,180,195,210,225], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
+  chirps_p50_cess:  { s:[250,265,275,285,295,305,320], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Cessation P50 (DOY)' },
+  chirps_p50_lgp:   { s:[60,75,90,105,120,135,160],    c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'CHIRPS Season Length P50 (days)' },
+  h_onset_p50:  { s:[135,150,165,180,195,210,225], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset P50 (DOY)' },
+  h_cess_p50:   { s:[250,265,275,285,295,305,320], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 (DOY)' },
+  h_lgp_p50:    { s:[60,75,90,105,120,135,160],    c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length P50 (days)' },
+}
+
 function detectSeason(selectedSeason, country, gridData) {
   if (selectedSeason === 'deyr' || selectedSeason === 'bega' || selectedSeason === 'ondj') return 'deyr'
-  if (selectedSeason === 'fmam' || selectedSeason === 'belg') return 'fmam'
-  if (selectedSeason === 'kiremt') return 'kiremt'
+  if (selectedSeason === 'annual' || selectedSeason === 'western') return 'annual'
+  if (selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'gu') return 'fmam'
+  if (selectedSeason === 'kiremt' || selectedSeason === 'jjas') return 'kiremt'
   if (selectedSeason === 'short_rains') return 'short_rains'
   const vmin = gridData?.meta?.vmin
   if (vmin != null) {
-    if (vmin >= 250) return country === 'ethiopia' ? 'deyr' : 'short_rains'
-    if (vmin >= 130) return 'kiremt'
+    if (vmin >= 240) return country === 'ethiopia' ? 'deyr' : 'short_rains'
+    if (vmin >= 140) return 'kiremt'
     if (vmin >= 30 && vmin <= 130 && country === 'ethiopia') return 'fmam'
   }
   if (country === 'ethiopia') return 'kiremt'
@@ -317,6 +338,9 @@ function detectSeason(selectedSeason, country, gridData) {
 }
 
 function getScale(scaleId, season = 'long_rains') {
+  if (season === 'annual' && CS_ANNUAL[scaleId]) {
+    return CS_ANNUAL[scaleId]
+  }
   if ((season === 'deyr' || season === 'bega' || season === 'ondj') && CS_BEGA[scaleId]) {
     return CS_BEGA[scaleId]
   }
@@ -330,6 +354,69 @@ function getScale(scaleId, season = 'long_rains') {
     return CS_OND[scaleId]
   }
   return CS[scaleId]
+}
+
+// Dynamically compute effective scale so the colour bar covers 100% of the active data
+function getEffectiveScale(scaleId, season = 'long_rains', gridData = null, seasonalMaskOnly = true) {
+  const base = getScale(scaleId, season)
+  if (!base) return null
+  if (!gridData?.features?.length) return base
+
+  // Collect active displayed pixel values
+  const vals = []
+  for (const f of gridData.features) {
+    const { map_val, in_season_mask } = f.properties
+    if (map_val == null || isNaN(map_val)) continue
+    if (seasonalMaskOnly && in_season_mask === false) continue
+    vals.push(Number(map_val))
+  }
+  if (vals.length < 5) return base
+
+  vals.sort((a, b) => a - b)
+  const p02 = vals[Math.floor(vals.length * 0.02)]
+  const p98 = vals[Math.floor(vals.length * 0.98)]
+  const vMin = vals[0]
+  const vMax = vals[vals.length - 1]
+
+  const isAnomaly = scaleId.includes('anom') || scaleId.includes('bias')
+  const isProbability = scaleId.includes('prob') || scaleId.includes('failure')
+  const isSkill = scaleId.startsWith('v_') || scaleId.includes('det') || scaleId.includes('alpha')
+
+  // Keep fixed probability scale (0 to 0.6 or 0 to 1) and fixed skill bounds
+  if (isProbability || isSkill) return base
+
+  const nSteps = base.s.length
+  let newS = [...base.s]
+
+  if (isAnomaly) {
+    const maxDev = Math.max(Math.abs(p02), Math.abs(p98), 5)
+    const ceilMax = Math.ceil(maxDev / 5) * 5
+    if (nSteps === 7) {
+      newS = [-ceilMax, -Math.round(ceilMax * 0.5), -Math.round(ceilMax * 0.25), 0, Math.round(ceilMax * 0.25), Math.round(ceilMax * 0.5), ceilMax]
+    } else {
+      newS = [-ceilMax, -Math.round(ceilMax * 0.5), 0, Math.round(ceilMax * 0.5), ceilMax]
+    }
+  } else {
+    // DOY, LGP, or Spread
+    let start = Math.floor(Math.max(vMin, p02))
+    let end   = Math.ceil(Math.min(vMax, p98))
+    if (end - start < nSteps) {
+      end = start + nSteps
+    }
+    const stepSize = (end - start) / (nSteps - 1)
+    newS = []
+    for (let i = 0; i < nSteps; i++) {
+      newS.push(Math.round(start + i * stepSize))
+    }
+    for (let i = 1; i < nSteps; i++) {
+      if (newS[i] <= newS[i - 1]) newS[i] = newS[i - 1] + 1
+    }
+  }
+
+  return {
+    ...base,
+    s: newS,
+  }
 }
 
 // Default layers (forecast / probabilistic / multi-model tabs)
@@ -569,8 +656,8 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
   return lines
 }
 
-function Legend({ scaleId, season = 'long_rains', opYear = 2026 }) {
-  const s = getScale(scaleId, season); if (!s) return null
+function Legend({ scaleId, season = 'long_rains', opYear = 2026, scale = null }) {
+  const s = scale || getScale(scaleId, season); if (!s) return null
   const isDOY = (scaleId.includes('onset') || scaleId.includes('cess')) &&
                 (scaleId.includes('med') || scaleId.includes('p50') || scaleId.includes('chirps') || scaleId.includes('_w'))
   return (
@@ -594,7 +681,12 @@ function Legend({ scaleId, season = 'long_rains', opYear = 2026 }) {
   )
 }
 
-function setupLayers(map, darkMode, onDone) {
+function setupLayers(map, darkMode, onDone, country = 'kenya') {
+  if (typeof onDone !== 'function' && typeof country === 'function') {
+    const tmp = onDone
+    onDone = country
+    country = typeof tmp === 'string' ? tmp : 'kenya'
+  }
   const beforeId=(()=>{
     for(const id of ['admin-0-boundary-bg','admin-0-boundary','water']){
       try{if(map.getLayer(id))return id}catch(_){}
@@ -608,7 +700,7 @@ function setupLayers(map, darkMode, onDone) {
   if(!map.getSource('forecast-raster')){
     map.addSource('forecast-raster',{type:'image',
       url:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-      coordinates:[[33.5,5],[42.5,5],[42.5,-5],[33.5,-5]]})
+      coordinates:[[33.5,5.5],[42.5,5.5],[42.5,-5.0],[33.5,-5.0]]})
     map.addLayer({id:'forecast-img',type:'raster',source:'forecast-raster',
       paint:{'raster-opacity':0.85,'raster-resampling':'nearest'}},beforeId)
   }
@@ -622,9 +714,9 @@ function setupLayers(map, darkMode, onDone) {
       layout:{visibility:'none'},
       paint:{
         'line-color': darkMode ? '#94a3b8' : '#475569',
-        'line-width': 1.4,
-        'line-dasharray': [3, 2],
-        'line-opacity': 0.9
+        'line-width': 1.1,
+        'line-opacity': 0.85,
+        'line-dasharray': [2, 2]
       }})
   }
   if(!map.getSource('boundary-admin0')){
@@ -638,7 +730,7 @@ function setupLayers(map, darkMode, onDone) {
       }})
   }
   if(!map.getSource('monitored-farm-sites')){
-    map.addSource('monitored-farm-sites', {type:'geojson', data: SITES_GEOJSON})
+    map.addSource('monitored-farm-sites', {type:'geojson', data: getSitesGeoJSON(country)})
     map.addLayer({
       id: 'monitored-farm-sites-halo',
       type: 'circle',
@@ -812,20 +904,26 @@ export default function MapPanel({
 
   // Build raster
   const [raster, setRaster] = useState(null)
+  const [showAuditModal, setShowAuditModal] = useState(false)
+
+  const csKey2 = activeLayer.startsWith('h_') ? (
+      activeLayer.includes('p50')  ? (activeLayer.includes('onset')?'onset_med':activeLayer.includes('cess')?'cess_med':'lgp_med')
+    : activeLayer.includes('spr')  ? 'onset_spread'
+    : activeLayer.includes('bias') ? 'bias'
+    : activeLayer.includes('det')  ? 'detection_rate'
+    : activeLayer) : activeLayer
+
+  const effectiveScale = useMemo(() => {
+    return getEffectiveScale(csKey2, activeSeason, gridData, seasonalMaskOnly)
+  }, [csKey2, activeSeason, gridData, seasonalMaskOnly])
+
   useEffect(()=>{
     console.log('[Raster build] gridData:', gridData?.features?.length, 'activeLayer:', activeLayer, 'activeSeason:', activeSeason, 'seasonalMaskOnly:', seasonalMaskOnly)
-    const csKey2 = activeLayer.startsWith('h_') ? (
-        activeLayer.includes('p50')  ? (activeLayer.includes('onset')?'onset_med':activeLayer.includes('cess')?'cess_med':'lgp_med')
-      : activeLayer.includes('spr')  ? 'onset_spread'
-      : activeLayer.includes('bias') ? 'bias'
-      : activeLayer.includes('det')  ? 'detection_rate'
-      : activeLayer) : activeLayer
-    const scale = getScale(csKey2, activeSeason)
-    if(!gridData||!scale){ console.log('[Raster build] SKIP - no data/scale'); return }
-    const r = buildRaster(gridData, scale, seasonalMaskOnly)
+    if(!gridData||!effectiveScale){ console.log('[Raster build] SKIP - no data/scale'); return }
+    const r = buildRaster(gridData, effectiveScale, seasonalMaskOnly)
     console.log('[Raster build] result:', r ? 'OK dataUrl len='+r.dataUrl.length : 'NULL')
     if(r) setRaster(r)
-  },[gridData, activeLayer, activeSeason, seasonalMaskOnly])
+  },[gridData, effectiveScale, seasonalMaskOnly])
 
   // -- Map init ----------------------------------------------------------
   useEffect(()=>{
@@ -842,7 +940,7 @@ export default function MapPanel({
     map.addControl(new mapboxgl.ScaleControl({unit:'metric'}),'bottom-right')
     map.on('load',()=>{
       if(mapReadyRef.current) return   // guard double-fire
-      setupLayers(map, darkRef.current, ()=>{
+      setupLayers(map, darkRef.current, countryRef.current, ()=>{
         console.log('[Map init] setupLayers complete')
         mapReadyRef.current = true
         // Apply any raster that arrived before map was ready
@@ -989,7 +1087,7 @@ export default function MapPanel({
     mapReadyRef.current=false; setMapReady(false); setTooltip(null)
     map.setStyle(targetStyle)
     map.once('style.load',()=>{
-      setupLayers(map,darkRef.current,()=>{
+      setupLayers(map,darkRef.current,countryRef.current,()=>{
         mapReadyRef.current=true; setMapReady(true)
         // Re-apply cached raster after style reload
         if(rasterRef.current){
@@ -1354,6 +1452,28 @@ export default function MapPanel({
             </span>
           </div>
         )}
+
+        {/* 20-Site Diagnostic Agreement Trigger Button (Ethiopia) */}
+        {country === 'ethiopia' && (
+          <button
+            type="button"
+            onClick={() => setShowAuditModal(true)}
+            title="View 20-Site Representative Climatological Diagnostic Agreement"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '4px 9px',
+              borderRadius: 8, fontSize: 9, backdropFilter: 'blur(4px)',
+              background: 'rgba(59, 130, 246, 0.15)',
+              border: '1px solid rgba(59, 130, 246, 0.5)',
+              color: darkMode ? '#93c5fd' : '#2563eb',
+              fontWeight: 700, cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}
+          >
+            <span>📊</span>
+            <span>20-Site Audited Agreement</span>
+            <span style={{background: '#10b981', color: '#fff', fontSize: 8, padding: '1px 5px', borderRadius: 4, fontWeight: 800}}>20/20 ✓</span>
+          </button>
+        )}
         </div>
         )}
 
@@ -1430,7 +1550,7 @@ export default function MapPanel({
         {/* Colour legend -- bottom-right */}
         {countryView.available && (
         <div style={{position:'absolute',bottom:8,right:8,pointerEvents:'auto'}}>
-          <Legend scaleId={activeLayer} season={activeSeason} opYear={opYear}/>
+          <Legend scale={effectiveScale} scaleId={activeLayer} season={activeSeason} opYear={opYear}/>
         </div>
         )}
 
@@ -1502,8 +1622,13 @@ export default function MapPanel({
                   <span>📍</span> {tooltip.site.site_name}
                 </div>
                 <div style={{fontSize:9,color:'var(--text-secondary)',marginBottom:2}}>
-                  County: <strong style={{color:'var(--text-primary)'}}>{tooltip.site.county}</strong>  •  {tooltip.site.desc}
+                  Region/Zone: <strong style={{color:'var(--text-primary)'}}>{tooltip.site.county}</strong> {tooltip.site.desc ? ` • ${tooltip.site.desc}` : ''}
                 </div>
+                {tooltip.site.regime_name && (
+                  <div style={{fontSize:9,color:tooltip.site.regime_id===1?'#38bdf8':tooltip.site.regime_id===2?'#34d399':tooltip.site.regime_id===3?'#fbbf24':'#ef4444',fontWeight:700,marginBottom:2}}>
+                    Regime: {tooltip.site.regime_name} {tooltip.site.rh != null ? `(r_H = ${tooltip.site.rh})` : ''}
+                  </div>
+                )}
                 <div style={{fontSize:8,color:'var(--text-faint)',marginTop:4,borderTop:'1px solid var(--border-primary)',paddingTop:3}}>
                   {Number(tooltip.site.lat).toFixed(3)}°N, {Number(tooltip.site.lon).toFixed(3)}°E  •  <span style={{color:'var(--accent-blue)',fontWeight:600}}>Click to load forecast</span>
                 </div>
@@ -1520,6 +1645,17 @@ export default function MapPanel({
           </div>
         )}
       </div>
+
+      {/* 20-Site Diagnostic Agreement Modal */}
+      <DiagnosticAgreementModal
+        isOpen={showAuditModal}
+        onClose={() => setShowAuditModal(false)}
+        onSelectSite={(st) => {
+          setSelectedSite({ site_name: st.site_name, lat: st.lat, lon: st.lon })
+          mapRef.current?.flyTo({ center: [st.lon, st.lat], zoom: 7.5, duration: 800 })
+        }}
+        darkMode={darkMode}
+      />
     </div>
   )
 }

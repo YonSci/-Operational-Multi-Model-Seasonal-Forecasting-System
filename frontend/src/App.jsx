@@ -56,7 +56,7 @@ function Card({title,children,className='',action,style={}}) {
   return (
     <div className={'card '+className} style={style}>
       {title&&<div className="card-title flex items-center justify-between"><span>{title}</span>{action}</div>}
-      <div className="flex-1 min-h-[220px] lg:min-h-0 overflow-hidden">{children}</div>
+      <div className="flex-1 min-h-[220px] lg:min-h-0 overflow-y-auto">{children}</div>
     </div>
   )
 }
@@ -862,7 +862,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
 
   return (
-    <div className="flex flex-col h-full gap-2 overflow-y-auto lg:overflow-hidden p-0.5">
+    <div className="flex flex-col h-full gap-2 overflow-y-auto touch-scroll p-0.5">
       {/* Regime Pill & Seasonal Domain Status */}
       {pixelData && (
         <div style={{
@@ -902,7 +902,7 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
           </span>
         </div>
       )}
-      <div className="flex flex-col lg:flex-row flex-1 gap-2 min-h-0 overflow-y-auto lg:overflow-hidden">
+      <div className="flex flex-col xl:flex-row flex-1 gap-2 min-h-0 overflow-y-auto touch-scroll">
         <div className="flex flex-col gap-2 min-w-0 flex-1">
           <Card title={'Ensemble Precipitation Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
                 className="flex-1 min-h-[280px]">
@@ -917,9 +917,9 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
           </div>
         </Card>
       </div>
-      <div className="flex flex-col gap-2 shrink-0 w-full lg:w-[300px]">
-        <Card title={'Ensemble Forecast Summary  -  '+displayModel+'  -  '+seasonCode+' '+opYear} className="shrink-0">
-          <div className="p-3 space-y-2">
+      <div className="flex flex-col gap-2 shrink-0 w-full xl:w-[320px] overflow-y-auto max-h-full touch-scroll">
+        <Card title={'Ensemble Forecast Summary  -  '+displayModel+'  -  '+seasonCode+' '+opYear} className="shrink-0 flex-1 overflow-y-auto">
+          <div className="p-3 space-y-2 overflow-y-auto max-h-full">
             {[['ONSET',mmmOn,mmmAnom,allOnP10,allOnP90,chirpsOn,'DOY'],
               ['CESSATION',mmmCs,mmmCsAnom,allCsP10,allCsP90,chirpsCs,'DOY'],
               ['SEASON LENGTH',mmmLg,mmmLgAnom,allLgP10,allLgP90,chirpsLg,'d']].map(([sec,p50,anom,p10s,p90s,cal,unit])=>(
@@ -1031,7 +1031,7 @@ function ValidationTab({ pixelData, activeModels, validationData,
   }
 
   return (
-    <div className="h-full flex flex-col gap-2 p-1.5 sm:p-2 overflow-y-auto lg:overflow-hidden touch-scroll">
+    <div className="h-full flex flex-col gap-2 p-1.5 sm:p-2 overflow-y-auto touch-scroll">
 
       {/* -- Control bar -- */}
       <div className="shrink-0 p-2 sm:p-2.5 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl flex items-center gap-2 sm:gap-3 flex-wrap text-xs">
@@ -1313,7 +1313,7 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
   const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
   const vars = [{key:'onset',label:'Onset DOY',color:'#34d399',unit:'DOY'},{key:'cessation',label:'Cessation DOY',color:'#f97316',unit:'DOY'},{key:'lgp',label:'Season Length',color:'#4a8fc4',unit:'days'}]
   return (
-    <div className="h-full flex flex-col gap-2 p-1.5 sm:p-2 overflow-y-auto lg:overflow-hidden touch-scroll">
+    <div className="h-full flex flex-col gap-2 p-1.5 sm:p-2 overflow-y-auto touch-scroll">
       <div className="shrink-0 p-2 sm:p-2.5 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl flex items-center gap-2 sm:gap-3 flex-wrap text-xs">
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Model</span>
@@ -1519,7 +1519,7 @@ function MultiModelTab({ pixelData, activeModels, modelsData, selectedSeason='lo
       </div>
 
       {/* -- Main content: A(D) Plume left, comparison table right -- */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-2 min-h-0 overflow-y-auto lg:overflow-hidden touch-scroll">
+      <div className="flex-1 flex flex-col lg:flex-row gap-2 min-h-0 overflow-y-auto touch-scroll">
 
         {/* A(D) Plume */}
         <div className="flex-1 min-w-0 min-h-[280px] sm:min-h-[340px] bg-[var(--bg-surface)] border border-[var(--border-primary)] rounded-xl flex flex-col overflow-hidden">
@@ -2508,7 +2508,7 @@ export default function App() {
           <div className="text-sm animate-pulse tracking-widest" style={{color:'var(--text-muted)'}}>LOADING MODEL DATA...</div>
         </div>
       ):(
-        <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden gap-1.5 sm:gap-2 p-1 sm:p-2">
+        <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto gap-1.5 sm:gap-2 p-1 sm:p-2">
           {activeTab!=='about'&&(
           <div className={`shrink-0 flex flex-col ${
             mobileViewMode === 'charts'
@@ -2534,7 +2534,7 @@ export default function App() {
           )}
           <div className={`flex-1 min-w-0 ${
             activeTab !== 'about' && mobileViewMode === 'map' ? 'hidden lg:block' : ''
-          } ${activeTab === 'about' ? 'h-full overflow-y-auto' : 'overflow-y-auto lg:overflow-hidden lg:h-full'}`}>
+          } ${activeTab === 'about' ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
             {activeTab==='forecast'      && <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
