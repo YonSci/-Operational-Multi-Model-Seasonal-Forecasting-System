@@ -41,6 +41,7 @@ scratch/
 *.png
 !backend/ilri_logo.png
 !ILRI_logo.png
+!docs/scientific_masking/figures/*.png
 
 # Docker build artifacts
 docker/.env
