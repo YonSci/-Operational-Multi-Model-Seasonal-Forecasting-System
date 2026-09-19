@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { Fragment, useState } from 'react'
 
 export const AUDITED_20_SITES_ETHIOPIA = [
   { id: "gambella",       site_name: "Gambella",       lat: 8.25,  lon: 34.58, county: "Gambella",          regime_id: 1, regime_name: "Western Unimodal",             pann: 1189, c1: 3.39, c2: 0.11, rh: 0.03, dunning_type: "Annual (rH < 1.0)", agreement: true, desc: "R1: Western Unimodal (rH=0.03)" },
@@ -239,7 +239,7 @@ export default function DiagnosticAgreementModal({ isOpen, onClose, onSelectSite
                   {filteredSites.map((st, idx) => {
                     const regColor = st.regime_id === 1 ? '#38bdf8' : st.regime_id === 2 ? '#34d399' : st.regime_id === 3 ? '#fbbf24' : '#ef4444'
                     return (
-                      <React.Fragment key={st.id}>
+                      <Fragment key={st.id}>
                         <tr
                           key={st.site_name}
                           style={{
@@ -335,7 +335,7 @@ export default function DiagnosticAgreementModal({ isOpen, onClose, onSelectSite
                           </td>
                         </tr>
                       )}
-                    </React.Fragment>
+                    </Fragment>
                   )
                 })}
               </tbody>

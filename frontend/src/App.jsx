@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import React, { Fragment, useEffect, useState, useMemo } from 'react'
 import {
   ComposedChart, Line, Area, Scatter, Customized, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer
@@ -2160,7 +2160,7 @@ function AboutTab() {
                       {filteredStations.map((st, i) => {
                         const isExpanded = !!expandedStations[st.id]
                         return (
-                          <React.Fragment key={st.id}>
+                          <Fragment key={st.id}>
                             <tr
                               onClick={() => toggleStation(st.id)}
                               style={{
@@ -2329,7 +2329,7 @@ function AboutTab() {
                                 </td>
                               </tr>
                             )}
-                          </React.Fragment>
+                          </Fragment>
                         )
                       })}
                     </tbody>
