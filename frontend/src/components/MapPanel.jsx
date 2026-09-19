@@ -1461,19 +1461,6 @@ export default function MapPanel({
         )}
         </div>
 
-        {/* Active pixel metric pill */}
-        {gridData?.meta?.n_seasonal_pixels != null && (
-          <div style={{
-            fontSize: 9, padding: '4px 8px', borderRadius: 8, backdropFilter: 'blur(4px)',
-            background: 'var(--bg-elevated)', border: brd,
-            color: darkMode ? '#34d399' : '#059669',
-            display: 'flex', alignItems: 'center', gap: 4
-          }}>
-            <span style={{fontWeight: 600}}>
-              {gridData.meta.n_seasonal_pixels} / {gridData.meta.n_pixels} active ({gridData.meta.seasonal_pct}%)
-            </span>
-          </div>
-        )}
 
         {/* 20-Site Diagnostic Agreement Trigger Button (Ethiopia) - Toggleable */}
         {country === 'ethiopia' && (
