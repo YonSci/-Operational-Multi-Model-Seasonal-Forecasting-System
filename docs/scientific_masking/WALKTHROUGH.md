@@ -256,9 +256,38 @@ All 20 representative sites evaluated across Ethiopia achieve **100% concordance
 | **Jijiga** | 9.35°N | 42.80°E | 1,609 m | 580 mm | 1.45 | **Regime 3: Bimodal Type-2 Lowlands** |
 | **Semera / Afar** | 11.79°N | 41.01°E | 433 m | 180 mm | 0.88 | **Regime 0: Arid / Marginal Afar** |
 
-### 7.2 UI Integration
+### 7.2 Representative Climatological Regime Profile Examples
+
+Under each station in the platform's diagnostic tab, users can expand the full Fourier harmonic profile and observed monthly rainfall. Below are illustrative examples across the four diagnosed regimes:
+
+#### 1. Regime 1: Western Unimodal Domain
+| Gambella ($8.25^\circ\text{N}, 34.58^\circ\text{E}$, $r_H = 0.03$) | Jimma ($7.67^\circ\text{N}, 36.83^\circ\text{E}$, $r_H = 0.10$) |
+| :---: | :---: |
+| ![Gambella Profile](figures/stations/gambella.png) | ![Jimma Profile](figures/stations/jimma.png) |
+| *Single continuous monsoon peak in Jul–Aug. Annual cycle ($C_1 = 3.39$) dominates; semi-annual cycle ($C_2 = 0.11$) is negligible.* | *Southwestern high-rainfall coffee zone. Smooth onset in Mar/Apr accelerating into summer without a June dry break.* |
+
+#### 2. Regime 2: Bimodal Type-1 Central & Eastern Highlands
+| Addis Ababa ($9.03^\circ\text{N}, 38.74^\circ\text{E}$, $r_H = 0.55$) | Kombolcha ($11.08^\circ\text{N}, 39.73^\circ\text{E}$, $r_H = 0.74$) |
+| :---: | :---: |
+| ![Addis Ababa Profile](figures/stations/addis_ababa.png) | ![Kombolcha Profile](figures/stations/kombolcha.png) |
+| *Classic highland bimodal Type 1: early Belg secondary peak in Apr (~75 mm), June dry gap, and heavy summer Kiremt (~300 mm).* | *Wollo escarpment: vital early agricultural Belg cycle before main summer monsoon rains arrive.* |
+
+#### 3. Regime 3: Bimodal Type-2 Southern & Southeastern Lowlands
+| Arba Minch ($6.03^\circ\text{N}, 37.55^\circ\text{E}$, $r_H = 1.65$) | Gode ($5.95^\circ\text{N}, 43.58^\circ\text{E}$, $r_H = 23.04$) |
+| :---: | :---: |
+| ![Arba Minch Profile](figures/stations/arba_minch.png) | ![Gode Profile](figures/stations/gode.png) |
+| *Southern Rift transition: major Gu spring peak (Apr–May) and secondary autumn peak with dry summer ($r_H = 1.65 > 1.0$).* | *Shebelle basin hyper-bimodal pastoral domain: clean Gu & Deyr rains separated by bone-dry summer ($r_H = 23.04$).* |
+
+#### 4. Regime 0: Arid / Marginal Afar Basin
+| Semera ($11.79^\circ\text{N}, 41.00^\circ\text{E}$, $r_H = 0.97$) |
+| :---: |
+| ![Semera Profile](figures/stations/semera.png) |
+| *Low annual precipitation ($263.5\text{ mm}$); noise-dominated ratio properly screened out from crop onset algorithms.* |
+
+### 7.3 UI Integration
 - **Map Top Navigation**: A dedicated `20-Site Audited Agreement (20/20 ✓)` launcher button is mounted directly on the map header.
-- **Interactive Inspection Modal**: Includes the high-resolution 20-station diagnostic profile plot, key methodology metrics, search/filtering by regime or station name, and one-click "Select & View Plumes" navigation that pans the map and loads plume forecasts for the chosen site.
+- **Interactive Inspection Modal**: Includes the high-resolution 20-station diagnostic profile plot, key methodology metrics, search/filtering by regime or station name, one-click expandable station graphs under every table row, and "Select & View Plumes" navigation.
+- **Dedicated About Tab (📍 20-Site Diagnostic Agreement)**: Full interactive table with inline `📈 View Graph` / `▼ Hide` drawers under every station, parameter chips ($P_{\text{ann}}$, $r_H$, $C_1$, $C_2$), meteorological rationale, and "Expand All 20 Graphs" toggle.
 - **All 20 Stations as Map Markers**: All 20 audited sites are plotted as interactive markers on the map, with hover tooltips detailing elevation, annual rainfall, harmonic ratio $r_H$, and verified climate regime.
 
 ---

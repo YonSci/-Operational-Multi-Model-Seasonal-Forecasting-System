@@ -188,7 +188,35 @@ To validate spatial grid representations against in-situ meteorological station 
 | **Gode** | Somali / Shabelle | 5.95°N | 43.58°E | 290 m | 281 mm | 23.04 | **Regime 3: Bimodal Type-2 Lowlands** |
 | **Semera** | Afar / Zone 1 | 11.79°N | 41.00°E | 433 m | 264 mm | 0.97 | **Regime 0: Arid / Marginal Afar** |
 
-The interactive dashboard includes an **Audited 20-Site Agreement Modal** (`📊 20-Site Audited Agreement (20/20 ✓)`), enabling researchers to inspect diagnostic plots, filter by regime, and fly directly to any station on the map.
+### Representative Climatological Regime Profile Examples
+
+Under each station in the platform's diagnostic tab, users can expand the full Fourier harmonic profile and observed monthly rainfall. Below are illustrative examples across the four diagnosed regimes:
+
+#### 1. Regime 1: Western Unimodal Domain
+| Gambella ($8.25^\circ\text{N}, 34.58^\circ\text{E}$, $r_H = 0.03$) | Jimma ($7.67^\circ\text{N}, 36.83^\circ\text{E}$, $r_H = 0.10$) |
+| :---: | :---: |
+| ![Gambella Profile](docs/scientific_masking/figures/stations/gambella.png) | ![Jimma Profile](docs/scientific_masking/figures/stations/jimma.png) |
+| *Single continuous monsoon peak in Jul–Aug. Annual cycle ($C_1 = 3.39$) dominates; semi-annual cycle ($C_2 = 0.11$) is negligible.* | *Southwestern high-rainfall coffee zone. Smooth onset in Mar/Apr accelerating into summer without a June dry break.* |
+
+#### 2. Regime 2: Bimodal Type-1 Central & Eastern Highlands
+| Addis Ababa ($9.03^\circ\text{N}, 38.74^\circ\text{E}$, $r_H = 0.55$) | Kombolcha ($11.08^\circ\text{N}, 39.73^\circ\text{E}$, $r_H = 0.74$) |
+| :---: | :---: |
+| ![Addis Ababa Profile](docs/scientific_masking/figures/stations/addis_ababa.png) | ![Kombolcha Profile](docs/scientific_masking/figures/stations/kombolcha.png) |
+| *Classic highland bimodal Type 1: early Belg secondary peak in Apr (~75 mm), June dry gap, and heavy summer Kiremt (~300 mm).* | *Wollo escarpment: vital early agricultural Belg cycle before main summer monsoon rains arrive.* |
+
+#### 3. Regime 3: Bimodal Type-2 Southern & Southeastern Lowlands
+| Arba Minch ($6.03^\circ\text{N}, 37.55^\circ\text{E}$, $r_H = 1.65$) | Gode ($5.95^\circ\text{N}, 43.58^\circ\text{E}$, $r_H = 23.04$) |
+| :---: | :---: |
+| ![Arba Minch Profile](docs/scientific_masking/figures/stations/arba_minch.png) | ![Gode Profile](docs/scientific_masking/figures/stations/gode.png) |
+| *Southern Rift transition: major Gu spring peak (Apr–May) and secondary autumn peak with dry summer ($r_H = 1.65 > 1.0$).* | *Shebelle basin hyper-bimodal pastoral domain: clean Gu & Deyr rains separated by bone-dry summer ($r_H = 23.04$).* |
+
+#### 4. Regime 0: Arid / Marginal Afar Basin
+| Semera ($11.79^\circ\text{N}, 41.00^\circ\text{E}$, $r_H = 0.97$) |
+| :---: |
+| ![Semera Profile](docs/scientific_masking/figures/stations/semera.png) |
+| *Low annual precipitation ($264\text{ mm}$); noise-dominated ratio properly screened out from crop onset algorithms.* |
+
+The interactive dashboard includes an **Audited 20-Site Agreement Modal** (`📊 20-Site Audited Agreement (20/20 ✓)`) and a dedicated **About Tab (`📍 20-Site Diagnostic Agreement`)**, enabling researchers to expand inline profile graphs under each station, inspect diagnostic parameters ($P_{\text{ann}}$, $r_H$, $C_1$, $C_2$), filter by regime, and fly directly to any station on the map.
 
 ---
 

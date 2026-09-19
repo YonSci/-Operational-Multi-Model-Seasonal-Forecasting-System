@@ -45,8 +45,8 @@ files/mnt/
 *.png
 !backend/ilri_logo.png
 !ILRI_logo.png
-!docs/scientific_masking/figures/*.png
-!frontend/public/figures/*.png
+!docs/scientific_masking/figures/**
+!frontend/public/figures/**
 !frontend/public/shapefiles/**
 !outputs/shapefiles/**
 

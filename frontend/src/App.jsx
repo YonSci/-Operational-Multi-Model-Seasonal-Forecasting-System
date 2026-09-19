@@ -1670,28 +1670,37 @@ function AboutTab() {
     </div>
   )
 
+  const [expandedStations, setExpandedStations] = useState({ gambella: true })
+  const [stationFilter, setStationFilter] = useState('all')
+  const [stationSearch, setStationSearch] = useState('')
+
+  const toggleStation = (id) => {
+    setExpandedStations(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
   const AUDITED_STATIONS = [
-    { name: 'Gambella', req: '8.25°N, 34.58°E', grid: '8.125°N, 34.625°E', idx: '(20, 06)', pann: '1,189.1', c1: '3.39', c2: '0.11', rh: '0.03', reg: 'Regime 1: Western Unimodal', desc: 'Extended unimodal monsoon; single broad wet season' },
-    { name: 'Assosa', req: '10.07°N, 34.53°E', grid: '10.125°N, 34.625°E', idx: '(28, 06)', pann: '1,197.3', c1: '4.21', c2: '0.60', rh: '0.14', reg: 'Regime 1: Western Unimodal', desc: 'Benishangul-Gumuz unimodal summer rainfall belt' },
-    { name: 'Jimma', req: '7.67°N, 36.83°E', grid: '7.625°N, 36.875°E', idx: '(18, 15)', pann: '1,599.2', c1: '3.62', c2: '0.37', rh: '0.10', reg: 'Regime 1: Western Unimodal', desc: 'High-rainfall coffee zone; continuous season Mar-Oct' },
-    { name: 'Bahir Dar', req: '11.60°N, 37.38°E', grid: '11.625°N, 37.375°E', idx: '(34, 17)', pann: '1,385.1', c1: '5.57', c2: '2.46', rh: '0.44', reg: 'Regime 1: Western Unimodal', desc: 'Lake Tana basin unimodal summer rainfall' },
-    { name: 'Gondar', req: '12.60°N, 37.47°E', grid: '12.625°N, 37.375°E', idx: '(38, 17)', pann: '1,198.4', c1: '4.57', c2: '1.77', rh: '0.39', reg: 'Regime 1: Western Unimodal', desc: 'Northwestern unimodal monsoon domain' },
-    { name: 'Bedele', req: '8.45°N, 36.35°E', grid: '8.375°N, 36.375°E', idx: '(21, 13)', pann: '1,810.7', c1: '5.10', c2: '0.35', rh: '0.07', reg: 'Regime 1: Western Unimodal', desc: 'Western high-rainfall core unimodal belt' },
-    { name: 'Addis Ababa', req: '9.03°N, 38.74°E', grid: '9.125°N, 38.625°E', idx: '(24, 22)', pann: '1,180.7', c1: '4.07', c2: '2.25', rh: '0.55', reg: 'Regime 2: Bimodal Type 1', desc: 'Classic central highland: Belg early + Kiremt main' },
-    { name: 'Kombolcha', req: '11.08°N, 39.73°E', grid: '11.125°N, 39.625°E', idx: '(32, 26)', pann: '1,150.0', c1: '3.38', c2: '2.50', rh: '0.74', reg: 'Regime 2: Bimodal Type 1', desc: 'Wollo escarpment; vital Belg early agricultural cycle' },
-    { name: 'Mekelle', req: '13.50°N, 39.47°E', grid: '13.375°N, 39.375°E', idx: '(41, 25)', pann: '689.6', c1: '2.91', c2: '2.01', rh: '0.69', reg: 'Regime 2: Bimodal Type 1', desc: 'Tigray highlands; minor Belg + major Kiremt' },
-    { name: 'Dire Dawa', req: '9.60°N, 41.87°E', grid: '9.625°N, 41.875°E', idx: '(26, 35)', pann: '625.6', c1: '1.21', c2: '1.01', rh: '0.84', reg: 'Regime 2: Bimodal Type 1', desc: 'Eastern escarpment; spring Belg & summer Kiremt' },
-    { name: 'Jijiga', req: '9.35°N, 42.80°E', grid: '9.375°N, 42.875°E', idx: '(25, 39)', pann: '544.5', c1: '1.21', c2: '0.77', rh: '0.64', reg: 'Regime 2: Bimodal Type 1', desc: 'Eastern transition; Type-1 summer/spring rainfall' },
-    { name: 'Hawassa', req: '7.05°N, 38.48°E', grid: '7.125°N, 38.375°E', idx: '(16, 21)', pann: '1,050.2', c1: '1.84', c2: '0.76', rh: '0.41', reg: 'Regime 2: Bimodal Type 1', desc: 'Rift Valley; dual May/Jul peaks with June drop' },
-    { name: 'Arba Minch', req: '6.03°N, 37.55°E', grid: '6.125°N, 37.625°E', idx: '(12, 18)', pann: '1,001.9', c1: '0.98', c2: '1.61', rh: '1.65', reg: 'Regime 3: Bimodal Type 2', desc: 'Gamo Gofa; bimodal with major Gu spring peak' },
-    { name: 'Goba / Bale', req: '7.00°N, 39.98°E', grid: '6.875°N, 39.875°E', idx: '(15, 27)', pann: '1,127.3', c1: '1.07', c2: '1.88', rh: '1.76', reg: 'Regime 3: Bimodal Type 2', desc: 'Bale zone; bimodal spring & autumn peaks' },
-    { name: 'Negelle Borana', req: '5.33°N, 39.58°E', grid: '5.375°N, 39.625°E', idx: '(09, 26)', pann: '666.5', c1: '0.88', c2: '2.59', rh: '2.94', reg: 'Regime 3: Bimodal Type 2', desc: 'Borana pastoral; Gu/Ganna (MAM) + Deyr/Hagaya (SON)' },
-    { name: 'Yabello', req: '4.88°N, 38.09°E', grid: '4.875°N, 38.125°E', idx: '(07, 20)', pann: '643.9', c1: '0.88', c2: '2.03', rh: '2.31', reg: 'Regime 3: Bimodal Type 2', desc: 'Borana rangeland; symmetric bimodal pastoral rains' },
-    { name: 'Moyale', req: '3.53°N, 39.05°E', grid: '3.625°N, 39.125°E', idx: '(02, 24)', pann: '628.6', c1: '0.70', c2: '2.16', rh: '3.08', reg: 'Regime 3: Bimodal Type 2', desc: 'Border equatorial biannual; dry summer (JJA)' },
-    { name: 'Kebri Dehar', req: '6.73°N, 44.28°E', grid: '6.625°N, 44.375°E', idx: '(14, 45)', pann: '425.8', c1: '0.06', c2: '1.99', rh: '35.76', reg: 'Regime 3: Bimodal Type 2', desc: 'Ogaden lowlands; dry summer, Gu + Deyr pastoral' },
-    { name: 'Gode', req: '5.95°N, 43.58°E', grid: '5.875°N, 43.625°E', idx: '(11, 42)', pann: '280.9', c1: '0.06', c2: '1.33', rh: '23.04', reg: 'Regime 3: Bimodal Type 2', desc: 'Shebelle basin; hyper-bimodal pastoral rains' },
-    { name: 'Semera', req: '11.79°N, 41.00°E', grid: '11.875°N, 40.875°E', idx: '(35, 31)', pann: '263.5', c1: '0.57', c2: '0.55', rh: '0.97', reg: 'Regime 0: Arid / Marginal', desc: 'Afar / Danakil; hyper-arid, no reliable rainy season' },
+    { id: 'gambella', name: 'Gambella', req: '8.25°N, 34.58°E', grid: '8.125°N, 34.625°E', idx: '(20, 06)', pann: '1,189.1', c1: '3.39', c2: '0.11', rh: '0.03', reg: 'Regime 1: Western Unimodal', desc: 'Extended unimodal monsoon; single broad wet season', elev: '526 m', rationale: 'Single broad monsoon peak in July–August. The annual Fourier harmonic (C1=3.39) overwhelmingly dominates the negligible semi-annual cycle (C2=0.11), producing an ultra-low harmonic ratio (rH=0.03 << 1.0). Rains proceed continuously without a June cessation break.' },
+    { id: 'assosa', name: 'Assosa', req: '10.07°N, 34.53°E', grid: '10.125°N, 34.625°E', idx: '(28, 06)', pann: '1,197.3', c1: '4.21', c2: '0.60', rh: '0.14', reg: 'Regime 1: Western Unimodal', desc: 'Benishangul-Gumuz unimodal summer rainfall belt', elev: '1,570 m', rationale: 'Western unimodal summer belt with monsoon peak in July–August. Very low harmonic ratio (rH=0.14) confirms absence of distinct bimodal transitions.' },
+    { id: 'jimma', name: 'Jimma', req: '7.67°N, 36.83°E', grid: '7.625°N, 36.875°E', idx: '(18, 15)', pann: '1,599.2', c1: '3.62', c2: '0.37', rh: '0.10', reg: 'Regime 1: Western Unimodal', desc: 'High-rainfall coffee zone; continuous season Mar-Oct', elev: '1,780 m', rationale: 'High-rainfall southwestern agro-ecological zone. Rains begin in March and build smoothly through August without any intervening dry interval (rH=0.10).' },
+    { id: 'bahir_dar', name: 'Bahir Dar', req: '11.60°N, 37.38°E', grid: '11.625°N, 37.375°E', idx: '(34, 17)', pann: '1,385.1', c1: '5.57', c2: '2.46', rh: '0.44', reg: 'Regime 1: Western Unimodal', desc: 'Lake Tana basin unimodal summer rainfall', elev: '1,820 m', rationale: 'Lake Tana basin unimodal summer rainfall. Strong unimodal summer concentration (July peak > 380 mm) keeps rH=0.44 well below the biannual threshold.' },
+    { id: 'gondar', name: 'Gondar', req: '12.60°N, 37.47°E', grid: '12.625°N, 37.375°E', idx: '(38, 17)', pann: '1,198.4', c1: '4.57', c2: '1.77', rh: '0.39', reg: 'Regime 1: Western Unimodal', desc: 'Northwestern unimodal monsoon domain', elev: '2,133 m', rationale: 'Northwestern unimodal monsoon regime dominated by heavy July–August rains (peak ~300 mm). Single unimodal wet cycle with rH=0.39.' },
+    { id: 'bedele', name: 'Bedele', req: '8.45°N, 36.35°E', grid: '8.375°N, 36.375°E', idx: '(21, 13)', pann: '1,810.7', c1: '5.10', c2: '0.35', rh: '0.07', reg: 'Regime 1: Western Unimodal', desc: 'Western high-rainfall core unimodal belt', elev: '2,011 m', rationale: 'Western high-rainfall core belt with annual rainfall exceeding 1,800 mm. Fourier decomposition reveals complete unimodal dominance (rH=0.07).' },
+    { id: 'addis_ababa', name: 'Addis Ababa', req: '9.03°N, 38.74°E', grid: '9.125°N, 38.625°E', idx: '(24, 22)', pann: '1,180.7', c1: '4.07', c2: '2.25', rh: '0.55', reg: 'Regime 2: Bimodal Type 1', desc: 'Classic central highland: Belg early + Kiremt main', elev: '2,355 m', rationale: 'Classic central highland bimodal Type 1 regime. Clearly shows the early spring Belg secondary peak (April ~75 mm), a dry depression in June, and the intense summer Kiremt peak (July–August ~300 mm). Harmonic ratio rH=0.55 captures the dual-peak structure.' },
+    { id: 'kombolcha', name: 'Kombolcha', req: '11.08°N, 39.73°E', grid: '11.125°N, 39.625°E', idx: '(32, 26)', pann: '1,150.0', c1: '3.38', c2: '2.50', rh: '0.74', reg: 'Regime 2: Bimodal Type 1', desc: 'Wollo escarpment; vital Belg early agricultural cycle', elev: '1,857 m', rationale: 'Eastern escarpment of Wollo where Belg rains are vital for early crops. Distinct April peak followed by a June break before the main Kiremt rains (rH=0.74).' },
+    { id: 'mekelle', name: 'Mekelle', req: '13.50°N, 39.47°E', grid: '13.375°N, 39.375°E', idx: '(41, 25)', pann: '689.6', c1: '2.91', c2: '2.01', rh: '0.69', reg: 'Regime 2: Bimodal Type 1', desc: 'Tigray highlands; minor Belg + major Kiremt', elev: '2,254 m', rationale: 'Northern highland bimodal regime with a modest spring Belg peak and intense July–August Kiremt rains (rH=0.69).' },
+    { id: 'dire_dawa', name: 'Dire Dawa', req: '9.60°N, 41.87°E', grid: '9.625°N, 41.875°E', idx: '(26, 35)', pann: '625.6', c1: '1.21', c2: '1.01', rh: '0.84', reg: 'Regime 2: Bimodal Type 1', desc: 'Eastern escarpment; spring Belg & summer Kiremt', elev: '1,260 m', rationale: 'Eastern transition escarpment. Balanced bimodal Type 1 profile with distinct April and August peaks separated by June dry conditions (rH=0.84).' },
+    { id: 'jijiga', name: 'Jijiga', req: '9.35°N, 42.80°E', grid: '9.375°N, 42.875°E', idx: '(25, 39)', pann: '544.5', c1: '1.21', c2: '0.77', rh: '0.64', reg: 'Regime 2: Bimodal Type 1', desc: 'Eastern transition; Type-1 summer/spring rainfall', elev: '1,609 m', rationale: 'Eastern highland edge showing Type 1 bimodal distribution with active spring and late-summer rainfall (rH=0.64).' },
+    { id: 'hawassa', name: 'Hawassa', req: '7.05°N, 38.48°E', grid: '7.125°N, 38.375°E', idx: '(16, 21)', pann: '1,050.2', c1: '1.84', c2: '0.76', rh: '0.41', reg: 'Regime 2: Bimodal Type 1', desc: 'Rift Valley; dual May/Jul peaks with June drop', elev: '1,708 m', rationale: 'Central Rift Valley station exhibiting twin rainfall peaks in May and July/August with a notable dip in June (rH=0.41).' },
+    { id: 'arba_minch', name: 'Arba Minch', req: '6.03°N, 37.55°E', grid: '6.125°N, 37.625°E', idx: '(12, 18)', pann: '1,001.9', c1: '0.98', c2: '1.61', rh: '1.65', reg: 'Regime 3: Bimodal Type 2', desc: 'Gamo Gofa; bimodal with major Gu spring peak', elev: '1,285 m', rationale: 'Southern rift transition with prominent Gu spring peak (April–May) and secondary autumn peak (October), separated by a relatively dry summer (rH=1.65 > 1.0).' },
+    { id: 'goba_bale', name: 'Goba / Bale', req: '7.00°N, 39.98°E', grid: '6.875°N, 39.875°E', idx: '(15, 27)', pann: '1,127.3', c1: '1.07', c2: '1.88', rh: '1.76', reg: 'Regime 3: Bimodal Type 2', desc: 'Bale zone; bimodal spring & autumn peaks', elev: '2,743 m', rationale: 'Highland Bale zone with equinoctial biannual peaks in spring (April–May) and autumn (September–October) and a marked July reduction (rH=1.76).' },
+    { id: 'negelle_borana', name: 'Negelle Borana', req: '5.33°N, 39.58°E', grid: '5.375°N, 39.625°E', idx: '(09, 26)', pann: '666.5', c1: '0.88', c2: '2.59', rh: '2.94', reg: 'Regime 3: Bimodal Type 2', desc: 'Borana pastoral; Gu/Ganna (MAM) + Deyr/Hagaya (SON)', elev: '1,475 m', rationale: 'Southern Borana pastoral heartland. High harmonic ratio (rH=2.94) proves clean biannual rainfall driven by the ITCZ: Gu/Ganna (MAM) and Deyr/Hagaya (SON) with bone-dry JJA.' },
+    { id: 'yabello', name: 'Yabello', req: '4.88°N, 38.09°E', grid: '4.875°N, 38.125°E', idx: '(07, 20)', pann: '643.9', c1: '0.88', c2: '2.03', rh: '2.31', reg: 'Regime 3: Bimodal Type 2', desc: 'Borana rangeland; symmetric bimodal pastoral rains', elev: '1,857 m', rationale: 'Borana rangeland with symmetric spring (April peak) and autumn (October/November peak) pastoral rains. Summer months (JJA) are virtually rainless (rH=2.31).' },
+    { id: 'moyale', name: 'Moyale', req: '3.53°N, 39.05°E', grid: '3.625°N, 39.125°E', idx: '(02, 24)', pann: '628.6', c1: '0.70', c2: '2.16', rh: '3.08', reg: 'Regime 3: Bimodal Type 2', desc: 'Border equatorial biannual; dry summer (JJA)', elev: '1,113 m', rationale: 'Southern border equatorial regime with strong semi-annual harmonic dominance (rH=3.08). Dual MAM and OND wet seasons align with Kenyan equatorial dynamics.' },
+    { id: 'kebri_dehar', name: 'Kebri Dehar', req: '6.73°N, 44.28°E', grid: '6.625°N, 44.375°E', idx: '(14, 45)', pann: '425.8', c1: '0.06', c2: '1.99', rh: '35.76', reg: 'Regime 3: Bimodal Type 2', desc: 'Ogaden lowlands; dry summer, Gu + Deyr pastoral', elev: '493 m', rationale: 'Somali region (Ogaden) lowlands. Extreme biannual harmonic ratio (rH=35.76) due to near-zero annual cycle and two symmetric brief wet seasons (Gu & Deyr).' },
+    { id: 'gode', name: 'Gode', req: '5.95°N, 43.58°E', grid: '5.875°N, 43.625°E', idx: '(11, 42)', pann: '280.9', c1: '0.06', c2: '1.33', rh: '23.04', reg: 'Regime 3: Bimodal Type 2', desc: 'Shebelle basin; hyper-bimodal pastoral rains', elev: '290 m', rationale: 'Lower Wabi Shebelle basin pastoral domain. Extreme biannual regime (rH=23.04) with two sharp peaks in April–May and October–November and an arid summer.' },
+    { id: 'semera', name: 'Semera', req: '11.79°N, 41.00°E', grid: '11.875°N, 40.875°E', idx: '(35, 31)', pann: '263.5', c1: '0.57', c2: '0.55', rh: '0.97', reg: 'Regime 0: Arid / Marginal', desc: 'Afar / Danakil; hyper-arid, no reliable rainy season', elev: '433 m', rationale: 'Afar / Danakil lowlands with low annual precipitation (P_ann = 263.5 mm). Spurious harmonic ratios due to noise; properly screened out under Regime 0.' },
   ]
+
 
   const SUB_TABS = [
     { id: 'blueprint',    label: '🏛️ Scientific Blueprint & Regimes' },
@@ -2063,37 +2072,275 @@ function AboutTab() {
               <strong>Sampling Protocol:</strong> To rigorously audit against template or regional curve reuse, every station coordinate was sampled directly from the nearest CHIRPS 0.25° grid cell (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>latitude, longitude</span> &rarr; grid index <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>i, j</span>). The table below reports genuine, distinct annual rainfall totals, Fourier harmonic amplitudes (C_1, C_2), harmonic ratios (r_H = C_2/C_1), and resulting regime diagnoses. <strong>20/20 representative sites show diagnostic agreement with documented EMI regional climate regimes.</strong>
             </div>
 
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%', borderCollapse:'collapse', fontSize:9}}>
-                <thead>
-                  <tr style={{borderBottom:'1px solid var(--border-primary)', background:'var(--bg-surface)'}}>
-                    {['Station','Req Coord','Grid Coord','(i, j)','P_ann (mm)','C1','C2','r_H','Assigned Regime','Agreement','Climatological Feature'].map(h=>(
-                      <th key={h} style={{padding:'6px 8px', textAlign:'left', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', whiteSpace:'nowrap'}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {AUDITED_STATIONS.map((st, i) => (
-                    <tr key={st.name} style={{borderBottom:'1px solid var(--border-primary)', background: i%2 === 0 ? 'transparent' : 'var(--bg-elevated)'}}>
-                      <td style={{padding:'5px 8px', color:'var(--text-primary)', fontWeight:700, whiteSpace:'nowrap'}}>{st.name}</td>
-                      <td style={{padding:'5px 8px', color:'var(--text-muted)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.req}</td>
-                      <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.grid}</td>
-                      <td style={{padding:'5px 8px', color:'#60a5fa', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.idx}</td>
-                      <td style={{padding:'5px 8px', color:'var(--text-primary)', fontFamily:"'IBM Plex Mono',monospace", fontWeight:600}}>{st.pann}</td>
-                      <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace"}}>{st.c1}</td>
-                      <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace"}}>{st.c2}</td>
-                      <td style={{padding:'5px 8px', color: Number(st.rh) >= 1.0 ? '#fbbf24' : '#38bdf8', fontFamily:"'IBM Plex Mono',monospace", fontWeight:700}}>{st.rh}</td>
-                      <td style={{padding:'5px 8px', whiteSpace:'nowrap', color: st.reg.includes('Regime 1') ? '#38bdf8' : (st.reg.includes('Regime 2') ? '#4ade80' : (st.reg.includes('Regime 3') ? '#fbbf24' : '#94a3b8')), fontWeight:600}}>{st.reg}</td>
-                      <td style={{padding:'5px 8px', color:'#34d399', fontWeight:700, whiteSpace:'nowrap'}}>✓ 20/20</td>
-                      <td style={{padding:'5px 8px', color:'var(--text-muted)', minWidth:180}}>{st.desc}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Filter and Control Bar */}
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom:12}}>
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedStations(prev => ({ ...prev, gambella: !prev.gambella }))}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: 6,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: expandedStations['gambella'] ? 'rgba(56, 189, 248, 0.2)' : 'var(--bg-elevated)',
+                    color: expandedStations['gambella'] ? '#38bdf8' : 'var(--text-secondary)',
+                    border: '1px solid ' + (expandedStations['gambella'] ? '#38bdf8' : 'var(--border-primary)')
+                  }}
+                >
+                  {expandedStations['gambella'] ? '✨ Hide Example (Gambella)' : '✨ Show Example Graph (Gambella)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const all = {}
+                    AUDITED_STATIONS.forEach(s => { all[s.id] = true })
+                    setExpandedStations(all)
+                  }}
+                  style={{padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)'}}
+                >
+                  📂 Expand All 20 Graphs
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExpandedStations({})}
+                  style={{padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)'}}
+                >
+                  📁 Collapse All
+                </button>
+              </div>
+
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                <select
+                  value={stationFilter}
+                  onChange={e => setStationFilter(e.target.value)}
+                  style={{padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', outline: 'none'}}
+                >
+                  <option value="all">All Regimes (20 Sites)</option>
+                  <option value="1">Regime 1: Western Unimodal (6)</option>
+                  <option value="2">Regime 2: Bimodal Type 1 Belg+Kiremt (6)</option>
+                  <option value="3">Regime 3: Bimodal Type 2 Gu+Deyr (7)</option>
+                  <option value="0">Regime 0: Arid / Marginal (1)</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search station..."
+                  value={stationSearch}
+                  onChange={e => setStationSearch(e.target.value)}
+                  style={{padding: '4px 8px', borderRadius: 6, fontSize: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', outline: 'none', width: 140}}
+                />
+              </div>
             </div>
+
+            {(() => {
+              const filteredStations = AUDITED_STATIONS.filter(st => {
+                if (stationFilter === '1' && !st.reg.includes('Regime 1')) return false
+                if (stationFilter === '2' && !st.reg.includes('Regime 2')) return false
+                if (stationFilter === '3' && !st.reg.includes('Regime 3')) return false
+                if (stationFilter === '0' && !st.reg.includes('Regime 0')) return false
+                if (stationSearch) {
+                  const q = stationSearch.toLowerCase()
+                  return st.name.toLowerCase().includes(q) || st.desc.toLowerCase().includes(q)
+                }
+                return true
+              })
+
+              return (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%', borderCollapse:'collapse', fontSize:9}}>
+                    <thead>
+                      <tr style={{borderBottom:'1px solid var(--border-primary)', background:'var(--bg-surface)'}}>
+                        {['Station','Req Coord','Grid Coord','(i, j)','P_ann (mm)','C1','C2','r_H','Assigned Regime','Agreement','Climatological Feature','Profile Graph'].map(h=>(
+                          <th key={h} style={{padding:'6px 8px', textAlign:'left', color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', whiteSpace:'nowrap'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredStations.map((st, i) => {
+                        const isExpanded = !!expandedStations[st.id]
+                        return (
+                          <React.Fragment key={st.id}>
+                            <tr
+                              onClick={() => toggleStation(st.id)}
+                              style={{
+                                borderBottom: isExpanded ? 'none' : '1px solid var(--border-primary)',
+                                background: isExpanded ? 'rgba(56, 189, 248, 0.08)' : (i%2 === 0 ? 'transparent' : 'var(--bg-elevated)'),
+                                cursor: 'pointer',
+                                transition: 'background 0.15s ease'
+                              }}
+                              title="Click row to expand/collapse rainfall profile graph"
+                            >
+                              <td style={{padding:'5px 8px', color:'var(--text-primary)', fontWeight:700, whiteSpace:'nowrap'}}>
+                                <span style={{marginRight: 5, color: isExpanded ? 'var(--accent-blue)' : 'var(--text-muted)'}}>
+                                  {isExpanded ? '▼' : '▶'}
+                                </span>
+                                {st.name}
+                              </td>
+                              <td style={{padding:'5px 8px', color:'var(--text-muted)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.req}</td>
+                              <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.grid}</td>
+                              <td style={{padding:'5px 8px', color:'#60a5fa', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.idx}</td>
+                              <td style={{padding:'5px 8px', color:'var(--text-primary)', fontFamily:"'IBM Plex Mono',monospace", fontWeight:600}}>{st.pann}</td>
+                              <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace"}}>{st.c1}</td>
+                              <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace"}}>{st.c2}</td>
+                              <td style={{padding:'5px 8px', color: Number(st.rh) >= 1.0 ? '#fbbf24' : '#38bdf8', fontFamily:"'IBM Plex Mono',monospace", fontWeight:700}}>{st.rh}</td>
+                              <td style={{padding:'5px 8px', whiteSpace:'nowrap', color: st.reg.includes('Regime 1') ? '#38bdf8' : (st.reg.includes('Regime 2') ? '#4ade80' : (st.reg.includes('Regime 3') ? '#fbbf24' : '#94a3b8')), fontWeight:600}}>{st.reg}</td>
+                              <td style={{padding:'5px 8px', color:'#34d399', fontWeight:700, whiteSpace:'nowrap'}}>✓ 20/20</td>
+                              <td style={{padding:'5px 8px', color:'var(--text-muted)', minWidth:160}}>{st.desc}</td>
+                              <td style={{padding:'5px 8px', whiteSpace:'nowrap'}}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleStation(st.id)
+                                  }}
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: 6,
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    background: isExpanded ? 'var(--accent-blue)' : 'var(--bg-elevated)',
+                                    color: isExpanded ? '#ffffff' : 'var(--accent-blue)',
+                                    border: '1px solid ' + (isExpanded ? 'var(--accent-blue)' : 'var(--border-primary)'),
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {isExpanded ? '▼ Hide Graph' : '📈 View Graph'}
+                                </button>
+                              </td>
+                            </tr>
+
+                            {/* Collapsible Corresponding Graph Card Under Station */}
+                            {isExpanded && (
+                              <tr style={{background: 'rgba(15, 23, 42, 0.45)', borderBottom: '2px solid var(--accent-blue)'}}>
+                                <td colSpan={12} style={{padding: '12px 16px'}}>
+                                  <div style={{
+                                    background: 'var(--bg-elevated)',
+                                    border: '1px solid var(--border-primary)',
+                                    borderRadius: 12,
+                                    padding: '14px 16px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 12,
+                                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.4)'
+                                  }}>
+                                    {/* Header badge row */}
+                                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8}}>
+                                      <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                                        <span style={{fontSize: 16}}>📊</span>
+                                        <div>
+                                          <span style={{fontSize: 12.5, fontWeight: 800, color: 'var(--text-primary)'}}>
+                                            {st.name} Climatological Rainfall Profile &amp; Harmonic Decomposition
+                                          </span>
+                                          <span style={{fontSize: 9.5, color: 'var(--text-muted)', marginLeft: 8}}>
+                                            CHIRPS 1993–2025 Daily Climatology (33-Year Calibration Window)
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                                        <span style={{
+                                          fontSize: 9.5,
+                                          fontWeight: 800,
+                                          padding: '3px 8px',
+                                          borderRadius: 6,
+                                          background: st.reg.includes('Regime 1') ? 'rgba(56, 189, 248, 0.15)' : (st.reg.includes('Regime 2') ? 'rgba(74, 222, 128, 0.15)' : (st.reg.includes('Regime 3') ? 'rgba(251, 191, 36, 0.15)' : 'rgba(148, 163, 184, 0.15)')),
+                                          color: st.reg.includes('Regime 1') ? '#38bdf8' : (st.reg.includes('Regime 2') ? '#4ade80' : (st.reg.includes('Regime 3') ? '#fbbf24' : '#94a3b8')),
+                                          border: '1px solid ' + (st.reg.includes('Regime 1') ? 'rgba(56, 189, 248, 0.4)' : (st.reg.includes('Regime 2') ? 'rgba(74, 222, 128, 0.4)' : (st.reg.includes('Regime 3') ? 'rgba(251, 191, 36, 0.4)' : 'rgba(148, 163, 184, 0.4)'))),
+                                        }}>
+                                          {st.reg}
+                                        </span>
+                                        <span style={{background: '#10b981', color: '#fff', fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 10}}>
+                                          ✓ 20/20 Verified
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Content Flex: Graph Image + Detailed Metrics */}
+                                    <div style={{display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start'}}>
+                                      {/* Left: Plot Image */}
+                                      <div style={{flex: '1 1 340px', maxWidth: 440, background: '#ffffff', padding: 8, borderRadius: 10, border: '1px solid var(--border-primary)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)'}}>
+                                        <img
+                                          src={`./figures/stations/${st.id}.png`}
+                                          alt={`${st.name} diagnostic plot`}
+                                          style={{width: '100%', height: 'auto', display: 'block', borderRadius: 6}}
+                                        />
+                                        <div style={{marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 9, color: '#475569'}}>
+                                          <span>Bars: Monthly CHIRPS | Lines: H1, H2, H1+H2 Fit</span>
+                                          <a href={`./figures/stations/${st.id}.png`} target="_blank" rel="noreferrer" style={{color: '#0284c7', fontWeight: 700, textDecoration: 'none'}}>
+                                            🔍 Open High-Res ↗
+                                          </a>
+                                        </div>
+                                      </div>
+
+                                      {/* Right: Technical Explanation & Metrics */}
+                                      <div style={{flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 10}}>
+                                        {/* Parameter Cards Grid */}
+                                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8}}>
+                                          <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
+                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Annual Rainfall (P_ann)</div>
+                                            <div style={{fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2}}>{st.pann} mm</div>
+                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>Elevation: {st.elev}</div>
+                                          </div>
+                                          <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
+                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Harmonic Ratio (r_H)</div>
+                                            <div style={{fontSize: 13, fontWeight: 800, color: Number(st.rh) >= 1.0 ? '#fbbf24' : '#38bdf8', marginTop: 2}}>{st.rh}</div>
+                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>C2 / C1 Ratio</div>
+                                          </div>
+                                          <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
+                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Annual Fundamental (C1)</div>
+                                            <div style={{fontSize: 13, fontWeight: 800, color: '#60a5fa', marginTop: 2}}>{st.c1} mm</div>
+                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>365-Day Cycle</div>
+                                          </div>
+                                          <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
+                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Semi-Annual Cycle (C2)</div>
+                                            <div style={{fontSize: 13, fontWeight: 800, color: '#f87171', marginTop: 2}}>{st.c2} mm</div>
+                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>182.5-Day Cycle</div>
+                                          </div>
+                                        </div>
+
+                                        {/* Meteorological Rationale */}
+                                        <div style={{padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 9.5, lineHeight: 1.6, color: 'var(--text-secondary)'}}>
+                                          <div style={{fontWeight: 700, color: 'var(--accent-blue)', marginBottom: 4}}>
+                                            🔬 Meteorological Harmonic Interpretation:
+                                          </div>
+                                          <div>
+                                            {st.rationale}
+                                          </div>
+                                          <div style={{marginTop: 6, fontSize: 9, color: 'var(--text-muted)'}}>
+                                            <strong>Climatological Feature:</strong> {st.desc}
+                                          </div>
+                                        </div>
+
+                                        {/* Footnote bar */}
+                                        <div style={{padding: '6px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 8.5, color: 'var(--text-faint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                          <span>Req Coord: <strong style={{color: 'var(--text-secondary)'}}>{st.req}</strong> &rarr; Grid Point: <strong style={{color: '#60a5fa'}}>{st.grid} {st.idx}</strong></span>
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleStation(st.id)}
+                                            style={{background: 'transparent', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: 9, fontWeight: 700}}
+                                          >
+                                            ▲ Collapse Graph
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
           </S>
         </div>
       )}
+
 
       {/* SUB-TAB 4: RISK GAUGES & MODELS */}
       {subTab === 'gauges' && (
