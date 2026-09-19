@@ -49,6 +49,16 @@ const useDashboardStore = create((set, get) => ({
   // -- Seasonal Mask enforcement (All-Ethiopia unmasked view removed for scientific validity)
   seasonalMaskOnly: true,
   setSeasonalMaskOnly: () => set({ seasonalMaskOnly: true }),
+
+  // -- Map Overlay Toggles --------------------------------------------------
+  showStations: true,
+  setShowStations: (val) => set((s) => ({
+    showStations: typeof val === 'function' ? val(s.showStations) : val
+  })),
+  showAuditAgreement: true,
+  setShowAuditAgreement: (val) => set((s) => ({
+    showAuditAgreement: typeof val === 'function' ? val(s.showAuditAgreement) : val
+  })),
 }))
 
 export default useDashboardStore

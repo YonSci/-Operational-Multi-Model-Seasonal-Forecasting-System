@@ -681,11 +681,14 @@ function Legend({ scaleId, season = 'long_rains', opYear = 2026, scale = null })
   )
 }
 
-function setupLayers(map, darkMode, onDone, country = 'kenya') {
+function setupLayers(map, darkMode, onDone, country = 'kenya', showStations = true) {
   if (typeof onDone !== 'function' && typeof country === 'function') {
     const tmp = onDone
     onDone = country
     country = typeof tmp === 'string' ? tmp : 'kenya'
+  }
+  if (typeof showStations !== 'boolean') {
+    showStations = true
   }
   const beforeId=(()=>{
     for(const id of ['admin-0-boundary-bg','admin-0-boundary','water']){
@@ -731,10 +734,12 @@ function setupLayers(map, darkMode, onDone, country = 'kenya') {
   }
   if(!map.getSource('monitored-farm-sites')){
     map.addSource('monitored-farm-sites', {type:'geojson', data: getSitesGeoJSON(country)})
+    const siteVis = showStations ? 'visible' : 'none'
     map.addLayer({
       id: 'monitored-farm-sites-halo',
       type: 'circle',
       source: 'monitored-farm-sites',
+      layout: { 'visibility': siteVis },
       paint: {
         'circle-radius': 11,
         'circle-color': '#10b981',
@@ -747,6 +752,7 @@ function setupLayers(map, darkMode, onDone, country = 'kenya') {
       id: 'monitored-farm-sites-point',
       type: 'circle',
       source: 'monitored-farm-sites',
+      layout: { 'visibility': siteVis },
       paint: {
         'circle-radius': 6.5,
         'circle-color': '#10b981',
@@ -759,6 +765,7 @@ function setupLayers(map, darkMode, onDone, country = 'kenya') {
       type: 'symbol',
       source: 'monitored-farm-sites',
       layout: {
+        'visibility': siteVis,
         'text-field': ['get', 'short_name'],
         'text-size': 10,
         'text-offset': [0, 1.3],
@@ -877,6 +884,15 @@ export default function MapPanel({
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
   const seasonalMaskOnly = useDashboardStore(s=>s.seasonalMaskOnly)
   const setSeasonalMaskOnly = useDashboardStore(s=>s.setSeasonalMaskOnly)
+  const showStations = useDashboardStore(s=>s.showStations)
+  const setShowStations = useDashboardStore(s=>s.setShowStations)
+  const showAuditAgreement = useDashboardStore(s=>s.showAuditAgreement)
+  const setShowAuditAgreement = useDashboardStore(s=>s.setShowAuditAgreement)
+
+  const showStationsRef = useRef(showStations)
+  useEffect(() => {
+    showStationsRef.current = showStations
+  }, [showStations])
   // Active layer list: strict tab-based selection
   const ALL_LAYERS = (
     activeTab === 'validation'    ? VAL_LAYERS :
@@ -955,26 +971,28 @@ export default function MapPanel({
         try{ map.setPaintProperty('forecast-img','raster-opacity',COUNTRY_VIEWS[countryRef.current]?.available?0.85:0) }catch(_){}
         applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0Ref.current, showAdmin1Ref.current, darkRef.current)
         setMapReady(true)
-      })
+      }, showStationsRef.current)
     })
 
     const handleMapClick = (e) => {
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
 
-      // 1. Monitored farm site clicked
-      try {
-        const siteFeatures = map.queryRenderedFeatures(e.point, {
-          layers: ['monitored-farm-sites-point', 'monitored-farm-sites-halo', 'monitored-farm-sites-label']
-        })
-        if (siteFeatures && siteFeatures.length > 0) {
-          const p = siteFeatures[0].properties ?? {}
-          const sName = p.site_name || 'Monitored Farm'
-          const lat = Number(p.lat)
-          const lon = Number(p.lon)
-          setSelectedSite({ site_name: sName, lat, lon })
-          return
-        }
-      } catch(_) {}
+      // 1. Monitored farm site clicked (only when stations overlay is ON)
+      if (showStationsRef.current) {
+        try {
+          const siteFeatures = map.queryRenderedFeatures(e.point, {
+            layers: ['monitored-farm-sites-point', 'monitored-farm-sites-halo', 'monitored-farm-sites-label']
+          })
+          if (siteFeatures && siteFeatures.length > 0) {
+            const p = siteFeatures[0].properties ?? {}
+            const sName = p.site_name || 'Monitored Farm'
+            const lat = Number(p.lat)
+            const lon = Number(p.lon)
+            setSelectedSite({ site_name: sName, lat, lon })
+            return
+          }
+        } catch(_) {}
+      }
 
       // 2. Forecast grid cell clicked
       try {
@@ -1014,23 +1032,25 @@ export default function MapPanel({
     const handleMouseMove = (e) => {
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
 
-      // Check farm sites first
-      try {
-        const siteFeatures = map.queryRenderedFeatures(e.point, {
-          layers: ['monitored-farm-sites-point', 'monitored-farm-sites-halo']
-        })
-        if (siteFeatures && siteFeatures.length > 0) {
-          map.getCanvas().style.cursor = 'pointer'
-          const p = siteFeatures[0].properties ?? {}
-          setTooltip({
-            x: e.point.x,
-            y: e.point.y,
-            isSite: true,
-            site: p
+      // Check farm sites first (only when stations overlay is ON)
+      if (showStationsRef.current) {
+        try {
+          const siteFeatures = map.queryRenderedFeatures(e.point, {
+            layers: ['monitored-farm-sites-point', 'monitored-farm-sites-halo']
           })
-          return
-        }
-      } catch(_) {}
+          if (siteFeatures && siteFeatures.length > 0) {
+            map.getCanvas().style.cursor = 'pointer'
+            const p = siteFeatures[0].properties ?? {}
+            setTooltip({
+              x: e.point.x,
+              y: e.point.y,
+              isSite: true,
+              site: p
+            })
+            return
+          }
+        } catch(_) {}
+      }
 
       // Check forecast grid
       try {
@@ -1100,7 +1120,7 @@ export default function MapPanel({
         }
         try{ map.setPaintProperty('forecast-img','raster-opacity',COUNTRY_VIEWS[countryRef.current]?.available?0.85:0) }catch(_){}
         applyBoundaryLayers(map, boundaryDataRef.current, showAdmin0Ref.current, showAdmin1Ref.current, darkRef.current)
-      })
+      }, showStationsRef.current)
     })
   },[basemapId])
 
@@ -1176,6 +1196,25 @@ export default function MapPanel({
       :{type:'FeatureCollection',features:[]}
     try{map.getSource('selected')?.setData(fc)}catch(_){}
   },[selectedSite,mapReady])
+
+  // -- Station markers visibility toggle ----------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const vis = showStations ? 'visible' : 'none'
+    const siteLayers = [
+      'monitored-farm-sites-halo',
+      'monitored-farm-sites-point',
+      'monitored-farm-sites-label'
+    ]
+    siteLayers.forEach(id => {
+      try {
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(id, 'visibility', vis)
+        }
+      } catch (_) {}
+    })
+  }, [showStations, mapReady])
 
   // -- Resize observer for responsive layout adaptivity ------------------
   useEffect(() => {
@@ -1422,23 +1461,6 @@ export default function MapPanel({
         )}
         </div>
 
-        {/* Permanent Seasonal Domain Badge (All-Ethiopia unmasked view removed for scientific validity) */}
-        <div
-          title="Operationally constrained to the climatologically valid seasonal rainfall receiving domain."
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-            borderRadius: 8, fontSize: 10, backdropFilter: 'blur(4px)',
-            background: darkMode ? 'rgba(16, 185, 129, 0.2)' : '#d1fae5',
-            border: '1px solid #10b981',
-            color: darkMode ? '#34d399' : '#047857',
-            fontWeight: 700,
-            boxShadow: '0 0 10px rgba(16, 185, 129, 0.2)'
-          }}
-        >
-          <span style={{fontSize: 10}}>🎯</span>
-          <span>Climatological Seasonal Domain</span>
-        </div>
-
         {/* Active pixel metric pill */}
         {gridData?.meta?.n_seasonal_pixels != null && (
           <div style={{
@@ -1453,40 +1475,92 @@ export default function MapPanel({
           </div>
         )}
 
-        {/* 20-Site Diagnostic Agreement Trigger Button (Ethiopia) */}
+        {/* 20-Site Diagnostic Agreement Trigger Button (Ethiopia) - Toggleable */}
         {country === 'ethiopia' && (
-          <button
-            type="button"
-            onClick={() => setShowAuditModal(true)}
-            title="View 20-Site Representative Climatological Diagnostic Agreement"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '4px 9px',
-              borderRadius: 8, fontSize: 9, backdropFilter: 'blur(4px)',
-              background: 'rgba(59, 130, 246, 0.15)',
-              border: '1px solid rgba(59, 130, 246, 0.5)',
-              color: darkMode ? '#93c5fd' : '#2563eb',
-              fontWeight: 700, cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}
-          >
-            <span>📊</span>
-            <span>20-Site Audited Agreement</span>
-            <span style={{background: '#10b981', color: '#fff', fontSize: 8, padding: '1px 5px', borderRadius: 4, fontWeight: 800}}>20/20 ✓</span>
-          </button>
+          showAuditAgreement ? (
+            <div style={{display: 'flex', alignItems: 'center', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)'}}>
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(true)}
+                title="View 20-Site Representative Climatological Diagnostic Agreement"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '4px 9px',
+                  borderRadius: '8px 0 0 8px', fontSize: 9, backdropFilter: 'blur(4px)',
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  border: '1px solid rgba(59, 130, 246, 0.5)',
+                  borderRight: 'none',
+                  color: darkMode ? '#93c5fd' : '#2563eb',
+                  fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                <span>📊</span>
+                <span>20-Site Audited Agreement</span>
+                <span style={{background: '#10b981', color: '#fff', fontSize: 8, padding: '1px 5px', borderRadius: 4, fontWeight: 800}}>20/20 ✓</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAuditAgreement(false)}
+                title="Turn off Site Audit Agreement button"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '4px 6px', borderRadius: '0 8px 8px 0', fontSize: 8, cursor: 'pointer',
+                  backdropFilter: 'blur(4px)',
+                  background: 'rgba(59, 130, 246, 0.18)',
+                  border: '1px solid rgba(59, 130, 246, 0.5)',
+                  color: darkMode ? '#93c5fd' : '#2563eb',
+                  fontWeight: 700
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAuditAgreement(true)}
+              title="Turn on Site Audit Agreement option"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px',
+                borderRadius: 8, fontSize: 9, backdropFilter: 'blur(4px)',
+                background: 'var(--bg-elevated)', border: brd,
+                color: 'var(--text-muted)', fontWeight: 600, cursor: 'pointer'
+              }}
+            >
+              <span>📊</span>
+              <span>+ Audit Agreement</span>
+            </button>
+          )
         )}
         </div>
         )}
 
-        {/* Farm Quick Selector -- top-right (next to MapLibre nav controls) */}
+        {/* Farm Quick Selector & Station Map Toggle -- top-right (next to MapLibre nav controls) */}
         {countryView.available && (() => {
           const activeSites = country === 'ethiopia' ? MONITORED_SITES_ETHIOPIA : MONITORED_SITES_KENYA
           return (
-            <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto',maxWidth:'min(180px, 45vw)'}}>
+            <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto',display:'flex',alignItems:'center',gap:4,maxWidth:'min(250px, 60vw)'}}>
+              <button
+                type="button"
+                onClick={() => setShowStations(v => !v)}
+                title={showStations ? "Turn OFF station markers on map" : "Turn ON station markers on map"}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 3, padding: '5px 7px', borderRadius: 8, fontSize: 9, cursor: 'pointer',
+                  backdropFilter: 'blur(4px)',
+                  background: showStations ? (darkMode ? 'rgba(16,185,129,0.25)' : '#d1fae5') : 'var(--bg-elevated)',
+                  border: '1px solid ' + (showStations ? '#10b981' : 'var(--border-primary)'),
+                  color: showStations ? (darkMode ? '#34d399' : '#047857') : 'var(--text-muted)',
+                  fontWeight: 700, flexShrink: 0
+                }}
+              >
+                <span style={{fontSize: 9}}>📍</span>
+                <span>{showStations ? 'ON' : 'OFF'}</span>
+              </button>
               <select
                 value={activeSites.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
                 onChange={(e) => {
                   const site = activeSites.find(s => s.site_name === e.target.value)
                   if (site) {
+                    setShowStations(true)
                     setSelectedSite({ site_name: site.site_name, lat: site.lat, lon: site.lon })
                     mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
                   }
@@ -1608,6 +1682,34 @@ export default function MapPanel({
             <span style={{width:5,height:5,borderRadius:'50%',background:showAdmin1?'#10b981':'var(--text-faint)'}}/>
             COUNTIES: {showAdmin1 ? 'ON' : 'OFF'}
           </button>
+
+          {/* Station markers toggle */}
+          <button onClick={()=>setShowStations(v=>!v)}
+            title="Toggle Monitored Farm & Climatological Stations on Map"
+            style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
+                    backdropFilter:'blur(4px)',
+                    background: showStations ? (darkMode ? 'rgba(16,185,129,0.2)' : '#d1fae5') : 'var(--bg-elevated)',
+                    border: '1px solid ' + (showStations ? '#10b981' : 'var(--border-primary)'),
+                    color: showStations ? (darkMode ? '#34d399' : '#059669') : 'var(--text-secondary)',
+                    fontWeight: showStations ? 700 : 500}}>
+            <span style={{width:5,height:5,borderRadius:'50%',background:showStations?'#10b981':'var(--text-faint)'}}/>
+            STATIONS: {showStations ? 'ON' : 'OFF'}
+          </button>
+
+          {/* Site Audit Agreement toggle (Ethiopia) */}
+          {country === 'ethiopia' && (
+            <button onClick={()=>setShowAuditAgreement(v=>!v)}
+              title="Toggle 20-Site Audited Agreement option in toolbar"
+              style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
+                      backdropFilter:'blur(4px)',
+                      background: showAuditAgreement ? (darkMode ? 'rgba(59,130,246,0.2)' : '#dbeafe') : 'var(--bg-elevated)',
+                      border: '1px solid ' + (showAuditAgreement ? 'var(--accent-blue)' : 'var(--border-primary)'),
+                      color: showAuditAgreement ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                      fontWeight: showAuditAgreement ? 700 : 500}}>
+              <span style={{width:5,height:5,borderRadius:'50%',background:showAuditAgreement?'var(--accent-blue)':'var(--text-faint)'}}/>
+              SITE AUDIT: {showAuditAgreement ? 'ON' : 'OFF'}
+            </button>
+          )}
         </div>
 
         {/* Hover tooltip -- follows cursor over monitored farm sites and forecast grid */}
