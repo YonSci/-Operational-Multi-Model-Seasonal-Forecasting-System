@@ -54,6 +54,8 @@ An operational, end-to-end seasonal climate forecasting and agro-pastoral decisi
                             ◄──── LGP (Season Length) ────►
 ```
 
+![Cumulative Anomalous Rainfall Onset & Cessation Detection (Dunning et al., 2016)](docs/scientific_masking/figures/cumulative_anomalous_rainfall_diagram.png)
+
 ### 1. Vectorized Dunning et al. (2016) Detection Method
 
 The core pipeline implements the cumulative anomalous rainfall method of **Dunning et al. (2016)** (`notebook/dunning_lib.py`):
@@ -84,8 +86,10 @@ All model forecast members are bias-corrected daily using **Empirical Quantile M
 
 - **Tercile Partitioning**: Onset, cessation, and LGP are categorized against the historical baseline into **Below Normal (BN)**, **Near Normal (NN)**, and **Above Normal (AN)**.
 - **Optimal Probability Shrinkage ($\alpha^*$)**:
-  $$\vec{P}_{\text{calibrated}} = \alpha^* \vec{P}_{\text{raw}} + (1 - \alpha^*) \left[\frac{1}{3}, \frac{1}{3}, \frac{1}{3}\right]$$
-  where $\alpha^* = \operatorname{clip}(0.50 + 0.50 \times \max(\text{RPSS}, 0), 0.35, 0.85)$ systematically prevents overconfident warnings in regions with marginal hindcast skill.
+  $$\mathbf{P}_{\mathrm{calibrated}} = \alpha^* \mathbf{P}_{\mathrm{raw}} + (1 - \alpha^*) \begin{bmatrix} 1/3 \\ 1/3 \\ 1/3 \end{bmatrix}$$
+  where the linear damping parameter is optimized via ranked probability scores:
+  $$\alpha^* = \max\left(0.35, \, \min\left(0.85, \, 0.50 + 0.50 \cdot \max(\mathrm{RPSS}, 0)\right)\right)$$
+  systematically preventing overconfident warnings in regions with marginal hindcast skill.
 
 ---
 
@@ -111,6 +115,8 @@ where $C_1$ is the amplitude of the annual cycle (first harmonic, period = 365 d
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+![The Four Objective Climate Regimes of Ethiopia](docs/scientific_masking/figures/ethiopia_four_climate_regimes_map.png)
+
 1. **Regime 1: Western Unimodal ($r_H < 1.0$)**:
    - *Core Zones*: Gambella, Benishangul-Gumuz, western Oromia (Bedele, Gore, Jimma), Lake Tana basin, and western Amhara.
    - *Climatology*: Monsoonal Atlantic/Congo airmasses drive a single continuous rainy season spanning May through October (DOY ~120–300).
@@ -122,7 +128,7 @@ where $C_1$ is the amplitude of the annual cycle (first harmonic, period = 365 d
    - *Climatology*: Equatorial biannual regime governed by ITCZ north/south migration: **Gu / Genna** (spring rains, MAM) and **Deyr / Hagaya** (autumn rains, OND). The summer Kiremt (JJAS) is intensely dry.
 4. **Regime 0: Arid / Marginal Afar Basin**:
    - *Core Zones*: Danakil Depression, central and northern Afar lowlands.
-   - *Climatology*: Hyper-arid ($P_{\text{ann}} < 300\text{mm}$) lacking well-defined, agronomically reliable rainfall seasons.
+   - *Climatology*: Hyper-arid ($P_{\text{ann}} < 300\text{ mm}$) lacking well-defined, agronomically reliable rainfall seasons.
 
 ### 2. The Necessity of Climatological Seasonal Domain Masking
 
@@ -135,11 +141,21 @@ The platform enforces **Climatological Seasonal Domain Masking** across all 1,48
 - **Bega / Deyr (ONDJ)**: Focuses strictly on Regime 3 Pastoral Lowlands where meaningful autumn rainfall occurs.
 - **Western Extended Season**: Covers Regime 1 Western Unimodal.
 
+| Kiremt Main Rains Operational Domain (JJAS) | Belg Early Rains Operational Domain (FMAM) |
+| :---: | :---: |
+| ![Kiremt Main Rains Operational Domain (JJAS)](docs/scientific_masking/figures/mask_kiremt_jjas.png) | ![Belg Early Rains Operational Domain (FMAM)](docs/scientific_masking/figures/mask_belg_early_rains.png) |
+
+| Pastoral Deyr Autumn Rains Domain (OND) | Western Extended Annual Wet Season Domain |
+| :---: | :---: |
+| ![Deyr Pastoral Autumn Rains Domain (OND)](docs/scientific_masking/figures/mask_deyr_short_rains.png) | ![Western Extended Annual Wet Season Domain](docs/scientific_masking/figures/mask_western_extended_season.png) |
+
 ---
 
 ## Audited 20-Site Representative Climatological Diagnostic Agreement
 
 To validate spatial grid representations against in-situ meteorological station records, all 20 representative meteorological stations across Ethiopia were audited. The results show **100% concordance (20/20 sites)** between Fourier harmonic ratios ($r_H$), EMI operational climatology, and in-situ historical observations:
+
+![Diagnostic Consistency of Ethiopian Rainfall Regimes (20 Representative Sites)](docs/scientific_masking/figures/station_validation_profiles.png)
 
 | Station Name | Region / Zone | Latitude | Longitude | Elevation | Annual Rain ($P_{\text{ann}}$) | Harmonic Ratio ($r_H$) | Verified Climatological Regime |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
@@ -172,9 +188,13 @@ The interactive dashboard includes an **Audited 20-Site Agreement Modal** (`📊
 
 To prevent artificial color saturation clipping across regions with widely differing climatological timing, the dashboard applies **Percentile-Adaptive Dynamic Scaling**:
 
-$$\text{vmin}_{\text{eff}} = \mathcal{P}_2(\text{active\_data}), \quad \text{vmax}_{\text{eff}} = \mathcal{P}_{98}(\text{active\_data})$$
+$$v_{\min} = \mathcal{P}_2(X), \quad v_{\max} = \mathcal{P}_{98}(X)$$
 
-- **Anomalies**: Kept strictly symmetric around zero: $\text{abs\_max} = \max(|\mathcal{P}_2|, |\mathcal{P}_{98}|)$ to maintain neutral midpoints.
+where $X$ represents active visible grid cell values.
+
+- **Symmetric Anomaly Scaling**: Anomalies are bounded symmetrically around zero:
+  $$A_{\max} = \max\left(\left|\mathcal{P}_2(X)\right|, \, \left|\mathcal{P}_{98}(X)\right|\right)$$
+  yielding an anomaly visualization domain of $[-A_{\max}, \, +A_{\max}]$.
 - **Fidelity**: Both the WebGL canvas rasterizer (`buildRaster`) and the interactive color legend (`<Legend />`) evaluate identical scale parameters in real time.
 
 ---
@@ -196,6 +216,8 @@ All four climate regimes and five seasonal masks are packaged in open GIS format
 ---
 
 ## System Architecture
+
+![Scientific Architecture & Operational Workflow](docs/scientific_masking/figures/scientific_architecture_workflow.png)
 
 ```mermaid
 flowchart TD

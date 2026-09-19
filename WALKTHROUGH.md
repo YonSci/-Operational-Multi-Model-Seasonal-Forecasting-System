@@ -21,7 +21,7 @@
 
 The operational onset/cessation forecasting system operates as an integrated five-stage pipeline unifying physical climatology, dynamical multi-model seasonal climate forecasts, and interactive GIS web delivery:
 
-![Scientific Architecture & Operational Workflow](figures/scientific_architecture_workflow.png)
+![Scientific Architecture & Operational Workflow](docs/scientific_masking/figures/scientific_architecture_workflow.png)
 
 ### The Five Operational Stages
 
@@ -77,13 +77,15 @@ flowchart TD
 5. **Stage 5 (Cumulative Anomaly Analysis & Products)**:
    The Dunning cumulative anomaly curve $A(D) = \sum [P(t) - \bar{Q}]$ is calculated for individual years and multi-model forecast ensembles. The day of minimum $A(D) + 1$ denotes the start of sustained rainfall (onset), the day of maximum $A(D)$ denotes the termination (cessation), and the difference represents the Length of Growing Period (LGP).
 
+![Cumulative Anomalous Rainfall Onset & Cessation Detection (Dunning et al., 2016)](docs/scientific_masking/figures/cumulative_anomalous_rainfall_diagram.png)
+
 ---
 
 ## 2. High-Resolution Maps of the Regimes and Operational Domains
 
 ### 2.1 The Four Objective Climate Regimes of Ethiopia (ETHIOPIA ONLY)
 
-![The Four Objective Climate Regimes of Ethiopia](figures/ethiopia_four_climate_regimes_map.png)
+![The Four Objective Climate Regimes of Ethiopia](docs/scientific_masking/figures/ethiopia_four_climate_regimes_map.png)
 
 - **Regime 1: Western Unimodal (Indigo, 426 px | 28.7% of Ethiopia)**:
   Gambella, Benishangul-Gumuz (Assosa), Jimma, Bedele, Gondar, and Lake Tana western slopes. Single prolonged wet season starting in Feb/Mar, peaking in Jul–Aug, and terminating in Oct/Nov.
@@ -98,7 +100,7 @@ flowchart TD
 
 ### 2.2 Kiremt / Main Rains Operational Domain (JJAS)
 
-![Kiremt Main Rains Operational Domain (JJAS)](figures/mask_kiremt_jjas.png)
+![Kiremt Main Rains Operational Domain (JJAS)](docs/scientific_masking/figures/mask_kiremt_jjas.png)
 
 - **Active Pixels**: **832 grid cells** (56.0% of Ethiopia's sovereign land area).
 - **Composed Of**:
@@ -115,7 +117,7 @@ flowchart TD
 
 ### 2.3 Belg Early Rains Operational Domain (FMAM)
 
-![Belg Early Rains Operational Domain (FMAM)](figures/mask_belg_early_rains.png)
+![Belg Early Rains Operational Domain (FMAM)](docs/scientific_masking/figures/mask_belg_early_rains.png)
 
 - **Active Pixels**: **416 grid cells** (28.0% of Ethiopia's sovereign land area).
 - **Geographic Scope**: Confined strictly to **Regime 2 (Type-1 Highlands)** — Addis Ababa, Amhara (Wollo, North Shewa), Tigray, eastern Oromia, and SNNP (Hawassa).
@@ -127,7 +129,7 @@ flowchart TD
 
 ### 2.4 Deyr / Short Rains & Gu Operational Domain (SON–OND & MAM)
 
-![Deyr Short Rains and Gu Pastoral Domain](figures/mask_deyr_short_rains.png)
+![Deyr Short Rains and Gu Pastoral Domain](docs/scientific_masking/figures/mask_deyr_short_rains.png)
 
 - **Active Pixels**: **578 grid cells** (38.9% of Ethiopia's sovereign land area).
 - **Geographic Scope**: Confined strictly to **Regime 3 (Pastoral Lowlands)** — Somali Region, Borana, Guji, and Bale lowlands.
@@ -140,7 +142,7 @@ flowchart TD
 
 ### 2.5 Western Extended Annual Wet Season Domain
 
-![Western Extended Annual Wet Season Domain](figures/mask_western_extended_season.png)
+![Western Extended Annual Wet Season Domain](docs/scientific_masking/figures/mask_western_extended_season.png)
 
 - **Active Pixels**: **426 grid cells** (28.7% of Ethiopia's sovereign land area).
 - **Geographic Scope**: Confined strictly to **Regime 1 (Western Unimodal)** — Gambella, Benishangul-Gumuz, western Oromia (Jimma, Bedele, Nekemte), and the western Lake Tana slopes.
@@ -215,8 +217,11 @@ A pre-packaged archive containing all shapefiles, companion PRJ projection defin
    - Enhanced `detectSeason`: Explicitly maps `'annual'`, `'western'`, and `'gu'` seasons to their respective scales.
 2. **Percentile-Adaptive Dynamic Scaling (`getEffectiveScale`)**:
    - Rather than relying solely on static min/max bounds, `MapPanel.jsx` evaluates active visible values across the loaded GeoJSON grid:
-     $$\text{vmin}_{\text{eff}} = \mathcal{P}_2(\text{data}), \quad \text{vmax}_{\text{eff}} = \mathcal{P}_{98}(\text{data})$$
-   - Anomalies remain strictly symmetric around zero: $\text{abs\_max} = \max(|\mathcal{P}_2|, |\mathcal{P}_{98}|)$ to prevent skewing the neutral zero line.
+     $$v_{\min} = \mathcal{P}_2(X), \quad v_{\max} = \mathcal{P}_{98}(X)$$
+     where $X$ represents visible raster grid cell values.
+   - Anomalies remain strictly symmetric around zero:
+     $$A_{\max} = \max\left(\left|\mathcal{P}_2(X)\right|, \, \left|\mathcal{P}_{98}(X)\right|\right)$$
+     yielding an anomaly visualization domain of $[-A_{\max}, \, +A_{\max}]$ without skewing the neutral zero line.
    - DOY and day counts snap to integer bounds, and tick marks are dynamically recalculated.
    - Both the WebGL canvas rasterizer (`buildRaster`) and the map legend (`<Legend scale={effectiveScale} />`) share the exact same scale, ensuring 100% color-data fidelity.
 
@@ -226,7 +231,7 @@ A pre-packaged archive containing all shapefiles, companion PRJ projection defin
 
 To bridge spatial grid outputs with in-situ meteorological station records, the platform integrates an interactive **20-Site Representative Diagnostic Agreement Modal**:
 
-![Diagnostic Consistency of Ethiopian Rainfall Regimes](C:/Users/Admin/.gemini/antigravity-ide/brain/26a6009d-7bda-4390-9f0b-9a579fca5392/station_validation_profiles.png)
+![Diagnostic Consistency of Ethiopian Rainfall Regimes](docs/scientific_masking/figures/station_validation_profiles.png)
 
 ### 7.1 Scientific Concordance (20/20 Sites)
 All 20 representative sites evaluated across Ethiopia achieve **100% concordance** between the Dunning Fourier harmonic analysis ($r_H = C_2 / C_1$), EMI operational climatology, and in-situ historical observations:

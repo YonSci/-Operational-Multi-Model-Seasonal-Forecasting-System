@@ -77,6 +77,8 @@ flowchart TD
 5. **Stage 5 (Cumulative Anomaly Analysis & Products)**:
    The Dunning cumulative anomaly curve $A(D) = \sum [P(t) - \bar{Q}]$ is calculated for individual years and multi-model forecast ensembles. The day of minimum $A(D) + 1$ denotes the start of sustained rainfall (onset), the day of maximum $A(D)$ denotes the termination (cessation), and the difference represents the Length of Growing Period (LGP).
 
+![Cumulative Anomalous Rainfall Onset & Cessation Detection (Dunning et al., 2016)](figures/cumulative_anomalous_rainfall_diagram.png)
+
 ---
 
 ## 2. High-Resolution Maps of the Regimes and Operational Domains
@@ -215,8 +217,8 @@ A pre-packaged archive containing all shapefiles, companion PRJ projection defin
    - Enhanced `detectSeason`: Explicitly maps `'annual'`, `'western'`, and `'gu'` seasons to their respective scales.
 2. **Percentile-Adaptive Dynamic Scaling (`getEffectiveScale`)**:
    - Rather than relying solely on static min/max bounds, `MapPanel.jsx` evaluates active visible values across the loaded GeoJSON grid:
-     $$\text{vmin}_{\text{eff}} = \mathcal{P}_2(\text{data}), \quad \text{vmax}_{\text{eff}} = \mathcal{P}_{98}(\text{data})$$
-   - Anomalies remain strictly symmetric around zero: $\text{abs\_max} = \max(|\mathcal{P}_2|, |\mathcal{P}_{98}|)$ to prevent skewing the neutral zero line.
+     $$v_{\min} = \mathcal{P}_2(X), \quad v_{\max} = \mathcal{P}_{98}(X)$$
+   - Anomalies remain strictly symmetric around zero: $A_{\max} = \max(|\mathcal{P}_2(X)|, |\mathcal{P}_{98}(X)|)$ to prevent skewing the neutral zero line.
    - DOY and day counts snap to integer bounds, and tick marks are dynamically recalculated.
    - Both the WebGL canvas rasterizer (`buildRaster`) and the map legend (`<Legend scale={effectiveScale} />`) share the exact same scale, ensuring 100% color-data fidelity.
 
@@ -226,7 +228,7 @@ A pre-packaged archive containing all shapefiles, companion PRJ projection defin
 
 To bridge spatial grid outputs with in-situ meteorological station records, the platform integrates an interactive **20-Site Representative Diagnostic Agreement Modal**:
 
-![Diagnostic Consistency of Ethiopian Rainfall Regimes](C:/Users/Admin/.gemini/antigravity-ide/brain/26a6009d-7bda-4390-9f0b-9a579fca5392/station_validation_profiles.png)
+![Diagnostic Consistency of Ethiopian Rainfall Regimes](figures/station_validation_profiles.png)
 
 ### 7.1 Scientific Concordance (20/20 Sites)
 All 20 representative sites evaluated across Ethiopia achieve **100% concordance** between the Dunning Fourier harmonic analysis ($r_H = C_2 / C_1$), EMI operational climatology, and in-situ historical observations:
