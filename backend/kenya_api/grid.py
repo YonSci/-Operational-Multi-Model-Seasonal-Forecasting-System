@@ -54,6 +54,12 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
     }
     reg_counts = {1: 0, 2: 0, 3: 0, 0: 0}
 
+    dom_cat = grid.get("dominant_cat")
+    max_prob = grid.get("max_prob")
+    p_bn_grid = grid.get("p_bn")
+    p_nn_grid = grid.get("p_nn")
+    p_an_grid = grid.get("p_an")
+
     for ii, lat in enumerate(lats):
         for jj, lon in enumerate(lons):
             try:
@@ -89,23 +95,34 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
             coords = [[[lon-half, lat-half], [lon+half, lat-half],
                         [lon+half, lat+half], [lon-half, lat+half],
                         [lon-half, lat-half]]]
+            feat_props = {
+                "lat"    : round(float(lat), 3),
+                "lon"    : round(float(lon), 3),
+                "pi"     : ii,
+                "pj"     : jj,
+                "map_val": round(float(val), 3),
+                "in_season_mask": in_season,
+                "regime_id": regime_id,
+                "regime_name": regime_name,
+                # Tooltip fields - derived fresh per-pixel
+                "label"  : grid.get("variable", ""),
+                "layer"  : grid.get("layer", ""),
+                "units"  : grid.get("units", ""),
+            }
+            if dom_cat is not None:
+                try:
+                    feat_props["dominant_cat"] = dom_cat[ii][jj]
+                    feat_props["max_prob"]     = max_prob[ii][jj] if max_prob else None
+                    feat_props["p_bn"]         = p_bn_grid[ii][jj] if p_bn_grid else None
+                    feat_props["p_nn"]         = p_nn_grid[ii][jj] if p_nn_grid else None
+                    feat_props["p_an"]         = p_an_grid[ii][jj] if p_an_grid else None
+                except Exception:
+                    pass
+
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Polygon", "coordinates": coords},
-                "properties": {
-                    "lat"    : round(float(lat), 3),
-                    "lon"    : round(float(lon), 3),
-                    "pi"     : ii,
-                    "pj"     : jj,
-                    "map_val": round(float(val), 3),
-                    "in_season_mask": in_season,
-                    "regime_id": regime_id,
-                    "regime_name": regime_name,
-                    # Tooltip fields - derived fresh per-pixel
-                    "label"  : grid.get("variable", ""),
-                    "layer"  : grid.get("layer", ""),
-                    "units"  : grid.get("units", ""),
-                },
+                "properties": feat_props,
             })
 
     # Enrich features with tooltip data using appropriate season CHIRPS clim
@@ -185,11 +202,11 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
 
 @router.get("")
 def get_grid(
-    variable: str  = Query("onset",        description="onset | cessation | lgp"),
-    layer   : str  = Query("anomaly",      description="anomaly | spread | prob_bn | prob_an | failure"),
+    variable: str  = Query("onset",        description="onset | cessation | lgp | rainfall"),
+    layer   : str  = Query("anomaly",      description="anomaly | spread | prob_bn | prob_an | tercile | failure"),
     bust    : bool = Query(False,          description="Clear cache and rebuild"),
     model   : str  = Query("",            description="Optional: single model name for per-model grid"),
-    season  : str  = Query("long_rains",  description="long_rains | short_rains"),
+    season  : str  = Query("long_rains",  description="long_rains | short_rains | kiremt | fmam | deyr | bega"),
 ):
     """
     Return a GeoJSON FeatureCollection for the requested map layer.
@@ -198,8 +215,8 @@ def get_grid(
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
 
-    valid_vars   = {"onset", "cessation", "lgp"}
-    valid_layers = {"anomaly", "spread", "median", "prob_bn", "prob_nn", "prob_an", "failure", "chirps_p50", "chirps_spread", "bias", "detection_rate", "rpss_val", "hitrate_val", "alpha", "hr_weighted", "rpss_weighted"}
+    valid_vars   = {"onset", "cessation", "lgp", "rainfall"}
+    valid_layers = {"anomaly", "spread", "median", "prob_bn", "prob_nn", "prob_an", "tercile", "failure", "chirps_p50", "chirps_spread", "bias", "detection_rate", "rpss_val", "hitrate_val", "alpha", "hr_weighted", "rpss_weighted"}
 
     if variable not in valid_vars:
         raise HTTPException(400, f"variable must be one of {sorted(valid_vars)}")

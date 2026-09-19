@@ -212,6 +212,11 @@ const CS = {
   h_onset_det:  { s:[0.5,0.6,0.7,0.8,0.9,0.95,1.0], c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Detection Rate: Onset (fraction)' },
   h_cess_det:   { s:[0.5,0.6,0.7,0.8,0.9,0.95,1.0], c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Detection Rate: Cessation (fraction)' },
   h_lgp_det:    { s:[0.5,0.6,0.7,0.8,0.9,0.95,1.0], c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Detection Rate: Season Length (fraction)' },
+  // ICPAC Probabilistic Tercile colour scales
+  tercile_rainfall: { s:[40,50,60,70,80,90], c:['#98f576','#6fb536','#62a731','#417d21','#254e10','#183707'], label:'Rainfall Tercile Forecast (%)' },
+  tercile_onset:    { s:[40,50,60,70,80,90], c:['#98f576','#6fb536','#62a731','#417d21','#254e10','#183707'], label:'Onset Tercile Forecast (%)' },
+  tercile_cess:     { s:[40,50,60,70,80,90], c:['#98f576','#6fb536','#62a731','#417d21','#254e10','#183707'], label:'Cessation Tercile Forecast (%)' },
+  tercile_lgp:      { s:[40,50,60,70,80,90], c:['#98f576','#6fb536','#62a731','#417d21','#254e10','#183707'], label:'Season Length Tercile Forecast (%)' },
 }
 
 // Dedicated Short Rains (OND) colour scales:
@@ -379,7 +384,7 @@ function getEffectiveScale(scaleId, season = 'long_rains', gridData = null, seas
   const vMax = vals[vals.length - 1]
 
   const isAnomaly = scaleId.includes('anom') || scaleId.includes('bias')
-  const isProbability = scaleId.includes('prob') || scaleId.includes('failure')
+  const isProbability = scaleId.includes('prob') || scaleId.includes('failure') || scaleId.includes('tercile')
   const isSkill = scaleId.startsWith('v_') || scaleId.includes('det') || scaleId.includes('alpha')
 
   // Keep fixed probability scale (0 to 0.6 or 0 to 1) and fixed skill bounds
@@ -432,10 +437,17 @@ const LAYERS = [
   { id:'onset_anom',   label:'Onset Anomaly',      group:'Anomaly',  variable:'onset',     layer:'anomaly' },
   { id:'cess_anom',    label:'Cessation Anomaly',  group:'Anomaly',  variable:'cessation', layer:'anomaly' },
   { id:'lgp_anom',     label:'Season Length Anomaly', group:'Anomaly', variable:'lgp',     layer:'anomaly' },
+  // ICPAC Terciles
+  { id:'tercile_rainfall', label:'Rainfall Terciles (ICPAC)', group:'Tercile', variable:'rainfall', layer:'tercile' },
+  { id:'tercile_onset',    label:'Onset Terciles (ICPAC)',    group:'Tercile', variable:'onset',    layer:'tercile' },
+  { id:'tercile_cess',     label:'Cessation Terciles (ICPAC)',group:'Tercile', variable:'cessation',layer:'tercile' },
+  { id:'tercile_lgp',      label:'Season Len Terciles (ICPAC)',group:'Tercile',variable:'lgp',      layer:'tercile' },
 ]
 
 // Probabilistic-only layers -- shown only when activeTab === 'probabilistic'
 const PROB_LAYERS = [
+  { id:'tercile_rainfall', label:'Rainfall Terciles (ICPAC)', variable:'rainfall', layer:'tercile', group:'ICPAC' },
+  { id:'tercile_onset',    label:'Onset Terciles (ICPAC)',    variable:'onset',    layer:'tercile', group:'ICPAC' },
   { id:'p_onset_bn',  label:'P(BN) Onset',          variable:'onset',     layer:'prob_bn', group:'BN' },
   { id:'p_onset_nn',  label:'P(NN) Onset',           variable:'onset',     layer:'prob_nn', group:'NN' },
   { id:'p_onset_an',  label:'P(AN) Onset',           variable:'onset',     layer:'prob_an', group:'AN' },
@@ -515,13 +527,58 @@ function v2rgb(v,scale){
   return rgbs[rgbs.length-1]
 }
 
+// ICPAC Authentic Colour Mapping
+function getIcpacTercileRgba(props) {
+  if (!props) return null
+  const { in_season_mask, dominant_cat, max_prob } = props
+  // 1. Outside active seasonal rainy domain (dry northern/western highlands in Deyr) -> authentic solid ICPAC gray
+  if (in_season_mask === false) {
+    return [190, 190, 190, 225] // #bebebe
+  }
+  const prob = (max_prob != null && max_prob > 1) ? max_prob : (max_prob != null ? max_prob * 100 : 33.3)
+  // 2. Climatological neutral (< 40%)
+  if (dominant_cat === 'climatology' || prob < 40) {
+    return [255, 255, 255, 220] // #ffffff
+  }
+  // 3. Above normal (Greens)
+  if (dominant_cat === 'above') {
+    if (prob >= 80) return [37, 78, 16, 235]   // #254e10 (>80%)
+    if (prob >= 70) return [65, 125, 33, 235]  // #417d21 (70-80%)
+    if (prob >= 60) return [98, 167, 49, 235]  // #62a731 (60-70%)
+    if (prob >= 50) return [111, 181, 54, 235] // #6fb536 (50-60%)
+    if (prob >= 45) return [152, 245, 118, 235]// #98f576 (45-50%)
+    return [204, 252, 191, 235]                 // #ccfcbf (40-45%)
+  }
+  // 4. Normal (Cyans)
+  if (dominant_cat === 'normal') {
+    if (prob >= 80) return [136, 251, 254, 235] // #88fbfe (>80%)
+    if (prob >= 70) return [138, 251, 254, 235] // #8afbfe (70-80%)
+    if (prob >= 60) return [149, 251, 254, 235] // #95fbfe (60-70%)
+    if (prob >= 50) return [159, 251, 254, 235] // #9ffbfe (50-60%)
+    if (prob >= 45) return [171, 252, 254, 235] // #abfcfe (45-50%)
+    return [236, 254, 255, 235]                  // #ecfeff (40-45%)
+  }
+  // 5. Below normal (Yellows/Oranges/Reds)
+  if (dominant_cat === 'below') {
+    if (prob >= 80) return [225, 53, 30, 235]   // #e1351e (>80%)
+    if (prob >= 70) return [226, 77, 34, 235]   // #e24d22 (70-80%)
+    if (prob >= 60) return [230, 122, 43, 235]  // #e67a2b (60-70%)
+    if (prob >= 50) return [233, 147, 49, 235]  // #e99331 (50-60%)
+    if (prob >= 45) return [247, 226, 71, 235]  // #f7e247 (45-50%)
+    return [253, 254, 143, 235]                 // #fdfe8f (40-45%)
+  }
+  return [255, 255, 255, 220]
+}
+
 function buildRaster(gridData, scale, seasonalMaskOnly = true) {
   if (!gridData?.features?.length) return null
-  const latSet=new Set(),lonSet=new Set(),raw={},inMask={}
+  const isTercile = gridData.meta?.layer === 'tercile' || (gridData.features[0]?.properties?.layer === 'tercile')
+  const latSet=new Set(),lonSet=new Set(),raw={},inMask={},featProps={}
   for(const f of gridData.features){
-    const{lat,lon,map_val,in_season_mask}=f.properties; if(map_val==null) continue
+    const{lat,lon,map_val,in_season_mask}=f.properties; if(map_val==null && !isTercile) continue
     latSet.add(lat); lonSet.add(lon); raw[lat+','+lon]=map_val
     inMask[lat+','+lon] = in_season_mask !== false
+    featProps[lat+','+lon] = f.properties
   }
   const lats=[...latSet].sort((a,b)=>b-a),lons=[...lonSet].sort((a,b)=>a-b)
   const nL=lats.length,nO=lons.length; if(!nL||!nO) return null
@@ -532,12 +589,21 @@ function buildRaster(gridData, scale, seasonalMaskOnly = true) {
   for(let i=0;i<nL;i++){
     for(let j=0;j<nO;j++){
       const key=lats[i]+','+lons[j]
-      const v=raw[key],idx=(i*nO+j)*4
-      if(v==null){d[idx+3]=0;continue}
-      if(seasonalMaskOnly && inMask[key] === false){d[idx+3]=0;continue}
-      const rgb=v2rgb(v,scale)
-      if(!rgb){d[idx+3]=0;continue}
-      d[idx]=rgb[0];d[idx+1]=rgb[1];d[idx+2]=rgb[2];d[idx+3]=210
+      const idx=(i*nO+j)*4
+      if (isTercile) {
+        const fp = featProps[key]
+        if (!fp) { d[idx+3]=0; continue }
+        const rgba = getIcpacTercileRgba(fp)
+        if (!rgba) { d[idx+3]=0; continue }
+        d[idx]=rgba[0]; d[idx+1]=rgba[1]; d[idx+2]=rgba[2]; d[idx+3]=rgba[3]
+      } else {
+        const v=raw[key]
+        if(v==null){d[idx+3]=0;continue}
+        if(seasonalMaskOnly && inMask[key] === false){d[idx+3]=0;continue}
+        const rgb=v2rgb(v,scale)
+        if(!rgb){d[idx+3]=0;continue}
+        d[idx]=rgb[0];d[idx+1]=rgb[1];d[idx+2]=rgb[2];d[idx+3]=210
+      }
     }
   }
   ctx.putImageData(img,0,0)
@@ -580,6 +646,34 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
     } else {
       lines.push('⚠️ Outside Primary Seasonal Rainfall Zone')
     }
+  }
+
+  // Handle ICPAC Tercile layers first
+  if (props.layer === 'tercile' || L.includes('tercile')) {
+    const isRf = L.includes('rainfall') || props.label === 'rainfall'
+    lines.push(isRf ? '🌧️ ICPAC Rainfall Tercile Forecast' : '🌱 ICPAC Onset Tercile Forecast')
+    lines.push('📅 Autumn Rains Deyr/Hagaya (SON–OND) 2026')
+    if (props.in_season_mask === false) {
+      lines.push('🏜️ Non-Seasonal Zone / Dry Bega Season')
+      lines.push('ℹ️ Solid gray mask per ICPAC GCOF standard (negligible autumn rain in highlands).')
+    } else {
+      const cat = props.dominant_cat || 'climatology'
+      const pMax = props.max_prob != null ? props.max_prob : mv
+      const catBadge = cat === 'above' ? `🟢 ABOVE NORMAL (${pMax}%)` :
+                       cat === 'normal' ? `🔵 NEAR NORMAL (${pMax}%)` :
+                       cat === 'below' ? `🔴 BELOW NORMAL (${pMax}%)` :
+                       `⚪ CLIMATOLOGY / NO SIGNAL (<40%)`
+      lines.push(`Dominant Tercile: ${catBadge}`)
+      if (props.p_an != null && props.p_nn != null && props.p_bn != null) {
+        lines.push(`• Above Normal: ${props.p_an}%`)
+        lines.push(`• Near Normal:  ${props.p_nn}%`)
+        lines.push(`• Below Normal: ${props.p_bn}%`)
+      }
+    }
+    if (props.lat != null) {
+      lines.push('Grid: ' + Number(props.lat).toFixed(3) + '°N,  ' + Number(props.lon).toFixed(3) + '°E')
+    }
+    return lines
   }
 
   // Determine variable from layer id prefix
@@ -657,6 +751,86 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
 }
 
 function Legend({ scaleId, season = 'long_rains', opYear = 2026, scale = null }) {
+  if (scaleId?.includes('tercile')) {
+    return (
+      <div style={{
+        background:'var(--bg-surface)', border:'1px solid var(--border-primary)',
+        borderRadius:8, padding:'8px 10px', minWidth:210, maxWidth:260, backdropFilter:'blur(8px)',
+        boxShadow:'0 4px 16px rgba(0,0,0,0.25)'
+      }}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6}}>
+          <span style={{fontSize:9, fontWeight:800, color:'var(--text-primary)', letterSpacing:'0.03em'}}>
+            ICPAC PROBABILISTIC FORECAST
+          </span>
+          <span style={{fontSize:8, color:'#10b981', background:'rgba(16,185,129,0.12)', padding:'1px 4px', borderRadius:3, fontWeight:700}}>GCOF</span>
+        </div>
+        
+        {/* 3 Tercile Columns: Above, Normal, Below */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:6}}>
+          {/* Above Normal */}
+          <div>
+            <div style={{fontSize:8, fontWeight:700, color:'#2e7d32', textAlign:'center', marginBottom:3}}>Above (%)</div>
+            <div style={{display:'flex', flexDirection:'column', borderRadius:3, overflow:'hidden', border:'1px solid rgba(0,0,0,0.15)'}}>
+              <div style={{background:'#254e10', height:7}} title=">80%"/>
+              <div style={{background:'#417d21', height:7}} title="70-80%"/>
+              <div style={{background:'#62a731', height:7}} title="60-70%"/>
+              <div style={{background:'#6fb536', height:7}} title="50-60%"/>
+              <div style={{background:'#98f576', height:7}} title="45-50%"/>
+              <div style={{background:'#ccfcbf', height:7}} title="40-45%"/>
+            </div>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:7, color:'var(--text-faint)', marginTop:2}}>
+              <span>90</span><span>40</span>
+            </div>
+          </div>
+
+          {/* Near Normal */}
+          <div>
+            <div style={{fontSize:8, fontWeight:700, color:'#0284c7', textAlign:'center', marginBottom:3}}>Normal (%)</div>
+            <div style={{display:'flex', flexDirection:'column', borderRadius:3, overflow:'hidden', border:'1px solid rgba(0,0,0,0.15)'}}>
+              <div style={{background:'#88fbfe', height:7}} title=">80%"/>
+              <div style={{background:'#8afbfe', height:7}} title="70-80%"/>
+              <div style={{background:'#95fbfe', height:7}} title="60-70%"/>
+              <div style={{background:'#9ffbfe', height:7}} title="50-60%"/>
+              <div style={{background:'#abfcfe', height:7}} title="45-50%"/>
+              <div style={{background:'#ecfeff', height:7}} title="40-45%"/>
+            </div>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:7, color:'var(--text-faint)', marginTop:2}}>
+              <span>90</span><span>40</span>
+            </div>
+          </div>
+
+          {/* Below Normal */}
+          <div>
+            <div style={{fontSize:8, fontWeight:700, color:'#b91c1c', textAlign:'center', marginBottom:3}}>Below (%)</div>
+            <div style={{display:'flex', flexDirection:'column', borderRadius:3, overflow:'hidden', border:'1px solid rgba(0,0,0,0.15)'}}>
+              <div style={{background:'#e1351e', height:7}} title=">80%"/>
+              <div style={{background:'#e24d22', height:7}} title="70-80%"/>
+              <div style={{background:'#e67a2b', height:7}} title="60-70%"/>
+              <div style={{background:'#e99331', height:7}} title="50-60%"/>
+              <div style={{background:'#f7e247', height:7}} title="45-50%"/>
+              <div style={{background:'#fdfe8f', height:7}} title="40-45%"/>
+            </div>
+            <div style={{display:'flex', justifyContent:'space-between', fontSize:7, color:'var(--text-faint)', marginTop:2}}>
+              <span>90</span><span>40</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Legend notes for Climatology & Gray Dry Zone */}
+        <div style={{display:'flex', flexDirection:'column', gap:3, borderTop:'1px solid var(--border-subtle)', paddingTop:5}}>
+          <div style={{display:'flex', alignItems:'center', gap:5, fontSize:8, color:'var(--text-muted)'}}>
+            <div style={{width:9, height:9, background:'#ffffff', border:'1px solid #94a3b8', borderRadius:2, flexShrink:0}}/>
+            <span>Climatology / Neutral (&lt; 40%)</span>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:5, fontSize:8, color:'var(--text-muted)'}}>
+            <div style={{width:9, height:9, background:'#bebebe', border:'1px solid #71717a', borderRadius:2, flexShrink:0}}/>
+            <span>Dry Season (Non-Seasonal / Masked)</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const s = scale || getScale(scaleId, season); if (!s) return null
   const isDOY = (scaleId.includes('onset') || scaleId.includes('cess')) &&
                 (scaleId.includes('med') || scaleId.includes('p50') || scaleId.includes('chirps') || scaleId.includes('_w'))
@@ -1347,6 +1521,45 @@ export default function MapPanel({
                   })}
                 </div>
               ))}
+
+              {/* ICPAC Probabilistic Tercile Section */}
+              <div style={{marginTop:8, paddingTop:8, borderTop:'1px solid var(--border-subtle)'}}>
+                <div style={{fontSize:8, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#10b981', marginBottom:5, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                  <span style={{display:'flex', alignItems:'center', gap:4}}>
+                    <span>🌦️</span>
+                    <span>ICPAC Tercile Forecast</span>
+                  </span>
+                  <span style={{fontSize:7, padding:'1px 4px', borderRadius:3, background:'rgba(16,185,129,0.15)', color:'#10b981', fontWeight:800}}>GCOF Style</span>
+                </div>
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:4}}>
+                  <button
+                    onClick={()=>handleLayerChange('tercile_rainfall')}
+                    title="Rainfall Probabilistic Tercile Forecast (Above/Normal/Below) in ICPAC Style"
+                    style={{
+                      padding:'6px 6px', borderRadius:5, fontSize:9, cursor:'pointer', textAlign:'center',
+                      border:'1px solid '+(activeLayer==='tercile_rainfall'?'#10b981':'var(--border-primary)'),
+                      background:activeLayer==='tercile_rainfall'?'#10b981':'var(--bg-surface)',
+                      color:activeLayer==='tercile_rainfall'?'#fff':'var(--text-secondary)',
+                      fontWeight:activeLayer==='tercile_rainfall'?700:500
+                    }}
+                  >
+                    🌧️ Rainfall Terciles
+                  </button>
+                  <button
+                    onClick={()=>handleLayerChange('tercile_onset')}
+                    title="Onset Probabilistic Tercile Forecast in ICPAC Style"
+                    style={{
+                      padding:'6px 6px', borderRadius:5, fontSize:9, cursor:'pointer', textAlign:'center',
+                      border:'1px solid '+(activeLayer==='tercile_onset'?'#10b981':'var(--border-primary)'),
+                      background:activeLayer==='tercile_onset'?'#10b981':'var(--bg-surface)',
+                      color:activeLayer==='tercile_onset'?'#fff':'var(--text-secondary)',
+                      fontWeight:activeLayer==='tercile_onset'?700:500
+                    }}
+                  >
+                    🌱 Onset Terciles
+                  </button>
+                </div>
+              </div>
             </div>
           ) : activeTab === 'multimodel' ? (
             /* Multi-model: 3x3 grid -- Equal/HR-Wt/RPSS-Wt x Onset/Cess/Season */

@@ -374,7 +374,7 @@ def _load_model(name, out_dir, chirps, season="long_rains", win_doy_start=32, wi
         _missing.append(f"{metric}_{variable}.nc")
         return np.full((3, n_years, n_lat, n_lon), 1/3, np.float32)
 
-    probs_damped = {v: _probs("probs_damped", v)   for v in ["onset","cessation","lgp"]}
+    probs_damped = {v: _probs("probs_damped", v)   for v in ["onset","cessation","lgp","rainfall"]}
     alpha        = {v: _skill("alpha", v)            for v in ["onset","cessation","lgp"]}
     hitrate_cal  = {v: _skill("hitrate", v, "cal")   for v in ["onset","cessation","lgp"]}
     hitrate_val  = {v: _skill("hitrate", v, "val")   for v in ["onset","cessation","lgp"]}
@@ -846,6 +846,7 @@ def _load_demo_npz():
                 "onset": data["bega_ecmwf_p_on"],
                 "cessation": data["bega_ecmwf_p_cs"],
                 "lgp": data["bega_ecmwf_p_lg"],
+                "rainfall": data.get("bega_ecmwf_p_rf", data["bega_ecmwf_p_on"]),
             },
             alpha={
                 "onset": data["bega_ecmwf_a_on"],
@@ -1490,9 +1491,9 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
     """
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     s = _state
-    _vmap  = {"onset":("onset","onset_doy"),"cessation":("cessation","cessation_doy"),"lgp":("lgp","lgp_days")}
+    _vmap  = {"onset":("onset","onset_doy"),"cessation":("cessation","cessation_doy"),"lgp":("lgp","lgp_days"),"rainfall":("rainfall","rainfall_mm")}
     if variable not in _vmap: raise ValueError(f"variable must be one of {list(_vmap)}")
-    if layer not in ("anomaly","spread","median","prob_bn","prob_nn","prob_an","failure","chirps_p50","chirps_spread","bias","detection_rate","rpss_val","hitrate_val","alpha","hr_weighted","rpss_weighted"): raise ValueError(f"invalid layer {layer!r}")
+    if layer not in ("anomaly","spread","median","prob_bn","prob_nn","prob_an","tercile","failure","chirps_p50","chirps_spread","bias","detection_rate","rpss_val","hitrate_val","alpha","hr_weighted","rpss_weighted"): raise ValueError(f"invalid layer {layer!r}")
     clim_key, arr_key = _vmap[variable]
 
     is_bega   = (season in ["deyr", "bega", "ondj"]) or (model in ["ECMWF SEAS5 (Bega)", "ECMWF SEAS5 (Deyr)", "ecmwf_bega", "ecmwf_deyr"])
@@ -1505,7 +1506,8 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         MODELS = {target_name: s["MODELS"][target_name]}
         bega_md = s["MODELS"][target_name]
         c_ref = s.get("chirps_bega", s)
-        clim_map = bega_md.get("chirps_clim", c_ref["chirps_clim"])[clim_key]
+        c_clim = bega_md.get("chirps_clim", c_ref.get("chirps_clim", {}))
+        clim_map = c_clim.get(clim_key) if isinstance(c_clim, dict) else None
         grid_lat = c_ref["target_lat"]
         grid_lon = c_ref["target_lon"]
         lm = c_ref["lm"]
@@ -1515,7 +1517,8 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         MODELS = {target_name: s["MODELS"][target_name]}
         fmam_md = s["MODELS"][target_name]
         c_ref = s.get("chirps_fmam", s)
-        clim_map = fmam_md.get("chirps_clim", c_ref["chirps_clim"])[clim_key]
+        c_clim = fmam_md.get("chirps_clim", c_ref.get("chirps_clim", {}))
+        clim_map = c_clim.get(clim_key) if isinstance(c_clim, dict) else None
         grid_lat = c_ref["target_lat"]
         grid_lon = c_ref["target_lon"]
         lm = c_ref["lm"]
@@ -1525,7 +1528,8 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         MODELS = {target_name: s["MODELS"][target_name]}
         kiremt_md = s["MODELS"][target_name]
         c_ref = s.get("chirps_kiremt", s)
-        clim_map = kiremt_md.get("chirps_clim", c_ref["chirps_clim"])[clim_key]
+        c_clim = kiremt_md.get("chirps_clim", c_ref.get("chirps_clim", {}))
+        clim_map = c_clim.get(clim_key) if isinstance(c_clim, dict) else None
         grid_lat = c_ref["target_lat"]
         grid_lon = c_ref["target_lon"]
         lm = c_ref["lm"]
@@ -1539,12 +1543,14 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         if target_name in s["MODELS"]:
             MODELS = {target_name: s["MODELS"][target_name]}
             short_md = s["MODELS"][target_name]
-            clim_map = short_md.get("chirps_clim", s["chirps_clim"])[clim_key]
+            c_clim = short_md.get("chirps_clim", s.get("chirps_clim", {}))
+            clim_map = c_clim.get(clim_key) if isinstance(c_clim, dict) else None
         else:
             MODELS = {k: v for k, v in s["MODELS"].items() if v.get("season") == "short_rains" or "Sep" in k}
             if not MODELS: MODELS = s["MODELS"]
             first_md = list(MODELS.values())[0]
-            clim_map = first_md.get("chirps_clim", s["chirps_clim"])[clim_key]
+            c_clim = first_md.get("chirps_clim", s.get("chirps_clim", {}))
+            clim_map = c_clim.get(clim_key) if isinstance(c_clim, dict) else None
         grid_lat = s["target_lat"]
         grid_lon = s["target_lon"]
         lm = s["lm"]
@@ -1556,13 +1562,19 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         else:
             MODELS = {k: v for k, v in s["MODELS"].items() if v.get("season") not in ("short_rains", "kiremt", "fmam", "bega", "ondj") and "Sep" not in k and "Kiremt" not in k and "FMAM" not in k and "Bega" not in k}
             if not MODELS: MODELS = s["MODELS"]
-        clim_map = s["chirps_clim"][clim_key]
+        c_clim = s.get("chirps_clim", {})
+        clim_map = c_clim.get(clim_key) if isinstance(c_clim, dict) else None
         grid_lat = s["target_lat"]
         grid_lon = s["target_lon"]
         lm = s["lm"]
         n_lat, n_lon = s["n_lat"], s["n_lon"]
     out = np.full((n_lat, n_lon), np.nan, np.float32)
     units = "days"
+    dominant_cat_arr = None
+    max_p_arr = None
+    p_bn_arr = None
+    p_nn_arr = None
+    p_an_arr = None
     if layer == "anomaly":
         meds = [np.nanmedian(md[arr_key][:,md["op_idx"],:,:],axis=0) for md in MODELS.values()]
         out  = np.where(lm, np.nanmedian(np.stack(meds,axis=0),axis=0) - clim_map, np.nan).astype(np.float32)
@@ -1591,9 +1603,74 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
 
     elif layer in ("prob_bn","prob_nn","prob_an"):
         cat  = 0 if layer=="prob_bn" else 1 if layer=="prob_nn" else 2
-        prbs = [md["probs_damped"][clim_key][cat,md["op_idx"],:,:] for md in MODELS.values()]
-        out  = np.where(lm, np.nanmean(np.stack(prbs,axis=0),axis=0), np.nan).astype(np.float32)
+        prbs = [md["probs_damped"][clim_key][cat,md["op_idx"],:,:] for md in MODELS.values() if "probs_damped" in md and clim_key in md["probs_damped"]]
+        if prbs:
+            out  = np.where(lm, np.nanmean(np.stack(prbs,axis=0),axis=0), np.nan).astype(np.float32)
+        else:
+            out  = np.where(lm, 1/3, np.nan).astype(np.float32)
         units = "probability (0-1)"
+    elif layer == "tercile":
+        # ICPAC 3-tercile probabilities: BN (0), NN (1), AN (2)
+        prbs_list = []
+        for md in MODELS.values():
+            if "probs_damped" in md and clim_key in md["probs_damped"]:
+                p_d = md["probs_damped"][clim_key]
+                if p_d.ndim == 4:
+                    idx = min(md.get("op_idx", p_d.shape[1]-1), p_d.shape[1]-1)
+                    prbs_list.append(p_d[:, idx, :, :])
+                elif p_d.ndim == 3:
+                    prbs_list.append(p_d)
+            elif f"probs_{clim_key}" in md:
+                prbs_list.append(md[f"probs_{clim_key}"])
+
+        # Direct NetCDF fallback if list is empty
+        if not prbs_list:
+            cand_files = [
+                os.path.join(_REPO_ROOT, "outputs", "ecmwf_bega", f"probs_op_2026_{clim_key}.nc"),
+                os.path.join(_REPO_ROOT, "outputs", "ecmwf_bega", f"probs_damped_{clim_key}.nc"),
+            ]
+            for cf in cand_files:
+                if os.path.exists(cf):
+                    try:
+                        import xarray as _xr
+                        with _xr.open_dataset(cf) as _ds:
+                            vname = f"probs_op_2026_{clim_key}" if f"probs_op_2026_{clim_key}" in _ds else f"probs_damped_{clim_key}"
+                            arr = _ds[vname].values
+                            if arr.ndim == 4:
+                                arr = arr[:, -1, :, :]
+                            prbs_list.append(arr)
+                            break
+                    except Exception as _ex:
+                        print(f"  WARNING: failed loading {cf}: {_ex}")
+
+        if prbs_list:
+            p_mean = np.nanmean(np.stack(prbs_list, axis=0), axis=0)  # [3, n_lat, n_lon]
+        else:
+            p_mean = np.full((3, n_lat, n_lon), 1/3, dtype=np.float32)
+
+        p_bn_arr = np.where(lm, p_mean[0], np.nan).astype(np.float32)
+        p_nn_arr = np.where(lm, p_mean[1], np.nan).astype(np.float32)
+        p_an_arr = np.where(lm, p_mean[2], np.nan).astype(np.float32)
+
+        max_p_arr = np.nanmax(p_mean, axis=0)  # [n_lat, n_lon]
+        dominant_cat_arr = np.full((n_lat, n_lon), "climatology", dtype=object)
+        for i in range(n_lat):
+            for j in range(n_lon):
+                if not lm[i, j] or np.isnan(max_p_arr[i, j]):
+                    dominant_cat_arr[i, j] = None
+                    continue
+                mp = float(max_p_arr[i, j])
+                if mp < 0.40:
+                    dominant_cat_arr[i, j] = "climatology"
+                elif abs(float(p_mean[2, i, j]) - mp) < 1e-5:
+                    dominant_cat_arr[i, j] = "above"
+                elif abs(float(p_mean[1, i, j]) - mp) < 1e-5:
+                    dominant_cat_arr[i, j] = "normal"
+                else:
+                    dominant_cat_arr[i, j] = "below"
+
+        out = np.where(lm, max_p_arr * 100.0, np.nan).astype(np.float32)
+        units = "% (dominant probability)"
     elif layer == "failure":
         fails = [np.mean(np.isnan(md[arr_key][:,md["op_idx"],:,:]),axis=0) for md in MODELS.values()]
         out   = np.where(lm, np.nanmean(np.stack(fails,axis=0),axis=0), np.nan).astype(np.float32)
@@ -1735,13 +1812,20 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
     with warnings.catch_warnings():
         warnings.simplefilter("ignore",RuntimeWarning)
         lv = out[lm]; vmin, vmax = float(np.nanmin(lv)), float(np.nanmax(lv))
-    return dict(variable=variable, layer=layer,
+    res = dict(variable=variable, layer=layer,
                 lats=grid_lat.tolist(), lons=grid_lon.tolist(),
                 values=[[None if np.isnan(v) else round(float(v),3) for v in row] for row in out],
                 seasonal_mask=seasonal_mask_list,
                 n_seasonal=n_seasonal,
                 regime_map=regime_list,
                 vmin=round(vmin,3), vmax=round(vmax,3), units=units)
+    if layer == "tercile" and dominant_cat_arr is not None:
+        res["dominant_cat"] = [[v for v in row] for row in dominant_cat_arr]
+        res["max_prob"]     = [[None if np.isnan(v) else round(float(v)*100, 1) for v in row] for row in max_p_arr]
+        res["p_bn"]         = [[None if np.isnan(v) else round(float(v)*100, 1) for v in row] for row in p_bn_arr]
+        res["p_nn"]         = [[None if np.isnan(v) else round(float(v)*100, 1) for v in row] for row in p_nn_arr]
+        res["p_an"]         = [[None if np.isnan(v) else round(float(v)*100, 1) for v in row] for row in p_an_arr]
+    return res
 
 # ── Taylor stats ───────────────────────────────────────────────────────────
 def get_taylor_stats():

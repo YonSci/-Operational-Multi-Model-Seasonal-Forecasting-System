@@ -2663,7 +2663,7 @@ export default function App() {
   },[modelsData,setActiveModels])
 
   const querySite = selectedSite??{lat:-1.62,lon:37.12}
-  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj'
+  const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const isKiremt = !isBega && selectedSeason === 'kiremt'
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
   const effectiveModel = isBega
@@ -2683,7 +2683,7 @@ export default function App() {
   useEffect(()=>{
     if (!modelsLoaded||!selectedModel) return
     let model = selectedModel!=='multimodel'?selectedModel:''
-    if (selectedSeason === 'bega' || selectedSeason === 'ondj') {
+    if (selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr') {
       model = 'ECMWF SEAS5 (Bega)'
     } else if (selectedSeason === 'fmam' || selectedSeason === 'belg') {
       model = 'ECMWF SEAS5 (FMAM)'
