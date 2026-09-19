@@ -82,14 +82,22 @@ The system ingests hindcasts and operational runs across **8 Global Climate Mode
 
 All model forecast members are bias-corrected daily using **Empirical Quantile Mapping (EQM)** with cube-root power transformation against **CHIRPS v2.0** daily climatology (1981–2016) before calculating onset and cessation dates.
 
-### 3. Probabilistic Terciles & Optimal Linear Pooling ($\alpha^*$)
+### 3. Probabilistic Terciles & Optimal Linear Pooling
 
 - **Tercile Partitioning**: Onset, cessation, and LGP are categorized against the historical baseline into **Below Normal (BN)**, **Near Normal (NN)**, and **Above Normal (AN)**.
-- **Optimal Probability Shrinkage ($\alpha^*$)**:
-  $$\mathbf{P}_{\mathrm{calibrated}} = \alpha^* \mathbf{P}_{\mathrm{raw}} + (1 - \alpha^*) \begin{bmatrix} 1/3 \\ 1/3 \\ 1/3 \end{bmatrix}$$
-  where the linear damping parameter is optimized via ranked probability scores:
-  $$\alpha^* = \max\left(0.35, \, \min\left(0.85, \, 0.50 + 0.50 \cdot \max(\mathrm{RPSS}, 0)\right)\right)$$
-  systematically preventing overconfident warnings in regions with marginal hindcast skill.
+- **Optimal Probability Shrinkage ($\alpha^*$)**: Raw ensemble tercile probabilities are calibrated against climatological skill by shrinking toward the uniform prior $[1/3, \, 1/3, \, 1/3]^T$:
+
+$$
+\mathbf{P}_{\mathrm{calibrated}} = \alpha^* \mathbf{P}_{\mathrm{raw}} + (1 - \alpha^*) \left[ \frac{1}{3}, \, \frac{1}{3}, \, \frac{1}{3} \right]^T
+$$
+
+where the shrinkage parameter $\alpha^*$ is dynamically optimized via ranked probability skill scores:
+
+$$
+\alpha^* = \max\left(0.35, \, \min\left(0.85, \, 0.50 + 0.50 \cdot \max(\mathrm{RPSS}, 0)\right)\right)
+$$
+
+systematically preventing overconfident warnings in regions with marginal hindcast skill.
 
 ---
 

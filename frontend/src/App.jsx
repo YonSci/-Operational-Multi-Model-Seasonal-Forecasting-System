@@ -56,7 +56,7 @@ function Card({title,children,className='',action,style={}}) {
   return (
     <div className={'card '+className} style={style}>
       {title&&<div className="card-title flex items-center justify-between"><span>{title}</span>{action}</div>}
-      <div className="flex-1 min-h-[220px] lg:min-h-0 overflow-y-auto">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto touch-scroll">{children}</div>
     </div>
   )
 }
@@ -917,9 +917,9 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
           </div>
         </Card>
       </div>
-      <div className="flex flex-col gap-2 shrink-0 w-full xl:w-[320px] overflow-y-auto max-h-full touch-scroll">
-        <Card title={'Ensemble Forecast Summary  -  '+displayModel+'  -  '+seasonCode+' '+opYear} className="shrink-0 flex-1 overflow-y-auto">
-          <div className="p-3 space-y-2 overflow-y-auto max-h-full">
+      <div className="flex flex-col gap-2 shrink-0 w-full xl:w-[320px] min-h-0 h-full">
+        <Card title={'Ensemble Forecast Summary  -  '+displayModel+'  -  '+seasonCode+' '+opYear} className="flex-1 min-h-0 h-full flex flex-col">
+          <div className="p-3 space-y-2">
             {[['ONSET',mmmOn,mmmAnom,allOnP10,allOnP90,chirpsOn,'DOY'],
               ['CESSATION',mmmCs,mmmCsAnom,allCsP10,allCsP90,chirpsCs,'DOY'],
               ['SEASON LENGTH',mmmLg,mmmLgAnom,allLgP10,allLgP90,chirpsLg,'d']].map(([sec,p50,anom,p10s,p90s,cal,unit])=>(
