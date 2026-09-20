@@ -5,21 +5,29 @@ process_method2_ecmwf_rainfall.py
 Method 2: Raw Dynamical GCM Ensemble Ingestion & Downscaling
 for Ethiopia Deyr/Hagaya (OND 2026) Seasonal Rainfall Terciles.
 
-Pipeline Steps:
-  1. Ingest raw ECMWF SEAS5 51-member operational ensemble initialized September 01, 2026.
-  2. Compute seasonal cumulative total precipitation per ensemble member across OND (lead days 30 to 122)
-     in mm (tp * 1000.0).
-  3. Spatially regrid member fields from native GCM resolution (1.0°) to Ethiopia's target 0.25° grid
-     (48 lats × 60 lons) using bilinear interpolation.
-  4. Perform Parametric Quantile Matching (Bias Correction) against historical CHIRPS calibration (1993–2016).
-  5. Calculate member-based tercile frequencies P(BN), P(NN), P(AN) against historical T33 and T67.
-  6. Apply Bayesian linear shrinkage (alpha*) based on historical validation RPSS.
-  7. Apply sovereign and dry-area masking (mask_deyr: 578 active pastoral cells, 907 dry highland cells).
-  8. Export standardized NetCDFs in outputs/ecmwf_bega/ and update backend/demo_data.npz.
+Physical Downscaling Architecture:
+  1. Ingest ECMWF SEAS5 51-member operational ensemble initialized September 01, 2026.
+  2. Ingest ECMWF SEAS5 historical hindcast ensemble (1993–2016, 24 years × 25 members = 600 members)
+     to establish the GCM's own historical model climatology at native resolution.
+  3. Extract OND cumulative seasonal precipitation (lead days 30 to 122) in mm (tp * 1000.0).
+  4. Spatially regrid both the 2026 forecast and the historical baseline from native 1.0° GCM resolution
+     to the sovereign 0.25° Ethiopia target grid (48 lats × 60 lons).
+  5. Apply Empirical Quantile Mapping (EQM):
+     - For each operational member m, compute its non-exceedance quantile q_m within the GCM's own
+       historical hindcast distribution at that pixel: q_m = F_GCM(R_m_2026).
+     - Map q_m to the local observed CHIRPS calibration distribution (1993–2016):
+       R_m_corr = F_CHIRPS⁻¹(q_m).
+     This guarantees that model systematic biases are eliminated relative to model climate,
+     and any physical wet/dry anomalies directly project onto observed rainfall.
+  6. Calculate member-based tercile frequencies P(BN), P(NN), P(AN) against historical T33 and T67.
+  7. Apply Bayesian linear shrinkage (alpha*) based on historical validation RPSS.
+  8. Apply sovereign and dry-area masking (mask_deyr: 578 active pastoral cells, 907 dry highland cells).
+  9. Export standardized NetCDFs in outputs/ecmwf_bega/ and update backend/demo_data.npz.
 """
 
 import sys
 import os
+import glob
 from pathlib import Path
 import numpy as np
 import xarray as xr
@@ -35,7 +43,7 @@ MASKS_DIR = BASE_DIR / "outputs" / "masks"
 CHIRPS_PATH = BASE_DIR / "data" / "chirps_pr_et" / "et_chirps_pr_r25_1993_2025.nc"
 
 ET_SEP_FILE = BASE_DIR / "data" / "seasonal_pr_downloads_et_sep" / "ecmwf_202609_d01.nc"
-KE_SEP_FILE = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / "ecmwf_sep" / "ecmwf_202609_d01.nc"
+KE_SEP_DIR  = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / "ecmwf_sep"
 
 def run_method2():
     print("=" * 78)
@@ -72,7 +80,7 @@ def run_method2():
     dry_pixels = int(np.sum(~mask_deyr))
     print(f"  Deyr Mask: {active_pixels} active pastoral pixels | {dry_pixels} non-seasonal dry pixels")
 
-    # Compute historical OND seasonal rainfall totals (1993-2016)
+    # Compute historical OND seasonal rainfall totals (1993-2016) from CHIRPS
     cal_years = np.arange(1993, 2017)
     cal_ond_totals = []
     for y in cal_years:
@@ -81,94 +89,92 @@ def run_method2():
         cal_ond_totals.append(tot)
     cal_ond_totals = np.stack(cal_ond_totals, axis=0) # (24, 48, 60)
 
-    # Compute tercile boundaries T33 and T67
+    # Compute observed tercile boundaries T33 and T67
     t33 = np.percentile(cal_ond_totals, 33.333, axis=0).astype(np.float32)
     t67 = np.percentile(cal_ond_totals, 66.667, axis=0).astype(np.float32)
-    print(f"  Historical OND Tercile Boundaries: mean T33={np.mean(t33[mask_deyr]):.1f} mm, mean T67={np.mean(t67[mask_deyr]):.1f} mm")
+    print(f"  Observed CHIRPS OND Boundaries: mean T33={np.mean(t33[mask_deyr]):.1f} mm, mean T67={np.mean(t67[mask_deyr]):.1f} mm")
 
-    # 2. Ingest ECMWF SEAS5 Ensemble Data
-    print("\n[Step 2/6] Ingesting ECMWF SEAS5 operational ensemble fields...")
-    gcm_file = None
+    # 2. Ingest ECMWF SEAS5 2026 Operational Forecast & Historical Hindcasts
+    print("\n[Step 2/6] Ingesting ECMWF SEAS5 operational forecast & historical hindcasts...")
+    gcm_fc_file = None
     if ET_SEP_FILE.exists() and ET_SEP_FILE.stat().st_size > 100000:
-        gcm_file = ET_SEP_FILE
-        print(f"  Found full Ethiopia domain GCM file: {gcm_file.name} ({gcm_file.stat().st_size // 1024} KB)")
-    elif KE_SEP_FILE.exists():
-        gcm_file = KE_SEP_FILE
-        print(f"  Ingesting high-resolution East Africa / Kenya GCM file: {gcm_file.name} ({gcm_file.stat().st_size // 1024} KB)")
+        gcm_fc_file = ET_SEP_FILE
+        print(f"  Using full Ethiopia domain GCM forecast: {gcm_fc_file.name}")
     else:
-        raise FileNotFoundError("No ECMWF SEAS5 September file available on disk.")
+        gcm_fc_file = KE_SEP_DIR / "ecmwf_202609_d01.nc"
+        print(f"  Using high-resolution GCM forecast: {gcm_fc_file.name}")
 
-    ds_gcm = xr.open_dataset(gcm_file)
-    n_members = len(ds_gcm.number)
-    gcm_lats = ds_gcm.latitude.values.astype(np.float64)
-    gcm_lons = ds_gcm.longitude.values.astype(np.float64)
-    print(f"  GCM Dimensions: {n_members} members, {len(gcm_lats)} lats, {len(gcm_lons)} lons")
+    ds_2026 = xr.open_dataset(gcm_fc_file)
+    n_members_op = len(ds_2026.number)
+    gcm_lats = ds_2026.latitude.values.astype(np.float64)
+    gcm_lons = ds_2026.longitude.values.astype(np.float64)
 
-    # Extract OND cumulative rainfall per member: lead day 30 (Sep 30) to lead day 122 (Dec 31)
-    # tp is in meters accumulated from start of forecast
-    tp_raw = ds_gcm["tp"]
-    if len(ds_gcm.forecast_period) >= 122:
-        tp_ond_m = tp_raw.isel(forecast_reference_time=0, forecast_period=121).values - \
-                   tp_raw.isel(forecast_reference_time=0, forecast_period=29).values
+    # Cumulative OND precipitation for 2026 (lead days 30 to 122) in mm
+    tp_raw_2026 = ds_2026["tp"]
+    if len(ds_2026.forecast_period) >= 122:
+        tp_2026_m = tp_raw_2026.isel(forecast_reference_time=0, forecast_period=121).values - \
+                    tp_raw_2026.isel(forecast_reference_time=0, forecast_period=29).values
     else:
-        tp_ond_m = tp_raw.isel(forecast_reference_time=0, forecast_period=-1).values
+        tp_2026_m = tp_raw_2026.isel(forecast_reference_time=0, forecast_period=-1).values
+    tp_2026_mm = np.maximum(0.0, tp_2026_m * 1000.0).astype(np.float32) # (51, n_lat, n_lon)
 
-    # Convert to mm
-    tp_ond_mm = np.maximum(0.0, tp_ond_m * 1000.0).astype(np.float32)
-    print(f"  Raw GCM OND Rainfall: min={np.min(tp_ond_mm):.1f} mm, mean={np.mean(tp_ond_mm):.1f} mm, max={np.max(tp_ond_mm):.1f} mm")
+    # Ingest historical hindcasts (1993–2016)
+    hist_files = sorted(glob.glob(str(KE_SEP_DIR / "ecmwf_*09_d01.nc")))
+    gcm_hist_list = []
+    for hf in hist_files:
+        yr = int(Path(hf).name.split("_")[1][:4])
+        if yr in cal_years:
+            ds_h = xr.open_dataset(hf)
+            tp_h_raw = ds_h["tp"]
+            if len(ds_h.forecast_period) >= 122:
+                tp_h = tp_h_raw.isel(forecast_reference_time=0, forecast_period=121).values - \
+                       tp_h_raw.isel(forecast_reference_time=0, forecast_period=29).values
+            else:
+                tp_h = tp_h_raw.isel(forecast_reference_time=0, forecast_period=-1).values
+            gcm_hist_list.append(np.maximum(0.0, tp_h * 1000.0).astype(np.float32))
 
-    # 3. Spatial Bilinear Regridding to Target CHIRPS Grid (48 x 60)
-    print("\n[Step 3/6] Spatially regridding GCM ensemble to sovereign 0.25° grid...")
+    gcm_hist_all = np.concatenate(gcm_hist_list, axis=0) # (N_hist_members, n_lat, n_lon)
+    print(f"  GCM Data: {n_members_op} operational members (2026) | {len(gcm_hist_all)} historical hindcast members (1993-2016)")
+
+    # 3. Spatial Bilinear Regridding to Target Grid (48 x 60)
+    print("\n[Step 3/6] Spatially regridding GCM fields to sovereign 0.25° grid...")
     lat_sort_idx = np.argsort(gcm_lats)
     lon_sort_idx = np.argsort(gcm_lons)
     gcm_lats_sorted = gcm_lats[lat_sort_idx]
     gcm_lons_sorted = gcm_lons[lon_sort_idx]
-    tp_sorted = tp_ond_mm[:, lat_sort_idx, :][:, :, lon_sort_idx]
+
+    tp_2026_sorted = tp_2026_mm[:, lat_sort_idx, :][:, :, lon_sort_idx]
+    tp_hist_sorted = gcm_hist_all[:, lat_sort_idx, :][:, :, lon_sort_idx]
 
     mesh_lon, mesh_lat = np.meshgrid(lons_target, lats_target)
-    regrid_members = np.zeros((n_members, n_lat, n_lon), dtype=np.float32)
+    pts = np.column_stack([mesh_lat.ravel(), mesh_lon.ravel()])
 
-    for m in range(n_members):
+    regrid_2026 = np.zeros((n_members_op, n_lat, n_lon), dtype=np.float32)
+    for m in range(n_members_op):
         interp = RegularGridInterpolator(
             (gcm_lats_sorted, gcm_lons_sorted),
-            tp_sorted[m],
-            method="linear",
+            tp_2026_sorted[m],
             bounds_error=False,
             fill_value=None
         )
-        pts = np.column_stack([mesh_lat.ravel(), mesh_lon.ravel()])
-        regrid_members[m] = interp(pts).reshape((n_lat, n_lon))
+        regrid_2026[m] = interp(pts).reshape((n_lat, n_lon))
+    regrid_2026 = np.maximum(0.0, regrid_2026)
 
-    regrid_members = np.maximum(0.0, regrid_members)
-    print(f"  Regridded {n_members} members to ({n_lat}, {n_lon}). Domain mean={np.mean(regrid_members[:, mask_deyr]):.1f} mm")
+    regrid_hist = np.zeros((len(gcm_hist_all), n_lat, n_lon), dtype=np.float32)
+    for m in range(len(gcm_hist_all)):
+        interp = RegularGridInterpolator(
+            (gcm_lats_sorted, gcm_lons_sorted),
+            tp_hist_sorted[m],
+            bounds_error=False,
+            fill_value=None
+        )
+        regrid_hist[m] = interp(pts).reshape((n_lat, n_lon))
+    regrid_hist = np.maximum(0.0, regrid_hist)
 
-    # 4. Parametric Quantile Matching (Bias Correction)
-    print("\n[Step 4/6] Applying parametric quantile matching against CHIRPS calibration...")
-    corrected_members = np.zeros_like(regrid_members)
+    print(f"  Regridded: 2026 OND domain mean={np.mean(regrid_2026[:, mask_deyr]):.1f} mm | Hist OND domain mean={np.mean(regrid_hist[:, mask_deyr]):.1f} mm")
 
-    for i in range(n_lat):
-        for j in range(n_lon):
-            if not mask_deyr[i, j]:
-                continue
-            obs_sample = cal_ond_totals[:, i, j]
-            obs_sorted = np.sort(obs_sample)
-
-            mod_sample = regrid_members[:, i, j]
-            ranks = np.argsort(np.argsort(mod_sample))
-            quantiles = (ranks + 0.5) / n_members
-
-            obs_q = np.quantile(obs_sorted, quantiles)
-            mod_mean = np.mean(mod_sample)
-            obs_mean = np.mean(obs_sorted) + 1e-4
-            anomaly_ratio = mod_mean / obs_mean
-
-            if anomaly_ratio > 1.2:
-                corrected_members[:, i, j] = obs_q * np.clip(anomaly_ratio, 1.0, 1.4)
-            else:
-                corrected_members[:, i, j] = obs_q
-
-    # 5. Calculate Ensemble Tercile Probabilities & Bayesian Skill Damping
-    print("\n[Step 5/6] Calculating ensemble tercile frequencies & skill damping...")
+    # 4. Empirical Quantile Mapping (EQM) against Historical Baseline
+    print("\n[Step 4/6] Applying empirical quantile mapping against model climatology...")
     p_bn_raw = np.zeros((n_lat, n_lon), dtype=np.float32)
     p_nn_raw = np.zeros((n_lat, n_lon), dtype=np.float32)
     p_an_raw = np.zeros((n_lat, n_lon), dtype=np.float32)
@@ -176,20 +182,32 @@ def run_method2():
     for i in range(n_lat):
         for j in range(n_lon):
             if mask_deyr[i, j]:
-                mem_vals = corrected_members[:, i, j]
-                bn_count = np.sum(mem_vals < t33[i, j])
-                an_count = np.sum(mem_vals >= t67[i, j])
-                nn_count = n_members - bn_count - an_count
+                mod_hist_sorted = np.sort(regrid_hist[:, i, j])
+                obs_hist_sorted = np.sort(cal_ond_totals[:, i, j])
+                n_mod_h = len(mod_hist_sorted)
 
-                p_bn_raw[i, j] = bn_count / n_members
-                p_nn_raw[i, j] = nn_count / n_members
-                p_an_raw[i, j] = an_count / n_members
+                # For each 2026 operational member, compute its non-exceedance percentile in GCM climate
+                q_members = np.searchsorted(mod_hist_sorted, regrid_2026[:, i, j]) / float(n_mod_h)
+                q_members = np.clip(q_members, 0.01, 0.99)
+
+                # Map quantile into observed CHIRPS distribution
+                obs_mapped = np.quantile(obs_hist_sorted, q_members)
+
+                # Evaluate against local CHIRPS tercile thresholds T33 and T67
+                bn_count = np.sum(obs_mapped < t33[i, j])
+                an_count = np.sum(obs_mapped >= t67[i, j])
+                nn_count = n_members_op - bn_count - an_count
+
+                p_bn_raw[i, j] = bn_count / float(n_members_op)
+                p_nn_raw[i, j] = nn_count / float(n_members_op)
+                p_an_raw[i, j] = an_count / float(n_members_op)
             else:
                 p_bn_raw[i, j] = 0.3333
                 p_nn_raw[i, j] = 0.3334
                 p_an_raw[i, j] = 0.3333
 
-    # Load validation RPSS to determine spatial alpha*
+    # 5. Bayesian Skill Shrinkage & Probability Calibration
+    print("\n[Step 5/6] Applying Bayesian linear skill shrinkage (alpha*)...")
     rpss_file = OUT_DIR / "rpss_onset_val.nc"
     if rpss_file.exists():
         ds_rpss = xr.open_dataset(rpss_file)
@@ -202,7 +220,7 @@ def run_method2():
     p_nn_damped = alpha * p_nn_raw + (1.0 - alpha) / 3.0
     p_an_damped = alpha * p_an_raw + (1.0 - alpha) / 3.0
 
-    # Re-normalize to exactly 1.0
+    # Normalize to ensure exact 1.000 sum
     prob_sum = p_bn_damped + p_nn_damped + p_an_damped
     p_bn_damped /= prob_sum
     p_nn_damped /= prob_sum
@@ -213,16 +231,26 @@ def run_method2():
     an_active = p_an_damped[mask_deyr]
     nn_active = p_nn_damped[mask_deyr]
     bn_active = p_bn_damped[mask_deyr]
-    print(f"  Active Deyr Domain Probabilities:")
-    print(f"    - Above Normal (AN): mean={np.mean(an_active)*100:.1f}%, max={np.max(an_active)*100:.1f}%, min={np.min(an_active)*100:.1f}%")
-    print(f"    - Near Normal  (NN): mean={np.mean(nn_active)*100:.1f}%, max={np.max(nn_active)*100:.1f}%, min={np.min(nn_active)*100:.1f}%")
-    print(f"    - Below Normal (BN): mean={np.mean(bn_active)*100:.1f}%, max={np.max(bn_active)*100:.1f}%, min={np.min(bn_active)*100:.1f}%")
+    print(f"  Active Deyr Domain Calibrated Probabilities:")
+    print(f"    - Above Normal (AN): mean={np.mean(an_active)*100:.1f}%, min={np.min(an_active)*100:.1f}%, max={np.max(an_active)*100:.1f}%")
+    print(f"    - Near Normal  (NN): mean={np.mean(nn_active)*100:.1f}%, min={np.min(nn_active)*100:.1f}%, max={np.max(nn_active)*100:.1f}%")
+    print(f"    - Below Normal (BN): mean={np.mean(bn_active)*100:.1f}%, min={np.min(bn_active)*100:.1f}%, max={np.max(bn_active)*100:.1f}%")
 
+    # Check breakdown across active pastoral pixels
+    max_probs = np.max(p_op_2026[:, mask_deyr], axis=0)
     dom_cats = np.argmax(p_op_2026[:, mask_deyr], axis=0)
-    print(f"  Dominant Tercile Category Breakdown across {active_pixels} Active Pixels:")
-    print(f"    Above Normal: {np.sum(dom_cats == 2)} pixels ({np.sum(dom_cats == 2)/active_pixels*100:.1f}%)")
-    print(f"    Near Normal : {np.sum(dom_cats == 1)} pixels ({np.sum(dom_cats == 1)/active_pixels*100:.1f}%)")
-    print(f"    Below Normal: {np.sum(dom_cats == 0)} pixels ({np.sum(dom_cats == 0)/active_pixels*100:.1f}%)")
+    is_climatology = (max_probs < 0.40)
+
+    n_above = np.sum((dom_cats == 2) & (~is_climatology))
+    n_normal = np.sum((dom_cats == 1) & (~is_climatology))
+    n_below = np.sum((dom_cats == 0) & (~is_climatology))
+    n_clim = np.sum(is_climatology)
+
+    print(f"\n  Dominant Tercile Category Breakdown across {active_pixels} Active Pixels:")
+    print(f"    Above Normal (Green) : {n_above} pixels ({n_above/active_pixels*100:.1f}%)")
+    print(f"    Near Normal  (Cyan)  : {n_normal} pixels ({n_normal/active_pixels*100:.1f}%)")
+    print(f"    Below Normal (Yellow): {n_below} pixels ({n_below/active_pixels*100:.1f}%)")
+    print(f"    Climatology  (White) : {n_clim} pixels ({n_clim/active_pixels*100:.1f}%)")
 
     # 6. Export NetCDFs & Update demo_data.npz
     print("\n[Step 6/6] Exporting NetCDF outputs and repacking backend/demo_data.npz...")
@@ -232,7 +260,7 @@ def run_method2():
         coords={"tercile": [0, 1, 2], "lat": lats_target, "lon": lons_target},
         name="probs_op_2026_rainfall",
         attrs={
-            "description": "Method 2: Calibrated ECMWF SEAS5 51-Member Dynamical Terciles for Ethiopia Deyr OND 2026",
+            "description": "Method 2: Empirical Quantile-Mapped ECMWF SEAS5 Dynamical Terciles for Ethiopia Deyr OND 2026",
             "model": "ECMWF SEAS5 System 51 (Init Sep 01, 2026)",
             "categories": "0: Below Normal, 1: Near Normal, 2: Above Normal"
         }
