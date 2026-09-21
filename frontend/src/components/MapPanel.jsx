@@ -437,17 +437,13 @@ const LAYERS = [
   { id:'onset_anom',   label:'Onset Anomaly',      group:'Anomaly',  variable:'onset',     layer:'anomaly' },
   { id:'cess_anom',    label:'Cessation Anomaly',  group:'Anomaly',  variable:'cessation', layer:'anomaly' },
   { id:'lgp_anom',     label:'Season Length Anomaly', group:'Anomaly', variable:'lgp',     layer:'anomaly' },
-  // ICPAC Terciles
-  { id:'tercile_rainfall', label:'Rainfall Terciles (ICPAC)', group:'Tercile', variable:'rainfall', layer:'tercile' },
-  { id:'tercile_onset',    label:'Onset Terciles (ICPAC)',    group:'Tercile', variable:'onset',    layer:'tercile' },
-  { id:'tercile_cess',     label:'Cessation Terciles (ICPAC)',group:'Tercile', variable:'cessation',layer:'tercile' },
-  { id:'tercile_lgp',      label:'Season Len Terciles (ICPAC)',group:'Tercile',variable:'lgp',      layer:'tercile' },
+  // Probabilistic Terciles
+  { id:'tercile_rainfall', label:'Rainfall Terciles (OND 2026)', group:'Tercile', variable:'rainfall', layer:'tercile' },
 ]
 
 // Probabilistic-only layers -- shown only when activeTab === 'probabilistic'
 const PROB_LAYERS = [
-  { id:'tercile_rainfall', label:'Rainfall Terciles (ICPAC)', variable:'rainfall', layer:'tercile', group:'ICPAC' },
-  { id:'tercile_onset',    label:'Onset Terciles (ICPAC)',    variable:'onset',    layer:'tercile', group:'ICPAC' },
+  { id:'tercile_rainfall', label:'Rainfall Terciles (OND 2026)', variable:'rainfall', layer:'tercile', group:'Tercile' },
   { id:'p_onset_bn',  label:'P(BN) Onset',          variable:'onset',     layer:'prob_bn', group:'BN' },
   { id:'p_onset_nn',  label:'P(NN) Onset',           variable:'onset',     layer:'prob_nn', group:'NN' },
   { id:'p_onset_an',  label:'P(AN) Onset',           variable:'onset',     layer:'prob_an', group:'AN' },
@@ -648,21 +644,20 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
     }
   }
 
-  // Handle ICPAC Tercile layers first
+  // Handle Tercile layers first
   if (props.layer === 'tercile' || L.includes('tercile')) {
-    const isRf = L.includes('rainfall') || props.label === 'rainfall'
-    lines.push(isRf ? '🌧️ ICPAC Rainfall Tercile Forecast' : '🌱 ICPAC Onset Tercile Forecast')
+    lines.push('🌧️ ECMWF SEAS5 Rainfall Tercile Forecast')
     lines.push('📅 Autumn Rains Deyr/Hagaya (SON–OND) 2026')
     if (props.in_season_mask === false) {
       lines.push('🏜️ Non-Seasonal Zone / Dry Bega Season')
-      lines.push('ℹ️ Solid gray mask per ICPAC GCOF standard (negligible autumn rain in highlands).')
+      lines.push('ℹ️ Solid gray mask: negligible autumn rain in highlands during dry Bega harvest season.')
     } else {
       const cat = props.dominant_cat || 'climatology'
       const pMax = props.max_prob != null ? props.max_prob : mv
       const catBadge = cat === 'above' ? `🟢 ABOVE NORMAL (${pMax}%)` :
                        cat === 'normal' ? `🔵 NEAR NORMAL (${pMax}%)` :
                        cat === 'below' ? `🔴 BELOW NORMAL (${pMax}%)` :
-                       `⚪ CLIMATOLOGY / NO SIGNAL (<40%)`
+                       `⚪ NO DOMINANT TERCILE (<40%)`
       lines.push(`Dominant Tercile: ${catBadge}`)
       if (props.p_an != null && props.p_nn != null && props.p_bn != null) {
         lines.push(`• Above Normal: ${props.p_an}%`)
@@ -755,14 +750,16 @@ function Legend({ scaleId, season = 'long_rains', opYear = 2026, scale = null })
     return (
       <div style={{
         background:'var(--bg-surface)', border:'1px solid var(--border-primary)',
-        borderRadius:8, padding:'8px 10px', minWidth:210, maxWidth:260, backdropFilter:'blur(8px)',
+        borderRadius:8, padding:'8px 10px', minWidth:230, maxWidth:280, backdropFilter:'blur(8px)',
         boxShadow:'0 4px 16px rgba(0,0,0,0.25)'
       }}>
-        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6}}>
-          <span style={{fontSize:9, fontWeight:800, color:'var(--text-primary)', letterSpacing:'0.03em'}}>
-            ICPAC PROBABILISTIC FORECAST
-          </span>
-          <span style={{fontSize:8, color:'#10b981', background:'rgba(16,185,129,0.12)', padding:'1px 4px', borderRadius:3, fontWeight:700}}>GCOF</span>
+        <div style={{marginBottom:6}}>
+          <div style={{fontSize:9.5, fontWeight:800, color:'var(--text-primary)', letterSpacing:'0.02em', lineHeight:1.25}}>
+            ECMWF SEAS5 OND {opYear} Probabilistic Forecast
+          </div>
+          <div style={{fontSize:8, color:'var(--text-muted)', fontWeight:600, marginTop:2}}>
+            Valid period: October–December {opYear}
+          </div>
         </div>
         
         {/* 3 Tercile Columns: Above, Normal, Below */}
@@ -817,10 +814,10 @@ function Legend({ scaleId, season = 'long_rains', opYear = 2026, scale = null })
         </div>
 
         {/* Legend notes for Climatology & Gray Dry Zone */}
-        <div style={{display:'flex', flexDirection:'column', gap:3, borderTop:'1px solid var(--border-subtle)', paddingTop:5}}>
+        <div style={{display:'flex', flexDirection:'column', gap:4, borderTop:'1px solid var(--border-subtle)', paddingTop:5}}>
           <div style={{display:'flex', alignItems:'center', gap:5, fontSize:8, color:'var(--text-muted)'}}>
             <div style={{width:9, height:9, background:'#ffffff', border:'1px solid #94a3b8', borderRadius:2, flexShrink:0}}/>
-            <span>Climatology / Neutral (&lt; 40%)</span>
+            <span>No dominant tercile / probabilities below 40%</span>
           </div>
           <div style={{display:'flex', alignItems:'center', gap:5, fontSize:8, color:'var(--text-muted)'}}>
             <div style={{width:9, height:9, background:'#bebebe', border:'1px solid #71717a', borderRadius:2, flexShrink:0}}/>
@@ -1522,21 +1519,20 @@ export default function MapPanel({
                 </div>
               ))}
 
-              {/* ICPAC Probabilistic Tercile Section */}
+              {/* Probabilistic Tercile Section */}
               <div style={{marginTop:8, paddingTop:8, borderTop:'1px solid var(--border-subtle)'}}>
                 <div style={{fontSize:8, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#10b981', marginBottom:5, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                   <span style={{display:'flex', alignItems:'center', gap:4}}>
                     <span>🌦️</span>
-                    <span>ICPAC Tercile Forecast</span>
+                    <span>Seasonal Tercile Forecast</span>
                   </span>
-                  <span style={{fontSize:7, padding:'1px 4px', borderRadius:3, background:'rgba(16,185,129,0.15)', color:'#10b981', fontWeight:800}}>GCOF Style</span>
                 </div>
-                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:4}}>
+                <div style={{display:'grid', gridTemplateColumns:'1fr', gap:4}}>
                   <button
                     onClick={()=>handleLayerChange('tercile_rainfall')}
-                    title="Rainfall Probabilistic Tercile Forecast (Above/Normal/Below) in ICPAC Style"
+                    title="Rainfall Probabilistic Tercile Forecast (Above/Normal/Below)"
                     style={{
-                      padding:'6px 6px', borderRadius:5, fontSize:9, cursor:'pointer', textAlign:'center',
+                      padding:'7px 8px', borderRadius:5, fontSize:9, cursor:'pointer', textAlign:'center',
                       border:'1px solid '+(activeLayer==='tercile_rainfall'?'#10b981':'var(--border-primary)'),
                       background:activeLayer==='tercile_rainfall'?'#10b981':'var(--bg-surface)',
                       color:activeLayer==='tercile_rainfall'?'#fff':'var(--text-secondary)',
@@ -1544,19 +1540,6 @@ export default function MapPanel({
                     }}
                   >
                     🌧️ Rainfall Terciles
-                  </button>
-                  <button
-                    onClick={()=>handleLayerChange('tercile_onset')}
-                    title="Onset Probabilistic Tercile Forecast in ICPAC Style"
-                    style={{
-                      padding:'6px 6px', borderRadius:5, fontSize:9, cursor:'pointer', textAlign:'center',
-                      border:'1px solid '+(activeLayer==='tercile_onset'?'#10b981':'var(--border-primary)'),
-                      background:activeLayer==='tercile_onset'?'#10b981':'var(--bg-surface)',
-                      color:activeLayer==='tercile_onset'?'#fff':'var(--text-secondary)',
-                      fontWeight:activeLayer==='tercile_onset'?700:500
-                    }}
-                  >
-                    🌱 Onset Terciles
                   </button>
                 </div>
               </div>
