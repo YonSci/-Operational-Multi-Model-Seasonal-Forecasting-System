@@ -22,9 +22,34 @@ from scipy.interpolate import RegularGridInterpolator
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap, BoundaryNorm
 
 from pipeline.config import SeasonConfig, STAGING_DIR, BASE_DIR
+
+def _plot_country_boundary(ax, country: str, color="#1e293b", linewidth=1.8):
+    """Plot country administrative boundary from GeoJSON."""
+    c_code = "ke" if country.lower() == "kenya" else "eth" if country.lower() == "ethiopia" else country.lower()
+    boundary_file = BASE_DIR / "frontend" / "public" / "boundaries" / f"{c_code}_admin0.geojson"
+    if boundary_file.exists():
+        try:
+            with open(boundary_file, "r") as f:
+                b_data = json.load(f)
+            for feat in b_data.get("features", []):
+                geom = feat.get("geometry", {})
+                g_type = geom.get("type")
+                coords = geom.get("coordinates", [])
+                if g_type == "Polygon":
+                    for ring in coords:
+                        xs, ys = zip(*ring)
+                        ax.plot(xs, ys, color=color, linewidth=linewidth, zorder=5)
+                elif g_type == "MultiPolygon":
+                    for poly in coords:
+                        for ring in poly:
+                            xs, ys = zip(*ring)
+                            ax.plot(xs, ys, color=color, linewidth=linewidth, zorder=5)
+        except Exception as e:
+            print(f"  [Analyzer] Notice reading boundary GeoJSON: {e}")
 
 def run_analysis(
     cfg: SeasonConfig,
@@ -349,48 +374,178 @@ def run_analysis(
     return manifest
 
 def _render_preview_plot(p_op, lats, lons, mask_active, lm, cfg, year, metrics, out_png):
-    """Render high-resolution preview map of dominant terciles."""
-    fig, ax = plt.subplots(figsize=(7, 6.5), dpi=160)
-    
-    # Calculate dominant category and display value
-    # Categories: 0: Below (Red/Yellow), 1: Normal (Cyan), 2: Above (Green), 3: Neutral (White), 4: Dry (Gray)
-    grid_display = np.full((len(lats), len(lons)), np.nan)
-    max_p = np.max(p_op, axis=0)
-    dom_cat = np.argmax(p_op, axis=0)
+    """Render authentic publication preview map of dominant terciles identical to live dashboard."""
+    n_lat, n_lon = len(lats), len(lons)
+    rgba = np.zeros((n_lat, n_lon, 4), dtype=np.uint8)
 
-    for i in range(len(lats)):
-        for j in range(len(lons)):
+    for i in range(n_lat):
+        for j in range(n_lon):
             if not lm[i, j]:
+                # Outside sovereign domain -> transparent
+                rgba[i, j] = [0, 0, 0, 0]
                 continue
+            
             if not mask_active[i, j]:
-                grid_display[i, j] = 4  # Dry/Non-seasonal
-            elif max_p[i, j] < 0.40:
-                grid_display[i, j] = 3  # Neutral / Climatology
-            else:
-                grid_display[i, j] = dom_cat[i, j]
+                # Non-seasonal / dry masked area -> authentic solid ICPAC gray #bebebe
+                rgba[i, j] = [190, 190, 190, 255]
+                continue
+            
+            probs = p_op[:, i, j]
+            if np.isnan(probs).any():
+                rgba[i, j] = [0, 0, 0, 0]
+                continue
+            
+            dom = int(np.argmax(probs))  # 0: below, 1: normal, 2: above
+            max_p = float(probs[dom]) * 100.0
+            
+            if max_p < 40.0:
+                # Climatological neutral (< 40%) -> #ffffff
+                rgba[i, j] = [255, 255, 255, 255]
+            elif dom == 2:  # Above normal (Greens)
+                if max_p >= 80.0:
+                    rgba[i, j] = [37, 78, 16, 255]    # #254e10
+                elif max_p >= 70.0:
+                    rgba[i, j] = [65, 125, 33, 255]   # #417d21
+                elif max_p >= 60.0:
+                    rgba[i, j] = [98, 167, 49, 255]   # #62a731
+                elif max_p >= 50.0:
+                    rgba[i, j] = [111, 181, 54, 255]  # #6fb536
+                elif max_p >= 45.0:
+                    rgba[i, j] = [152, 245, 118, 255] # #98f576
+                else:
+                    rgba[i, j] = [204, 252, 191, 255] # #ccfcbf
+            elif dom == 1:  # Near normal (Cyans)
+                if max_p >= 80.0:
+                    rgba[i, j] = [136, 251, 254, 255] # #88fbfe
+                elif max_p >= 70.0:
+                    rgba[i, j] = [138, 251, 254, 255] # #8afbfe
+                elif max_p >= 60.0:
+                    rgba[i, j] = [149, 251, 254, 255] # #95fbfe
+                elif max_p >= 50.0:
+                    rgba[i, j] = [159, 251, 254, 255] # #9ffbfe
+                elif max_p >= 45.0:
+                    rgba[i, j] = [171, 252, 254, 255] # #abfcfe
+                else:
+                    rgba[i, j] = [236, 254, 255, 255] # #ecfeff
+            elif dom == 0:  # Below normal (Reds/Oranges/Yellows)
+                if max_p >= 80.0:
+                    rgba[i, j] = [225, 53, 30, 255]   # #e1351e
+                elif max_p >= 70.0:
+                    rgba[i, j] = [226, 77, 34, 255]   # #e24d22
+                elif max_p >= 60.0:
+                    rgba[i, j] = [230, 122, 43, 255]  # #e67a2b
+                elif max_p >= 50.0:
+                    rgba[i, j] = [233, 147, 49, 255]  # #e99331
+                elif max_p >= 45.0:
+                    rgba[i, j] = [247, 226, 71, 255]  # #f7e247
+                else:
+                    rgba[i, j] = [253, 254, 143, 255] # #fdfe8f
 
-    cmap = ListedColormap(["#e1351e", "#88fbfe", "#417d21", "#ffffff", "#bebebe"])
-    norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5, 4.5], cmap.N)
+    # Create figure with high-contrast, clean styling
+    fig, ax = plt.subplots(figsize=(8.5, 9.0), dpi=180)
+    fig.patch.set_facecolor("#f8fafc")
+    ax.set_facecolor("#f1f5f9")
 
-    im = ax.pcolormesh(lons, lats, grid_display, cmap=cmap, norm=norm, shading="auto")
-    ax.set_title(f"{cfg.operational_model} {cfg.label} {year} Probabilistic Forecast\nValid: {cfg.target_period_label} {year} | Init: {year}-{cfg.init_month:02d}-01", fontsize=10, fontweight="bold", pad=10)
-    ax.set_xlabel("Longitude (°E)", fontsize=9)
-    ax.set_ylabel("Latitude (°N)", fontsize=9)
-    ax.grid(True, linestyle=":", alpha=0.5, color="#64748b")
+    # Lat/Lon bounds & extent
+    lat_min, lat_max = float(lats.min()), float(lats.max())
+    lon_min, lon_max = float(lons.min()), float(lons.max())
+    extent = [lon_min - 0.125, lon_max + 0.125, lat_min - 0.125, lat_max + 0.125]
 
-    # Add custom legend
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor="#417d21", edgecolor="#14532d", label=f"Above Normal: {metrics['above_cells']} px ({metrics['above_pct']}%)"),
-        Patch(facecolor="#88fbfe", edgecolor="#0284c7", label=f"Near Normal: {metrics['normal_cells']} px ({metrics['normal_pct']}%)"),
-        Patch(facecolor="#e1351e", edgecolor="#991b1b", label=f"Below Normal: {metrics['below_cells']} px ({metrics['below_pct']}%)"),
-        Patch(facecolor="#ffffff", edgecolor="#94a3b8", label=f"No Dominant Tercile (<40%): {metrics['neutral_cells']} px ({metrics['neutral_pct']}%)"),
-        Patch(facecolor="#bebebe", edgecolor="#6b7280", label=f"Non-Seasonal / Dry (Masked)"),
-    ]
-    ax.legend(handles=legend_elements, loc="lower left", fontsize=7.5, framealpha=0.9)
+    # Render raster layer
+    ax.imshow(rgba, origin="lower", extent=extent, interpolation="nearest", zorder=2)
+
+    # Overlay sovereign boundary
+    _plot_country_boundary(ax, cfg.country, color="#1e293b", linewidth=1.8)
+
+    # Geographic labels
+    if cfg.country.lower() == "kenya":
+        ax.text(37.8, 0.5, "KENYA", fontsize=11, color="#64748b", fontweight="bold", alpha=0.35, ha="center", va="center", zorder=3)
+        ax.text(38.5, 5.2, "ETHIOPIA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.text(42.5, 2.0, "SOMALIA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.text(37.5, -3.8, "TANZANIA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.text(33.2, 1.5, "UGANDA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.set_xlim(32.8, 43.2)
+        ax.set_ylim(-5.2, 5.8)
+    elif cfg.country.lower() == "ethiopia":
+        ax.text(39.5, 8.5, "ETHIOPIA", fontsize=11, color="#64748b", fontweight="bold", alpha=0.35, ha="center", va="center", zorder=3)
+        ax.text(38.5, 15.0, "ERITREA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.text(46.0, 7.5, "SOMALIA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.text(37.5, 3.5, "KENYA", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.text(33.5, 8.0, "SUDAN", fontsize=9, color="#94a3b8", fontweight="bold", alpha=0.6, ha="center", zorder=1)
+        ax.set_xlim(lon_min - 0.8, lon_max + 1.2)
+        ax.set_ylim(lat_min - 0.4, lat_max + 0.5)
+    else:
+        ax.set_xlim(lon_min - 0.8, lon_max + 1.2)
+        ax.set_ylim(lat_min - 0.4, lat_max + 0.5)
+
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_color("#cbd5e1")
+        spine.set_linewidth(1.0)
+
+    # Season acronym tag
+    season_tag = "OND" if cfg.id in ("short_rains", "deyr", "ond") else "MAM" if cfg.id in ("long_rains", "mam") else "FMAM" if cfg.id in ("belg", "fmam") else "JJAS" if cfg.id in ("kiremt", "jjas") else cfg.id.upper()
+
+    # Floating dashboard legend card
+    card_ax = ax.inset_axes([0.47, 0.02, 0.51, 0.33], facecolor="#ffffff", zorder=10)
+    card_ax.set_xticks([])
+    card_ax.set_yticks([])
+    for s in card_ax.spines.values():
+        s.set_color("#cbd5e1")
+        s.set_linewidth(1.2)
+
+    # Title & Subtitle
+    card_ax.text(0.05, 0.91, f"{cfg.operational_model} {season_tag} {year} Probabilistic Forecast", fontsize=8.2, fontweight="bold", color="#0f172a", transform=card_ax.transAxes)
+    card_ax.text(0.05, 0.81, f"Valid period: {cfg.target_period_label} {year}", fontsize=7.2, fontweight="bold", color="#64748b", transform=card_ax.transAxes)
+
+    # 3 Tercile Columns: Above, Normal, Below
+    ramp_y0, ramp_h = 0.38, 0.31
+    ramp_w = 0.25
+
+    # Above column
+    card_ax.text(0.185, 0.73, "Above (%)", fontsize=7.2, fontweight="bold", color="#2e7d32", ha="center", transform=card_ax.transAxes)
+    above_colors = ["#254e10", "#417d21", "#62a731", "#6fb536", "#98f576", "#ccfcbf"]
+    for k, c in enumerate(above_colors):
+        sy = ramp_y0 + (5 - k) * (ramp_h / 6.0)
+        card_ax.add_patch(mpatches.Rectangle((0.06, sy), ramp_w, ramp_h / 6.0, facecolor=c, edgecolor="none", transform=card_ax.transAxes))
+    card_ax.add_patch(mpatches.Rectangle((0.06, ramp_y0), ramp_w, ramp_h, fill=False, edgecolor="#94a3b8", linewidth=0.6, transform=card_ax.transAxes))
+    card_ax.text(0.06, 0.32, "90", fontsize=6.2, color="#64748b", transform=card_ax.transAxes)
+    card_ax.text(0.06 + ramp_w, 0.32, "40", fontsize=6.2, color="#64748b", ha="right", transform=card_ax.transAxes)
+
+    # Normal column
+    card_ax.text(0.505, 0.73, "Normal (%)", fontsize=7.2, fontweight="bold", color="#0284c7", ha="center", transform=card_ax.transAxes)
+    normal_colors = ["#88fbfe", "#8afbfe", "#95fbfe", "#9ffbfe", "#abfcfe", "#ecfeff"]
+    for k, c in enumerate(normal_colors):
+        sy = ramp_y0 + (5 - k) * (ramp_h / 6.0)
+        card_ax.add_patch(mpatches.Rectangle((0.38, sy), ramp_w, ramp_h / 6.0, facecolor=c, edgecolor="none", transform=card_ax.transAxes))
+    card_ax.add_patch(mpatches.Rectangle((0.38, ramp_y0), ramp_w, ramp_h, fill=False, edgecolor="#94a3b8", linewidth=0.6, transform=card_ax.transAxes))
+    card_ax.text(0.38, 0.32, "90", fontsize=6.2, color="#64748b", transform=card_ax.transAxes)
+    card_ax.text(0.38 + ramp_w, 0.32, "40", fontsize=6.2, color="#64748b", ha="right", transform=card_ax.transAxes)
+
+    # Below column
+    card_ax.text(0.825, 0.73, "Below (%)", fontsize=7.2, fontweight="bold", color="#b91c1c", ha="center", transform=card_ax.transAxes)
+    below_colors = ["#e1351e", "#e24d22", "#e67a2b", "#e99331", "#f7e247", "#fdfe8f"]
+    for k, c in enumerate(below_colors):
+        sy = ramp_y0 + (5 - k) * (ramp_h / 6.0)
+        card_ax.add_patch(mpatches.Rectangle((0.70, sy), ramp_w, ramp_h / 6.0, facecolor=c, edgecolor="none", transform=card_ax.transAxes))
+    card_ax.add_patch(mpatches.Rectangle((0.70, ramp_y0), ramp_w, ramp_h, fill=False, edgecolor="#94a3b8", linewidth=0.6, transform=card_ax.transAxes))
+    card_ax.text(0.70, 0.32, "90", fontsize=6.2, color="#64748b", transform=card_ax.transAxes)
+    card_ax.text(0.70 + ramp_w, 0.32, "40", fontsize=6.2, color="#64748b", ha="right", transform=card_ax.transAxes)
+
+    # Divider line
+    card_ax.axhline(0.26, color="#e2e8f0", linewidth=0.8, xmin=0.05, xmax=0.95)
+
+    # Neutral & Masked items
+    card_ax.add_patch(mpatches.Rectangle((0.06, 0.15), 0.045, 0.07, facecolor="#ffffff", edgecolor="#94a3b8", linewidth=0.8, transform=card_ax.transAxes))
+    card_ax.text(0.13, 0.16, "No dominant tercile / probabilities below 40%", fontsize=6.5, color="#475569", transform=card_ax.transAxes)
+
+    card_ax.add_patch(mpatches.Rectangle((0.06, 0.04), 0.045, 0.07, facecolor="#bebebe", edgecolor="#6b7280", linewidth=0.8, transform=card_ax.transAxes))
+    card_ax.text(0.13, 0.05, "Non-Seasonal / Masked", fontsize=6.5, color="#475569", transform=card_ax.transAxes)
 
     plt.tight_layout()
-    fig.savefig(out_png)
+    fig.savefig(out_png, dpi=180, bbox_inches="tight")
     plt.close(fig)
 
 def _render_onset_preview_plot(cfg: SeasonConfig, lats: np.ndarray, lons: np.ndarray, mask_active: np.ndarray, lm: np.ndarray, year: int, out_png: Path) -> dict:
@@ -475,6 +630,9 @@ def _render_onset_preview_plot(cfg: SeasonConfig, lats: np.ndarray, lons: np.nda
     norm = BoundaryNorm(bounds, cmap.N)
     
     im = ax.pcolormesh(lons, lats, disp, cmap=cmap, norm=norm, shading="auto")
+
+    # Overlay sovereign boundary
+    _plot_country_boundary(ax, cfg.country, color="#1e293b", linewidth=1.6)
     
     # Colorbar with DOY and calendar dates
     cbar = fig.colorbar(im, ax=ax, orientation="horizontal", pad=0.08, shrink=0.85, ticks=bounds)
