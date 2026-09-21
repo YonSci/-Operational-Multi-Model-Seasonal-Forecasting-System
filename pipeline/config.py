@@ -11,6 +11,12 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except Exception:
+    pass
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 @dataclass

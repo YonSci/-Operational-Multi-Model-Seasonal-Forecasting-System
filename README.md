@@ -14,10 +14,11 @@
 
 An operational, end-to-end seasonal climate forecasting and agro-pastoral decision-support platform designed for East Africa. Developed for **ILRI (International Livestock Research Institute) Climate Services** and **CGIAR**, this platform moves beyond traditional seasonal rainfall totals by delivering high-resolution probabilistic forecasts of **Rainfall Onset (ONS)**, **Cessation (CESS)**, and **Length of Growing Period (LGP / Season Length)** derived from Copernicus Climate Change Service (C3S) multi-model global ensembles and calibrated against CHIRPS daily precipitation records.
 
-### 🌐 Live System Access
+### 🌐 Live System Access & Guides
 - **Interactive Web Dashboard**: [GitHub Pages Deployment](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/)
 - **Live Operational API**: [Render Backend Service](https://operational-multi-model-seasonal-1t6w.onrender.com)
 - **Interactive API Documentation (Swagger)**: [API Swagger Docs](https://operational-multi-model-seasonal-1t6w.onrender.com/docs)
+- **Automated Pipeline Guide**: [AUTOMATION_GUIDE.md](AUTOMATION_GUIDE.md) — Complete instructions for scheduled data download, Method 2 downscaling, email reminders, and approval workflow.
 - **Open GIS Shapefile Bundle**: [`/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip`](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip)
 
 ---
