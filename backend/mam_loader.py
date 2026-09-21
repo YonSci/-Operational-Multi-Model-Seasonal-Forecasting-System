@@ -987,6 +987,14 @@ def load(force=False):
             raise
 
 def is_loaded(): return _loaded
+
+def reload(force=True):
+    """Force reload of the data_loader cache and models."""
+    global _loaded, _state
+    _loaded = False
+    _state = None
+    load(force=force)
+
 def get_state():
     if not _loaded: raise RuntimeError("Call data_loader.load() first.")
     return _state

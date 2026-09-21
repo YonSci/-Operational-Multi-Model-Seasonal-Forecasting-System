@@ -169,3 +169,37 @@ def debug_bulletin(step: int = 0):
     except Exception as e:
         return {"status": "error", "error": str(e), "traceback": traceback.format_exc(), "logs": logs}
 
+
+# ── Pipeline Automation & Approval Endpoints ─────────────────────────────────
+@app.get("/api/pipeline/staged")
+def get_staged_runs():
+    """List all staged forecast runs pending approval or recently published."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from pipeline.publisher import list_staged_runs
+        return {"status": "ok", "runs": list_staged_runs()}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/pipeline/approve")
+@app.get("/api/pipeline/approve")
+def approve_staged_run(run_id: str, token: str = None):
+    """Approve and publish a staged forecast run by run_id."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from pipeline.publisher import publish_run
+        res = publish_run(run_id, token=token)
+        return {"status": "ok", "result": res}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/pipeline/reload")
+def reload_data_cache():
+    """Trigger hot reload of backend in-memory dataset cache."""
+    try:
+        dl.reload()
+        return {"status": "ok", "message": "Backend cache reloaded successfully"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
