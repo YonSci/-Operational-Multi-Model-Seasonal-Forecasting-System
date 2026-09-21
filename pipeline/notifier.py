@@ -7,12 +7,16 @@ breakdown tables, attached/embedded preview maps, and one-click/CLI approval.
 """
 
 import os
+import sys
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from pathlib import Path
 from typing import Dict, Any
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from pipeline.config import STAGING_DIR, BASE_DIR
 
@@ -203,8 +207,8 @@ Artifacts Staged:
         msg_alternative = MIMEMultipart("alternative")
         msg.attach(msg_alternative)
 
-        msg_alternative.attach(MIMEText(text_content, "plain"))
-        msg_alternative.attach(MIMEText(html_content, "html"))
+        msg_alternative.attach(MIMEText(text_content, "plain", "utf-8"))
+        msg_alternative.attach(MIMEText(html_content, "html", "utf-8"))
 
         # Attach preview image if present
         preview_png = stage_dir / "preview_tercile_map.png"
@@ -222,8 +226,10 @@ Artifacts Staged:
             server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
-        print(f"  [Notifier] ✓ Notification email successfully sent to {to_email}!")
+        print(f"  [Notifier] [OK] Notification email successfully sent to {to_email}!")
         return {"status": "SENT", "to": to_email}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"  [Notifier] WARNING: Failed to send email via SMTP ({e}). Digest remains saved locally.")
         return {"status": "FAILED", "error": str(e), "preview_file": str(email_preview_file)}

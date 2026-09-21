@@ -17,6 +17,9 @@ from typing import Dict, Any
 import numpy as np
 import xarray as xr
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from pipeline.config import STAGING_DIR, DEMO_NPZ_PATH, BASE_DIR
 
 def publish_run(run_id: str, token: str | None = None) -> Dict[str, Any]:
@@ -79,7 +82,7 @@ def publish_run(run_id: str, token: str | None = None) -> Dict[str, Any]:
                 demo_dict["sep_ecmwf_p_rf"] = p_op
 
             np.savez_compressed(DEMO_NPZ_PATH, **demo_dict)
-            print(f"  [Publisher] ✓ Updated '{demo_key}' in {DEMO_NPZ_PATH} (shape: {p_op.shape})")
+            print(f"  [Publisher] [OK] Updated '{demo_key}' in {DEMO_NPZ_PATH} (shape: {p_op.shape})")
 
     # 3. Reload Backend Cache
     sys.path.insert(0, str(BASE_DIR / "backend"))
@@ -87,10 +90,10 @@ def publish_run(run_id: str, token: str | None = None) -> Dict[str, Any]:
         import mam_loader as dl
         if hasattr(dl, "reload"):
             dl.reload()
-            print("  [Publisher] ✓ Triggered in-memory reload of backend data_loader.")
+            print("  [Publisher] [OK] Triggered in-memory reload of backend data_loader.")
         elif hasattr(dl, "load"):
             dl.load()
-            print("  [Publisher] ✓ Reloaded backend data_loader in memory.")
+            print("  [Publisher] [OK] Reloaded backend data_loader in memory.")
     except Exception as e:
         print(f"  [Publisher] Notice: In-memory reload notification emitted ({e}).")
 
@@ -100,7 +103,7 @@ def publish_run(run_id: str, token: str | None = None) -> Dict[str, Any]:
     with open(manifest_file, "w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"\n  [Publisher] ✓ Successfully published {run_id} to live dashboard!")
+    print(f"\n  [Publisher] [OK] Successfully published {run_id} to live dashboard!")
     print(f"{'='*78}\n")
 
     return {
