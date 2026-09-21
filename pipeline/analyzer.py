@@ -306,9 +306,14 @@ def run_analysis(
     xr.DataArray(t33, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}, name="t33_rainfall").to_netcdf(stage_dir / "t33_rainfall.nc")
     xr.DataArray(t67, dims=["lat", "lon"], coords={"lat": target_lat, "lon": target_lon}, name="t67_rainfall").to_netcdf(stage_dir / "t67_rainfall.nc")
 
-    # 8. Render Publication Preview Map (PNG)
+    # 8. Render Publication Preview Maps (Terciles & Onset Median)
     preview_png = stage_dir / "preview_tercile_map.png"
     _render_preview_plot(p_op, target_lat, target_lon, mask_active, lm, cfg, year, metrics, preview_png)
+
+    onset_png = stage_dir / "preview_onset_median_map.png"
+    onset_stats = _render_onset_preview_plot(cfg, target_lat, target_lon, mask_active, lm, year, onset_png)
+    if onset_stats:
+        metrics.update(onset_stats)
 
     # 9. Create Staging Manifest
     approval_token = secrets.token_urlsafe(16)
@@ -331,6 +336,7 @@ def run_analysis(
             "t33": "t33_rainfall.nc",
             "t67": "t67_rainfall.nc",
             "preview_map": "preview_tercile_map.png",
+            "preview_onset_map": "preview_onset_median_map.png",
         },
         "target_output_dir": str(cfg.output_dir),
         "demo_npz_key": cfg.demo_npz_key,
@@ -386,3 +392,123 @@ def _render_preview_plot(p_op, lats, lons, mask_active, lm, cfg, year, metrics, 
     plt.tight_layout()
     fig.savefig(out_png)
     plt.close(fig)
+
+def _render_onset_preview_plot(cfg: SeasonConfig, lats: np.ndarray, lons: np.ndarray, mask_active: np.ndarray, lm: np.ndarray, year: int, out_png: Path) -> dict:
+    """Render high-resolution preview map of Ensemble Median Onset DOY."""
+    onset_med = None
+    
+    # 1. Try loading from ECMWF_onset_doy_all_years.nc or onset_doy_2026.nc in output_dir
+    possible_nc_files = [
+        cfg.output_dir / "ECMWF_onset_doy_all_years.nc",
+        cfg.output_dir / f"onset_doy_{year}.nc",
+        cfg.output_dir / "onset_doy_2026.nc",
+    ]
+    for nc_f in possible_nc_files:
+        if nc_f.exists():
+            try:
+                with xr.open_dataset(nc_f) as ds:
+                    v = list(ds.data_vars.values())[0]
+                    if "year" in ds.coords and len(ds.year) > 1:
+                        target_y = year if year in ds.year.values else ds.year.values[-1]
+                        op_data = v.sel(year=target_y).values
+                    else:
+                        op_data = v.values
+                    
+                    if op_data.ndim == 3:
+                        onset_med = np.nanmedian(op_data, axis=0)
+                    elif op_data.ndim == 2:
+                        onset_med = op_data
+                    elif op_data.ndim == 4:
+                        onset_med = np.nanmedian(op_data[:, -1, :, :], axis=0)
+                    break
+            except Exception as e:
+                print(f"  [Analyzer] Notice reading {nc_f.name}: {e}")
+
+    # 2. Fallback to demo_data.npz
+    if onset_med is None or onset_med.shape != (len(lats), len(lons)):
+        demo_path = BASE_DIR / "backend" / "demo_data.npz"
+        if demo_path.exists():
+            try:
+                d = np.load(demo_path)
+                npz_key = "sep_ecmwf_onset" if "short" in cfg.id else "bega_ecmwf_onset" if "deyr" in cfg.id else "ecmwf_onset" if "long" in cfg.id else "fmam_ecmwf_onset" if "belg" in cfg.id else "kiremt_ecmwf_onset"
+                if npz_key in d:
+                    arr = d[npz_key]
+                    if arr.ndim == 4:
+                        onset_med = np.nanmedian(arr[:, -1, :, :], axis=0)
+                    elif arr.ndim == 3:
+                        onset_med = np.nanmedian(arr, axis=0)
+            except Exception as e:
+                print(f"  [Analyzer] Notice reading demo_data.npz for onset: {e}")
+
+    if onset_med is None or onset_med.shape != (len(lats), len(lons)):
+        print("  [Analyzer] Warning: Could not locate onset array for preview map.")
+        return {}
+
+    from datetime import datetime, timedelta
+    fig, ax = plt.subplots(figsize=(7, 6.5), dpi=160)
+    
+    # Active seasonal values
+    disp = np.where(mask_active & np.isfinite(onset_med), onset_med, np.nan)
+    
+    # Background for dry / non-seasonal areas
+    dry_bg = np.where(~mask_active & lm & np.isfinite(onset_med), 1.0, np.nan)
+    ax.pcolormesh(lons, lats, dry_bg, cmap=ListedColormap(["#e2e8f0"]), shading="auto")
+    
+    # Dynamic DOY bounds from active cells
+    valid_vals = disp[np.isfinite(disp)]
+    if len(valid_vals) > 0:
+        p10 = float(np.percentile(valid_vals, 5))
+        p90 = float(np.percentile(valid_vals, 95))
+        step = 10 if (p90 - p10) > 40 else 7 if (p90 - p10) > 25 else 5
+        start_bound = int(np.floor(p10 / step) * step)
+        end_bound = int(np.ceil(p90 / step) * step)
+        bounds = list(range(start_bound, end_bound + step, step))
+        if len(bounds) > 8:
+            step = 15
+            bounds = list(range(int(np.floor(p10 / step) * step), int(np.ceil(p90 / step) * step) + step, step))
+    else:
+        bounds = [260, 275, 290, 305, 320, 335, 350]
+
+    n_intervals = max(len(bounds) - 1, 1)
+    base_colors = ['#1a9850', '#66bd63', '#a6d96a', '#ffffbf', '#fdae61', '#f46d43', '#d73027']
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("onset_cmap", base_colors, N=n_intervals)
+    norm = BoundaryNorm(bounds, cmap.N)
+    
+    im = ax.pcolormesh(lons, lats, disp, cmap=cmap, norm=norm, shading="auto")
+    
+    # Colorbar with DOY and calendar dates
+    cbar = fig.colorbar(im, ax=ax, orientation="horizontal", pad=0.08, shrink=0.85, ticks=bounds)
+    tick_labels = []
+    for b in bounds:
+        try:
+            dt = datetime(year, 1, 1) + timedelta(days=int(b) - 1)
+            d_str = dt.strftime("%d %b")
+            tick_labels.append(f"{b}\n({d_str})")
+        except Exception:
+            tick_labels.append(str(b))
+    cbar.set_ticklabels(tick_labels, fontsize=8)
+    cbar.set_label("Ensemble Median Onset Date (DOY / Calendar Date)", fontsize=9, fontweight="bold", labelpad=6)
+    
+    ax.set_title(f"{cfg.operational_model} {cfg.label} {year} - Ensemble Median Onset (P50)\nValid: {cfg.target_period_label} {year} | Forecast Init: {year}-{cfg.init_month:02d}-01", fontsize=10, fontweight="bold", pad=10)
+    ax.set_xlabel("Longitude (°E)", fontsize=9)
+    ax.set_ylabel("Latitude (°N)", fontsize=9)
+    ax.grid(True, linestyle=":", alpha=0.5, color="#94a3b8")
+    
+    from matplotlib.patches import Patch
+    ax.legend(handles=[Patch(facecolor="#e2e8f0", edgecolor="#94a3b8", label="Non-Seasonal / Dry (Masked)")], loc="lower left", fontsize=7.5, framealpha=0.9)
+    
+    plt.tight_layout()
+    fig.savefig(out_png)
+    plt.close(fig)
+
+    onset_stats = {}
+    if len(valid_vals) > 0:
+        med_val = float(np.nanmedian(valid_vals))
+        dt_med = datetime(year, 1, 1) + timedelta(days=int(round(med_val)) - 1)
+        onset_stats = {
+            "domain_median_onset_doy": round(med_val, 1),
+            "domain_median_onset_date": dt_med.strftime("%d %B"),
+            "onset_p10_date": (datetime(year, 1, 1) + timedelta(days=int(round(p10)) - 1)).strftime("%d %b"),
+            "onset_p90_date": (datetime(year, 1, 1) + timedelta(days=int(round(p90)) - 1)).strftime("%d %b"),
+        }
+    return onset_stats
