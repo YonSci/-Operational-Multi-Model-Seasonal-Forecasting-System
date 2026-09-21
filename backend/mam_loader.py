@@ -558,6 +558,7 @@ def _load_demo_npz():
                 "onset": data["sep_ecmwf_p_on"],
                 "cessation": data["sep_ecmwf_p_cs"],
                 "lgp": data["sep_ecmwf_p_lg"],
+                "rainfall": data.get("ke_ecmwf_p_rf", data.get("sep_ecmwf_p_rf", data["sep_ecmwf_p_on"])),
             },
             alpha={
                 "onset": data["sep_ecmwf_a_on"],
@@ -1626,6 +1627,8 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         # Direct NetCDF fallback if list is empty
         if not prbs_list:
             cand_files = [
+                os.path.join(_REPO_ROOT, "outputs", "ecmwf_sep", f"probs_op_2026_{clim_key}.nc"),
+                os.path.join(_REPO_ROOT, "outputs", "ecmwf_sep", f"probs_damped_{clim_key}.nc"),
                 os.path.join(_REPO_ROOT, "outputs", "ecmwf_bega", f"probs_op_2026_{clim_key}.nc"),
                 os.path.join(_REPO_ROOT, "outputs", "ecmwf_bega", f"probs_damped_{clim_key}.nc"),
             ]
