@@ -47,8 +47,16 @@ const SEASONS = {
     { id:'deyr',   label:'Autumn rains — Deyr/Hagaya (SON–OND)',        init:'0901', initLabel:'Sep 01' },
   ],
 }
+// Short Rains initializations -> backend model name (Oct runs appear only when the backend has them)
+const SHORT_RAINS_INITS = [
+  { init:'0901',  initLabel:'Sep 01',           model:'ECMWF SEAS5 (Sep)' },
+  { init:'1001',  initLabel:'Oct 01',           model:'ECMWF SEAS5 (Oct)' },
+  { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
+  { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
+]
+const shortRainsModel = (init) => (SHORT_RAINS_INITS.find(i=>i.init===init) ?? SHORT_RAINS_INITS[0]).model
 const INIT_LABELS = Object.fromEntries(
-  Object.values(SEASONS).flat().map(s=>[s.init,s.initLabel])
+  [...Object.values(SEASONS).flat(), ...SHORT_RAINS_INITS].map(s=>[s.init,s.initLabel])
 )
 
 // --- UI Primitives --------------------------------------------------------
@@ -95,7 +103,7 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
   const isSingle = isBega || isFmam || isKiremt || isShort
   const monthTicks = isBega ? DOY_MONTHS_BEGA : (isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM)))
-  const winStart = isBega ? 244 : (isFmam ? 32 : (isKiremt ? 122 : (isShort ? 244 : 32)))
+  const winStart = isBega ? 244 : (isFmam ? 32 : (isKiremt ? 122 : (isShort ? (pixelData?.win_doy_start ?? 244) : 32)))
   const winEnd   = isBega ? 396 : (isFmam ? 166 : (isKiremt ? 304 : (isShort ? 365 : 213)))
   const Q_bar    = pixelData.Q_bar_pixel   ?? 0   // pixel climatological daily rainfall mean
   const C_vec    = pixelData.C_clim_vec    ?? []  // CHIRPS CAL C(d) -- already cumulative, plot directly
@@ -314,8 +322,8 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
   const isSingle = isBega || isFmam || isKiremt || isShort
-  const DOY_START = isBega ? 244 : (isFmam ? 32 : (isKiremt ? 122 : (isShort ? 244 : 32)))
-  const N_DAYS = isBega ? 153 : (isFmam ? 135 : (isKiremt ? 183 : (isShort ? 122 : 150)))
+  const DOY_START = isBega ? 244 : (isFmam ? 32 : (isKiremt ? 122 : (isShort ? (pixelData?.win_doy_start ?? 244) : 32)))
+  const N_DAYS = isBega ? 153 : (isFmam ? 135 : (isKiremt ? 183 : (isShort ? 365 - DOY_START + 1 : 150)))
   const MONTH_TICKS = isBega ? DOY_MONTHS_BEGA : (isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM)))
   const DRY_THRESHOLD = 0.5
 
@@ -2465,10 +2473,13 @@ const TABS = [
   {id:'multimodel',    label:'Multi-Model',   icon:'🌐'},
   {id:'validation',    label:'Validation',    icon:'🛡️'},
   {id:'historical',    label:'Historical',    icon:'⏳'},
+  {id:'tracker',       label:'Short Rains Tracker', icon:'🛰️'},
   {id:'about',         label:'About',         icon:'ℹ️'},
 ]
+// Tabs that take the full width (no map panel beside them)
+const FULL_PAGE_TABS = ['about', 'tracker']
 
-function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
+function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
   const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
@@ -2542,7 +2553,18 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
               <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Year</label>
               <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>{[2026,2025,2024,2023].map(y=><option key={y} value={y}>{y}</option>)}</select>
             </div>
-            <span style={{fontSize:9,color:'var(--header-muted)',whiteSpace:'nowrap'}}>Init {INIT_LABELS[selectedInit]??selectedInit}</span>
+            {selectedSeason === 'short_rains' && setSelectedInit ? (
+              <div className="flex items-center gap-1.5">
+                <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Init</label>
+                <select value={selectedInit} onChange={e=>setSelectedInit(e.target.value)} style={selStyle}>
+                  {SHORT_RAINS_INITS
+                    .filter(i => i.init === '0901' || Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === i.model || m?.raw_name === i.model))
+                    .map(i=><option key={i.init} value={i.init}>{i.initLabel}</option>)}
+                </select>
+              </div>
+            ) : (
+              <span style={{fontSize:9,color:'var(--header-muted)',whiteSpace:'nowrap'}}>Init {INIT_LABELS[selectedInit]??selectedInit}</span>
+            )}
           </div>
         )}
       </div>
@@ -2673,10 +2695,10 @@ export default function App() {
       : (isKiremt
         ? 'ECMWF SEAS5 (Kiremt)'
         : ((selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
-          ? 'ECMWF SEAS5 (Sep)'
+          ? shortRainsModel(selectedInit)
           : (selectedModel !== 'multimodel' ? selectedModel : ''))))
   const { data: pixelData,  isLoading: pixelLoading } = usePixelStats(querySite, selectedSeason, effectiveModel)
-  const { data: chirpsHist }                           = useChirpsHistorical(querySite, selectedSeason)
+  const { data: chirpsHist }                           = useChirpsHistorical(querySite, selectedSeason, selectedSeason === 'short_rains' ? effectiveModel : '')
   const { data: validationData }                       = useValidation()
 
   const modelsLoaded = !!modelsData?.models
@@ -2690,7 +2712,7 @@ export default function App() {
     } else if (selectedSeason === 'kiremt') {
       model = 'ECMWF SEAS5 (Kiremt)'
     } else if (selectedSeason === 'short_rains' && (model === 'ECMWF SEAS5' || !model)) {
-      model = 'ECMWF SEAS5 (Sep)'
+      model = shortRainsModel(selectedInit)
     }
     const {variable,layer}=mapLayer
     const url = `${API_BASE}/grid?variable=${variable}&layer=${layer}&bust=true&season=${selectedSeason}` + (model ? `&model=${encodeURIComponent(model)}` : '')
@@ -2700,7 +2722,7 @@ export default function App() {
       .then(data=>setMapGridData(data))
       .catch(err=>{if(err.name!=='AbortError') console.warn('[Grid fetch error]',err)})
     return ()=>ctrl.abort()
-  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason])
+  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason,selectedInit])
 
   if (showLanding) {
     return (
@@ -2719,12 +2741,12 @@ export default function App() {
               selectedSeason={selectedSeason} onSeasonChange={changeSeason}
               selectedModel={selectedModel} setSelectedModel={setSelectedModel}
               selectedYear={selectedYear} setSelectedYear={setSelectedYear}
-              selectedInit={selectedInit}
+              selectedInit={selectedInit} setSelectedInit={setSelectedInit}
               onOpenBulletin={()=>setBulletinModalOpen(true)}
               darkMode={darkMode} setDarkMode={setDarkMode}/>
 
       {/* Mobile/Tablet View Switcher Bar */}
-      {activeTab !== 'about' && (
+      {!FULL_PAGE_TABS.includes(activeTab) && (
         <div className="flex lg:hidden items-center justify-between px-3 py-1.5 bg-[var(--bg-elevated)] border-b border-[var(--border-primary)] text-xs">
           <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Display View</span>
           <div className="flex rounded-lg overflow-hidden border border-[var(--border-primary)] p-0.5 bg-[var(--bg-surface)]">
@@ -2756,7 +2778,7 @@ export default function App() {
         </div>
       ):(
         <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto gap-1.5 sm:gap-2 p-1 sm:p-2">
-          {activeTab!=='about'&&(
+          {!FULL_PAGE_TABS.includes(activeTab)&&(
           <div className={`shrink-0 flex flex-col ${
             mobileViewMode === 'charts'
               ? 'hidden lg:flex'
@@ -2780,14 +2802,18 @@ export default function App() {
           </div>
           )}
           <div className={`flex-1 min-w-0 ${
-            activeTab !== 'about' && mobileViewMode === 'map' ? 'hidden lg:block' : ''
-          } ${activeTab === 'about' ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
+            !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:block' : ''
+          } ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
             {activeTab==='forecast'      && <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab/>}
+            {activeTab==='tracker'       && (
+              <iframe title="Short Rains Tracker" src="tracker/index.html"
+                      style={{width:'100%', height:'100%', minHeight:'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)'}}/>
+            )}
           </div>
         </div>
       )}
@@ -2796,6 +2822,7 @@ export default function App() {
         onClose={()=>setBulletinModalOpen(false)}
         selectedSite={selectedSite}
         selectedSeason={selectedSeason}
+        shortRainsModelName={selectedSeason === 'short_rains' ? shortRainsModel(selectedInit) : undefined}
         selectedYear={selectedYear}
         country={country}
       />

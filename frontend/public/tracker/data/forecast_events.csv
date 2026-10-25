@@ -1,0 +1,37 @@
+model,model_label,site,short_name,horizon_days,total_7d_mm,total_all_mm,first_planting_rain,planting_rain_within_7d
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,15,33.5,70.6,2026-10-29,1
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,15,30.1,45.3,,0
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,15,33.1,61.8,,0
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,15,51.3,103.3,2026-10-28,1
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,15,33.7,71.2,,0
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,15,33.5,70.6,2026-10-29,1
+ecmwf_ifs025,ECMWF IFS,El Karama Sahiwals Farm,El Karama,15,33.5,72.5,,0
+ecmwf_ifs025,ECMWF IFS,Genco LTD Maralal Samburu Farm,Maralal,15,28.7,41.3,,0
+ecmwf_ifs025,ECMWF IFS,Genco LTD Tana River Farm,Tana River,15,30.3,57.3,,0
+ecmwf_ifs025,ECMWF IFS,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,15,64.6,122.6,2026-10-27,1
+ecmwf_ifs025,ECMWF IFS,Kapiti Research Station Farm,Kapiti,15,24.7,55.9,,0
+ecmwf_ifs025,ECMWF IFS,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,15,33.5,72.5,,0
+gem_global,GDPS (ECCC),El Karama Sahiwals Farm,El Karama,10,27.9,28.1,2026-10-30,1
+gem_global,GDPS (ECCC),Genco LTD Maralal Samburu Farm,Maralal,10,8.3,9.2,,0
+gem_global,GDPS (ECCC),Genco LTD Tana River Farm,Tana River,10,38.2,45.1,2026-10-26,1
+gem_global,GDPS (ECCC),"KALRO Kiboko, Makueni Farm",KALRO Kiboko,10,24.5,24.6,2026-10-29,1
+gem_global,GDPS (ECCC),Kapiti Research Station Farm,Kapiti,10,54.4,62.2,2026-10-27,1
+gem_global,GDPS (ECCC),"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,10,27.9,28.1,2026-10-30,1
+gfs_global,GFS (NOAA),El Karama Sahiwals Farm,El Karama,16,21.5,83.6,2026-10-29,1
+gfs_global,GFS (NOAA),Genco LTD Maralal Samburu Farm,Maralal,16,18.1,42.7,2026-11-04,0
+gfs_global,GFS (NOAA),Genco LTD Tana River Farm,Tana River,16,11.0,40.1,,0
+gfs_global,GFS (NOAA),"KALRO Kiboko, Makueni Farm",KALRO Kiboko,16,14.6,96.3,2026-10-30,1
+gfs_global,GFS (NOAA),Kapiti Research Station Farm,Kapiti,16,10.6,96.0,2026-11-03,0
+gfs_global,GFS (NOAA),"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,16,21.5,83.6,2026-10-29,1
+icon_global,ICON (DWD),El Karama Sahiwals Farm,El Karama,7,16.1,16.1,,0
+icon_global,ICON (DWD),Genco LTD Maralal Samburu Farm,Maralal,7,6.0,6.0,,0
+icon_global,ICON (DWD),Genco LTD Tana River Farm,Tana River,7,12.2,12.2,,0
+icon_global,ICON (DWD),"KALRO Kiboko, Makueni Farm",KALRO Kiboko,7,44.0,44.0,2026-10-29,1
+icon_global,ICON (DWD),Kapiti Research Station Farm,Kapiti,7,9.0,9.0,,0
+icon_global,ICON (DWD),"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,7,16.1,16.1,,0
+ukmo_global_deterministic_10km,UKMO (Met Office),El Karama Sahiwals Farm,El Karama,7,33.0,33.0,2026-10-29,1
+ukmo_global_deterministic_10km,UKMO (Met Office),Genco LTD Maralal Samburu Farm,Maralal,7,3.8,3.8,,0
+ukmo_global_deterministic_10km,UKMO (Met Office),Genco LTD Tana River Farm,Tana River,7,75.5,75.5,2026-10-25,1
+ukmo_global_deterministic_10km,UKMO (Met Office),"KALRO Kiboko, Makueni Farm",KALRO Kiboko,7,43.2,43.2,2026-10-29,1
+ukmo_global_deterministic_10km,UKMO (Met Office),Kapiti Research Station Farm,Kapiti,7,16.9,16.9,,0
+ukmo_global_deterministic_10km,UKMO (Met Office),"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,7,33.0,33.0,2026-10-29,1

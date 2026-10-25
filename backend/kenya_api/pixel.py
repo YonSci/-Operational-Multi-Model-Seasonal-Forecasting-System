@@ -105,6 +105,7 @@ def get_chirps_historical(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
     season: str = Query("long_rains", description="Season: 'long_rains', 'short_rains', 'kiremt', or 'fmam'"),
+    model: str = Query("", description="Optional Short Rains model whose window-consistent CHIRPS history to use"),
 ):
     """Full CHIRPS time series (onset, cessation, LGP) for the nearest pixel."""
     if not dl.is_loaded():
@@ -131,6 +132,8 @@ def get_chirps_historical(
         c_source = s["chirps_fmam"]
     elif is_kiremt and s.get("chirps_kiremt"):
         c_source = s["chirps_kiremt"]
+    elif is_short and s["MODELS"].get(model, {}).get("chirps_hist"):
+        c_source = s["MODELS"][model]["chirps_hist"]
     elif is_short and s.get("chirps_sep"):
         c_source = s["chirps_sep"]
     else:

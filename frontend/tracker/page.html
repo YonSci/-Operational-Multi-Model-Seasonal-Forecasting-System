@@ -1,0 +1,932 @@
+<style>
+/* Layout: one column of sections; site detail as a card grid driven by a site picker */
+.kt { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); }
+.kt h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+.kt h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.kt h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.kt-take { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); max-width: 70ch; }
+.kt-take b, .kt b { font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
+.kt-sec { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+.kt-note { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); max-width: 80ch; }
+.kt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
+.kt-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+.kt-chart { position: relative; min-height: 15rem; }
+.kt-maps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--cds-gap-md); }
+.kt-map { position: relative; min-height: 14rem; }
+.kt-scroll { overflow-x: auto; }
+.kt table { border-collapse: collapse; width: 100%; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.kt th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.kt td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.kt td.num, .kt th.num { text-align: right; }
+.kt tr.kt-pick td { background: color-mix(in srgb, var(--color-fg) 6%, transparent); }
+.kt tbody tr[data-key] { cursor: pointer; }
+.kt-pill { display: inline-block; padding: 0 var(--cds-pad-sm); border-radius: 999px; border: 1px solid var(--color-border-line); }
+.kt-pill.useful { color: var(--color-ok); } .kt-pill.limited { color: var(--color-warn); } .kt-pill.no { color: var(--color-bad); }
+.kt-dry { color: var(--color-bad); }
+.kt-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); }
+.kt select { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-sm); border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); }
+.kt-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+.kt-tip .d { color: var(--cds-text-secondary); }
+.kt-sw { display: inline-block; width: .6rem; height: .6rem; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+.kt-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.kt-fail { display: flex; align-items: center; justify-content: center; gap: .4rem; min-height: inherit; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.kt-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+[data-dash-source-state=empty] { color: transparent; }
+[data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+.kt-btn { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); cursor: pointer; }
+.kt-btn:focus-visible, .kt select:focus-visible, #anim-day:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+#anim-day { flex: 1 1 10rem; min-width: 8rem; }
+.kt-station-panel { margin-top: var(--cds-gap-md); }
+.kt-anim-date { margin: 0; font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-heading); font-variant-numeric: tabular-nums; }
+.kt-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.kt-methods { columns: 2 22rem; column-gap: var(--cds-gap-xl); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.kt-methods p { margin: 0 0 var(--cds-gap-sm); break-inside: avoid; }
+</style>
+
+<div class="kt">
+  <header id="top">
+    <h1>Kenya Short Rains 2026 Tracker</h1>
+    <p class="kt-take" id="takeaway">
+      Satellite rainfall since 1 October: <b><span data-source="headline" data-field="dry_sites" class="dash-skeleton">—</span> of
+      <span data-source="headline" data-field="n_sites">—</span></b> monitored sites have had less than 5 mm and none has a confirmed planting onset.
+      The ECMWF ensemble issued <span data-source="headline" data-field="ens_init">—</span> gives Kapiti a
+      <b><span data-source="headline" data-field="kapiti_p7">—</span></b> chance of planting rains within 7 days; the seasonal outlook puts Kapiti's planting onset most likely on
+      <b><span data-source="headline" data-field="kapiti_season">—</span></b>.
+    </p>
+  </header>
+
+  <section class="kt-sec" id="sites">
+    <h2>Site status</h2>
+    <p class="kt-note">Planting rains = at least 20 mm within 1–3 days. Planting onset = planting rains with no 10-day dry spell in the 21 days after. Click a row to see that site below.</p>
+    <div class="kt-card kt-scroll">
+      <table id="site-table" data-source="sites" data-row-key="site">
+        <thead><tr>
+          <th data-field="site">Site</th>
+          <th data-field="obs_through">Satellite data to</th>
+          <th class="num" data-field="rain_since_oct1_chirps_mm">CHIRPS since 1 Oct (mm)</th>
+          <th class="num" data-field="pct_of_normal">% of normal</th>
+          <th class="num" data-field="products_with_onset">Products showing onset</th>
+          <th class="num" data-field="p_event_7d">Planting rains ≤7 d</th>
+          <th class="num" data-field="p_onset_15d">Planting onset ≤15 d</th>
+          <th data-field="season_onset_median">Seasonal onset, most likely</th>
+          <th data-field="season_onset_likely">Likely range</th>
+          <th data-field="season_skill">Local skill</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="kt-sec" id="detail">
+    <div class="kt-row">
+      <h2>Site detail</h2>
+      <select id="site-pick" aria-label="Site" data-source="sites"></select>
+    </div>
+    <div class="kt-grid">
+      <div class="kt-card" id="rain-card">
+        <h3>Daily rainfall since 1 September</h3>
+        <p class="kt-note">Each line is one satellite product at the site's 0.25° cell. CHIRPS is final to 30 Sep, preliminary after.</p>
+        <div class="kt-legend" id="rain-legend" data-source="rain_daily"></div>
+        <div class="kt-chart dash-skeleton" id="rain-chart" data-source="rain_daily"></div>
+      </div>
+      <div class="kt-card" id="ens-card">
+        <h3>Next 15 days, ECMWF ensemble</h3>
+        <p class="kt-note">Share of 50 members with rain on each day, and with planting rains starting that day. Raw model output: light-rain days are overstated.</p>
+        <div class="kt-legend" id="ens-legend"></div>
+        <div class="kt-chart dash-skeleton" id="ens-chart" data-source="ens_daily"></div>
+      </div>
+    </div>
+    <div class="kt-card" id="season-card">
+      <h3>Season outlook</h3>
+      <p class="kt-note" id="season-cond" data-source="sites">—</p>
+      <div class="kt-chart dash-skeleton" id="season-chart" data-source="seasonal" style="min-height: 11rem"></div>
+      <div class="kt-scroll">
+        <table id="season-table" data-source="seasonal" data-row-key="site,variable">
+          <thead><tr>
+            <th data-field="label">Variable</th>
+            <th data-field="median">Most likely</th>
+            <th data-field="likely_from">Likely from</th>
+            <th data-field="likely_to">Likely to</th>
+            <th class="num" data-field="p_low">Early / short</th>
+            <th class="num" data-field="p_mid">Normal</th>
+            <th class="num" data-field="p_high">Late / long</th>
+            <th data-field="normal">Normal</th>
+            <th data-field="skill">Local skill</th>
+            <th class="num" data-field="mae_days">Typical error (days)</th>
+            <th class="num" data-field="rpss_val">RPSS</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="kt-sec" id="zone">
+    <h2>Kenya short-rains zone</h2>
+    <p class="kt-note">0.25° cells; cells outside the short-rains zone are faded. Lines are county boundaries; dots are the monitored stations.</p>
+    <div class="kt-card">
+      <div class="kt-maps" data-source="grid boundaries stations">
+        <div><h3>Rain since 1 Oct, % of normal (CHIRPS)</h3><div class="kt-map dash-skeleton" id="map-pct"></div></div>
+        <div><h3>Chance of planting rains within 7 days (ECMWF)</h3><div class="kt-map dash-skeleton" id="map-ens"></div></div>
+        <div><h3>Seasonal chance of an early planting onset</h3><div class="kt-map dash-skeleton" id="map-early"></div></div>
+      </div>
+    </div>
+    <div class="kt-card" id="anim-card">
+      <div class="kt-row">
+        <h3>Day by day since 1 October</h3>
+        <select id="anim-metric" aria-label="Measure">
+          <option value="pct_of_normal">% of normal</option>
+          <option value="anomaly_mm">Anomaly (mm)</option>
+          <option value="rain_since_oct1_mm">Rain since 1 Oct (mm)</option>
+          <option value="rain_mm">Daily rain (mm)</option>
+        </select>
+        <select id="anim-station" aria-label="Station" data-source="stations"></select>
+      </div>
+      <div class="kt-row">
+        <button type="button" id="anim-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
+        <button type="button" id="anim-play" class="kt-btn">Play</button>
+        <button type="button" id="anim-next" class="kt-btn" aria-label="Next day">Next ▶</button>
+        <input type="range" id="anim-day" min="0" max="0" value="0" step="1" aria-label="Day">
+      </div>
+      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. A product stops on its last available day.</p>
+      <div data-source="anim boundaries stations">
+        <p class="kt-anim-date" id="anim-date">—</p>
+        <div class="kt-maps dash-skeleton" id="anim-maps" style="min-height: 16rem"></div>
+        <div class="kt-legend" id="anim-legend"></div>
+        <div class="kt-grid kt-station-panel">
+          <div class="kt-scroll">
+            <h3 id="anim-st-title">Station</h3>
+            <table id="anim-st-table">
+              <thead><tr>
+                <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Since 1 Oct (mm)</th>
+                <th class="num">Normal (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div>
+            <h3 id="anim-st-chart-title">Over time</h3>
+            <div class="kt-chart" id="anim-st-chart" style="min-height: 12rem"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="kt-card" id="fc-card">
+      <div class="kt-row">
+        <h3>Next 10–16 days: model forecasts</h3>
+        <select id="fc-metric" aria-label="Measure">
+          <option value="cum_mm">Rain from today (mm)</option>
+          <option value="rain_mm">Daily rain (mm)</option>
+        </select>
+      </div>
+      <div class="kt-row" id="fc-models" data-source="forecast_events" aria-label="Models shown"></div>
+      <div class="kt-row">
+        <button type="button" id="fc-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
+        <button type="button" id="fc-play" class="kt-btn">Play</button>
+        <button type="button" id="fc-next" class="kt-btn" aria-label="Next day">Next ▶</button>
+        <input type="range" id="fc-day" min="0" max="0" value="0" step="1" aria-label="Forecast day">
+      </div>
+      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7. A model stops at the end of its range. Planting rains = at least 20 mm within 3 days. Source: Open-Meteo (ECMWF, NOAA, DWD, ECCC, Met Office) and the ECMWF ensemble download.</p>
+      <div data-source="forecast boundaries stations">
+        <p class="kt-anim-date" id="fc-date">—</p>
+        <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
+        <div class="kt-legend" id="fc-legend"></div>
+      </div>
+      <div class="kt-grid kt-station-panel">
+        <div class="kt-scroll">
+          <h3 id="fc-st-title">Station</h3>
+          <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
+          <table id="fc-st-table" data-source="forecast_events forecast_sites">
+            <thead><tr>
+              <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 7 days (mm)</th>
+              <th class="num">Whole range (mm)</th><th>First planting rains</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <h3 id="fc-st-chart-title">Rain from today</h3>
+          <div class="kt-chart" id="fc-st-chart" data-source="forecast_sites" style="min-height: 12rem"></div>
+        </div>
+      </div>
+    </div>
+    <div class="kt-card kt-scroll">
+      <h3>Satellite products over the zone since 1 October</h3>
+      <table id="zone-table" data-source="zone" data-row-key="product">
+        <thead><tr>
+          <th data-field="label">Product</th>
+          <th data-field="last_day">Data to</th>
+          <th class="num" data-field="ond_zone_mean_mm">Zone mean (mm)</th>
+          <th class="num" data-field="ond_zone_normal_mm">Normal (mm)</th>
+          <th class="num" data-field="ond_zone_pct_normal">% of normal</th>
+          <th class="num" data-field="ond_zone_pct_onset_detected">Zone with planting onset</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="kt-sec" id="verify">
+    <h2>How the real-time products compare with CHIRPS</h2>
+    <p class="kt-note">Daily rainfall over the short-rains zone against CHIRPS (gauge-blended). Oct–Dec 2025 is the main test; 2026 is the current season so far. POD = share of CHIRPS rain days the product also caught; FAR = share of the product's rain days CHIRPS did not have.</p>
+    <div class="kt-card kt-scroll">
+      <table id="ver-table" data-source="verification" data-row-key="product,period">
+        <thead><tr>
+          <th data-field="product">Product</th>
+          <th data-field="period">Period</th>
+          <th class="num" data-field="days">Days</th>
+          <th class="num" data-field="bias_pct">Total bias</th>
+          <th class="num" data-field="corr_daily">r daily</th>
+          <th class="num" data-field="corr_pentad">r 5-day</th>
+          <th class="num" data-field="pod_1mm">POD ≥1 mm</th>
+          <th class="num" data-field="far_1mm">FAR ≥1 mm</th>
+          <th class="num" data-field="pod_10mm">POD ≥10 mm</th>
+          <th class="num" data-field="far_10mm">FAR ≥10 mm</th>
+          <th class="num" data-field="onset_mad_days">Onset difference (days)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="kt-sec" id="inits">
+    <h2 id="init-title">Forecast by initialization</h2>
+    <p class="kt-note">The same season at the selected station, seen by each seasonal forecast run (1 Sep, 1 Oct, 1 Oct with observed September, 1 Oct with the latest observations). Pick the station in Site detail.</p>
+    <div class="kt-card kt-scroll">
+      <table id="init-table" data-source="inits" data-row-key="site,init,variable">
+        <thead><tr>
+          <th data-field="init">Run</th>
+          <th data-field="variable">Variable</th>
+          <th data-field="median_date">Most likely</th>
+          <th class="num" data-field="median">Median</th>
+          <th class="num" data-field="anomaly">vs normal (days)</th>
+          <th class="num" data-field="p_bn">Early / short</th>
+          <th class="num" data-field="p_nn">Normal</th>
+          <th class="num" data-field="p_an">Late / long</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="kt-sec" id="methods">
+    <h2>How these numbers are made</h2>
+    <div class="kt-methods">
+      <p><b>Seasonal forecast.</b> ECMWF SEAS5 started 1 October 2026, 25 members, bias-corrected day by day against CHIRPS 1993–2016 by quantile mapping. Observed CHIRPS rainfall replaces the forecast up to the latest observed day in every year, so skill is measured the same way it is used.</p>
+      <p><b>Onset definitions.</b> Dunning onset is the turning point of accumulated rainfall anomaly over 1 Sep – 31 Dec. Planting onset is the first day from 1 Oct with at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
+      <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Local skill compares past forecasts at the site's cell with CHIRPS: useful, limited or no skill.</p>
+      <p><b>Next 15 days.</b> ECMWF IFS ensemble (open data, 50 members), not bias-corrected. The combined planting onset continues each member with a seasonal member to check for dry spells beyond day 15.</p>
+      <p><b>Satellite products.</b> ARC2 (NOAA CPC), TAMSAT v3.1, PDIR-Now (UC Irvine CHRS) and CHIRPS (preliminary after September), averaged onto the same 0.25° grid. IMERG and GSMaP need accounts and are not included yet.</p>
+      <p><b>Seasonal conditioning.</b> Where no product shows an onset, members with an onset before the ensemble start date are dropped and the probabilities recomputed.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+const KT = (window.KT = {});
+// Resolve any CSS colour (var(--token), dash.colors entries, light-dark(), …) to rgb() so d3 can interpolate it
+KT.color = (c) => {
+  const el = document.createElement('span');
+  el.style.color = c;
+  (document.getElementById('dash-root') || document.body).appendChild(el);
+  const v = getComputedStyle(el).color;
+  el.remove();
+  return v;
+};
+KT.css = (name) => KT.color(`var(${name})`);
+// Map overlay: county lines, Kenya outline and monitored stations, drawn with the map's own x/y scales
+KT.ringPath = (geom, x, y) => {
+  const g = typeof geom === 'string' ? JSON.parse(geom) : geom;
+  const polys = g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates];
+  return polys.flatMap((rings) => rings.map((r) => 'M' + r.map(([lo, la]) => `${x(lo).toFixed(1)},${y(la).toFixed(1)}`).join('L') + 'Z')).join('');
+};
+KT.overlay = (svg, x, y, W, labels = true, picked = null) => {
+  const b = dash.data('boundaries');
+  if (b.status === 'ok') {
+    const rows = b.data;
+    svg.append('g').selectAll('path').data(rows.filter((r) => r.level === 'county')).join('path')
+      .attr('d', (r) => KT.ringPath(r.geometry, x, y)).attr('fill', 'none').attr('stroke', 'var(--color-fg-muted)').attr('stroke-width', 0.6).attr('stroke-opacity', 0.55);
+    svg.append('g').selectAll('path').data(rows.filter((r) => r.level === 'country')).join('path')
+      .attr('d', (r) => KT.ringPath(r.geometry, x, y)).attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.4);
+  }
+  const s = dash.data('stations');
+  if (s.status === 'ok') {
+    // merge stations closer than ~5 km so their labels do not sit on top of each other
+    const groups = [];
+    s.data.forEach((r) => {
+      const g = groups.find((q) => Math.abs(q.lat - +r.lat) < 0.05 && Math.abs(q.lon - +r.lon) < 0.05);
+      if (g) { g.names.push(r.short_name); g.sites.push(r.site); } else groups.push({ lat: +r.lat, lon: +r.lon, names: [r.short_name], sites: [r.site] });
+    });
+    const g = svg.append('g');
+    const isPicked = (q) => picked && q.sites.includes(picked);
+    g.selectAll('circle.ring').data(groups.filter(isPicked)).join('circle').attr('cx', (q) => x(q.lon)).attr('cy', (q) => y(q.lat)).attr('r', 9)
+      .attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+    g.selectAll('circle.dot').data(groups).join('circle').attr('cx', (q) => x(q.lon)).attr('cy', (q) => y(q.lat)).attr('r', (q) => (isPicked(q) ? 5 : 3.5))
+      .attr('fill', 'var(--color-fg)').attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+    if (labels && W >= 220) {
+      g.selectAll('text').data(groups).join('text').attr('x', (q) => x(q.lon) + 6).attr('y', (q) => y(q.lat)).attr('dy', '0.35em')
+        .attr('font-size', 10).attr('fill', 'var(--color-fg)').attr('paint-order', 'stroke').attr('stroke', 'var(--color-panel)').attr('stroke-width', 3)
+        .attr('text-anchor', (q) => (x(q.lon) > W * 0.7 ? 'end' : 'start')).attr('dx', (q) => (x(q.lon) > W * 0.7 ? -12 : 0))
+        .text((q) => q.names.join(' / '));
+    }
+  }
+};
+KT.pct = d3.format('.0%');
+KT.num = d3.format(',.1f');
+KT.int = d3.format(',.0f');
+KT.doyDate = (doy) => d3.utcFormat('%-d %b')(new Date(Date.UTC(2026, 0, 1) + (doy - 1) * 864e5));
+KT.site = () => (dash.params().site || 'Kapiti Research Station Farm');
+KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early'];
+KT.prodLabel = { chirps: 'CHIRPS', arc2: 'ARC2', tamsat: 'TAMSAT', pdirnow: 'PDIR-Now', imerg: 'IMERG Late', imerg_early: 'IMERG Early' };
+KT.models = ['ecmwf_ifs025', 'ecmwf_ens_median', 'gfs_global', 'gem_global', 'icon_global', 'ukmo_global_deterministic_10km'];
+KT.fail = (el, d) => {
+  if (d.status === 'error' || d.status === 'connect' || d.status === 'declined' || d.status === 'missing') {
+    el.classList.remove('dash-skeleton');
+    el.replaceChildren(Object.assign(document.createElement('div'), { className: 'kt-fail', textContent: 'Failed to load' }));
+    return true;
+  }
+  return false;
+};
+KT.tip = (box) => {
+  let t = box.querySelector('.kt-tip');
+  if (!t) { t = document.createElement('div'); t.className = 'kt-tip'; t.hidden = true; box.appendChild(t); }
+  return t;
+};
+KT.fillTable = (table, rows, cols) => {
+  const tb = table.querySelector('tbody');
+  tb.replaceChildren(...rows.map((r) => {
+    const tr = document.createElement('tr');
+    cols.forEach(([field, fmt, cls]) => {
+      const td = document.createElement('td');
+      const v = r[field];
+      td.textContent = v === null || v === undefined || v === '' ? '—' : (fmt ? fmt(v, r) : String(v));
+      if (cls) td.className = typeof cls === 'function' ? cls(v, r) : cls;
+      tr.appendChild(td);
+    });
+    return tr;
+  }));
+  return tb;
+};
+
+dash.calc('headline', {
+  title: 'Headline figures',
+  description: 'Sites with under 5 mm since 1 Oct, and Kapiti’s 7-day planting-rain chance and seasonal onset.',
+  inputs: ['sites'],
+  fn: (sites) => {
+    const k = sites.find((s) => s.site === 'Kapiti Research Station Farm') || {};
+    return [{
+      dry_sites: sites.filter((s) => Number(s.rain_since_oct1_chirps_mm) < 5).length,
+      n_sites: sites.length,
+      ens_init: k.ens_init,
+      kapiti_p7: k.p_event_7d,
+      kapiti_season: k.season_onset_median,
+    }];
+  },
+});
+
+dash.onData(() => {
+  const h = dash.data('headline');
+  document.querySelectorAll('#takeaway [data-source=headline]').forEach((el) => {
+    el.classList.remove('dash-skeleton');
+    if (h.status !== 'ok' || !h.data.length) { el.textContent = '—'; return; }
+    const v = h.data[0][el.dataset.field];
+    el.textContent = el.dataset.field === 'kapiti_p7' ? KT.pct(Number(v))
+      : el.dataset.field === 'ens_init' ? d3.utcFormat('%-d %b')(new Date(v)) : String(v);
+  });
+});
+</script>
+
+<script>
+// Site status table + site picker
+const siteTable = document.getElementById('site-table');
+const pick = document.getElementById('site-pick');
+pick.addEventListener('change', () => dash.setParams({ site: pick.value }));
+siteTable.addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-key]');
+  if (tr) { dash.setParams({ site: tr.dataset.key }); document.getElementById('detail').scrollIntoView({ behavior: 'smooth' }); }
+});
+dash.onData(() => {
+  const d = dash.data('sites');
+  if (d.status !== 'ok') { siteTable.querySelector('tbody').replaceChildren(); return; }
+  const rows = d.data;
+  const tb = KT.fillTable(siteTable, rows, [
+    ['site'],
+    ['obs_through', (v) => d3.utcFormat('%-d %b')(new Date(v))],
+    ['rain_since_oct1_chirps_mm', (v) => KT.num(Number(v)), (v) => 'num' + (Number(v) < 5 ? ' kt-dry' : '')],
+    ['pct_of_normal', (v) => KT.int(Number(v)) + '%', 'num'],
+    ['products_with_onset', (v, r) => `${v} of ${r.products}`, 'num'],
+    ['p_event_7d', (v) => KT.pct(Number(v)), 'num'],
+    ['p_onset_15d', (v) => KT.pct(Number(v)), 'num'],
+    ['season_onset_median'],
+    ['season_onset_likely'],
+    ['season_skill', (v) => v + ' skill'],
+  ]);
+  [...tb.children].forEach((tr, i) => {
+    tr.dataset.key = rows[i].site;
+    tr.classList.toggle('kt-pick', rows[i].site === KT.site());
+    const sk = tr.lastElementChild; const pill = document.createElement('span');
+    pill.className = 'kt-pill ' + rows[i].season_skill; pill.textContent = sk.textContent; sk.replaceChildren(pill);
+  });
+  pick.replaceChildren(...rows.map((r) => new Option(r.site, r.site)));
+  pick.value = KT.site();
+  const me = rows.find((r) => r.site === KT.site());
+  const cond = document.getElementById('season-cond');
+  cond.textContent = me && me.condition ? 'Given no onset yet: ' + me.condition + '.' : 'All 25 members shown.';
+});
+</script>
+
+<script>
+// Daily rainfall by product at the picked site
+dash.onData(() => {
+  const box = document.getElementById('rain-chart');
+  const leg = document.getElementById('rain-legend');
+  const d = dash.data('rain_daily');
+  if (KT.fail(box, d)) return;
+  if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
+  box.classList.remove('dash-skeleton');
+  const rows = d.data.filter((r) => r.site === KT.site()).map((r) => ({ ...r, t: new Date(r.date), mm: Number(r.mm) }));
+  const prods = KT.products.filter((p) => rows.some((r) => r.product === p));
+  const col = (p) => dash.colors[prods.indexOf(p) % dash.colors.length];
+  leg.replaceChildren(...prods.map((p) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = col(p); s.append(KT.prodLabel[p]); return s; }));
+  const W = box.clientWidth || 600, H = 240, m = { t: 8, r: 12, b: 26, l: 34 };
+  const x = d3.scaleUtc(d3.extent(rows, (r) => r.t), [m.l, W - m.r]);
+  const y = d3.scaleLinear([0, Math.max(10, d3.max(rows, (r) => r.mm) || 0)], [H - m.b, m.t]).nice();
+  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 90))).tickFormat(d3.utcFormat('%-d %b')))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'))
+    .call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - m.l - m.r)))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+  const oct1 = new Date('2026-10-01');
+  svg.append('line').attr('x1', x(oct1)).attr('x2', x(oct1)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+  prods.forEach((p) => {
+    const s = rows.filter((r) => r.product === p).sort((a, b) => a.t - b.t);
+    svg.append('path').datum(s).attr('fill', 'none').attr('stroke', col(p)).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+      .attr('d', d3.line().x((r) => x(r.t)).y((r) => y(r.mm)));
+  });
+  const dates = [...new Set(rows.map((r) => r.date))].sort();
+  const tip = KT.tip(box);
+  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev) => {
+      const [px] = d3.pointer(ev); const t = x.invert(px);
+      const day = dates[d3.minIndex(dates, (s) => Math.abs(new Date(s) - t))];
+      const at = rows.filter((r) => r.date === day);
+      tip.hidden = false;
+      tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: d3.utcFormat('%-d %b %Y')(new Date(day)) }),
+        ...prods.map((p) => { const r = at.find((a) => a.product === p); const div = document.createElement('div');
+          div.innerHTML = '<span class="kt-sw"></span>'; div.firstChild.style.background = col(p); div.append(`${KT.prodLabel[p]} ${r ? KT.num(r.mm) + ' mm' : '—'}`); return div; }));
+      const bx = Math.min(px + 12, W - 150); tip.style.left = (bx / W * box.clientWidth) + 'px'; tip.style.top = '8px';
+    })
+    .on('mouseleave', () => { tip.hidden = true; });
+  box.replaceChildren(svg.node(), tip);
+});
+</script>
+
+<script>
+// ECMWF ensemble next 15 days at the picked site
+dash.onData(() => {
+  const box = document.getElementById('ens-chart');
+  const leg = document.getElementById('ens-legend');
+  const d = dash.data('ens_daily');
+  if (KT.fail(box, d)) return;
+  if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
+  box.classList.remove('dash-skeleton');
+  const rows = d.data.filter((r) => r.site === KT.site()).map((r) => ({ date: r.date, t: new Date(r.date), p_rain: +r.p_rain, p_10mm: +r.p_10mm, p_trigger: +r.p_trigger, median_mm: +r.median_mm }));
+  const series = [['p_rain', 'Rain ≥1 mm', 'var(--cds-chart-muted)'], ['p_10mm', 'Rain ≥10 mm', dash.colors[0]], ['p_trigger', 'Planting rains start', dash.colors[1]]];
+  leg.replaceChildren(...series.map(([, n, c]) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = c; s.append(n); return s; }));
+  const W = box.clientWidth || 600, H = 240, m = { t: 8, r: 12, b: 26, l: 38 };
+  const x = d3.scaleBand(rows.map((r) => r.date), [m.l, W - m.r]).padding(0.25);
+  const y = d3.scaleLinear([0, 1], [H - m.b, m.t]);
+  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const every = Math.ceil(rows.length / Math.max(2, Math.floor(W / 60)));
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(rows.map((r) => r.date).filter((_, i) => i % every === 0)).tickFormat((s) => d3.utcFormat('%-d %b')(new Date(s))))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(KT.pct).tickSize(-(W - m.l - m.r)))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.bandwidth()).attr('y', (r) => y(r.p_rain)).attr('height', (r) => y(0) - y(r.p_rain)).attr('rx', 3).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.5);
+  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.bandwidth()).attr('y', (r) => y(r.p_10mm)).attr('height', (r) => y(0) - y(r.p_10mm)).attr('rx', 3).attr('fill', dash.colors[0]);
+  const cx = (r) => x(r.date) + x.bandwidth() / 2;
+  svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', dash.colors[1]).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x(cx).y((r) => y(r.p_trigger)));
+  svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', cx).attr('cy', (r) => y(r.p_trigger)).attr('r', 3).attr('fill', dash.colors[1]);
+  const tip = KT.tip(box);
+  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.bandwidth()).attr('y', m.t).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+    .on('mouseenter', (ev, r) => {
+      tip.hidden = false;
+      tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: d3.utcFormat('%a %-d %b')(r.t) }),
+        ...[['Rain ≥1 mm', KT.pct(r.p_rain)], ['Rain ≥10 mm', KT.pct(r.p_10mm)], ['Planting rains start', KT.pct(r.p_trigger)], ['Median rain', KT.num(r.median_mm) + ' mm']]
+          .map(([a, b]) => Object.assign(document.createElement('div'), { textContent: `${a}: ${b}` })));
+      const px = Math.min(cx(r) + 10, W - 170); tip.style.left = (px / W * box.clientWidth) + 'px'; tip.style.top = '8px';
+    })
+    .on('mouseleave', () => { tip.hidden = true; });
+  box.replaceChildren(svg.node(), tip);
+});
+</script>
+
+<script>
+// Season outlook ranges + table at the picked site
+dash.onData(() => {
+  const box = document.getElementById('season-chart');
+  const table = document.getElementById('season-table');
+  const d = dash.data('seasonal');
+  if (KT.fail(box, d)) return;
+  if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); table.querySelector('tbody').replaceChildren(); return; }
+  box.classList.remove('dash-skeleton');
+  const rows = d.data.filter((r) => r.site === KT.site());
+  const dates = rows.filter((r) => r.variable !== 'lgp').map((r) => ({ ...r, ...Object.fromEntries(['p10', 'p25', 'p50', 'p75', 'p90', 'normal', 't33', 't67'].map((k) => [k, Number(r[k + '_value'])])) }));
+  const W = box.clientWidth || 600, rowH = 46, m = { t: 6, r: 14, b: 26, l: Math.min(190, W * 0.34) };
+  const H = m.t + m.b + rowH * dates.length;
+  const x = d3.scaleLinear([274, 366], [m.l, W - m.r]);
+  const y = d3.scaleBand(dates.map((r) => r.variable), [m.t, H - m.b]).padding(0.3);
+  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const ticks = [274, 288, 305, 319, 335, 349, 365];
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(W < 480 ? [274, 305, 335, 365] : ticks).tickFormat(KT.doyDate).tickSize(-(H - m.t - m.b)))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+  const today = d3.utcDay.count(d3.utcYear(new Date()), new Date()) + 1;
+  if (today >= 274 && today <= 366) svg.append('line').attr('x1', x(today)).attr('x2', x(today)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+  const g = svg.append('g').selectAll('g').data(dates).join('g').attr('transform', (r) => `translate(0,${y(r.variable)})`);
+  const bh = y.bandwidth();
+  g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').attr('font-size', 12).text((r) => r.label);
+  g.append('rect').attr('x', (r) => x(r.t33)).attr('width', (r) => Math.max(0, x(r.t67) - x(r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
+  g.append('line').attr('x1', (r) => x(r.p10)).attr('x2', (r) => x(r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', dash.colors[0]).attr('stroke-width', 2).attr('stroke-linecap', 'round');
+  g.append('rect').attr('x', (r) => x(r.p25)).attr('width', (r) => Math.max(3, x(r.p75) - x(r.p25))).attr('y', bh * 0.2).attr('height', bh * 0.6).attr('rx', 4).attr('fill', dash.colors[0]);
+  g.append('circle').attr('cx', (r) => x(r.p50)).attr('cy', bh / 2).attr('r', 5).attr('fill', 'var(--color-panel)').attr('stroke', dash.colors[0]).attr('stroke-width', 2);
+  g.append('line').attr('x1', (r) => x(r.normal)).attr('x2', (r) => x(r.normal)).attr('y1', -2).attr('y2', bh + 2).attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+  box.style.minHeight = H + 'px';
+  box.replaceChildren(svg.node());
+  const cap = document.createElement('p'); cap.className = 'kt-note';
+  cap.textContent = 'Thick bar: likely range (half the members). Thin line: wide range (8 in 10). Circle: most likely. Black tick: long-term average. Grey band: normal third. Dashed: today.';
+  box.appendChild(cap);
+  KT.fillTable(table, rows, [
+    ['label'], ['median'], ['likely_from'], ['likely_to'],
+    ['p_low', (v) => KT.pct(+v), 'num'], ['p_mid', (v) => KT.pct(+v), 'num'], ['p_high', (v) => KT.pct(+v), 'num'],
+    ['normal'], ['skill', (v) => v + ' skill', (v) => 'kt-pill-cell ' + v], ['mae_days', (v) => KT.int(+v), 'num'], ['rpss_val', (v) => d3.format('+.2f')(+v), 'num'],
+  ]);
+  [...table.querySelectorAll('tbody tr')].forEach((tr, i) => { tr.dataset.key = `${encodeURIComponent(rows[i].site)},${encodeURIComponent(rows[i].variable)}`; });
+});
+</script>
+
+<script>
+// Maps
+dash.onData(() => {
+  const d = dash.data('grid');
+  const specs = [['map-pct', 'chirps_pct_normal', [0, 100, 200], ['--color-bad', '--color-panel', '--color-ok'], (v) => KT.int(v) + '%'],
+                 ['map-ens', 'ens_p_event_7d', [0, 1], ['--color-panel', null], KT.pct],
+                 ['map-early', 'season_p_early', [0, 0.333, 0.7], ['--color-panel', '--color-panel', null], KT.pct]];
+  specs.forEach(([id, field, dom, toks, fmt]) => {
+    const box = document.getElementById(id);
+    if (KT.fail(box, d)) return;
+    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
+    box.classList.remove('dash-skeleton');
+    const rows = d.data.map((r) => ({ lat: +r.lat, lon: +r.lon, z: +r.in_zone, v: r[field] === '' || r[field] == null ? NaN : +r[field] }));
+    const cols = toks.map((t) => (t ? KT.css(t) : KT.color(dash.colors[0])));
+    const color = d3.scaleLinear(dom, cols).interpolate(d3.interpolateRgb).clamp(true);
+    const W = box.clientWidth || 300, H = Math.round(W * 10.5 / 8.5);
+    const x = d3.scaleLinear([33.5, 42.0], [0, W]); const y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
+    const cw = x(33.75) - x(33.5), ch = y(-5.0) - y(-4.75);
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    svg.append('g').selectAll('rect').data(rows.filter((r) => isFinite(r.v))).join('rect')
+      .attr('x', (r) => x(r.lon - 0.125)).attr('y', (r) => y(r.lat + 0.125)).attr('width', cw + 0.5).attr('height', ch + 0.5)
+      .attr('fill', (r) => color(r.v)).attr('opacity', (r) => (r.z ? 1 : 0.3));
+    KT.overlay(svg, x, y, W);
+    const lg = document.createElement('div'); lg.className = 'kt-legend';
+    lg.append(...dom.map((v) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = color(v); s.append(fmt(v)); return s; }));
+    box.replaceChildren(svg.node(), lg);
+  });
+});
+</script>
+
+<script>
+// Zone, verification and initialization tables
+dash.onData(() => {
+  const z = dash.data('zone');
+  const zt = document.getElementById('zone-table');
+  if (z.status === 'ok') {
+    const tb = KT.fillTable(zt, z.data, [['label'], ['last_day', (v) => d3.utcFormat('%-d %b')(new Date(v))], ['ond_zone_mean_mm', (v) => KT.num(+v), 'num'],
+      ['ond_zone_normal_mm', (v) => KT.num(+v), 'num'], ['ond_zone_pct_normal', (v) => KT.int(+v) + '%', 'num'], ['ond_zone_pct_onset_detected', (v) => KT.int(+v) + '%', 'num']]);
+    [...tb.children].forEach((tr, i) => { tr.dataset.key = z.data[i].product; });
+  } else zt.querySelector('tbody').replaceChildren();
+
+  const v = dash.data('verification');
+  const vt = document.getElementById('ver-table');
+  if (v.status === 'ok') {
+    const f2 = (x) => (x === '' || x == null ? '—' : d3.format('.2f')(+x));
+    const tb = KT.fillTable(vt, v.data, [['product', (x) => KT.prodLabel[x] || x], ['period', (x) => x.replace(':', ' – ')], ['days', null, 'num'],
+      ['bias_pct', (x) => d3.format('+.0f')(+x) + '%', 'num'], ['corr_daily', f2, 'num'], ['corr_pentad', f2, 'num'], ['pod_1mm', f2, 'num'], ['far_1mm', f2, 'num'],
+      ['pod_10mm', f2, 'num'], ['far_10mm', f2, 'num'], ['onset_mad_days', (x) => (x === '' || x == null ? '—' : KT.int(+x)), 'num']]);
+    [...tb.children].forEach((tr, i) => { tr.dataset.key = `${encodeURIComponent(v.data[i].product)},${encodeURIComponent(v.data[i].period)}`; });
+  } else vt.querySelector('tbody').replaceChildren();
+
+  const n = dash.data('inits');
+  const nt = document.getElementById('init-table');
+  if (n.status === 'ok') {
+    const label = { onset: 'Onset (Dunning)', cessation: 'Cessation', lgp: 'Season length' };
+    const rows = n.data.filter((r) => r.site === KT.site());
+    document.getElementById('init-title').textContent = `Forecast by initialization: ${KT.site()}`;
+    const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x) => label[x] || x], ['median_date', (x, r) => x || `${KT.int(+r.median)} d`], ['median', (x) => KT.int(+x), 'num'],
+      ['anomaly', (x) => d3.format('+.0f')(+x), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num']]);
+    [...tb.children].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable].map(encodeURIComponent).join(','); });
+  } else nt.querySelector('tbody').replaceChildren();
+});
+</script>
+
+<script>
+// Day-by-day animated maps per product (rain, rain so far, anomaly, % of normal)
+(() => {
+  const metricSel = document.getElementById('anim-metric');
+  const playBtn = document.getElementById('anim-play');
+  const slider = document.getElementById('anim-day');
+  const box = document.getElementById('anim-maps');
+  const dateEl = document.getElementById('anim-date');
+  const legend = document.getElementById('anim-legend');
+  const SCALES = {
+    pct_of_normal: { dom: [0, 100, 200], toks: ['--color-bad', '--color-panel', '--color-ok'], fmt: (v) => KT.int(v) + '%' },
+    anomaly_mm: { dom: [-80, 0, 80], toks: ['--color-bad', '--color-panel', '--color-ok'], fmt: (v) => d3.format('+.0f')(v) + ' mm' },
+    rain_since_oct1_mm: { dom: [0, 50, 150], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
+    rain_mm: { dom: [0, 10, 30], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
+  };
+  let cache = null, cacheSrc = null, idx = null, timer = null;
+
+  const stSel = document.getElementById('anim-station');
+  const stTable = document.getElementById('anim-st-table');
+  const stTitle = document.getElementById('anim-st-title');
+  const stChart = document.getElementById('anim-st-chart');
+  const stChartTitle = document.getElementById('anim-st-chart-title');
+  const cellKey = (p, date, lat, lon) => `${p}|${date}|${(+lat).toFixed(3)}|${(+lon).toFixed(3)}`;
+  // centre of the 0.25° cell holding a point (grid edges at -5.0 lat and 33.5 lon)
+  const cellOf = (lat, lon) => [Math.floor((lat + 5.0) / 0.25) * 0.25 - 5.0 + 0.125, Math.floor((lon - 33.5) / 0.25) * 0.25 + 33.5 + 0.125];
+
+  const prep = (rows) => {
+    const byKey = new Map(), byCell = new Map();
+    rows.forEach((r) => {
+      const k = r.product + '|' + r.date;
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push({ lat: +r.lat, lon: +r.lon, v: r });
+      byCell.set(cellKey(r.product, r.date, r.lat, r.lon), r);
+    });
+    const dates = [...new Set(rows.map((r) => r.date))].sort();
+    const prods = KT.products.filter((p) => rows.some((r) => r.product === p));
+    // open on the latest day that the most products share (the newest day often has only one product)
+    const count = (dd) => prods.filter((p) => byKey.has(p + '|' + dd)).length;
+    const best = d3.max(dates, count);
+    const startIdx = d3.maxIndex(dates, (dd, i) => (count(dd) === best ? i : -1));
+    return { byKey, byCell, dates, prods, startIdx };
+  };
+
+  const drawStation = (m, S, day) => {
+    const st = dash.data('stations');
+    if (st.status !== 'ok' || !cache) return;
+    stSel.replaceChildren(...st.data.map((r) => new Option(r.short_name, r.site)));
+    stSel.value = KT.site();
+    const s = st.data.find((r) => r.site === KT.site()) || st.data[0];
+    const [clat, clon] = cellOf(+s.lat, +s.lon);
+    stTitle.textContent = `${s.short_name} on ${d3.utcFormat('%-d %b')(new Date(day))}`;
+    const f1 = (v) => (v === '' || v == null || !isFinite(+v) ? '—' : KT.num(+v));
+    const rows = cache.prods.map((p) => ({ p, r: cache.byCell.get(cellKey(p, day, clat, clon)) }));
+    stTable.querySelector('tbody').replaceChildren(...rows.map(({ p, r }) => {
+      const tr = document.createElement('tr');
+      const cells = [KT.prodLabel[p], ...(r ? [f1(r.rain_mm), f1(r.rain_since_oct1_mm), f1(r.normal_since_oct1_mm),
+        r.anomaly_mm === '' ? '—' : d3.format('+.1f')(+r.anomaly_mm), r.pct_of_normal === '' ? '—' : KT.int(+r.pct_of_normal) + '%'] : ['no data', '', '', '', ''])];
+      cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c; if (i) td.className = 'num'; tr.appendChild(td); });
+      return tr;
+    }));
+    // line chart of the selected measure at the station's cell, one line per product, marker at the current day
+    stChartTitle.textContent = `${s.short_name}: ${metricSel.options[metricSel.selectedIndex].text} since 1 Oct`;
+    const series = cache.prods.map((p) => ({ p, pts: cache.dates.map((dd) => ({ t: new Date(dd), r: cache.byCell.get(cellKey(p, dd, clat, clon)) }))
+      .filter((q) => q.r && q.r[m] !== '' && isFinite(+q.r[m])).map((q) => ({ t: q.t, v: +q.r[m] })) }));
+    const all = series.flatMap((q) => q.pts.map((pt) => pt.v));
+    const W = stChart.clientWidth || 400, H = 190, mg = { t: 8, r: 12, b: 24, l: 44 };
+    const x = d3.scaleUtc(d3.extent(cache.dates, (dd) => new Date(dd)), [mg.l, W - mg.r]);
+    const lo = Math.min(0, d3.min(all) ?? 0), hi = Math.max(m === 'pct_of_normal' ? 100 : 1, d3.max(all) ?? 1);
+    const y = d3.scaleLinear([lo, hi], [H - mg.b, mg.t]).nice();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 80))).tickFormat(d3.utcFormat('%-d %b')))
+      .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+    svg.append('g').attr('transform', `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - mg.l - mg.r)))
+      .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+      .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+    if (m === 'pct_of_normal' || m === 'anomaly_mm') {
+      const ref = m === 'pct_of_normal' ? 100 : 0;
+      svg.append('line').attr('x1', mg.l).attr('x2', W - mg.r).attr('y1', y(ref)).attr('y2', y(ref)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    }
+    series.forEach(({ p, pts }, i) => {
+      svg.append('path').datum(pts).attr('fill', 'none').attr('stroke', dash.colors[i % dash.colors.length]).attr('stroke-width', 2)
+        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((q) => x(q.t)).y((q) => y(q.v)));
+    });
+    const now = new Date(day);
+    svg.append('line').attr('x1', x(now)).attr('x2', x(now)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
+    const lg = document.createElement('div'); lg.className = 'kt-legend';
+    lg.append(...series.map(({ p }, i) => { const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[i % dash.colors.length]; sp.append(KT.prodLabel[p]); return sp; }));
+    stChart.replaceChildren(svg.node(), lg);
+  };
+
+  const draw = () => {
+    const d = dash.data('anim');
+    if (KT.fail(box, d)) return;
+    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
+    box.classList.remove('dash-skeleton');
+    if (cacheSrc !== d.data) { cache = prep(d.data); cacheSrc = d.data; }
+    const { byKey, dates, prods } = cache;
+    slider.max = String(dates.length - 1);
+    if (idx === null || idx > dates.length - 1) idx = cache.startIdx;
+    slider.value = String(idx);
+    const day = dates[idx];
+    dateEl.textContent = d3.utcFormat('%-d %B %Y')(new Date(day));
+    const m = metricSel.value, S = SCALES[m];
+    const c1 = KT.color(dash.colors[0]);
+    const cols = S.toks.map((t, i) => (t ? KT.css(t) : (i === 1 ? d3.interpolateRgb(KT.css('--color-panel'), c1)(0.5) : c1)));
+    const color = d3.scaleLinear(S.dom, cols).interpolate(d3.interpolateRgb).clamp(true);
+    const cards = prods.map((p) => {
+      const wrap = document.createElement('div');
+      const h = document.createElement('h3'); h.textContent = KT.prodLabel[p]; wrap.appendChild(h);
+      const mapBox = document.createElement('div'); mapBox.className = 'kt-map'; wrap.appendChild(mapBox);
+      return [p, wrap, mapBox];
+    });
+    box.replaceChildren(...cards.map((c) => c[1]));
+    cards.forEach(([p, , mapBox]) => {
+      const W = mapBox.clientWidth || 260, H = Math.round(W * 10.5 / 8.5);
+      const x = d3.scaleLinear([33.5, 42.0], [0, W]), y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
+      const cw = x(33.75) - x(33.5), ch = y(-5.0) - y(-4.75);
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+      const cells = (byKey.get(p + '|' + day) || []).filter((c) => c.v[m] !== '' && c.v[m] != null && isFinite(+c.v[m]));
+      svg.append('g').selectAll('rect').data(cells).join('rect')
+        .attr('x', (c) => x(c.lon - 0.125)).attr('y', (c) => y(c.lat + 0.125)).attr('width', cw + 0.5).attr('height', ch + 0.5)
+        .attr('fill', (c) => color(+c.v[m]));
+      KT.overlay(svg, x, y, W, true, KT.site());
+      mapBox.replaceChildren(svg.node());
+      if (!cells.length) mapBox.appendChild(Object.assign(document.createElement('div'), { className: 'kt-map-empty', textContent: 'No data for this day yet' }));
+    });
+    legend.replaceChildren(...S.dom.map((v) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = color(v); s.append(S.fmt(v)); return s; }));
+    drawStation(m, S, day);
+  };
+
+  const stop = () => { clearInterval(timer); timer = null; playBtn.textContent = 'Play'; };
+  playBtn.addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    if (!cache) return;
+    if (idx >= cache.dates.length - 1) idx = 0;
+    playBtn.textContent = 'Pause';
+    timer = setInterval(() => {
+      if (idx >= cache.dates.length - 1) { stop(); return; }
+      idx += 1; draw();
+    }, 700);
+    draw();
+  });
+  slider.addEventListener('input', () => { stop(); idx = +slider.value; draw(); });
+  const step = (k) => { stop(); if (!cache) return; idx = Math.max(0, Math.min(cache.dates.length - 1, idx + k)); draw(); };
+  document.getElementById('anim-prev').addEventListener('click', () => step(-1));
+  document.getElementById('anim-next').addEventListener('click', () => step(1));
+  stSel.addEventListener('change', () => dash.setParams({ site: stSel.value }));
+  metricSel.addEventListener('change', draw);
+  dash.onData(draw);
+})();
+</script>
+
+<script>
+// Multi-model 10–16 day forecast panel: model toggles, day animation, maps, station table and chart
+(() => {
+  const metricSel = document.getElementById('fc-metric');
+  const modelsBox = document.getElementById('fc-models');
+  const playBtn = document.getElementById('fc-play');
+  const slider = document.getElementById('fc-day');
+  const box = document.getElementById('fc-maps');
+  const dateEl = document.getElementById('fc-date');
+  const legend = document.getElementById('fc-legend');
+  const stTitle = document.getElementById('fc-st-title');
+  const consensus = document.getElementById('fc-consensus');
+  const stTable = document.getElementById('fc-st-table');
+  const stChart = document.getElementById('fc-st-chart');
+  const SCALES = { cum_mm: [0, 40, 120], rain_mm: [0, 10, 30] };
+  const label = {};
+  let cache = null, cacheSrc = null, idx = 0, timer = null, shown = null;
+
+  const prep = (rows) => {
+    const byKey = new Map();
+    rows.forEach((r) => { const k = r.model + '|' + r.date; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); label[r.model] = r.model_label; });
+    const dates = [...new Set(rows.map((r) => r.date))].sort();
+    const models = KT.models.filter((m) => rows.some((r) => r.model === m));
+    return { byKey, dates, models };
+  };
+  const colorOf = (m) => dash.colors[KT.models.indexOf(m) % dash.colors.length];
+  const fmtDay = (s) => d3.utcFormat('%-d %b')(new Date(s));
+
+  const drawToggles = () => {
+    modelsBox.replaceChildren(...cache.models.map((m) => {
+      const lab = document.createElement('label'); lab.className = 'kt-legend';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'fc-m-' + m; cb.checked = shown.has(m);
+      cb.addEventListener('change', () => { if (cb.checked) shown.add(m); else shown.delete(m); draw(); });
+      const sw = document.createElement('span'); sw.className = 'kt-sw'; sw.style.background = colorOf(m);
+      lab.append(cb, sw, label[m] || m);
+      return lab;
+    }));
+  };
+
+  const drawStation = (day) => {
+    const ev = dash.data('forecast_events'), fs = dash.data('forecast_sites');
+    if (ev.status !== 'ok' || fs.status !== 'ok') return;
+    const site = KT.site();
+    const rows = ev.data.filter((r) => r.site === site && shown.has(r.model));
+    const shortName = (ev.data.find((r) => r.site === site) || {}).short_name || site;
+    stTitle.textContent = `${shortName}: each model`;
+    const within = rows.filter((r) => +r.planting_rain_within_7d === 1);
+    consensus.textContent = rows.length
+      ? `${within.length} of ${rows.length} models shown give planting rains within 7 days` +
+        (within.length ? ` (${within.map((r) => `${r.model_label} ${fmtDay(r.first_planting_rain)}`).join(', ')}).` : '.')
+      : 'Tick at least one model.';
+    const series = fs.data.filter((r) => r.site === site && shown.has(r.model));
+    const trs = KT.models.filter((md) => shown.has(md)).map((md) => {
+      const e = rows.find((r) => r.model === md);
+      if (!e) return null;
+      const that = series.find((r) => r.model === md && r.date === day);
+      const tr = document.createElement('tr');
+      const cells = [e.model_label, e.horizon_days, that ? KT.num(+that.rain_mm) : '—', KT.num(+e.total_7d_mm), KT.num(+e.total_all_mm),
+        e.first_planting_rain ? fmtDay(e.first_planting_rain) : 'none in range'];
+      cells.forEach((c, i) => {
+        const td = document.createElement('td');
+        if (i === 0) { const sw = document.createElement('span'); sw.className = 'kt-sw'; sw.style.background = colorOf(md); td.append(sw); }
+        td.append(String(c));
+        if (i > 0 && i < 5) td.className = 'num';
+        tr.appendChild(td);
+      });
+      return tr;
+    }).filter(Boolean);
+    stTable.querySelector('tbody').replaceChildren(...trs);
+    // rain from today at the station, one line per visible model, marker at the current day
+    const W = stChart.clientWidth || 400, H = 190, mg = { t: 8, r: 12, b: 24, l: 40 };
+    const pts = series.map((r) => ({ md: r.model, t: new Date(r.date), v: +r.cum_mm }));
+    const x = d3.scaleUtc(d3.extent(cache.dates, (dd) => new Date(dd)), [mg.l, W - mg.r]);
+    const y = d3.scaleLinear([0, Math.max(20, d3.max(pts, (q) => q.v) || 0)], [H - mg.b, mg.t]).nice();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 80))).tickFormat(d3.utcFormat('%-d %b')))
+      .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+    svg.append('g').attr('transform', `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - mg.l - mg.r)))
+      .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+      .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+    d3.groups(pts, (q) => q.md).forEach(([md, p]) => {
+      svg.append('path').datum(p.sort((a, b) => a.t - b.t)).attr('fill', 'none').attr('stroke', colorOf(md)).attr('stroke-width', 2)
+        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((q) => x(q.t)).y((q) => y(q.v)));
+    });
+    svg.append('line').attr('x1', x(new Date(day))).attr('x2', x(new Date(day))).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
+    stChart.replaceChildren(svg.node());
+  };
+
+  const draw = () => {
+    const d = dash.data('forecast');
+    if (KT.fail(box, d)) return;
+    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
+    box.classList.remove('dash-skeleton');
+    if (cacheSrc !== d.data) { cache = prep(d.data); cacheSrc = d.data; if (!shown) shown = new Set(cache.models); drawToggles(); }
+    const { byKey, dates } = cache;
+    const vis = cache.models.filter((m) => shown.has(m));
+    slider.max = String(dates.length - 1);
+    idx = Math.min(idx, dates.length - 1);
+    slider.value = String(idx);
+    const day = dates[idx];
+    dateEl.textContent = `${d3.utcFormat('%a %-d %B')(new Date(day))} (day ${idx + 1})`;
+    const m = metricSel.value, dom = SCALES[m];
+    const panel = KT.css('--color-panel'), c1 = KT.color(dash.colors[0]);
+    const color = d3.scaleLinear(dom, [panel, d3.interpolateRgb(panel, c1)(0.5), c1]).interpolate(d3.interpolateRgb).clamp(true);
+    const cards = vis.map((md) => {
+      const wrap = document.createElement('div');
+      const h = document.createElement('h3'); h.textContent = label[md] || md; wrap.appendChild(h);
+      const mapBox = document.createElement('div'); mapBox.className = 'kt-map'; wrap.appendChild(mapBox);
+      return [md, wrap, mapBox];
+    });
+    box.replaceChildren(...cards.map((c) => c[1]));
+    cards.forEach(([md, , mapBox]) => {
+      const W = mapBox.clientWidth || 260, H = Math.round(W * 10.5 / 8.5);
+      const x = d3.scaleLinear([33.5, 42.0], [0, W]), y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
+      const cw = x(34.0) - x(33.5), ch = y(-5.0) - y(-4.5);
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+      const cells = byKey.get(md + '|' + day) || [];
+      svg.append('g').selectAll('rect').data(cells).join('rect')
+        .attr('x', (c) => x(+c.lon - 0.25)).attr('y', (c) => y(+c.lat + 0.25)).attr('width', cw + 0.5).attr('height', ch + 0.5)
+        .attr('fill', (c) => color(+c[m]));
+      KT.overlay(svg, x, y, W, true, KT.site());
+      mapBox.replaceChildren(svg.node());
+      if (!cells.length) mapBox.appendChild(Object.assign(document.createElement('div'), { className: 'kt-map-empty', textContent: 'Beyond this model’s range' }));
+    });
+    if (!vis.length) box.replaceChildren(Object.assign(document.createElement('p'), { className: 'kt-note', textContent: 'Tick at least one model above.' }));
+    legend.replaceChildren(...dom.map((v) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = color(v); s.append(KT.int(v) + ' mm'); return s; }));
+    drawStation(day);
+  };
+
+  const stop = () => { clearInterval(timer); timer = null; playBtn.textContent = 'Play'; };
+  playBtn.addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    if (!cache) return;
+    if (idx >= cache.dates.length - 1) idx = 0;
+    playBtn.textContent = 'Pause';
+    timer = setInterval(() => { if (idx >= cache.dates.length - 1) { stop(); return; } idx += 1; draw(); }, 700);
+    draw();
+  });
+  const step = (k) => { stop(); if (!cache) return; idx = Math.max(0, Math.min(cache.dates.length - 1, idx + k)); draw(); };
+  document.getElementById('fc-prev').addEventListener('click', () => step(-1));
+  document.getElementById('fc-next').addEventListener('click', () => step(1));
+  slider.addEventListener('input', () => { stop(); idx = +slider.value; draw(); });
+  metricSel.addEventListener('change', draw);
+  dash.onData(draw);
+})();
+</script>

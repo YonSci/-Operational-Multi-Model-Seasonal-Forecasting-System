@@ -80,7 +80,10 @@ def generate_bulletin(req: BulletinRequest):
         season_str = "kiremt"
         season_tag = f"Kiremt{req.year}"
     elif is_short:
-        req_model = "ECMWF SEAS5 (Sep)" if "ECMWF SEAS5 (Sep)" in s["MODELS"] else (req.model_name or "ECMWF SEAS5")
+        if req.model_name in s["MODELS"] and s["MODELS"][req.model_name].get("season") == "short_rains":
+            req_model = req.model_name
+        else:
+            req_model = "ECMWF SEAS5 (Sep)" if "ECMWF SEAS5 (Sep)" in s["MODELS"] else (req.model_name or "ECMWF SEAS5")
         season_str = "short_rains"
         season_tag = f"OND{req.year}"
     else:
