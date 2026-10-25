@@ -186,7 +186,7 @@
         <button type="button" id="fc-next" class="kt-btn" aria-label="Next day">Next ▶</button>
         <input type="range" id="fc-day" min="0" max="0" value="0" step="1" aria-label="Forecast day">
       </div>
-      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7. A model stops at the end of its range. Planting rains = at least 20 mm within 3 days. Source: Open-Meteo (ECMWF, NOAA, DWD, ECCC, Met Office) and the ECMWF ensemble download.</p>
+      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7–8. A model stops at the end of its range. Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
       <div data-source="forecast boundaries stations">
         <p class="kt-anim-date" id="fc-date">—</p>
         <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
@@ -199,7 +199,7 @@
           <table id="fc-st-table" data-source="forecast_events forecast_sites">
             <thead><tr>
               <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 7 days (mm)</th>
-              <th class="num">Whole range (mm)</th><th>First planting rains</th>
+              <th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -336,8 +336,8 @@ KT.num = d3.format(',.1f');
 KT.int = d3.format(',.0f');
 KT.doyDate = (doy) => d3.utcFormat('%-d %b')(new Date(Date.UTC(2026, 0, 1) + (doy - 1) * 864e5));
 KT.site = () => (dash.params().site || 'Kapiti Research Station Farm');
-KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early'];
-KT.prodLabel = { chirps: 'CHIRPS', arc2: 'ARC2', tamsat: 'TAMSAT', pdirnow: 'PDIR-Now', imerg: 'IMERG Late', imerg_early: 'IMERG Early' };
+KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early', 'imerg_gee', 'gsmap_gee'];
+KT.prodLabel = { chirps: 'CHIRPS', arc2: 'ARC2', tamsat: 'TAMSAT', pdirnow: 'PDIR-Now', imerg: 'IMERG Late', imerg_early: 'IMERG Early', imerg_gee: 'IMERG (GEE)', gsmap_gee: 'GSMaP (GEE)' };
 KT.models = ['ecmwf_ifs025', 'ecmwf_ens_median', 'gfs_global', 'gem_global', 'icon_global', 'ukmo_global_deterministic_10km'];
 KT.fail = (el, d) => {
   if (d.status === 'error' || d.status === 'connect' || d.status === 'declined' || d.status === 'missing') {
@@ -842,7 +842,7 @@ dash.onData(() => {
       const that = series.find((r) => r.model === md && r.date === day);
       const tr = document.createElement('tr');
       const cells = [e.model_label, e.horizon_days, that ? KT.num(+that.rain_mm) : '—', KT.num(+e.total_7d_mm), KT.num(+e.total_all_mm),
-        e.first_planting_rain ? fmtDay(e.first_planting_rain) : 'none in range'];
+        e.first_planting_rain ? fmtDay(e.first_planting_rain) : 'none in range', e.source || ''];
       cells.forEach((c, i) => {
         const td = document.createElement('td');
         if (i === 0) { const sw = document.createElement('span'); sw.className = 'kt-sw'; sw.style.background = colorOf(md); td.append(sw); }

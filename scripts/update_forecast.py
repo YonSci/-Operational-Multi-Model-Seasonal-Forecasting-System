@@ -158,6 +158,12 @@ def main():
     except (FileNotFoundError, netrc.NetrcParseError):
         has_earthdata = False
     products = ["arc2", "tamsat", "pdirnow"] + (["imerg", "imerg_early"] if has_earthdata else [])
+    # IMERG and GSMaP through Google Earth Engine when it is set up (earthengine-api installed, authenticated,
+    # project in EE_PROJECT or ~/.config/earthengine/project.txt)
+    import importlib.util
+    ee_cfg = Path.home() / ".config" / "earthengine"
+    if importlib.util.find_spec("ee") and (ee_cfg / "credentials").exists() and (os.environ.get("EE_PROJECT") or (ee_cfg / "project.txt").exists()):
+        products += ["imerg_gee", "gsmap_gee"]
     # Multi-model 10–16 day forecasts downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office
     # (00 UTC run); any model that cannot be reached is filled from Open-Meteo
     subprocess.run([PY, str(BASE_DIR / "scripts" / "fetch_nwp_direct.py")], check=False, env=env)
