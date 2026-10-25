@@ -129,12 +129,12 @@ export function useSites() {
 }
 
 /** GET /chirps_historical -- full CHIRPS time series + stats for a pixel */
-export function useChirpsHistorical(site, season = 'long_rains') {
+export function useChirpsHistorical(site, season = 'long_rains', model = '') {
   const lat = site?.lat ?? -1.62
   const lon = site?.lon ?? 37.12
   return useQuery({
-    queryKey: ['chirps_historical', lat, lon, season],
-    queryFn: () => fetchJSON(`/chirps_historical?lat=${lat}&lon=${lon}&season=${season}`),
+    queryKey: ['chirps_historical', lat, lon, season, model],
+    queryFn: () => fetchJSON(`/chirps_historical?lat=${lat}&lon=${lon}&season=${season}` + (model ? `&model=${encodeURIComponent(model)}` : '')),
     staleTime: 10 * 60 * 1000,
     enabled: true,
   })

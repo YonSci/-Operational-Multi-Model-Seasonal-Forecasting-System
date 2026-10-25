@@ -15,7 +15,7 @@ Public API
     get_taylor_stats()          -> dict
 """
 from __future__ import annotations
-import os, warnings
+import os, warnings, json
 from itertools import permutations
 from pathlib import Path
 from typing import Optional
@@ -51,6 +51,9 @@ _MODEL_DIR_ALIASES = {
 MODEL_COLORS: dict = {
     "ECMWF SEAS5"          : "#1B5EA6",
     "ECMWF SEAS5 (Sep)"    : "#0284C7",
+    "ECMWF SEAS5 (Oct)"    : "#0369A1",
+    "ECMWF SEAS5 (Oct+Obs)": "#075985",
+    "ECMWF SEAS5 (Oct+Obs latest)": "#0c4a6e",
     "ECMWF SEAS5 (Kiremt)" : "#1B5EA6",
     "ECMWF SEAS5 (FMAM)"   : "#0D9488",
     "ECMWF SEAS5 (Bega)"   : "#D97706",
@@ -83,6 +86,16 @@ _PREFIX_MAP   = {
     "dunning_v3":"SEAS5","bom_v3":"BOM","ukmo_v3":"UKMO","mf_v3":"MF",
     "dwd_v3":"DWD","cmcc_v3":"CMCC","ncep_v3":"NCEP","eccc_v3":"ECCC",
     "ecmwf_v3":"ECMWF","ecmwf_sep":"ECMWF","ecmwf_kiremt":"ECMWF","ecmwf_fmam":"ECMWF","ecmwf_bega":"ECMWF",
+    "ecmwf_oct":"ECMWF",
+}
+# Additional Short Rains initializations, loaded straight from pipeline NetCDF outputs
+# (in both raw and demo mode). Name -> (output dir, window DOY start, window DOY end).
+# Names must not contain "Sep": several routes treat "Sep" in a name as the September run.
+_EXTRA_SHORT_RAINS = {
+    "ECMWF SEAS5 (Oct)":            ("outputs/ecmwf_oct",         274, 365, "01 October {y}"),   # OND window
+    "ECMWF SEAS5 (Oct+Obs)":        ("outputs/ecmwf_oct_obs",     244, 365, "01 October {y}"),   # + observed Sep CHIRPS
+    # rolling run refreshed by scripts/update_forecast.py; {obs} comes from its run_meta.json
+    "ECMWF SEAS5 (Oct+Obs latest)": ("outputs/ecmwf_oct_obs_latest", 244, 365, "01 October {y} + obs to {obs}"),
 }
 
 
@@ -406,6 +419,31 @@ def _load_model(name, out_dir, chirps, season="long_rains", win_doy_start=32, wi
                 t33_onset=chirps.get("t33_onset"), t67_onset=chirps.get("t67_onset"),
                 t33_cess=chirps.get("t33_cess"), t67_cess=chirps.get("t67_cess"),
                 t33_lgp=chirps.get("t33_lgp"), t67_lgp=chirps.get("t67_lgp"))
+
+def _attach_extra_short_rains(MODELS):
+    for name, (rel, w0, w1, init_label) in _EXTRA_SHORT_RAINS.items():
+        out_dir = os.path.join(_BASE_DIR, rel)
+        if not os.path.isfile(os.path.join(out_dir, "chirps_C_clim.nc")):
+            continue
+        try:
+            c = _load_chirps(out_dir)
+            entry = _load_model(name, out_dir, c, season="short_rains", win_doy_start=w0, win_doy_end=w1)
+        except Exception as exc:
+            print(f"  SKIP  {name}: {type(exc).__name__}: {exc}")
+            continue
+        if entry is None:
+            continue
+        # Window-consistent CHIRPS history (bulletin historical panel) and init label
+        entry["chirps_hist"] = {k: c[k] for k in ("onset_doy", "cessation_doy", "lgp_days", "chirps_years", "chirps_clim")}
+        meta_p = os.path.join(out_dir, "run_meta.json")
+        obs_end = json.load(open(meta_p)).get("obs_end", "?") if os.path.isfile(meta_p) else "?"
+        entry["init_label"] = init_label.replace("{obs}", obs_end)
+        # Keep daily traces only for the latest two years (pixel plumes) to limit RAM
+        bc = entry.get("bc_daily")
+        if isinstance(bc, np.ndarray) and bc.ndim == 5:
+            entry["bc_daily"] = {int(y): bc[:, i].copy() for i, y in enumerate(entry["model_years"])
+                                 if y >= _OP_YEAR - 1}
+        MODELS[name] = entry
 
 # ── Demo / Cloud fallback loader ──────────────────────────────────────────
 def _load_demo_npz():
@@ -897,6 +935,7 @@ def _load_demo_npz():
             masks[mkey] = data[mkey].astype(bool)
     regime_map = data["regime_map"].astype(np.int8) if "regime_map" in data else None
 
+    _attach_extra_short_rains(MODELS)
     print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Deyr/Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}, RegimeMap: {regime_map is not None}).")
     return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
 
@@ -951,6 +990,7 @@ def load(force=False):
                 m_end    = 213
             entry = _load_model(name, out_dir, m_chirps, season=m_season, win_doy_start=m_start, win_doy_end=m_end)
             if entry is not None: MODELS[name] = entry
+        _attach_extra_short_rains(MODELS)
         if not MODELS:
             raise RuntimeError("No models loaded from NetCDF files.")
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
@@ -1242,7 +1282,9 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
     chirps_fmam   = s.get("chirps_fmam")
     kiremt_md     = s["MODELS"].get("ECMWF SEAS5 (Kiremt)")
     chirps_kiremt = s.get("chirps_kiremt")
-    sep_md        = s["MODELS"].get("ECMWF SEAS5 (Sep)")
+    # Short Rains: honour an explicitly requested initialization (e.g. "ECMWF SEAS5 (Oct)"), else Sep
+    short_name    = model if (model in s["MODELS"] and s["MODELS"][model].get("season") == "short_rains") else "ECMWF SEAS5 (Sep)"
+    sep_md        = s["MODELS"].get(short_name)
 
     if is_bega and (bega_md or chirps_bega):
         c_ref = chirps_bega if chirps_bega else bega_md
@@ -1461,12 +1503,12 @@ def get_pixel_stats(lat, lon, season="long_rains", model=None, year=None):
 
     if is_short:
         models_dict = {}
-        if "ECMWF SEAS5 (Sep)" in s["MODELS"]:
-            sep_stats = _model_pixel_stats("ECMWF SEAS5 (Sep)", pi, pj, year=year)
+        if short_name in s["MODELS"]:
+            sep_stats = _model_pixel_stats(short_name, pi, pj, year=year)
             models_dict["ECMWF SEAS5"] = sep_stats
-            models_dict["ECMWF SEAS5 (Sep)"] = sep_stats
+            models_dict[short_name] = sep_stats
     else:
-        models_dict = {n: _model_pixel_stats(n, pi, pj, year=year) for n in s["MODELS"] if "(Sep)" not in n and "(Kiremt)" not in n and "(FMAM)" not in n}
+        models_dict = {n: _model_pixel_stats(n, pi, pj, year=year) for n in s["MODELS"] if "(Sep)" not in n and "(Kiremt)" not in n and "(FMAM)" not in n and n not in _EXTRA_SHORT_RAINS}
 
     s_masks = s.get("seasonal_masks", {})
     m_active = s_masks.get("mask_kenya_ond") if is_short else s_masks.get("mask_kenya_mam")

@@ -32,6 +32,7 @@ except ImportError:
     dl = None
 
 # Pipeline Configuration (Short Rains OND)
+INIT_MONTH          = 9     # SEAS5 initialization month (overridable via --init-month)
 WIN_DOY_START       = 244   # Sept 1 (DOY 244)
 WIN_DOY_END         = 365   # Dec 31 (DOY 365)
 WIN_N_DAYS          = WIN_DOY_END - WIN_DOY_START + 1  # 122 days
@@ -53,6 +54,15 @@ ALPHA_GRID          = np.round(np.arange(0.0, 1.01, 0.02), 2)
 ECMWF_DIR           = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / "ecmwf_sep"
 CHIRPS_PATH         = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
 OUT_DIR             = BASE_DIR / "outputs" / "ecmwf_sep"
+
+# Observed-prefix mode: when the forecast's lead day 0 (OBS_LEAD_DOY) falls after WIN_DOY_START, days
+# WIN_DOY_START..OBS_END_DOY are filled with observed CHIRPS (same for every member) and only forecast
+# days are bias-corrected. OBS_END_DOY defaults to OBS_LEAD_DOY-1; a later value replaces the first
+# forecast days with observations too (applied to every year so calibration stays consistent).
+# CHIRPS_EXTRA files supply years beyond CHIRPS_PATH (later files fill gaps left by earlier ones).
+OBS_LEAD_DOY        = None
+OBS_END_DOY         = None
+CHIRPS_EXTRA        = None
 
 
 def _build_qm_transfer(c_pool, s_pool):
@@ -100,7 +110,7 @@ def run_pipeline():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     print("\n" + "=" * 70)
-    print("  ECMWF SEAS5 (September Initialization) Operational Pipeline")
+    print(f"  ECMWF SEAS5 (Init month {INIT_MONTH:02d}) Operational Pipeline")
     print("=" * 70)
     print(f"  Forecast window : DOY {WIN_DOY_START}–{WIN_DOY_END} ({WIN_N_DAYS} days)")
     print(f"  Calibration yrs : {CAL_YEARS[0]}–{CAL_YEARS[-1]} ({len(CAL_YEARS)} yrs)")
@@ -146,11 +156,11 @@ def run_pipeline():
     print(f"  CHIRPS loaded: {chirps_years[0]}–{chirps_years[-1]} ({n_cy} years)")
 
     # 3. Ingest ECMWF SEAS5 Downloads
-    print("\n[Step 3/5] Ingesting 33 ECMWF SEAS5 September forecast files ...")
-    pattern = str(ECMWF_DIR / "ecmwf_*09_d01.nc")
+    print(f"\n[Step 3/5] Ingesting ECMWF SEAS5 forecast files (init month {INIT_MONTH:02d}) ...")
+    pattern = str(ECMWF_DIR / f"ecmwf_*{INIT_MONTH:02d}_d01.nc")
     ecmwf_files = sorted(glob.glob(pattern))
     if not ecmwf_files:
-        raise FileNotFoundError(f"No ECMWF September files found matching {pattern}")
+        raise FileNotFoundError(f"No ECMWF files found matching {pattern}")
 
     file_years = []
     for fp in ecmwf_files:
@@ -163,8 +173,29 @@ def run_pipeline():
 
     ecmwf_raw = np.full((N_MEMBERS_COMMON, n_ey, WIN_N_DAYS, n_lat, n_lon), np.nan, dtype=np.float32)
 
+    lead0_doy = OBS_LEAD_DOY or WIN_DOY_START          # DOY of forecast lead day 0
+    obs_end   = (OBS_END_DOY or lead0_doy - 1) if OBS_LEAD_DOY else WIN_DOY_START - 1
+    n_obs     = obs_end - WIN_DOY_START + 1             # leading window days taken from CHIRPS
+    n_skip    = WIN_DOY_START + n_obs - lead0_doy        # forecast lead days replaced by observations
+    n_lead    = WIN_DOY_END - lead0_doy + 1             # forecast lead days needed to reach WIN_DOY_END
+    if n_obs:
+        extra = {}
+        for path in (CHIRPS_EXTRA or []):
+            with xr.open_dataset(path) as ds_x:
+                ds_x = ds_x.rename({k: v for k, v in {"latitude": "lat", "longitude": "lon"}.items() if k in ds_x.dims})
+                ds_x = ds_x.reindex(lat=target_lat, lon=target_lon, method="nearest")
+                x_time = pd.DatetimeIndex(ds_x.time.values)
+                for yr in np.unique(x_time.year):
+                    m_yr = x_time.year == yr
+                    arr = extra.setdefault(int(yr), np.full((366, n_lat, n_lon), np.nan, dtype=np.float32))
+                    doy_idx = x_time[m_yr].dayofyear.values - 1
+                    vals_x = ds_x["precip"].values[m_yr]
+                    arr[doy_idx] = np.where(np.isnan(arr[doy_idx]), vals_x, arr[doy_idx])
+        print(f"  Observed prefix: DOY {WIN_DOY_START}–{obs_end} ({n_obs} days CHIRPS); "
+              f"forecast lead day 0 = DOY {lead0_doy}, using leads {n_skip}–{n_lead - 1} (DOY {obs_end + 1}–{WIN_DOY_END})")
+
     for yi, yr in enumerate(file_years):
-        fp = ECMWF_DIR / f"ecmwf_{yr}09_d01.nc"
+        fp = ECMWF_DIR / f"ecmwf_{yr}{INIT_MONTH:02d}_d01.nc"
         with xr.open_dataset(fp) as ds_e:
             tp = ds_e["tp"]
             if "forecast_reference_time" in tp.dims:
@@ -176,8 +207,8 @@ def run_pipeline():
             # Subsample members to N_MEMBERS_COMMON (25)
             n_m = min(vals.shape[0], N_MEMBERS_COMMON)
             
-            # Slice forecast period: Day 0 (Sept 1) to Day WIN_N_DAYS-1 (Dec 31)
-            vals_win = vals[:n_m, :WIN_N_DAYS, :, :]
+            # Slice forecast period: lead day 0 (window start, or OBS_LEAD_DOY) to Dec 31
+            vals_win = vals[:n_m, :n_lead, :, :]
 
             # In ECMWF SEAS5 C3S, 'tp' is cumulative total precipitation in metres.
             # Differentiate along the forecast_period axis (axis=1) to obtain daily precipitation rate in mm/day.
@@ -185,7 +216,19 @@ def run_pipeline():
             daily_diff[daily_diff < 0] = 0.0  # guard against reset/monotonicity artifacts
             daily_mm = daily_diff * 1000.0   # convert m to mm
 
-            ecmwf_raw[:n_m, yi, :, :, :] = daily_mm
+            ecmwf_raw[:n_m, yi, n_obs:, :, :] = daily_mm[:, n_skip:]
+
+        if n_obs:
+            sl = slice(WIN_DOY_START - 1, obs_end)
+            if yr in chirps_years:
+                obs = chirps_daily[int(np.where(chirps_years == yr)[0][0]), sl]
+            elif int(yr) in extra:
+                obs = extra[int(yr)][sl]
+            else:
+                raise RuntimeError(f"No observed CHIRPS for {yr} DOY {WIN_DOY_START}–{obs_end} (pass --chirps-extra)")
+            if np.isnan(obs[:, lm]).any():
+                raise RuntimeError(f"Observed CHIRPS prefix for {yr} has gaps over land")
+            ecmwf_raw[:, yi, :n_obs, :, :] = obs[np.newaxis]
 
     # 4. Member-Wise Empirical Quantile Mapping Bias Correction (EQM-BC)
     print("\n[Step 4/5] Running member-wise Empirical Quantile Mapping daily bias correction ...")
@@ -202,7 +245,7 @@ def run_pipeline():
         if (pix_num + 1) % 150 == 0 or pix_num == n_land - 1:
             print(f"  Calibrating pixel {pix_num+1:4d} / {n_land} ({100*(pix_num+1)/n_land:.0f}%)", flush=True)
 
-        for d in range(WIN_N_DAYS):
+        for d in range(n_obs, WIN_N_DAYS):   # observed-prefix days are left uncorrected
             doy_d = WIN_DOY_START + d
 
             # CHIRPS pool: CAL years ±QM_DOY_WINDOW around doy_d
@@ -364,4 +407,23 @@ def run_pipeline():
 
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="ECMWF SEAS5 Short Rains onset/cessation/LGP pipeline")
+    ap.add_argument("--init-month", type=int, default=INIT_MONTH)
+    ap.add_argument("--win-doy-start", type=int, default=WIN_DOY_START,
+                    help="Window start DOY; lead day 0 of the forecast must fall on this DOY")
+    ap.add_argument("--win-doy-end", type=int, default=WIN_DOY_END)
+    ap.add_argument("--ecmwf-dir", type=Path, default=ECMWF_DIR)
+    ap.add_argument("--out-dir", type=Path, default=OUT_DIR)
+    ap.add_argument("--obs-lead-doy", type=int, default=None,
+                    help="DOY of forecast lead day 0; days from --win-doy-start up to it use observed CHIRPS")
+    ap.add_argument("--obs-end-doy", type=int, default=None,
+                    help="Last observed DOY (default: --obs-lead-doy - 1); later days come from the forecast")
+    ap.add_argument("--chirps-extra", type=Path, nargs="+", default=None,
+                    help="Extra CHIRPS daily NetCDF(s) for years beyond CHIRPS_PATH (e.g. 2026 final + prelim)")
+    a = ap.parse_args()
+    OBS_LEAD_DOY, OBS_END_DOY, CHIRPS_EXTRA = a.obs_lead_doy, a.obs_end_doy, a.chirps_extra
+    INIT_MONTH, WIN_DOY_START, WIN_DOY_END = a.init_month, a.win_doy_start, a.win_doy_end
+    WIN_N_DAYS = WIN_DOY_END - WIN_DOY_START + 1
+    ECMWF_DIR, OUT_DIR = a.ecmwf_dir.resolve(), a.out_dir.resolve()
     run_pipeline()

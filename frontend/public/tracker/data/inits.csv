@@ -1,0 +1,73 @@
+site,init,model,variable,window,n_valid,n_members,median,p10,p90,chirps_clim,anomaly,t33,t67,p_bn,p_nn,p_an,dominant,median_date,clim_date,p_fail
+El Karama Sahiwals Farm,Sep 01,ECMWF SEAS5 (Sep),onset,DOY 244-365,25,25,303.0,288.0,320.6,319.2,-16.2,312.0,321.0,0.63,0.24,0.13,BN,30 Oct,15 Nov,0.0
+El Karama Sahiwals Farm,Sep 01,ECMWF SEAS5 (Sep),cessation,DOY 244-365,25,25,358.0,336.2,365.0,348.0,10.0,342.0,355.0,0.33,0.33,0.33,BN,24 Dec,14 Dec,0.0
+El Karama Sahiwals Farm,Sep 01,ECMWF SEAS5 (Sep),lgp,DOY 244-365,25,25,50.0,19.2,75.2,28.7,21.3,24.0,38.0,0.14,0.06,0.8,AN,,,0.0
+El Karama Sahiwals Farm,Oct 01,ECMWF SEAS5 (Oct),onset,DOY 274-365,24,25,301.0,286.3,342.1,325.3,-24.3,317.7,329.3,0.59,0.18,0.23,BN,28 Oct,21 Nov,0.04
+El Karama Sahiwals Farm,Oct 01,ECMWF SEAS5 (Oct),cessation,DOY 274-365,24,25,351.5,312.9,365.0,344.6,6.9,338.3,353.0,0.33,0.33,0.33,BN,18 Dec,11 Dec,0.04
+El Karama Sahiwals Farm,Oct 01,ECMWF SEAS5 (Oct),lgp,DOY 274-365,24,25,39.5,8.6,66.7,21.3,18.2,5.0,31.3,0.13,0.39,0.47,AN,,,0.04
+El Karama Sahiwals Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),onset,DOY 244-365,24,25,293.5,286.0,316.8,319.2,-25.7,312.0,321.0,0.69,0.15,0.15,BN,21 Oct,15 Nov,0.04
+El Karama Sahiwals Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),cessation,DOY 244-365,24,25,359.5,322.6,365.0,348.0,11.5,342.0,355.0,0.33,0.33,0.33,BN,26 Dec,14 Dec,0.04
+El Karama Sahiwals Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),lgp,DOY 244-365,24,25,57.0,21.5,75.8,30.1,26.9,24.0,38.0,0.14,0.14,0.72,AN,,,0.04
+El Karama Sahiwals Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),onset,DOY 244-365,24,25,299.5,294.0,317.1,319.2,-19.7,312.0,321.0,0.66,0.18,0.15,BN,27 Oct,15 Nov,0.04
+El Karama Sahiwals Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),cessation,DOY 244-365,24,25,359.5,322.6,365.0,348.0,11.5,342.0,355.0,0.33,0.33,0.33,BN,26 Dec,14 Dec,0.04
+El Karama Sahiwals Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),lgp,DOY 244-365,24,25,50.0,17.9,66.7,30.1,19.9,24.0,38.0,0.18,0.14,0.69,AN,,,0.04
+Genco LTD Maralal Samburu Farm,Sep 01,ECMWF SEAS5 (Sep),onset,DOY 244-365,25,25,297.0,285.4,334.4,312.7,-15.7,298.3,323.7,0.4,0.33,0.27,BN,24 Oct,09 Nov,0.0
+Genco LTD Maralal Samburu Farm,Sep 01,ECMWF SEAS5 (Sep),cessation,DOY 244-365,25,25,337.0,319.0,355.2,340.9,-3.9,335.7,350.7,0.33,0.33,0.33,BN,03 Dec,07 Dec,0.0
+Genco LTD Maralal Samburu Farm,Sep 01,ECMWF SEAS5 (Sep),lgp,DOY 244-365,25,25,35.0,6.2,58.6,28.2,6.8,16.3,37.3,0.35,0.26,0.39,AN,,,0.0
+Genco LTD Maralal Samburu Farm,Oct 01,ECMWF SEAS5 (Oct),onset,DOY 274-365,24,25,289.0,285.3,317.5,318.1,-29.1,301.0,332.0,0.62,0.2,0.18,BN,16 Oct,14 Nov,0.04
+Genco LTD Maralal Samburu Farm,Oct 01,ECMWF SEAS5 (Oct),cessation,DOY 274-365,24,25,335.0,314.0,356.7,339.0,-4.0,332.7,350.7,0.33,0.33,0.33,BN,01 Dec,05 Dec,0.04
+Genco LTD Maralal Samburu Farm,Oct 01,ECMWF SEAS5 (Oct),lgp,DOY 274-365,24,25,42.5,8.8,65.2,25.1,17.4,2.3,33.7,0.08,0.33,0.58,AN,,,0.04
+Genco LTD Maralal Samburu Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),onset,DOY 244-365,25,25,290.0,285.4,305.0,312.7,-22.7,298.3,323.7,0.67,0.19,0.14,BN,17 Oct,09 Nov,0.0
+Genco LTD Maralal Samburu Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),cessation,DOY 244-365,25,25,337.0,309.8,356.6,340.9,-3.9,335.7,350.7,0.33,0.33,0.33,BN,03 Dec,07 Dec,0.0
+Genco LTD Maralal Samburu Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),lgp,DOY 244-365,25,25,46.0,10.2,65.4,31.8,14.2,16.3,37.3,0.16,0.2,0.64,AN,,,0.0
+Genco LTD Maralal Samburu Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),onset,DOY 244-365,24,25,300.0,294.0,352.8,312.7,-12.7,298.3,323.7,0.45,0.37,0.18,BN,27 Oct,09 Nov,0.04
+Genco LTD Maralal Samburu Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),cessation,DOY 244-365,24,25,346.0,325.2,357.7,340.9,5.1,335.7,350.7,0.33,0.33,0.33,BN,12 Dec,07 Dec,0.04
+Genco LTD Maralal Samburu Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),lgp,DOY 244-365,24,25,38.5,3.6,55.1,31.8,6.8,16.3,37.3,0.26,0.19,0.55,AN,,,0.04
+Genco LTD Tana River Farm,Sep 01,ECMWF SEAS5 (Sep),onset,DOY 244-365,24,25,290.0,276.0,318.9,311.8,-21.8,304.0,320.7,0.71,0.15,0.15,BN,17 Oct,08 Nov,0.04
+Genco LTD Tana River Farm,Sep 01,ECMWF SEAS5 (Sep),cessation,DOY 244-365,24,25,350.0,327.9,363.7,345.1,4.9,340.0,352.3,0.33,0.33,0.33,BN,16 Dec,11 Dec,0.04
+Genco LTD Tana River Farm,Sep 01,ECMWF SEAS5 (Sep),lgp,DOY 244-365,24,25,57.0,25.8,74.7,33.3,23.7,16.7,49.0,0.05,0.37,0.58,AN,,,0.04
+Genco LTD Tana River Farm,Oct 01,ECMWF SEAS5 (Oct),onset,DOY 274-365,24,25,286.0,277.0,348.1,311.4,-25.4,302.0,318.0,0.57,0.19,0.25,BN,13 Oct,07 Nov,0.04
+Genco LTD Tana River Farm,Oct 01,ECMWF SEAS5 (Oct),cessation,DOY 274-365,24,25,340.0,319.6,361.7,344.4,-4.4,338.0,352.0,0.33,0.33,0.33,BN,06 Dec,10 Dec,0.04
+Genco LTD Tana River Farm,Oct 01,ECMWF SEAS5 (Oct),lgp,DOY 274-365,24,25,41.0,4.6,65.2,34.8,6.2,20.0,39.0,0.27,0.24,0.49,AN,,,0.04
+Genco LTD Tana River Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),onset,DOY 244-365,24,25,286.0,277.0,330.2,311.8,-25.8,304.0,320.7,0.61,0.14,0.25,BN,13 Oct,08 Nov,0.04
+Genco LTD Tana River Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),cessation,DOY 244-365,24,25,342.5,321.3,363.7,345.1,-2.6,340.0,352.3,0.33,0.33,0.33,BN,08 Dec,11 Dec,0.04
+Genco LTD Tana River Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),lgp,DOY 244-365,24,25,48.0,5.3,77.4,34.7,13.3,16.7,49.0,0.21,0.33,0.46,AN,,,0.04
+Genco LTD Tana River Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),onset,DOY 244-365,24,25,299.5,294.0,348.1,311.8,-12.3,304.0,320.7,0.54,0.19,0.28,BN,27 Oct,08 Nov,0.04
+Genco LTD Tana River Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),cessation,DOY 244-365,24,25,343.5,321.3,363.7,345.1,-1.6,340.0,352.3,0.33,0.33,0.33,BN,10 Dec,11 Dec,0.04
+Genco LTD Tana River Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),lgp,DOY 244-365,24,25,40.5,3.6,63.0,34.7,5.8,16.7,49.0,0.29,0.54,0.17,NN,,,0.04
+"KALRO Kiboko, Makueni Farm",Sep 01,ECMWF SEAS5 (Sep),onset,DOY 244-365,25,25,304.0,288.4,317.8,315.6,-11.6,306.0,322.0,0.43,0.41,0.15,BN,31 Oct,12 Nov,0.0
+"KALRO Kiboko, Makueni Farm",Sep 01,ECMWF SEAS5 (Sep),cessation,DOY 244-365,25,25,351.0,336.2,365.0,342.6,8.4,336.0,352.0,0.21,0.37,0.42,AN,17 Dec,09 Dec,0.0
+"KALRO Kiboko, Makueni Farm",Sep 01,ECMWF SEAS5 (Sep),lgp,DOY 244-365,25,25,50.0,27.0,69.2,27.0,23.0,18.0,38.0,0.04,0.2,0.76,AN,,,0.0
+"KALRO Kiboko, Makueni Farm",Oct 01,ECMWF SEAS5 (Oct),onset,DOY 274-365,24,25,301.0,287.0,336.1,322.0,-21.0,312.7,324.0,0.46,0.26,0.28,BN,28 Oct,18 Nov,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01,ECMWF SEAS5 (Oct),cessation,DOY 274-365,24,25,351.5,317.1,364.7,346.5,5.0,343.0,352.7,0.33,0.33,0.33,BN,18 Dec,13 Dec,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01,ECMWF SEAS5 (Oct),lgp,DOY 274-365,24,25,45.0,8.6,68.8,25.8,19.2,12.7,35.7,0.18,0.18,0.65,AN,,,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),onset,DOY 244-365,24,25,293.5,286.0,316.8,315.6,-22.1,306.0,322.0,0.56,0.23,0.21,BN,21 Oct,12 Nov,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),cessation,DOY 244-365,24,25,359.5,322.6,365.0,342.6,16.9,336.0,352.0,0.28,0.3,0.42,AN,26 Dec,09 Dec,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),lgp,DOY 244-365,24,25,57.5,21.5,72.4,27.0,30.5,18.0,38.0,0.08,0.17,0.75,AN,,,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),onset,DOY 244-365,24,25,299.5,294.0,317.1,315.6,-16.1,306.0,322.0,0.53,0.27,0.2,BN,27 Oct,12 Nov,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),cessation,DOY 244-365,24,25,359.5,322.6,365.0,342.6,16.9,336.0,352.0,0.28,0.3,0.42,AN,26 Dec,09 Dec,0.04
+"KALRO Kiboko, Makueni Farm",Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),lgp,DOY 244-365,24,25,50.0,17.9,66.7,27.0,23.0,18.0,38.0,0.12,0.17,0.71,AN,,,0.04
+Kapiti Research Station Farm,Sep 01,ECMWF SEAS5 (Sep),onset,DOY 244-365,25,25,295.0,279.4,318.8,316.3,-21.3,303.3,322.0,0.53,0.3,0.16,BN,22 Oct,12 Nov,0.0
+Kapiti Research Station Farm,Sep 01,ECMWF SEAS5 (Sep),cessation,DOY 244-365,25,25,347.0,331.4,365.0,347.5,-0.5,342.3,355.0,0.34,0.32,0.34,AN,13 Dec,13 Dec,0.0
+Kapiti Research Station Farm,Sep 01,ECMWF SEAS5 (Sep),lgp,DOY 244-365,25,25,54.0,22.0,71.0,31.2,22.8,28.7,40.7,0.26,0.17,0.56,AN,,,0.0
+Kapiti Research Station Farm,Oct 01,ECMWF SEAS5 (Oct),onset,DOY 274-365,25,25,295.0,286.4,335.8,317.3,-22.3,308.7,322.7,0.52,0.2,0.27,BN,22 Oct,13 Nov,0.0
+Kapiti Research Station Farm,Oct 01,ECMWF SEAS5 (Oct),cessation,DOY 274-365,25,25,348.0,320.0,364.0,346.1,1.9,336.7,354.7,0.33,0.3,0.37,AN,14 Dec,12 Dec,0.0
+Kapiti Research Station Farm,Oct 01,ECMWF SEAS5 (Oct),lgp,DOY 274-365,25,25,44.0,3.4,67.8,28.8,15.2,19.3,35.3,0.2,0.2,0.6,AN,,,0.0
+Kapiti Research Station Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),onset,DOY 244-365,25,25,293.0,286.0,335.8,316.3,-23.3,303.3,322.0,0.48,0.24,0.28,BN,20 Oct,12 Nov,0.0
+Kapiti Research Station Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),cessation,DOY 244-365,25,25,348.0,323.8,364.6,347.5,0.5,342.3,355.0,0.32,0.31,0.36,AN,14 Dec,13 Dec,0.0
+Kapiti Research Station Farm,Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),lgp,DOY 244-365,25,25,51.0,3.4,71.6,34.2,16.8,28.7,40.7,0.27,0.26,0.47,AN,,,0.0
+Kapiti Research Station Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),onset,DOY 244-365,25,25,300.0,294.0,335.8,316.3,-16.3,303.3,322.0,0.4,0.3,0.3,BN,27 Oct,12 Nov,0.0
+Kapiti Research Station Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),cessation,DOY 244-365,25,25,348.0,323.8,364.6,347.5,0.5,342.3,355.0,0.31,0.3,0.39,AN,14 Dec,13 Dec,0.0
+Kapiti Research Station Farm,Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),lgp,DOY 244-365,25,25,50.0,3.4,66.8,34.2,15.8,28.7,40.7,0.34,0.23,0.43,AN,,,0.0
+"LiveMo LTD, Memerush, Kajiado",Sep 01,ECMWF SEAS5 (Sep),onset,DOY 244-365,25,25,303.0,288.0,320.6,319.2,-16.2,312.0,321.0,0.63,0.24,0.13,BN,30 Oct,15 Nov,0.0
+"LiveMo LTD, Memerush, Kajiado",Sep 01,ECMWF SEAS5 (Sep),cessation,DOY 244-365,25,25,358.0,336.2,365.0,348.0,10.0,342.0,355.0,0.33,0.33,0.33,BN,24 Dec,14 Dec,0.0
+"LiveMo LTD, Memerush, Kajiado",Sep 01,ECMWF SEAS5 (Sep),lgp,DOY 244-365,25,25,50.0,19.2,75.2,28.7,21.3,24.0,38.0,0.14,0.06,0.8,AN,,,0.0
+"LiveMo LTD, Memerush, Kajiado",Oct 01,ECMWF SEAS5 (Oct),onset,DOY 274-365,24,25,301.0,286.3,342.1,325.3,-24.3,317.7,329.3,0.59,0.18,0.23,BN,28 Oct,21 Nov,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01,ECMWF SEAS5 (Oct),cessation,DOY 274-365,24,25,351.5,312.9,365.0,344.6,6.9,338.3,353.0,0.33,0.33,0.33,BN,18 Dec,11 Dec,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01,ECMWF SEAS5 (Oct),lgp,DOY 274-365,24,25,39.5,8.6,66.7,21.3,18.2,5.0,31.3,0.13,0.39,0.47,AN,,,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),onset,DOY 244-365,24,25,293.5,286.0,316.8,319.2,-25.7,312.0,321.0,0.69,0.15,0.15,BN,21 Oct,15 Nov,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),cessation,DOY 244-365,24,25,359.5,322.6,365.0,348.0,11.5,342.0,355.0,0.33,0.33,0.33,BN,26 Dec,14 Dec,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01 + Sep obs,ECMWF SEAS5 (Oct+Obs),lgp,DOY 244-365,24,25,57.0,21.5,75.8,30.1,26.9,24.0,38.0,0.14,0.14,0.72,AN,,,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),onset,DOY 244-365,24,25,299.5,294.0,317.1,319.2,-19.7,312.0,321.0,0.66,0.18,0.15,BN,27 Oct,15 Nov,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),cessation,DOY 244-365,24,25,359.5,322.6,365.0,348.0,11.5,342.0,355.0,0.33,0.33,0.33,BN,26 Dec,14 Dec,0.04
+"LiveMo LTD, Memerush, Kajiado",Oct 01 + latest obs,ECMWF SEAS5 (Oct+Obs latest),lgp,DOY 244-365,24,25,50.0,17.9,66.7,30.1,19.9,24.0,38.0,0.18,0.14,0.69,AN,,,0.04

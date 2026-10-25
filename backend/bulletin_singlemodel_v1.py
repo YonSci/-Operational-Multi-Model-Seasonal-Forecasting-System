@@ -234,7 +234,8 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         if "ECMWF SEAS5 (Kiremt)" in models_dict:
             model_name = "ECMWF SEAS5 (Kiremt)"
     elif season == "short_rains" or "Sep" in model_name or "sep" in model_name:
-        if "ECMWF SEAS5 (Sep)" in models_dict:
+        # Keep an explicitly requested Short Rains initialization (e.g. Oct); default to Sep
+        if models_dict.get(model_name, {}).get("season") != "short_rains" and "ECMWF SEAS5 (Sep)" in models_dict:
             model_name = "ECMWF SEAS5 (Sep)"
     if model_name not in models_dict:
         # fallback to first available
@@ -493,17 +494,17 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     elif is_sep:
         season_name = "Short Rains (OND)"
         season_code = "OND"
-        init_date_str = f"01 September {f_year}"
+        init_date_str = md.get("init_label", "01 September {y}").format(y=f_year)
         valid_date_str = f"October – December {f_year}"
-        win_start = 244
-        win_end = 365
+        win_start = int(md.get("win_doy_start", 244))
+        win_end = int(md.get("win_doy_end", 365))
         cal_label = "1993-2016"
         cal_start = 1993
         cal_end = 2016
         cal_detail = f"CAL: 1993–2016 (24 yrs)   |   VAL: 2017–2025 (8 yrs)   |   OP year: {f_year}   |   Ensemble: {nm} members"
-        sub_window_str = f"Forecast window: DOY {win_start} (01 Sep) – DOY {win_end} (31 Dec)"
-        
-        c_src = s.get("chirps_sep")
+        sub_window_str = f"Forecast window: DOY {win_start} ({'01 Oct' if win_start == 274 else '01 Sep'}) – DOY {win_end} (31 Dec)"
+
+        c_src = md.get("chirps_hist") or s.get("chirps_sep")
         if c_src is not None:
             c_on_hist = c_src["onset_doy"][:, pi, pj]
             c_cs_hist = c_src["cessation_doy"][:, pi, pj]
@@ -1152,8 +1153,23 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     fig.text(0.04, FTR_H * 0.65,
              f"FORECAST SUMMARY   |   Onset: {_doy_to_date_str(on_med)} ({on_med:.1f} DOY, {on_anom:+.1f}d, {on_tl}, {on_pctile}th pctile)   |   Cessation: {_doy_to_date_str(cs_med)} ({cs_med:.1f} DOY, {cs_anom:+.1f}d, {cs_tl}, {cs_pctile}th pctile)   |   LGP: {lg_med:.0f}d ({lg_tl}, {lg_pctile}th pctile)   |   Sowing window: {sow_optimal_start} – {sow_optimal_end}",
              fontsize=9.0, fontweight="bold", color="#F5D98C", va="center", transform=fig.transFigure, zorder=11)
+    # Local onset skill at this pixel: hindcast ensemble median vs CHIRPS (+ validation RPSS)
+    skill_txt = "LOCAL ONSET SKILL: n/a"
+    try:
+        yrs = np.intersect1d(np.asarray(md["model_years"], int), np.asarray(chirps_years, int))
+        med_h = np.array([np.nanmedian(md["onset_doy"][:, int(np.where(md["model_years"] == y)[0][0]), pi, pj]) for y in yrs])
+        obs_h = np.array([c_on_hist[int(np.where(np.asarray(chirps_years, int) == y)[0][0])] for y in yrs])
+        ok = np.isfinite(med_h) & np.isfinite(obs_h)
+        r_sk = float(np.corrcoef(med_h[ok], obs_h[ok])[0, 1])
+        mae_sk = float(np.mean(np.abs(med_h[ok] - obs_h[ok])))
+        rpss_sk = float(md["rpss_val"]["onset"][pi, pj])
+        cat_sk = "USEFUL" if (rpss_sk >= 0.10 and r_sk >= 0.5) else ("LIMITED" if (rpss_sk > 0 or r_sk >= 0.3) else "NONE")
+        skill_txt = (f"LOCAL ONSET SKILL: {cat_sk}  (typical error ±{mae_sk:.0f} d, r={r_sk:.2f}, RPSS {rpss_sk:+.2f})"
+                     f"   |   Onset likely {_doy_to_date_str(_pct(on_v, 25), f_year)} – {_doy_to_date_str(_pct(on_v, 75), f_year)}: use the range, plant on confirmed rain")
+    except Exception:
+        pass
     fig.text(0.04, FTR_H * 0.28,
-             f"CHIRPS CLIM ({cal_label}):  Onset={c_on_clim:.1f} ({_doy_to_date_str(c_on_clim)})   Cessation={c_cs_clim:.1f} ({_doy_to_date_str(c_cs_clim)})   LGP={c_lg_clim:.0f}d   |   DETECTION RATE: Onset=100%   Cessation=100%   LGP=100%",
+             f"CHIRPS CLIM ({cal_label}):  Onset={c_on_clim:.1f} ({_doy_to_date_str(c_on_clim)})   Cessation={c_cs_clim:.1f} ({_doy_to_date_str(c_cs_clim)})   LGP={c_lg_clim:.0f}d   |   {skill_txt}",
              fontsize=8.2, color="#E2E8F0", va="center", transform=fig.transFigure, zorder=11)
 
     if os.path.isfile(logo_path):

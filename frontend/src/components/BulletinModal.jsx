@@ -46,7 +46,7 @@ const BEGA_MODELS = [
   { id: 'ECMWF SEAS5', name: 'ECMWF SEAS5 (System 51)', tag: '25 ens members (Deyr Sep 01)', centre: 'European Centre' },
 ]
 
-export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026, country = 'kenya' }) {
+export default function BulletinModal({ isOpen, onClose, selectedSite, selectedSeason = 'short_rains', selectedYear = 2026, country = 'kenya', shortRainsModelName }) {
   const isBega = selectedSeason === 'bega' || selectedSeason === 'deyr' || selectedSeason === 'ondj'
   const isEthiopia = country === 'ethiopia' || isBega || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg'
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
@@ -155,7 +155,7 @@ export default function BulletinModal({ isOpen, onClose, selectedSite, selectedS
         lon: parsedLon,
         fmt,
         bulletin_type: isSingle ? 'single' : bulletinType,
-        model_name: isSingle ? 'ECMWF SEAS5' : selectedModel,
+        model_name: isShort && shortRainsModelName ? shortRainsModelName : (isSingle ? 'ECMWF SEAS5' : selectedModel),
         season: isBega ? 'bega' : (isFmam ? 'fmam' : (isKiremt ? 'kiremt' : (selectedSeason || (isShort ? 'short_rains' : 'long_rains')))),
         year: Number(selectedYear) || 2026,
       })

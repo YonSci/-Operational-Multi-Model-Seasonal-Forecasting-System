@@ -1,0 +1,31 @@
+/* Theme tokens for the tracker page when it runs inside the platform (the online dashboard supplies its own). */
+:root {
+  --color-bg: #f6f7f5; --color-panel: #ffffff; --color-fg: #1c2420; --color-fg-muted: #5c6862;
+  --color-border-line: #dde2de; --color-ok: #2e7d4f; --color-warn: #9a6a08; --color-bad: #b4472a;
+  --series-1: #2f6db5; --series-2: #c2582b; --series-3: #2e8b6a; --series-4: #8a5cb8;
+  --series-5: #b08a1c; --series-6: #3d9bb5; --series-7: #b54a7a; --series-8: #6b7a3a;
+  --cds-chart-grid: #e7ebe8; --cds-chart-axis: #b9c2bc; --cds-chart-reference: #7d8a83; --cds-chart-muted: #9aa69f;
+  --cds-surface-popover: #ffffff; --cds-border: #d5dbd7; --cds-shadow-popover: 0 4px 16px rgba(20, 30, 25, .12);
+  --cds-text-secondary: #5c6862;
+  --cds-radius: 8px; --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 16px;
+  --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 16px; --cds-gap-xl: 32px;
+  --cds-font-size-caption: 12px; --cds-font-size-body: 14px; --cds-font-size-heading: 17px; --cds-font-size-title: 28px;
+  --cds-font-weight-medium: 600; --cds-dur-slow: 300ms;
+  --font-anthropic-sans: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-anthropic-serif: Georgia, "Times New Roman", serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #121614; --color-panel: #1a201d; --color-fg: #e6ebe8; --color-fg-muted: #9eaaa3;
+    --color-border-line: #2c3430; --color-ok: #6cc293; --color-warn: #e0b34d; --color-bad: #ee7a5a;
+    --series-1: #6fa4e6; --series-2: #f08a5d; --series-3: #5cc49c; --series-4: #b58ce6;
+    --series-5: #e0c060; --series-6: #6cc8e0; --series-7: #e07aa8; --series-8: #a7b86a;
+    --cds-chart-grid: #26302b; --cds-chart-axis: #46524b; --cds-chart-reference: #8a968f; --cds-chart-muted: #6d7972;
+    --cds-surface-popover: #1f2622; --cds-border: #34403a; --cds-text-secondary: #9eaaa3;
+    color-scheme: dark;
+  }
+}
+html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: 14px/1.5 var(--font-anthropic-sans); }
+#dash-root { padding: 20px max(16px, 3vw) 40px; }
+.dash-skeleton:empty { min-height: 1em; background: linear-gradient(90deg, var(--color-border-line), transparent); border-radius: var(--cds-radius); }

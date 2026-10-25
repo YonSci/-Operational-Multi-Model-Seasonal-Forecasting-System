@@ -135,7 +135,8 @@ def _build_geojson(variable: str, layer: str, model: str = "", season: str = "lo
         bega_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Bega)")
         fmam_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (FMAM)")
         kiremt_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Kiremt)")
-        sep_md = dl.get_state().get("MODELS", {}).get("ECMWF SEAS5 (Sep)")
+        _models = dl.get_state().get("MODELS", {})
+        sep_md = _models.get(model) if (model in _models and _models[model].get("season") == "short_rains") else _models.get("ECMWF SEAS5 (Sep)")
         if is_bega and bega_md and "chirps_clim" in bega_md:
             c_clim = bega_md["chirps_clim"]
         elif is_bega and dl.get_state().get("chirps_bega"):
