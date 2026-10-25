@@ -100,11 +100,19 @@ def ecmwf_ifs(date):
     base = f"https://data.ecmwf.int/forecasts/{date:%Y%m%d}/00z/ifs/0p25/oper/{date:%Y%m%d}000000"
     cum, la = [], None
     for step in range(24, 361, 24):
-        idx = get(f"{base}-{step}h-oper-fc.index")
+        try:
+            idx = get(f"{base}-{step}h-oper-fc.index")
+        except RuntimeError:
+            log(f"ecmwf_ifs025: step {step} h unavailable; keeping {len(cum)} day(s)")
+            break
         if idx is None:
             break
         e = [json.loads(l) for l in idx.text.splitlines() if json.loads(l).get("param") == "tp"][0]
-        blob = get(f"{base}-{step}h-oper-fc.grib2", headers={"Range": f"bytes={e['_offset']}-{e['_offset'] + e['_length'] - 1}"}).content
+        try:
+            blob = get(f"{base}-{step}h-oper-fc.grib2", headers={"Range": f"bytes={e['_offset']}-{e['_offset'] + e['_length'] - 1}"}).content
+        except RuntimeError:
+            log(f"ecmwf_ifs025: step {step} h unavailable; keeping {len(cum)} day(s)")
+            break
         m = grib_messages(blob)[0]
         la, lo, v = crop(m["lat"], m["lon"], m["values"])
         cum.append(v * 1000.0)                        # m → mm, accumulated from run start
@@ -118,7 +126,11 @@ def gfs(date):
         url = ("https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?"
                f"dir=%2Fgfs.{date:%Y%m%d}%2F00%2Fatmos&file=gfs.t00z.pgrb2.0p25.f{step:03d}&var_APCP=on&lev_surface=on"
                f"&subregion=&toplat={BOX['n']}&leftlon={BOX['w']}&rightlon={BOX['e']}&bottomlat={BOX['s']}")
-        r = get(url)
+        try:
+            r = get(url)
+        except RuntimeError:
+            log(f"gfs_global: f{step:03d} unavailable; keeping {len(cum)} day(s)")
+            break
         if r is None or len(r.content) < 100:
             break
         msgs = [m for m in grib_messages(r.content) if m["step"].startswith("0-")]   # accumulation since run start
@@ -136,7 +148,11 @@ def gdps(date):
     for step in range(24, 241, 24):
         url = (f"https://dd.weather.gc.ca/{date:%Y%m%d}/WXO-DD/model_gdps/15km/00/{step:03d}/"
                f"{date:%Y%m%d}T00Z_MSC_GDPS_Precip-Accum24h_Sfc_LatLon0.15_PT{step:03d}H.grib2")
-        r = get(url)
+        try:
+            r = get(url)
+        except RuntimeError:
+            log(f"gem_global: PT{step:03d}H unavailable; keeping {len(days)} day(s)")
+            break
         if r is None:
             break
         m = grib_messages(r.content)[0]
@@ -150,24 +166,22 @@ def icon(date):
     CACHE.mkdir(parents=True, exist_ok=True)
     gi = CACHE / "icon_R03B07_kenya_cells.npz"
     if not gi.exists():
-        # One-off: the global grid description is large once decompressed, so it is streamed to the system
-        # temp folder (not the data drive), read for the cell centres, and deleted; only Kenya-box cells are kept.
-        import os
-        import tempfile
-        log("ICON: fetching the R03B07 grid description once (cell centres for the Kenya box)")
-        tmp = Path(tempfile.gettempdir()) / "icon_grid_0026_R03B07_G.nc"
-        try:
-            with requests.get("https://opendata.dwd.de/weather/lib/cdo/icon_grid_0026_R03B07_G.nc.bz2", stream=True, timeout=900) as r:
-                r.raise_for_status()
-                dec = bz2.BZ2Decompressor()
-                with open(tmp, "wb") as w:
-                    for chunk in r.iter_content(1 << 20):
-                        w.write(dec.decompress(chunk))
-            with xr.open_dataset(tmp) as g:
-                clat, clon = np.degrees(g["clat"].values), np.degrees(g["clon"].values)
-        finally:
-            if tmp.exists():
-                os.unlink(tmp)
+        # One-off: cell-centre coordinates come from DWD's small per-run time-invariant CLAT/CLON GRIB files
+        # (the full grid description is ~940 MB); only Kenya-box cells are kept.
+        import eccodes
+        log("ICON: fetching CLAT/CLON once (cell centres for the Kenya box)")
+        coords = {}
+        for var in ("CLAT", "CLON"):
+            r = get(f"https://opendata.dwd.de/weather/nwp/icon/grib/00/{var.lower()}/"
+                    f"icon_global_icosahedral_time-invariant_{date:%Y%m%d}00_{var}.grib2.bz2")
+            if r is None:
+                raise RuntimeError(f"ICON {var} file not found for {date}")
+            h = eccodes.codes_new_from_message(bz2.decompress(r.content))
+            try:
+                coords[var] = eccodes.codes_get_values(h)          # degrees
+            finally:
+                eccodes.codes_release(h)
+        clat, clon = coords["CLAT"], coords["CLON"]
         sel = np.where((clat >= BOX["s"]) & (clat <= BOX["n"]) & (clon >= BOX["w"]) & (clon <= BOX["e"]))[0]
         np.savez(gi, idx=sel, lat=clat[sel], lon=clon[sel])
     g = np.load(gi)
@@ -175,7 +189,11 @@ def icon(date):
     for step in range(24, 181, 24):
         url = (f"https://opendata.dwd.de/weather/nwp/icon/grib/00/tot_prec/"
                f"icon_global_icosahedral_single-level_{date:%Y%m%d}00_{step:03d}_TOT_PREC.grib2.bz2")
-        r = get(url)
+        try:
+            r = get(url)
+        except RuntimeError:
+            log(f"icon_global: step {step} h unavailable; keeping {len(cum)} day(s)")
+            break
         if r is None:
             break
         import eccodes
@@ -227,7 +245,15 @@ def ukmo(date):
         d = (lead - 1) // 24
         if d >= nd:
             break
-        r = get(f"{base}/{k}")
+        try:
+            r = get(f"{base}/{k}")
+        except RuntimeError:
+            nd = d                    # keep only the days completed before the file that could not be fetched
+            log(f"ukmo: lead {lead} h unavailable; keeping {nd} complete day(s)")
+            break
+        if r is None:
+            nd = d
+            break
         with xr.open_dataset(io.BytesIO(r.content), engine="h5netcdf") as ds:
             v = ds["lwe_thickness_of_precipitation_amount"]
             scale = 1000.0 if v.attrs.get("units", "m") == "m" else 1.0
@@ -237,7 +263,9 @@ def ukmo(date):
                 la, lo = la.ravel(), lo.ravel()
                 daily = np.zeros((nd, la.size))
             daily[d] += sub.values.ravel() * scale
-    return [date + dt.timedelta(days=k) for k in range(nd)], la, lo, np.clip(daily, 0, None)
+    if daily is None or nd == 0:
+        raise RuntimeError("UKMO: no complete forecast day could be fetched")
+    return [date + dt.timedelta(days=k) for k in range(nd)], la, lo, np.clip(daily[:nd], 0, None)
 
 
 def ens_median(date):
@@ -275,10 +303,19 @@ def main():
     ap.add_argument("--date", default=dt.date.today().strftime("%Y%m%d"), help="run date YYYYMMDD (00 UTC run)")
     ap.add_argument("--models", nargs="+", default=list(READERS))
     ap.add_argument("--no-fallback", action="store_true")
+    ap.add_argument("--only-missing", action="store_true",
+                    help="fetch only models that do not yet have direct data in the day's file (for retries)")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     date = dt.datetime.strptime(a.date, "%Y%m%d").date()
+    if a.only_missing:
+        f = OUT / f"nwp_{date:%Y%m%d}.csv"
+        have = set(pd.read_csv(f).query("source == 'direct'").model) if f.exists() and "source" in pd.read_csv(f, nrows=1) else set()
+        a.models = [m for m in a.models if m not in have]
+        if not a.models:
+            log("all models already have direct data"); return
+        log(f"retrying: {', '.join(a.models)}")
     points = [("grid", "", la, lo) for la, lo in om.kenya_points()] + [("station", n, la, lo) for n, la, lo in om.stations()]
     rows, failed = [], []
     for m in a.models:
@@ -292,25 +329,37 @@ def main():
         except Exception as exc:
             failed.append(m)
             log(f"{m}: direct download failed ({type(exc).__name__}: {str(exc)[:160]})")
+    out = OUT / f"nwp_{date:%Y%m%d}.csv"
+    write(out, rows)                                   # save direct results before any fallback can fail
     if failed and not a.no_fallback:
         fb = [m for m in failed if m in om.MODELS]
         if fb:
             log(f"Open-Meteo fallback for: {', '.join(fb)}")
             om.MODELS[:] = fb
-            for i in range(0, len(points), om.BATCH):
-                chunk = points[i:i + om.BATCH]
-                res = om.fetch_batch([(p[2], p[3]) for p in chunk])
-                for (kind, site, plat, plon), d in zip(chunk, res):
-                    for m in fb:
-                        for t, v in zip(d["daily"]["time"], d["daily"].get(f"precipitation_sum_{m}") or []):
-                            if v is not None:
-                                rows.append({"model": m, "kind": kind, "site": site, "lat": plat, "lon": plon,
-                                             "date": t, "rain_mm": round(float(v), 1), "source": "open-meteo"})
-                time.sleep(1)
+            fb_rows = []
+            try:
+                for i in range(0, len(points), om.BATCH):
+                    chunk = points[i:i + om.BATCH]
+                    res = om.fetch_batch([(p[2], p[3]) for p in chunk])
+                    for (kind, site, plat, plon), d in zip(chunk, res):
+                        for m in fb:
+                            for t, v in zip(d["daily"]["time"], d["daily"].get(f"precipitation_sum_{m}") or []):
+                                if v is not None:
+                                    fb_rows.append({"model": m, "kind": kind, "site": site, "lat": plat, "lon": plon,
+                                                    "date": t, "rain_mm": round(float(v), 1), "source": "open-meteo"})
+                    time.sleep(1)
+                write(out, fb_rows)
+            except Exception as exc:
+                log(f"Open-Meteo fallback failed ({type(exc).__name__}); keeping earlier values for {', '.join(fb)} if any")
+
+
+def write(out, rows):
+    """Merge rows into the day's file: models in `rows` replace their earlier rows, other models are kept."""
+    if not rows:
+        return
     OUT.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(rows)
-    out = OUT / f"nwp_{date:%Y%m%d}.csv"
-    if out.exists() and len(df):                      # a partial re-run replaces only the models it fetched
+    if out.exists():
         prev = pd.read_csv(out)
         if "source" not in prev:
             prev["source"] = "open-meteo"

@@ -169,10 +169,58 @@ def read_imerg(day, run="L"):
         os.unlink(f.name)
 
 
+# ── Google Earth Engine (IMERG and GSMaP without NASA/JAXA servers) ────────
+# Needs: `pip install earthengine-api`, a one-time `earthengine authenticate`, and a Google Cloud project
+# registered for Earth Engine, given as env var EE_PROJECT or in ~/.config/earthengine/project.txt.
+GEE = {  # product -> (collection, band, hours per image, images per complete UTC day)
+    "imerg_gee": ("NASA/GPM_L3/IMERG_V07", "precipitation", 0.5, 48),
+    "gsmap_gee": ("JAXA/GPM_L3/GSMaP/v8/operational", "hourlyPrecipRateGC", 1.0, 24),
+}
+
+
+def ee_project():
+    p = os.environ.get("EE_PROJECT")
+    f = Path.home() / ".config" / "earthengine" / "project.txt"
+    return p or (f.read_text().strip() if f.exists() else None)
+
+
+def _ee():
+    import ee
+    if not getattr(_ee, "ready", False):
+        proj = ee_project()
+        ee.Initialize(project=proj) if proj else ee.Initialize()
+        _ee.ready = True
+    return ee
+
+
+def read_gee(day, product):
+    """Daily total (mm) from an Earth Engine rate collection, averaged onto the 0.25° grid server-side."""
+    ee = _ee()
+    coll, band, hours, need = GEE[product]
+    start = ee.Date(day.isoformat())
+    col = ee.ImageCollection(coll).filterDate(start, start.advance(1, "day")).select(band)
+    if col.size().getInfo() < need:
+        return None                                   # day not complete yet in Earth Engine
+    img = (col.sum().multiply(hours).rename("p")
+           .setDefaultProjection(col.first().projection())
+           .reduceResolution(ee.Reducer.mean(), maxPixels=1024)
+           .reproject(crs="EPSG:4326", crsTransform=[RES, 0, W, 0, -RES, N]))
+    arr = ee.data.computePixels({
+        "expression": img, "fileFormat": "NUMPY_NDARRAY",
+        "grid": {"dimensions": {"width": len(LON), "height": len(LAT)}, "crsCode": "EPSG:4326",
+                 "affineTransform": {"scaleX": RES, "shearX": 0, "translateX": W, "shearY": 0, "scaleY": -RES, "translateY": N}},
+    })
+    a = np.asarray(arr["p"], dtype=np.float32)[::-1]   # rows north→south → south→north like LAT
+    a[a < 0] = np.nan
+    return a
+
+
 READERS = {"arc2": read_arc2, "tamsat": read_tamsat, "pdirnow": read_pdirnow, "imerg": read_imerg,
-           "imerg_early": lambda d: read_imerg(d, run="E")}
+           "imerg_early": lambda d: read_imerg(d, run="E"),
+           "imerg_gee": lambda d: read_gee(d, "imerg_gee"), "gsmap_gee": lambda d: read_gee(d, "gsmap_gee")}
 LABELS = {"chirps": "CHIRPS (final+prelim)", "arc2": "ARC2 (NOAA CPC)", "tamsat": "TAMSAT v3.1",
-          "pdirnow": "PDIR-Now (UCI CHRS)", "imerg": "IMERG Late (NASA)", "imerg_early": "IMERG Early (NASA)"}
+          "pdirnow": "PDIR-Now (UCI CHRS)", "imerg": "IMERG Late (NASA)", "imerg_early": "IMERG Early (NASA)",
+          "imerg_gee": "IMERG (Earth Engine)", "gsmap_gee": "GSMaP Gauge (Earth Engine)"}
 
 
 # ── storage ─────────────────────────────────────────────────────────────────
@@ -301,7 +349,7 @@ def verify(ref, periods):
     OUT.mkdir(parents=True, exist_ok=True)
     R = load(ref)
     rows = []
-    for prod in ["arc2", "tamsat", "pdirnow", "imerg", "chirps"]:
+    for prod in ["arc2", "tamsat", "pdirnow", "imerg", "imerg_early", "imerg_gee", "gsmap_gee", "chirps"]:
         if prod == ref:
             continue
         F = load(prod)
@@ -343,7 +391,7 @@ def monitor(since, products):
     rec = load_chirps()
     rule = {k: v for k, v in ao.RULE.items() if k != "search_start_doy"}
     res, grids = {"since": str(since.date()), "products": {}}, {}
-    for prod in ["chirps", "arc2", "tamsat", "pdirnow", "imerg"]:
+    for prod in ["chirps", "arc2", "tamsat", "pdirnow", "imerg", "imerg_early", "imerg_gee", "gsmap_gee"]:
         F = load(prod)
         if F is None:
             continue
@@ -384,7 +432,7 @@ def monitor(since, products):
     return res
 
 
-def site_series(lat, lon, start, products=("chirps", "arc2", "tamsat", "pdirnow", "imerg")):
+def site_series(lat, lon, start, products=("chirps", "arc2", "tamsat", "pdirnow", "imerg", "imerg_early", "imerg_gee", "gsmap_gee")):
     """Daily rain at the nearest cell for each available product (DataFrame, columns = products)."""
     cols = {}
     for p in products:

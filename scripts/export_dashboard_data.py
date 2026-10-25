@@ -97,7 +97,7 @@ def main():
     lat, lon = g.lat.values, g.lon.values
     zone_mask = rr.ond_mask()
     cols = {"lat": np.repeat(lat, len(lon)), "lon": np.tile(lon, len(lat)), "in_zone": zone_mask.ravel().astype(int)}
-    for p in ["chirps", "arc2", "tamsat", "pdirnow", "imerg"]:
+    for p in ["chirps", "arc2", "tamsat", "pdirnow", "imerg", "imerg_early", "imerg_gee", "gsmap_gee"]:
         if f"{p}_total" in g:
             cols[f"{p}_total_mm"] = g[f"{p}_total"].values.ravel().round(1)
             cols[f"{p}_pct_normal"] = g[f"{p}_pct"].values.ravel().round(0)
@@ -127,7 +127,7 @@ def main():
     normal_daily = np.stack([rec_cal.isel(time=np.where(md_all == f"{d:%m-%d}")[0]).mean("time").values for d in days])
     normal_cum = np.cumsum(normal_daily, axis=0)
     ii, jj = np.where(keep)
-    for p in ["chirps", "arc2", "tamsat", "pdirnow", "imerg", "imerg_early"]:
+    for p in ["chirps", "arc2", "tamsat", "pdirnow", "imerg", "imerg_early", "imerg_gee", "gsmap_gee"]:
         F = rr.load(p)
         if F is None:
             continue
@@ -169,7 +169,9 @@ def main():
             acc = np.array([r[k:k + 3].sum() for k in range(len(r))])
             trig = np.where((r >= 1.0) & (acc >= 20.0))[0]
             first = g.date.values[trig[0]] if len(trig) else ""
-            ev.append({"model": m, "model_label": labels.get(m, m), "site": site, "short_name": short.get(site, site),
+            src = g["source"].iloc[0] if "source" in g else "open-meteo"
+            ev.append({"model": m, "model_label": labels.get(m, m), "source": "direct" if src == "direct" else "Open-Meteo",
+                       "site": site, "short_name": short.get(site, site),
                        "horizon_days": len(r), "total_7d_mm": round(float(r[:7].sum()), 1), "total_all_mm": round(float(r.sum()), 1),
                        "first_planting_rain": first, "planting_rain_within_7d": int(len(trig) > 0 and trig[0] < 7)})
         pd.DataFrame(ev).to_csv(OUT / "forecast_events.csv", index=False)

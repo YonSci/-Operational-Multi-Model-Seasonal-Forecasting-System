@@ -420,10 +420,43 @@ def _load_model(name, out_dir, chirps, season="long_rains", win_doy_start=32, wi
                 t33_cess=chirps.get("t33_cess"), t67_cess=chirps.get("t67_cess"),
                 t33_lgp=chirps.get("t33_lgp"), t67_lgp=chirps.get("t67_lgp"))
 
+def _attach_packed_short_rains(MODELS, names):
+    """Load extra Short Rains initializations from backend/demo_short_rains_extra.npz
+    (scripts/pack_short_rains_demo.py) for hosts without the NetCDF outputs, e.g. the hosted API."""
+    p = os.path.join(os.path.dirname(__file__), "demo_short_rains_extra.npz")
+    if not names or not os.path.isfile(p):
+        return
+    data = np.load(p, allow_pickle=False)
+    meta = json.loads(str(data["__meta__"]))
+
+    def unpack(v, key):
+        if v == "array":
+            a = data[key]
+            return a.astype(np.float32) if a.dtype.kind == "f" else a
+        if isinstance(v, dict):
+            return {sk: unpack(sv, f"{key}|{sk}") for sk, sv in v.items()}
+        return v
+
+    for name in names:
+        if name not in meta:
+            continue
+        entry = {k: unpack(v, f"{name}|{k}") for k, v in meta[name].items()}
+        for key in ("model_years",):
+            if key in entry:
+                entry[key] = np.asarray(entry[key]).astype(int)
+        if "lm" in entry:
+            entry["lm"] = np.asarray(entry["lm"]).astype(bool)
+        entry["bc_daily"] = {}
+        MODELS[name] = entry
+        print(f"  LOADED {name:<22}: packed demo data ({entry.get('n_members')} mem)")
+
+
 def _attach_extra_short_rains(MODELS):
+    missing = []
     for name, (rel, w0, w1, init_label) in _EXTRA_SHORT_RAINS.items():
         out_dir = os.path.join(_BASE_DIR, rel)
         if not os.path.isfile(os.path.join(out_dir, "chirps_C_clim.nc")):
+            missing.append(name)
             continue
         try:
             c = _load_chirps(out_dir)
@@ -444,6 +477,7 @@ def _attach_extra_short_rains(MODELS):
             entry["bc_daily"] = {int(y): bc[:, i].copy() for i, y in enumerate(entry["model_years"])
                                  if y >= _OP_YEAR - 1}
         MODELS[name] = entry
+    _attach_packed_short_rains(MODELS, missing)
 
 # ── Demo / Cloud fallback loader ──────────────────────────────────────────
 def _load_demo_npz():
