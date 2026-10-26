@@ -131,33 +131,41 @@ def read_pdirnow(day):
     return to_target(lat[i], lon[j], a)
 
 
-_IMERG_LISTING = {}
+_IMERG_SESSION = None
+# IMERG daily grid: 0.1°, lon −179.95…179.95 (3600), lat −89.95…89.95 (1800); index ranges cover 33.5–42.0°E, 5.0°S–5.5°N
+_IMERG_CE = "/precipitation[0:1:0][2135:1:2219][850:1:954];/lat[850:1:954];/lon[2135:1:2219];/time"
 
 
-def _imerg_url(day, run):
-    """Resolve the daily IMERG file (run 'L' = Late, 'E' = Early) from the month listing, whatever its version tag."""
-    import re
-    base = f"https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/GPM_3IMERGD{run}.07/{day:%Y/%m}/"
-    if base not in _IMERG_LISTING:
-        html = _get(base)
-        _IMERG_LISTING[base] = sorted(set(re.findall(r'href="([^"]+\.nc4)"', html.decode() if html else "")))
-    hits = [f for f in _IMERG_LISTING[base] if f".{day:%Y%m%d}-S000000" in f]
-    return base + hits[-1] if hits else None
+def _imerg_opendap_url(day, run):
+    """OPeNDAP link of the daily IMERG granule (run 'L' = Late, 'E' = Early), looked up in NASA CMR."""
+    r = _get("https://cmr.earthdata.nasa.gov/search/granules.json?short_name=GPM_3IMERGD" + run + "&version=07"
+             f"&temporal={day:%Y-%m-%d}T00:00:00Z,{day:%Y-%m-%d}T23:59:59Z&page_size=5")
+    entries = json.loads(r)["feed"]["entry"] if r else []
+    hits = [e for e in entries if f".{day:%Y%m%d}-S000000" in e["title"]]
+    if not hits:
+        return None
+    links = [lk["href"] for lk in hits[-1].get("links", []) if lk["href"].startswith("https://opendap.earthdata.nasa.gov/")]
+    return links[0] if links else None
 
 
 def read_imerg(day, run="L"):
+    """Kenya subset of the daily IMERG file through NASA's cloud OPeNDAP (Hyrax): the server cuts the box, so only
+    ~36 KB per day comes down and the GES DISC / CloudFront file hosts are never contacted. The Earthdata login
+    comes from ~/.netrc on the redirect to urs.earthdata.nasa.gov (requests rebuilds auth per host from .netrc)."""
+    global _IMERG_SESSION
     try:
         auth = netrc.netrc().authenticators("urs.earthdata.nasa.gov")
     except (FileNotFoundError, netrc.NetrcParseError):
         auth = None
     if not auth:
         raise RuntimeError("IMERG needs a NASA Earthdata login: add 'machine urs.earthdata.nasa.gov login <user> password <pw>' to ~/.netrc")
-    url = _imerg_url(day, run)
+    url = _imerg_opendap_url(day, run)
     if url is None:
         return None
-    s = requests.Session()          # Earthdata login comes from ~/.netrc on the redirect to urs.earthdata.nasa.gov
-    b = _get(url, session=s)
-    if b is None:
+    _IMERG_SESSION = _IMERG_SESSION or requests.Session()
+    from urllib.parse import quote
+    b = _get(f"{url}.dap.nc4?dap4.ce={quote(_IMERG_CE, safe='/:;')}", session=_IMERG_SESSION, timeout=180)
+    if b is None or b[1:4] != b"HDF":                # HDF5 signature; anything else is an error page
         return None
     with tempfile.NamedTemporaryFile(suffix=".nc4", delete=False) as f:
         f.write(b)

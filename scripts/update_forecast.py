@@ -143,9 +143,20 @@ def main():
     changed = run_seasonal(obs_end, a.force)
     if changed or not (OUT_DIR / "agro_onset" / "rule.json").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "seasonal", str(OUT_DIR)], check=True, env=env)
+    # Planting-onset presets for the platform's Onset selector (no 7- / 10-day dry spell in the next 21 days),
+    # packed for the backend, then every site's comparison across initializations and onset definitions
+    if changed or not all((OUT_DIR / f"agro_onset_d{k}" / "rule.json").exists() for k in (7, 10)):
+        for k in (7, 10):
+            subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "seasonal", str(OUT_DIR), "--dry-spell", str(k),
+                            "--out-name", f"agro_onset_d{k}"], check=True, env=env)
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_planting_onset.py")], check=True, env=env)
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "track_site_inits.py"), "--all-kenya"], check=False,
+                       env={**env, "LOAD_BC_DAILY": "0"})
 
     if not a.no_ens:
-        subprocess.run([PY, str(BASE_DIR / "scripts" / "fetch_ecmwf_ens.py")], check=True, env=env)
+        # a failed download (slow or unreachable data.ecmwf.int) keeps the previous run instead of stopping the update
+        if subprocess.run([PY, str(BASE_DIR / "scripts" / "fetch_ecmwf_ens.py")], env=env).returncode:
+            log("ENS: download failed, using the latest run already on disk")
         ens = sorted((BASE_DIR / "data" / "ecmwf_ens").glob("ens_tp_*_kenya.nc"))[-1]
         subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "ens", str(ens), str(OUT_DIR)], check=True, env=env)
 

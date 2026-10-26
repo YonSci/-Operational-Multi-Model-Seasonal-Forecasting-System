@@ -98,7 +98,7 @@ def crop(lat, lon, a):
 # ── per-model readers → (dates, lat[n], lon[n], daily[nd, n]) on source points in the Kenya box ──
 def ecmwf_ifs(date):
     base = f"https://data.ecmwf.int/forecasts/{date:%Y%m%d}/00z/ifs/0p25/oper/{date:%Y%m%d}000000"
-    cum, la = [], None
+    cum, la, lo = [], None, None
     for step in range(24, 361, 24):
         try:
             idx = get(f"{base}-{step}h-oper-fc.index")
@@ -121,7 +121,7 @@ def ecmwf_ifs(date):
 
 
 def gfs(date):
-    cum, la = [], None
+    cum, la, lo = [], None, None
     for step in range(24, 385, 24):
         url = ("https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?"
                f"dir=%2Fgfs.{date:%Y%m%d}%2F00%2Fatmos&file=gfs.t00z.pgrb2.0p25.f{step:03d}&var_APCP=on&lev_surface=on"
@@ -144,7 +144,7 @@ def gfs(date):
 
 
 def gdps(date):
-    days, la = [], None
+    days, la, lo = [], None, None
     for step in range(24, 241, 24):
         url = (f"https://dd.weather.gc.ca/{date:%Y%m%d}/WXO-DD/model_gdps/15km/00/{step:03d}/"
                f"{date:%Y%m%d}T00Z_MSC_GDPS_Precip-Accum24h_Sfc_LatLon0.15_PT{step:03d}H.grib2")
@@ -207,7 +207,80 @@ def icon(date):
     return [date + dt.timedelta(days=k) for k in range(len(cum))], g["lat"], g["lon"], np.clip(daily, 0, None)
 
 
+class RangeFile(io.RawIOBase):
+    """Read-only file object over HTTP Range requests, cached in 64 KB blocks, so h5py can read the Kenya
+    chunks of a remote netCDF-4 file (UKMO: 128×128 gzip chunks → ~5 requests, ~0.3 MB instead of 3–5 MB)."""
+
+    def __init__(self, url, block=64 * 1024):
+        self.url, self.block, self.s = url, block, requests.Session()
+        r = self.s.head(url, timeout=(20, 60))
+        self.size = int(r.headers["Content-Length"]) if r.status_code == 200 else None
+        self.pos, self.cache = 0, {}
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.pos
+
+    def seek(self, off, whence=0):
+        self.pos = off if whence == 0 else self.pos + off if whence == 1 else self.size + off
+        return self.pos
+
+    def _blk(self, b):
+        if b not in self.cache:
+            lo = b * self.block
+            r = get(self.url, headers={"Range": f"bytes={lo}-{min(self.size, lo + self.block) - 1}"}, timeout=(20, 60))
+            if r is None:
+                raise RuntimeError(f"gone: {self.url}")
+            self.cache[b] = r.content
+        return self.cache[b]
+
+    def readinto(self, buf):
+        n = min(len(buf), self.size - self.pos)
+        if n <= 0:
+            return 0
+        out, p = bytearray(), self.pos
+        while len(out) < n:
+            b, o = divmod(p, self.block)
+            part = self._blk(b)[o:o + n - len(out)]
+            out += part
+            p += len(part)
+        buf[:n] = out
+        self.pos += n
+        return n
+
+
+# usual forecast range (days) of each model's 00 UTC run
+HORIZON = {"ecmwf_ifs025": 15, "ecmwf_ens_median": 15, "gfs_global": 16, "gem_global": 10, "icon_global": 7,
+           "ukmo_global_deterministic_10km": 7}
+UKMO_BUDGET_S = 900                                    # stop UKMO after this and keep the complete days
+UKMO_WORKERS = 8
+
+
+def _ukmo_subset(url):
+    """Kenya box of one UKMO precipitation-accumulation file → (lat[n], lon[n], mm[n]); runs in a worker process."""
+    import h5py
+    rf = RangeFile(url)                                # only the Kenya chunks are fetched
+    if rf.size is None:
+        raise RuntimeError("missing")
+    with h5py.File(rf, "r") as f:
+        lat, lon = f["latitude"][:], f["longitude"][:]
+        i = np.where((lat >= BOX["s"]) & (lat <= BOX["n"]))[0]
+        j = np.where((lon >= BOX["w"]) & (lon <= BOX["e"]))[0]
+        v = f["lwe_thickness_of_precipitation_amount"]
+        units = v.attrs.get("units", b"m")
+        scale = 1000.0 if (units.decode() if isinstance(units, bytes) else str(units)) == "m" else 1.0
+        vals = v[i[0]:i[-1] + 1, j[0]:j[-1] + 1].astype(np.float64) * scale
+    la, lo = np.meshgrid(lat[i], lon[j], indexing="ij")
+    return la.ravel(), lo.ravel(), vals.ravel()
+
+
 def ukmo(date):
+    t0 = time.time()
     base = "https://met-office-atmospheric-model-data.s3.eu-west-2.amazonaws.com"
     prefix = f"global-deterministic-10km/{date:%Y%m%d}T0000Z/"
     keys, token = [], None
@@ -221,6 +294,7 @@ def ukmo(date):
         if not m:
             break
         token = m.group(1)
+    log(f"ukmo: {len(keys)} precipitation files listed ({time.time() - t0:.0f} s)")
     # one accumulation file per validity time: take the shortest accumulation period offered at each lead
     files = {}
     for k in keys:
@@ -239,32 +313,32 @@ def ukmo(date):
     nd = t // 24
     if nd == 0:
         raise RuntimeError("UKMO: no precipitation accumulation chain found")
-    la = lo = None
-    daily = None
-    for lead, k in chain:
-        d = (lead - 1) // 24
-        if d >= nd:
-            break
+    # files are read in parallel worker processes (h5py serialises reads within one process); a day counts
+    # only when every file in it arrived within the time budget
+    import concurrent.futures as cf
+    chain = [(lead, k) for lead, k in chain if (lead - 1) // 24 < nd]
+    got = {}
+    with cf.ProcessPoolExecutor(max_workers=UKMO_WORKERS) as ex:
+        futs = {ex.submit(_ukmo_subset, f"{base}/{k}"): lead for lead, k in chain}
         try:
-            r = get(f"{base}/{k}")
-        except RuntimeError:
-            nd = d                    # keep only the days completed before the file that could not be fetched
-            log(f"ukmo: lead {lead} h unavailable; keeping {nd} complete day(s)")
-            break
-        if r is None:
-            nd = d
-            break
-        with xr.open_dataset(io.BytesIO(r.content), engine="h5netcdf") as ds:
-            v = ds["lwe_thickness_of_precipitation_amount"]
-            scale = 1000.0 if v.attrs.get("units", "m") == "m" else 1.0
-            sub = v.sel(latitude=slice(BOX["s"], BOX["n"]), longitude=slice(BOX["w"], BOX["e"]))
-            if la is None:
-                la, lo = np.meshgrid(sub.latitude.values, sub.longitude.values, indexing="ij")
-                la, lo = la.ravel(), lo.ravel()
-                daily = np.zeros((nd, la.size))
-            daily[d] += sub.values.ravel() * scale
-    if daily is None or nd == 0:
+            for fu in cf.as_completed(futs, timeout=max(60, UKMO_BUDGET_S - (time.time() - t0))):
+                try:
+                    got[futs[fu]] = fu.result()
+                except Exception as exc:
+                    log(f"ukmo: lead {futs[fu]} h unavailable ({type(exc).__name__})")
+        except cf.TimeoutError:
+            log(f"ukmo: time budget reached with {len(got)} of {len(chain)} files")
+            for fu in futs:
+                fu.cancel()
+    first_gap = min([(lead - 1) // 24 for lead, _ in chain if lead not in got], default=nd)
+    nd = min(nd, first_gap)
+    if nd == 0 or not got:
         raise RuntimeError("UKMO: no complete forecast day could be fetched")
+    la, lo = next(iter(got.values()))[:2]
+    daily = np.zeros((nd, la.size))
+    for lead, (_, _, vals) in got.items():
+        if (lead - 1) // 24 < nd:
+            daily[(lead - 1) // 24] += vals
     return [date + dt.timedelta(days=k) for k in range(nd)], la, lo, np.clip(daily[:nd], 0, None)
 
 
@@ -317,7 +391,7 @@ def main():
             log("all models already have direct data"); return
         log(f"retrying: {', '.join(a.models)}")
     points = [("grid", "", la, lo) for la, lo in om.kenya_points()] + [("station", n, la, lo) for n, la, lo in om.stations()]
-    rows, failed = [], []
+    rows, failed, direct_days = [], [], {}
     for m in a.models:
         t0 = time.time()
         try:
@@ -325,7 +399,10 @@ def main():
             if not len(dates):
                 raise RuntimeError("no forecast days published yet")
             rows += sample(points, dates, la, lo, daily, m, "direct")
+            direct_days[m] = len(dates)
             log(f"{m}: {len(dates)} days direct ({time.time() - t0:.0f} s)")
+            if len(dates) < 0.6 * HORIZON.get(m, 0):        # a cut-short download: Open-Meteo may have the full range
+                failed.append(m)
         except Exception as exc:
             failed.append(m)
             log(f"{m}: direct download failed ({type(exc).__name__}: {str(exc)[:160]})")
@@ -348,7 +425,12 @@ def main():
                                     fb_rows.append({"model": m, "kind": kind, "site": site, "lat": plat, "lon": plon,
                                                     "date": t, "rain_mm": round(float(v), 1), "source": "open-meteo"})
                     time.sleep(1)
-                write(out, fb_rows)
+                # a short direct run is replaced only if Open-Meteo has more days for that model
+                fb_days = {m: len({r["date"] for r in fb_rows if r["model"] == m}) for m in fb}
+                keep = [m for m in fb if fb_days[m] > direct_days.get(m, 0)]
+                if set(fb) - set(keep):
+                    log(f"keeping direct data for {', '.join(sorted(set(fb) - set(keep)))} (Open-Meteo has no more days)")
+                write(out, [r for r in fb_rows if r["model"] in keep])
             except Exception as exc:
                 log(f"Open-Meteo fallback failed ({type(exc).__name__}); keeping earlier values for {', '.join(fb)} if any")
 

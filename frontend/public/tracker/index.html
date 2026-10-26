@@ -8,7 +8,7 @@
 </head>
 <body>
 <script src="vendor/d3.v7.min.js"></script>
-<script>window.TRACKER_DATASETS = {"sites": "data/sites.csv", "seasonal": "data/seasonal.csv", "ens_daily": "data/ens_daily.csv", "rain_daily": "data/rain_daily.csv", "zone": "data/zone.csv", "verification": "data/verification.csv", "grid": "data/grid.csv", "inits": "data/inits.csv", "anim": "data/anim.csv", "boundaries": "data/boundaries.json", "stations": "data/stations.csv", "forecast": "data/forecast.csv", "forecast_sites": "data/forecast_sites.csv", "forecast_events": "data/forecast_events.csv"}; window.TRACKER_PARAMS = {"site": "Kapiti Research Station Farm"};</script>
+<script>window.TRACKER_DATASETS = {"sites": "data/sites.csv", "seasonal": "data/seasonal.csv", "ens_daily": "data/ens_daily.csv", "rain_daily": "data/rain_daily.csv", "zone": "data/zone.csv", "verification": "data/verification.csv", "grid": "data/grid.csv", "inits": "data/inits.csv", "anim": "data/anim.csv", "boundaries": "data/boundaries.json", "stations": "data/stations.csv", "forecast": "data/forecast.csv", "forecast_sites": "data/forecast_sites.csv", "forecast_events": "data/forecast_events.csv", "products": "data/products.csv", "inits_members": "data/inits_members.csv"}; window.TRACKER_PARAMS = {"site": "Kapiti Research Station Farm"};</script>
 <script src="dash-shim.js"></script>
 <div id="dash-root">
 <style>
@@ -49,11 +49,32 @@
 .kt-btn { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); cursor: pointer; }
 .kt-btn:focus-visible, .kt select:focus-visible, #anim-day:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
 #anim-day { flex: 1 1 10rem; min-width: 8rem; }
-.kt-station-panel { margin-top: var(--cds-gap-md); }
+.kt-station-panel { margin-top: var(--cds-gap-md); grid-template-columns: 1fr; }   /* table above its chart so all columns fit */
 .kt-anim-date { margin: 0; font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-heading); font-variant-numeric: tabular-nums; }
 .kt-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
 .kt-methods { columns: 2 22rem; column-gap: var(--cds-gap-xl); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
 .kt-methods p { margin: 0 0 var(--cds-gap-sm); break-inside: avoid; }
+/* Animated maps: three per row (two rows for six products or models); one per row on phones */
+#fc-maps, #anim-maps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 40rem) { #fc-maps, #anim-maps { grid-template-columns: 1fr; } }
+.kt-src { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-gap-md); }
+.kt-src .kt-card { gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.kt-src h3 { color: var(--color-fg); }
+.kt-src a { color: inherit; overflow-wrap: anywhere; }
+.kt-late { color: var(--color-warn); }
+/* Sortable tables */
+.kt th[data-sort] { cursor: pointer; user-select: none; }
+.kt th[data-sort]:hover { color: var(--color-fg); }
+.kt th[data-sort]:focus-visible { outline: 2px solid var(--color-fg); outline-offset: -2px; }
+.kt th[aria-sort=ascending]::after { content: " ▲"; font-size: .7em; }
+.kt th[aria-sort=descending]::after { content: " ▼"; font-size: .7em; }
+/* Colorbar legend */
+.kt-cbar { display: flex; flex-direction: column; gap: 2px; width: 100%; max-width: 20rem; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.kt-cbar svg { display: block; overflow: visible; }
+/* Clickable chart legend: click a series to hide or show it */
+.kt-lg-item { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; display: inline-flex; align-items: center; }
+.kt-lg-item[aria-pressed=false] { opacity: .45; text-decoration: line-through; }
+.kt-lg-item:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
 </style>
 
 <div class="kt">
@@ -110,27 +131,31 @@
       </div>
     </div>
     <div class="kt-card" id="season-card">
-      <h3>Season outlook</h3>
+      <div class="kt-row">
+        <h3>Season outlook</h3>
+        <select id="season-run" aria-label="Forecast run" data-source="inits"></select>
+      </div>
       <p class="kt-note" id="season-cond" data-source="sites">—</p>
-      <div class="kt-chart dash-skeleton" id="season-chart" data-source="seasonal" style="min-height: 11rem"></div>
+      <div class="kt-chart dash-skeleton" id="season-chart" data-source="inits inits_members" style="min-height: 13rem"></div>
       <div class="kt-scroll">
-        <table id="season-table" data-source="seasonal" data-row-key="site,variable">
+        <table id="season-table" data-source="inits" data-row-key="site,init,variable,definition">
           <thead><tr>
-            <th data-field="label">Variable</th>
-            <th data-field="median">Most likely</th>
-            <th data-field="likely_from">Likely from</th>
-            <th data-field="likely_to">Likely to</th>
-            <th class="num" data-field="p_low">Early / short</th>
-            <th class="num" data-field="p_mid">Normal</th>
-            <th class="num" data-field="p_high">Late / long</th>
-            <th data-field="normal">Normal</th>
-            <th data-field="skill">Local skill</th>
-            <th class="num" data-field="mae_days">Typical error (days)</th>
-            <th class="num" data-field="rpss_val">RPSS</th>
+            <th>Variable</th>
+            <th>Most likely</th>
+            <th>Likely (half the members)</th>
+            <th>Wide (8 in 10)</th>
+            <th class="num">Early / short</th>
+            <th class="num">Normal</th>
+            <th class="num">Late / long</th>
+            <th>Long-term average</th>
+            <th class="num">No onset by 31 Dec</th>
+            <th class="num">RPSS</th>
+            <th class="num">Hit rate</th>
           </tr></thead>
           <tbody></tbody>
         </table>
       </div>
+      <p class="kt-note">Planting onset = first day from 1 Oct with at least 20 mm in 3 days and no dry spell (7 or 10 days under 1 mm) in the next 21 days. Members with no planting onset by 31 Dec count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
     </div>
   </section>
 
@@ -150,7 +175,9 @@
         <select id="anim-metric" aria-label="Measure">
           <option value="pct_of_normal">% of normal</option>
           <option value="anomaly_mm">Anomaly (mm)</option>
-          <option value="rain_since_oct1_mm">Rain since 1 Oct (mm)</option>
+          <option value="rain_since_oct1_mm">Total since 1 Oct (mm)</option>
+          <option value="rain_10d_mm">Total, last 10 days (mm)</option>
+          <option value="rain_5d_mm">Total, last 5 days (mm)</option>
           <option value="rain_mm">Daily rain (mm)</option>
         </select>
         <select id="anim-station" aria-label="Station" data-source="stations"></select>
@@ -161,7 +188,7 @@
         <button type="button" id="anim-next" class="kt-btn" aria-label="Next day">Next ▶</button>
         <input type="range" id="anim-day" min="0" max="0" value="0" step="1" aria-label="Day">
       </div>
-      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. A product stops on its last available day.</p>
+      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. 5- and 10-day totals end on the day shown. A product stops on its last available day. Click a table header to sort; hover the chart for values and click its legend to hide a product.</p>
       <div data-source="anim boundaries stations">
         <p class="kt-anim-date" id="anim-date">—</p>
         <div class="kt-maps dash-skeleton" id="anim-maps" style="min-height: 16rem"></div>
@@ -171,8 +198,8 @@
             <h3 id="anim-st-title">Station</h3>
             <table id="anim-st-table">
               <thead><tr>
-                <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Since 1 Oct (mm)</th>
-                <th class="num">Normal (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal</th>
+                <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Last 5 days (mm)</th><th class="num">Last 10 days (mm)</th>
+                <th class="num">Since 1 Oct (mm)</th><th class="num">Normal (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal</th>
               </tr></thead>
               <tbody></tbody>
             </table>
@@ -188,8 +215,11 @@
       <div class="kt-row">
         <h3>Next 10–16 days: model forecasts</h3>
         <select id="fc-metric" aria-label="Measure">
-          <option value="cum_mm">Rain from today (mm)</option>
+          <option value="cum_mm">Rain from today to the day shown (mm)</option>
           <option value="rain_mm">Daily rain (mm)</option>
+          <option value="total_5d_mm">Total, next 5 days (mm)</option>
+          <option value="total_10d_mm">Total, next 10 days (mm)</option>
+          <option value="total_all_mm">Total, whole range (mm)</option>
         </select>
       </div>
       <div class="kt-row" id="fc-models" data-source="forecast_events" aria-label="Models shown"></div>
@@ -199,7 +229,7 @@
         <button type="button" id="fc-next" class="kt-btn" aria-label="Next day">Next ▶</button>
         <input type="range" id="fc-day" min="0" max="0" value="0" step="1" aria-label="Forecast day">
       </div>
-      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7–8. A model stops at the end of its range. Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
+      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7–8. A model stops at the end of its range; its totals cover only the days it has. Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
       <div data-source="forecast boundaries stations">
         <p class="kt-anim-date" id="fc-date">—</p>
         <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
@@ -211,8 +241,8 @@
           <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
           <table id="fc-st-table" data-source="forecast_events forecast_sites">
             <thead><tr>
-              <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 7 days (mm)</th>
-              <th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
+              <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 5 days (mm)</th>
+              <th class="num">Next 10 days (mm)</th><th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -271,11 +301,12 @@
           <th data-field="init">Run</th>
           <th data-field="variable">Variable</th>
           <th data-field="median_date">Most likely</th>
-          <th class="num" data-field="median">Median</th>
+          <th data-field="p25">Likely (half the members)</th>
           <th class="num" data-field="anomaly">vs normal (days)</th>
           <th class="num" data-field="p_bn">Early / short</th>
           <th class="num" data-field="p_nn">Normal</th>
           <th class="num" data-field="p_an">Late / long</th>
+          <th class="num" data-field="no_onset">No onset by 31 Dec</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -289,9 +320,25 @@
       <p><b>Onset definitions.</b> Dunning onset is the turning point of accumulated rainfall anomaly over 1 Sep – 31 Dec. Planting onset is the first day from 1 Oct with at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
       <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Local skill compares past forecasts at the site's cell with CHIRPS: useful, limited or no skill.</p>
       <p><b>Next 15 days.</b> ECMWF IFS ensemble (open data, 50 members), not bias-corrected. The combined planting onset continues each member with a seasonal member to check for dry spells beyond day 15.</p>
-      <p><b>Satellite products.</b> ARC2 (NOAA CPC), TAMSAT v3.1, PDIR-Now (UC Irvine CHRS) and CHIRPS (preliminary after September), averaged onto the same 0.25° grid. IMERG and GSMaP need accounts and are not included yet.</p>
+      <p><b>Satellite products.</b> CHIRPS (preliminary after September), ARC2, TAMSAT v3.1, PDIR-Now and NASA IMERG Late and Early, averaged onto the same 0.25° grid. GSMaP is not included yet (needs an Earth Engine project or a JAXA account). Each product is described under Data sources below.</p>
       <p><b>Seasonal conditioning.</b> Where no product shows an onset, members with an onset before the ensemble start date are dropped and the probabilities recomputed.</p>
     </div>
+  </section>
+
+  <section class="kt-sec" id="sources">
+    <h2>Data sources</h2>
+    <p class="kt-note">Every update checks each provider for anything newer than the copy here and downloads only what is missing. Days behind = days between the latest data and the check (for forecasts: age of the run). Typical delay is what the provider usually needs to publish.</p>
+    <div class="kt-card kt-scroll">
+      <table id="src-table" data-source="products" data-row-key="id">
+        <thead><tr>
+          <th>Product</th><th>Type</th><th>Provider</th><th>Resolution</th><th>Typical delay</th>
+          <th>Latest data</th><th class="num">Days behind</th><th>Forecast to</th><th>Note</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="kt-note" id="src-checked" data-source="products"></p>
+    </div>
+    <div class="kt-src" id="src-cards" data-source="products"></div>
   </section>
 </div>
 
@@ -380,6 +427,130 @@ KT.fillTable = (table, rows, cols) => {
   }));
   return tb;
 };
+// Sortable tables: click a header to sort by that column (again to reverse). The choice is kept when the
+// table is refilled (a MutationObserver re-sorts new rows). Cells sort by data-v when set, otherwise by
+// their text read as a date ("26 Oct", ISO), a number ("12.5 mm", "+3%", "45%") or plain text; blanks last.
+KT.sortVal = (td) => {
+  if (!td) return null;
+  if (td.dataset.v !== undefined) return td.dataset.v === '' ? null : +td.dataset.v;
+  const s = td.textContent.trim();
+  if (!s || s === '—' || s === 'no data' || s === 'none in range') return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return Date.parse(s.slice(0, 10));
+  const dm = s.match(/^\d{1,2} [A-Z][a-z]{2}\b/);
+  if (dm && isFinite(Date.parse(dm[0] + ' 2026'))) return Date.parse(dm[0] + ' 2026');
+  if (/^[+−-]?\d/.test(s)) { const n = parseFloat(s.replace('−', '-').replace(/[,+%]/g, '')); if (isFinite(n)) return n; }
+  return s.toLowerCase();
+};
+KT.sortable = (table) => {
+  const ths = [...table.querySelectorAll('thead th')];
+  const tb = table.querySelector('tbody');
+  if (!tb || !ths.length) return;
+  let obs = null;
+  const apply = () => {
+    const col = table.dataset.sortCol === undefined ? -1 : +table.dataset.sortCol, dir = table.dataset.sortDir === 'desc' ? -1 : 1;
+    ths.forEach((th, i) => th.setAttribute('aria-sort', i === col ? (dir > 0 ? 'ascending' : 'descending') : 'none'));
+    if (col < 0 || tb.rows.length < 2) return;
+    const keyed = [...tb.rows].map((tr, i) => ({ tr, i, v: KT.sortVal(tr.cells[col]) }));
+    const cmp = (a, b) => {
+      if (a.v === null || b.v === null) return (a.v === null) - (b.v === null);
+      if (typeof a.v !== typeof b.v) return typeof a.v === 'number' ? -1 : 1;
+      return a.v < b.v ? -dir : a.v > b.v ? dir : 0;
+    };
+    keyed.sort((a, b) => cmp(a, b) || a.i - b.i);
+    tb.append(...keyed.map((k) => k.tr));
+    if (obs) obs.takeRecords();                        // our own reordering is not a refill
+  };
+  ths.forEach((th, i) => {
+    th.dataset.sort = ''; th.tabIndex = 0; th.title = 'Sort by this column';
+    const go = () => {
+      const same = table.dataset.sortCol === String(i);
+      table.dataset.sortDir = same && table.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+      table.dataset.sortCol = String(i);
+      apply();
+    };
+    th.addEventListener('click', go);
+    th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
+  obs = new MutationObserver(apply);
+  obs.observe(tb, { childList: true });
+  apply();
+};
+// Colorbar legend for a d3 colour scale over dom (2 or 3 stops); ticks at the stops
+KT.colorbar = (color, dom, fmt, title) => {
+  const W = 280, H = 32, pad = 14, lo = dom[0], hi = dom[dom.length - 1];
+  const id = 'kt-cb-' + (KT.cbN = (KT.cbN || 0) + 1);
+  const x = d3.scaleLinear([lo, hi], [pad, W - pad]);
+  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', `${title || 'Scale'}: ${fmt(lo)} to ${fmt(hi)}`);
+  const grad = svg.append('defs').append('linearGradient').attr('id', id);
+  d3.range(0, 1.0001, 0.05).forEach((f) => grad.append('stop').attr('offset', f).attr('stop-color', color(lo + f * (hi - lo))));
+  svg.append('rect').attr('x', pad).attr('y', 2).attr('width', W - 2 * pad).attr('height', 10).attr('rx', 2).attr('fill', `url(#${id})`)
+    .attr('stroke', 'var(--color-border-line)');
+  const tk = d3.range(0, 1.0001, 0.25).map((f) => lo + f * (hi - lo));
+  const ticks = [...new Set([...dom, ...(dom.length === 2 ? tk : [])])];
+  svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', x).attr('x2', x).attr('y1', 12).attr('y2', 16).attr('stroke', 'var(--color-fg-muted)');
+  svg.append('g').selectAll('text').data(ticks).join('text').attr('x', x).attr('y', 27).attr('text-anchor', 'middle').attr('font-size', 10)
+    .attr('fill', 'var(--color-fg-muted)').text((v, i) => fmt(v) + (i === ticks.length - 1 && v === hi ? '+' : ''));
+  const wrap = document.createElement('div'); wrap.className = 'kt-cbar';
+  if (title) wrap.append(Object.assign(document.createElement('span'), { textContent: title }));
+  wrap.append(svg.node());
+  return wrap;
+};
+// Interactive line chart: hover crosshair with the value of every series on that day, clickable legend to
+// hide/show series (remembered per chart box), optional reference lines and a marker for the current day.
+// o = { series: [{ key, label, color, pts: [{ t: Date, v }] }], H, fmt, yMin, yMax, refY: [], refX: [Date], marker: Date, xDomain }
+KT.lineChart = (box, o) => {
+  const hidden = box.ktHidden || (box.ktHidden = new Set());
+  const W = box.clientWidth || 400, H = o.H || 200, mg = { t: 8, r: 12, b: 24, l: 44 };
+  const fmt = o.fmt || ((v) => KT.num(v));
+  const vis = o.series.filter((s) => !hidden.has(s.key) && s.pts.length);
+  const all = vis.flatMap((s) => s.pts.map((p) => p.v));
+  const x = d3.scaleUtc(o.xDomain || d3.extent(o.series.flatMap((s) => s.pts), (p) => p.t), [mg.l, W - mg.r]);
+  const y = d3.scaleLinear([Math.min(o.yMin ?? 0, d3.min(all) ?? 0), Math.max(o.yMax ?? 1, d3.max(all) ?? 1)], [H - mg.b, mg.t]).nice();
+  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 80))).tickFormat(d3.utcFormat('%-d %b')))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+  svg.append('g').attr('transform', `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - mg.l - mg.r)))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+  (o.refY || []).forEach((v) => svg.append('line').attr('x1', mg.l).attr('x2', W - mg.r).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3'));
+  (o.refX || []).forEach((t) => svg.append('line').attr('x1', x(t)).attr('x2', x(t)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3'));
+  vis.forEach((s) => svg.append('path').datum(s.pts).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2)
+    .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((p) => x(p.t)).y((p) => y(p.v))));
+  if (o.marker) svg.append('line').attr('x1', x(o.marker)).attr('x2', x(o.marker)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
+  // hover: snap to the nearest day that has data, show a dot per series and a tooltip with every value
+  const lookup = vis.map((s) => new Map(s.pts.map((p) => [+p.t, p.v])));
+  const times = [...new Set(vis.flatMap((s) => s.pts.map((p) => +p.t)))].sort((a, b) => a - b);
+  const cross = svg.append('g').attr('display', 'none').attr('pointer-events', 'none');
+  const vline = cross.append('line').attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg-muted)').attr('stroke-width', 1);
+  const dots = cross.selectAll('circle').data(vis).join('circle').attr('r', 4).attr('fill', (s) => s.color).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+  const tip = KT.tip(box);
+  const show = (px) => {
+    if (!times.length) return;
+    const t = +x.invert(px), tt = times[d3.minIndex(times, (q) => Math.abs(q - t))], cx = x(tt);
+    cross.attr('display', null); vline.attr('x1', cx).attr('x2', cx);
+    dots.attr('cx', cx).attr('cy', (s, i) => (lookup[i].has(tt) ? y(lookup[i].get(tt)) : -99)).attr('display', (s, i) => (lookup[i].has(tt) ? null : 'none'));
+    const items = vis.map((s, i) => [s, lookup[i].get(tt)]).filter(([, v]) => v !== undefined).sort((a, b) => b[1] - a[1]);
+    tip.hidden = false;
+    tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: d3.utcFormat('%a %-d %b %Y')(new Date(tt)) }),
+      ...items.map(([s, v]) => { const div = document.createElement('div'); div.innerHTML = '<span class="kt-sw"></span>'; div.firstChild.style.background = s.color; div.append(`${s.label}: ${fmt(v)}`); return div; }));
+    const left = (cx / W) * box.clientWidth;
+    tip.style.top = '4px';
+    tip.style.left = left + 'px';
+    tip.style.transform = cx > W * 0.55 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)';
+  };
+  svg.append('rect').attr('x', mg.l).attr('y', mg.t).attr('width', W - mg.l - mg.r).attr('height', H - mg.t - mg.b).attr('fill', 'transparent')
+    .on('pointermove', (ev) => show(d3.pointer(ev)[0]))
+    .on('pointerleave', () => { cross.attr('display', 'none'); tip.hidden = true; });
+  const lg = document.createElement('div'); lg.className = 'kt-legend';
+  lg.append(...o.series.filter((s) => s.pts.length).map((s) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'kt-lg-item';
+    b.setAttribute('aria-pressed', String(!hidden.has(s.key))); b.title = 'Click to hide or show';
+    b.innerHTML = '<span class="kt-sw"></span>'; b.firstChild.style.background = s.color; b.append(s.label);
+    b.addEventListener('click', () => { if (hidden.has(s.key)) hidden.delete(s.key); else hidden.add(s.key); KT.lineChart(box, o); });
+    return b;
+  }));
+  box.replaceChildren(svg.node(), tip, lg);
+};
 
 dash.calc('headline', {
   title: 'Headline figures',
@@ -396,6 +567,8 @@ dash.calc('headline', {
     }];
   },
 });
+
+document.querySelectorAll('.kt table').forEach(KT.sortable);
 
 dash.onData(() => {
   const h = dash.data('headline');
@@ -444,7 +617,11 @@ dash.onData(() => {
   pick.value = KT.site();
   const me = rows.find((r) => r.site === KT.site());
   const cond = document.getElementById('season-cond');
-  cond.textContent = me && me.condition ? 'Given no onset yet: ' + me.condition + '.' : 'All 25 members shown.';
+  // the outlook shows every member; say what observations already rule out
+  cond.textContent = !me ? 'All 25 members shown.'
+    : +me.products_with_onset > 0
+      ? `All 25 members shown. ${me.products_with_onset} of ${me.products} satellite products already show a planting onset here.`
+      : `All 25 members shown. No satellite product shows a planting onset here so far, so members left of “today” have already been ruled out.`;
 });
 </script>
 
@@ -459,40 +636,12 @@ dash.onData(() => {
   box.classList.remove('dash-skeleton');
   const rows = d.data.filter((r) => r.site === KT.site()).map((r) => ({ ...r, t: new Date(r.date), mm: Number(r.mm) }));
   const prods = KT.products.filter((p) => rows.some((r) => r.product === p));
-  const col = (p) => dash.colors[prods.indexOf(p) % dash.colors.length];
-  leg.replaceChildren(...prods.map((p) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = col(p); s.append(KT.prodLabel[p]); return s; }));
-  const W = box.clientWidth || 600, H = 240, m = { t: 8, r: 12, b: 26, l: 34 };
-  const x = d3.scaleUtc(d3.extent(rows, (r) => r.t), [m.l, W - m.r]);
-  const y = d3.scaleLinear([0, Math.max(10, d3.max(rows, (r) => r.mm) || 0)], [H - m.b, m.t]).nice();
-  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 90))).tickFormat(d3.utcFormat('%-d %b')))
-    .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'))
-    .call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
-  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - m.l - m.r)))
-    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
-    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
-  const oct1 = new Date('2026-10-01');
-  svg.append('line').attr('x1', x(oct1)).attr('x2', x(oct1)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
-  prods.forEach((p) => {
-    const s = rows.filter((r) => r.product === p).sort((a, b) => a.t - b.t);
-    svg.append('path').datum(s).attr('fill', 'none').attr('stroke', col(p)).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
-      .attr('d', d3.line().x((r) => x(r.t)).y((r) => y(r.mm)));
+  leg.replaceChildren();                                   // the chart draws its own clickable legend
+  KT.lineChart(box, {
+    H: 240, yMax: 10, fmt: (v) => KT.num(v) + ' mm', refX: [new Date('2026-10-01')],
+    series: prods.map((p, i) => ({ key: p, label: KT.prodLabel[p], color: dash.colors[i % dash.colors.length],
+      pts: rows.filter((r) => r.product === p && isFinite(r.mm)).sort((q, w) => q.t - w.t).map((r) => ({ t: r.t, v: r.mm })) })),
   });
-  const dates = [...new Set(rows.map((r) => r.date))].sort();
-  const tip = KT.tip(box);
-  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
-    .on('mousemove', (ev) => {
-      const [px] = d3.pointer(ev); const t = x.invert(px);
-      const day = dates[d3.minIndex(dates, (s) => Math.abs(new Date(s) - t))];
-      const at = rows.filter((r) => r.date === day);
-      tip.hidden = false;
-      tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: d3.utcFormat('%-d %b %Y')(new Date(day)) }),
-        ...prods.map((p) => { const r = at.find((a) => a.product === p); const div = document.createElement('div');
-          div.innerHTML = '<span class="kt-sw"></span>'; div.firstChild.style.background = col(p); div.append(`${KT.prodLabel[p]} ${r ? KT.num(r.mm) + ' mm' : '—'}`); return div; }));
-      const bx = Math.min(px + 12, W - 150); tip.style.left = (bx / W * box.clientWidth) + 'px'; tip.style.top = '8px';
-    })
-    .on('mouseleave', () => { tip.hidden = true; });
-  box.replaceChildren(svg.node(), tip);
 });
 </script>
 
@@ -538,47 +687,147 @@ dash.onData(() => {
 </script>
 
 <script>
-// Season outlook ranges + table at the picked site
-dash.onData(() => {
+// Season outlook for the picked site and run: one row per onset definition (Dunning, planting 7-day, planting
+// 10-day) plus cessation. Hover a row for its numbers (a cursor shows the date under the pointer); the legend
+// switches layers on and off; the table below follows the same run.
+(() => {
   const box = document.getElementById('season-chart');
   const table = document.getElementById('season-table');
-  const d = dash.data('seasonal');
-  if (KT.fail(box, d)) return;
-  if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); table.querySelector('tbody').replaceChildren(); return; }
-  box.classList.remove('dash-skeleton');
-  const rows = d.data.filter((r) => r.site === KT.site());
-  const dates = rows.filter((r) => r.variable !== 'lgp').map((r) => ({ ...r, ...Object.fromEntries(['p10', 'p25', 'p50', 'p75', 'p90', 'normal', 't33', 't67'].map((k) => [k, Number(r[k + '_value'])])) }));
-  const W = box.clientWidth || 600, rowH = 46, m = { t: 6, r: 14, b: 26, l: Math.min(190, W * 0.34) };
-  const H = m.t + m.b + rowH * dates.length;
-  const x = d3.scaleLinear([274, 366], [m.l, W - m.r]);
-  const y = d3.scaleBand(dates.map((r) => r.variable), [m.t, H - m.b]).padding(0.3);
-  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-  const ticks = [274, 288, 305, 319, 335, 349, 365];
-  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(W < 480 ? [274, 305, 335, 365] : ticks).tickFormat(KT.doyDate).tickSize(-(H - m.t - m.b)))
-    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
-    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
-  const today = d3.utcDay.count(d3.utcYear(new Date()), new Date()) + 1;
-  if (today >= 274 && today <= 366) svg.append('line').attr('x1', x(today)).attr('x2', x(today)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
-  const g = svg.append('g').selectAll('g').data(dates).join('g').attr('transform', (r) => `translate(0,${y(r.variable)})`);
-  const bh = y.bandwidth();
-  g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').attr('font-size', 12).text((r) => r.label);
-  g.append('rect').attr('x', (r) => x(r.t33)).attr('width', (r) => Math.max(0, x(r.t67) - x(r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
-  g.append('line').attr('x1', (r) => x(r.p10)).attr('x2', (r) => x(r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', dash.colors[0]).attr('stroke-width', 2).attr('stroke-linecap', 'round');
-  g.append('rect').attr('x', (r) => x(r.p25)).attr('width', (r) => Math.max(3, x(r.p75) - x(r.p25))).attr('y', bh * 0.2).attr('height', bh * 0.6).attr('rx', 4).attr('fill', dash.colors[0]);
-  g.append('circle').attr('cx', (r) => x(r.p50)).attr('cy', bh / 2).attr('r', 5).attr('fill', 'var(--color-panel)').attr('stroke', dash.colors[0]).attr('stroke-width', 2);
-  g.append('line').attr('x1', (r) => x(r.normal)).attr('x2', (r) => x(r.normal)).attr('y1', -2).attr('y2', bh + 2).attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
-  box.style.minHeight = H + 'px';
-  box.replaceChildren(svg.node());
-  const cap = document.createElement('p'); cap.className = 'kt-note';
-  cap.textContent = 'Thick bar: likely range (half the members). Thin line: wide range (8 in 10). Circle: most likely. Black tick: long-term average. Grey band: normal third. Dashed: today.';
-  box.appendChild(cap);
-  KT.fillTable(table, rows, [
-    ['label'], ['median'], ['likely_from'], ['likely_to'],
-    ['p_low', (v) => KT.pct(+v), 'num'], ['p_mid', (v) => KT.pct(+v), 'num'], ['p_high', (v) => KT.pct(+v), 'num'],
-    ['normal'], ['skill', (v) => v + ' skill', (v) => 'kt-pill-cell ' + v], ['mae_days', (v) => KT.int(+v), 'num'], ['rpss_val', (v) => d3.format('+.2f')(+v), 'num'],
-  ]);
-  [...table.querySelectorAll('tbody tr')].forEach((tr, i) => { tr.dataset.key = `${encodeURIComponent(rows[i].site)},${encodeURIComponent(rows[i].variable)}`; });
-});
+  const runSel = document.getElementById('season-run');
+  const RUNS = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
+  const LAYERS = [['members', 'Members'], ['wide', 'Wide range (8 in 10)'], ['likely', 'Likely range (half)'],
+                  ['normal', 'Normal third'], ['avg', 'Long-term average'], ['today', 'Today']];
+  const END = 366;                                           // right edge: after 31 Dec (no onset)
+  const off = new Set();
+  let run = null;
+  const num = (v) => (v === '' || v == null || !isFinite(+v) ? NaN : +v);
+  const isPlant = (r) => r.variable === 'onset' && r.definition && r.definition !== 'Dunning';
+  const rowLabel = (r) => (r.variable === 'onset'
+    ? (isPlant(r) ? `Planting onset (no ${r.definition.includes('7-day') ? 7 : 10}-day dry spell)` : 'Onset (Dunning)')
+    : r.variable === 'cessation' ? 'Cessation' : 'Season length');
+  const order = (r) => (r.variable === 'onset' ? (!isPlant(r) ? 0 : r.definition.includes('7-day') ? 1 : 2) : r.variable === 'cessation' ? 3 : 4);
+  const fd = (v) => (isFinite(v) ? (v >= END ? 'after 31 Dec' : KT.doyDate(v)) : 'after 31 Dec');
+  runSel.addEventListener('change', () => { run = runSel.value; draw(); });
+
+  const draw = () => {
+    const d = dash.data('inits');
+    if (KT.fail(box, d)) return;
+    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); table.querySelector('tbody').replaceChildren(); return; }
+    box.classList.remove('dash-skeleton');
+    const all = d.data.filter((r) => r.site === KT.site());
+    const runs = RUNS.filter((k) => all.some((r) => r.init === k));
+    if (!runs.length) { box.replaceChildren(); return; }
+    if (!run || !runs.includes(run)) run = runs[runs.length - 1];
+    runSel.replaceChildren(...runs.map((k) => new Option(k === 'Oct 01 + latest obs' ? `Run: ${k} (newest)` : `Run: ${k}`, k)));
+    runSel.value = run;
+    const rows = all.filter((r) => r.init === run).sort((a, b) => order(a) - order(b));
+    const dates = rows.filter((r) => r.variable !== 'lgp').map((r) => ({ ...r, key: `${r.variable}|${r.definition || ''}`, label: rowLabel(r),
+      ...Object.fromEntries(['p10', 'p25', 'median', 'p75', 'p90', 'chirps_clim', 't33', 't67'].map((k) => [k, num(r[k])])) }));
+    const mem = dash.data('inits_members');
+    const memOf = (r) => (mem.status === 'ok' ? mem.data.filter((q) => q.site === r.site && q.init === r.init && q.variable === r.variable
+      && (q.definition || '') === (r.definition || '')).map((q) => +q.value) : []);
+
+    const lo = d3.min(dates, (r) => d3.min([r.p10, r.t33, r.chirps_clim].filter(isFinite))) ?? 274;
+    const x0 = lo < 274 ? 244 : 274;
+    const W = box.clientWidth || 600, rowH = 50, m = { t: 22, r: 18, b: 28, l: Math.min(240, W * 0.36) };
+    const H = m.t + m.b + rowH * dates.length;
+    const x = d3.scaleLinear([x0, END], [m.l, W - m.r]).clamp(true);
+    const xv = (v) => x(isFinite(v) ? v : END);
+    const y = d3.scaleBand(dates.map((r) => r.key), [m.t, H - m.b]).padding(0.28);
+    const bh = y.bandwidth();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+    const ticks = (W < 520 ? [244, 274, 305, 335, END] : [244, 259, 274, 288, 305, 319, 335, 349, END]).filter((t) => t >= x0);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`)
+      .call(d3.axisBottom(x).tickValues(ticks).tickFormat((t) => (t === END ? '31 Dec+' : KT.doyDate(t))).tickSize(-(H - m.t - m.b)))
+      .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+      .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+    const today = d3.utcDay.count(d3.utcYear(new Date()), new Date()) + 1;
+    if (!off.has('today') && today >= x0 && today <= END) {
+      svg.append('line').attr('x1', x(today)).attr('x2', x(today)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+      svg.append('text').attr('x', x(today)).attr('y', m.t - 8).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--color-fg-muted)').text('today');
+    }
+    const g = svg.append('g').selectAll('g').data(dates).join('g').attr('transform', (r) => `translate(0,${y(r.key)})`);
+    const bg = g.append('rect').attr('x', 0).attr('y', -bh * 0.15).attr('width', W).attr('height', bh * 1.3).attr('rx', 4).attr('fill', 'var(--color-fg)').attr('opacity', 0);
+    g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').attr('font-size', 12).text((r) => r.label);
+    const c0 = dash.colors[0], c1 = dash.colors[1];
+    const col = (r) => (isPlant(r) ? c1 : c0);
+    if (!off.has('normal')) g.append('rect').attr('x', (r) => xv(r.t33)).attr('width', (r) => Math.max(0, xv(r.t67) - xv(r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
+    if (!off.has('wide')) g.append('line').attr('x1', (r) => xv(r.p10)).attr('x2', (r) => xv(r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', col).attr('stroke-width', 2).attr('stroke-linecap', 'round');
+    if (!off.has('likely')) g.append('rect').attr('x', (r) => xv(r.p25)).attr('width', (r) => Math.max(3, xv(r.p75) - xv(r.p25))).attr('y', bh * 0.22).attr('height', bh * 0.56).attr('rx', 4).attr('fill', col).attr('opacity', 0.85);
+    if (!off.has('members')) {
+      g.each(function (r) {
+        const vals = memOf(r), rng = d3.randomLcg(r.key.length * 97 + 7);
+        const gg = d3.select(this);
+        gg.selectAll('circle.m').data(vals).join('circle').attr('class', 'm').attr('cx', (v) => x(v)).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
+          .attr('fill', 'var(--color-fg)').attr('opacity', 0.55);
+        const n = +r.no_onset || 0;          // members with no onset by 31 Dec, drawn hollow at the right edge
+        gg.selectAll('circle.n').data(d3.range(n)).join('circle').attr('class', 'n').attr('cx', x(END) - 4).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
+          .attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('opacity', 0.7);
+      });
+    }
+    g.append('circle').attr('cx', (r) => xv(r.median)).attr('cy', bh / 2).attr('r', 5.5).attr('fill', 'var(--color-panel)').attr('stroke', col).attr('stroke-width', 2.5);
+    if (!off.has('avg')) g.append('line').attr('x1', (r) => xv(r.chirps_clim)).attr('x2', (r) => xv(r.chirps_clim)).attr('y1', -2).attr('y2', bh + 2).attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+
+    // hover: row highlight, date cursor and a tooltip with the row's numbers
+    const cursor = svg.append('g').attr('display', 'none').attr('pointer-events', 'none');
+    const cl = cursor.append('line').attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--color-fg-muted)');
+    const ct = cursor.append('text').attr('y', m.t - 8).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--color-fg)');
+    const tip = KT.tip(box);
+    const pct = (v) => (isFinite(num(v)) ? KT.pct(num(v)) : '—');
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px, py] = d3.pointer(ev);
+        const i = Math.max(0, Math.min(dates.length - 1, Math.floor((py - m.t) / ((H - m.t - m.b) / dates.length))));
+        const r = dates[i];
+        bg.attr('opacity', (q) => (q === r ? 0.06 : 0));
+        const dv = Math.round(x.invert(px));
+        cursor.attr('display', null); cl.attr('x1', px).attr('x2', px); ct.attr('x', px).text(dv >= END ? 'after 31 Dec' : KT.doyDate(dv));
+        const lines = [
+          ['Most likely', fd(r.median)], ['Likely (half the members)', `${fd(r.p25)} – ${fd(r.p75)}`], ['Wide (8 in 10)', `${fd(r.p10)} – ${fd(r.p90)}`],
+          ['Long-term average', fd(r.chirps_clim)], ['Normal third', `${fd(r.t33)} – ${fd(r.t67)}`],
+          [r.variable === 'onset' ? 'Early / normal / late' : 'Early / normal / late end', `${pct(r.p_bn)} / ${pct(r.p_nn)} / ${pct(r.p_an)}`],
+        ];
+        if (r.variable === 'onset' && +r.no_onset) lines.push(['No onset by 31 Dec', `${r.no_onset} of ${r.n_members} members`]);
+        if (isFinite(num(r.rpss_val))) lines.push(['Past skill here', `RPSS ${d3.format('+.2f')(num(r.rpss_val))}, hit rate ${pct(r.hitrate_val)}`]);
+        else lines.push(['Past skill here', 'not available for this run']);
+        tip.hidden = false;
+        tip.replaceChildren(Object.assign(document.createElement('div'), { textContent: `${r.label} · ${r.init}` }),
+          ...lines.map(([k, v]) => { const div = document.createElement('div'); div.append(Object.assign(document.createElement('span'), { className: 'd', textContent: k + ': ' }), v); return div; }));
+        tip.style.top = ((y(r.key) + bh + 4) / H * box.clientHeight) + 'px';
+        tip.style.left = (px / W * box.clientWidth) + 'px';
+        tip.style.transform = px > W * 0.55 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)';
+      })
+      .on('pointerleave', () => { cursor.attr('display', 'none'); bg.attr('opacity', 0); tip.hidden = true; });
+
+    const lg = document.createElement('div'); lg.className = 'kt-legend';
+    lg.append(...LAYERS.map(([k, name]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'kt-lg-item';
+      b.setAttribute('aria-pressed', String(!off.has(k))); b.title = 'Click to hide or show'; b.textContent = name;
+      b.addEventListener('click', () => { if (off.has(k)) off.delete(k); else off.add(k); draw(); });
+      return b;
+    }), ...[[c0, 'Dunning onset, cessation'], [c1, 'Planting rule']].map(([c, t]) => {
+      const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = c; sp.append(t); return sp;
+    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: no onset by 31 Dec' }));
+    box.style.minHeight = H + 'px';
+    box.replaceChildren(svg.node(), tip, lg);
+
+    // table: every variable of the chosen run, including season length (days)
+    const isL = (r) => r.variable === 'lgp';
+    const dv = (r, k) => (isL(r) ? (isFinite(num(r[k])) ? KT.int(num(r[k])) + ' d' : '—') : fd(num(r[k])));
+    KT.fillTable(table, rows, [
+      ['variable', (v, r) => rowLabel(r)],
+      ['median', (v, r) => dv(r, 'median')],
+      ['p25', (v, r) => `${dv(r, 'p25')} – ${dv(r, 'p75')}`],
+      ['p10', (v, r) => `${dv(r, 'p10')} – ${dv(r, 'p90')}`],
+      ['p_bn', (v) => KT.pct(+v), 'num'], ['p_nn', (v) => KT.pct(+v), 'num'], ['p_an', (v) => KT.pct(+v), 'num'],
+      ['chirps_clim', (v, r) => dv(r, 'chirps_clim')],
+      ['no_onset', (v, r) => (r.variable === 'onset' ? `${v} of ${r.n_members}` : ''), 'num'],
+      ['rpss_val', (v) => d3.format('+.2f')(+v), 'num'], ['hitrate_val', (v) => d3.format('.2f')(+v), 'num'],
+    ]);
+    [...table.querySelectorAll('tbody tr')].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable, rows[i].definition || ''].map(encodeURIComponent).join(','); });
+  };
+  dash.onData(draw);
+})();
 </script>
 
 <script>
@@ -604,9 +853,7 @@ dash.onData(() => {
       .attr('x', (r) => x(r.lon - 0.125)).attr('y', (r) => y(r.lat + 0.125)).attr('width', cw + 0.5).attr('height', ch + 0.5)
       .attr('fill', (r) => color(r.v)).attr('opacity', (r) => (r.z ? 1 : 0.3));
     KT.overlay(svg, x, y, W);
-    const lg = document.createElement('div'); lg.className = 'kt-legend';
-    lg.append(...dom.map((v) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = color(v); s.append(fmt(v)); return s; }));
-    box.replaceChildren(svg.node(), lg);
+    box.replaceChildren(svg.node(), KT.colorbar(color, dom, fmt));
   });
 });
 </script>
@@ -635,13 +882,47 @@ dash.onData(() => {
   const n = dash.data('inits');
   const nt = document.getElementById('init-table');
   if (n.status === 'ok') {
-    const label = { onset: 'Onset (Dunning)', cessation: 'Cessation', lgp: 'Season length' };
-    const rows = n.data.filter((r) => r.site === KT.site());
+    const plant = (r) => r.variable === 'onset' && r.definition && r.definition !== 'Dunning';
+    const label = (r) => (r.variable === 'onset' ? (plant(r) ? `Planting onset (no ${r.definition.includes('7-day') ? 7 : 10}-day dry spell)` : 'Onset (Dunning)')
+      : r.variable === 'cessation' ? 'Cessation' : 'Season length');
+    const rank = (r) => (r.variable === 'onset' ? (plant(r) ? (r.definition.includes('7-day') ? 1 : 2) : 0) : r.variable === 'cessation' ? 3 : 4);
+    const runs = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
+    const rows = n.data.filter((r) => r.site === KT.site()).sort((a, b) => runs.indexOf(a.init) - runs.indexOf(b.init) || rank(a) - rank(b));
     document.getElementById('init-title').textContent = `Forecast by initialization: ${KT.site()}`;
-    const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x) => label[x] || x], ['median_date', (x, r) => x || `${KT.int(+r.median)} d`], ['median', (x) => KT.int(+x), 'num'],
-      ['anomaly', (x) => d3.format('+.0f')(+x), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num']]);
-    [...tb.children].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable].map(encodeURIComponent).join(','); });
+    const dd = (v, r) => (v === '' || v == null || !isFinite(+v) ? (r.variable === 'lgp' ? '—' : 'after 31 Dec') : r.variable === 'lgp' ? `${KT.int(+v)} d` : KT.doyDate(+v));
+    const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x, r) => label(r)], ['median_date', (x, r) => x || `${KT.int(+r.median)} d`],
+      ['init', (x, r) => (r.p25 === undefined ? '—' : `${dd(r.p25, r)} – ${dd(r.p75, r)}`)],
+      ['anomaly', (x) => d3.format('+.0f')(+x), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num'],
+      ['no_onset', (x, r) => (r.variable === 'onset' ? `${x} of ${r.n_members}` : ''), 'num']]);
+    [...tb.children].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable, rows[i].definition || ''].map(encodeURIComponent).join(','); });
   } else nt.querySelector('tbody').replaceChildren();
+
+  // Data sources: latency table + one description card per product
+  const pr = dash.data('products');
+  const st = document.getElementById('src-table');
+  const cards = document.getElementById('src-cards');
+  if (pr.status === 'ok') {
+    const kind = { obs: 'Observed (satellite)', nwp: 'Forecast, 1–16 days', seasonal: 'Seasonal forecast' };
+    const day = (v) => (v ? d3.utcFormat('%-d %b')(new Date(v)) : '');
+    const tb = KT.fillTable(st, pr.data, [
+      ['name'], ['kind', (v) => kind[v] || v], ['provider'], ['resolution'], ['typical_latency'],
+      ['latest_data', (v, r) => (r.kind === 'obs' ? day(v) : r.kind === 'nwp' ? `${day(r.run_date)} 00 UTC run` : `${day(r.run_date)} start`)],
+      ['days_behind', (v) => KT.int(+v), (v, r) => 'num' + (r.kind !== 'seasonal' && +v > (r.kind === 'obs' ? 3 : 1) ? ' kt-late' : '')],
+      ['forecast_to', day], ['note'],
+    ]);
+    [...tb.children].forEach((tr, i) => { tr.dataset.key = pr.data[i].id; tr.cells[0].replaceChildren(Object.assign(document.createElement('b'), { textContent: pr.data[i].name })); });
+    const chk = pr.data[0] && pr.data[0].checked;
+    document.getElementById('src-checked').textContent = chk ? `Last checked ${chk} (local time).` : '';
+    cards.replaceChildren(...pr.data.map((r) => {
+      const c = document.createElement('div'); c.className = 'kt-card';
+      const h = document.createElement('h3'); h.textContent = r.name;
+      const who = Object.assign(document.createElement('div'), { textContent: `${r.provider} · ${r.resolution} · typical delay ${r.typical_latency}` });
+      const about = Object.assign(document.createElement('p'), { textContent: r.about }); about.style.margin = '0';
+      const a = Object.assign(document.createElement('a'), { href: r.link, textContent: r.link.replace(/^https?:\/\//, '').replace(/\/$/, ''), target: '_blank', rel: 'noopener' });
+      c.append(h, who, about, a);
+      return c;
+    }));
+  } else { st.querySelector('tbody').replaceChildren(); cards.replaceChildren(); }
 });
 </script>
 
@@ -658,6 +939,8 @@ dash.onData(() => {
     pct_of_normal: { dom: [0, 100, 200], toks: ['--color-bad', '--color-panel', '--color-ok'], fmt: (v) => KT.int(v) + '%' },
     anomaly_mm: { dom: [-80, 0, 80], toks: ['--color-bad', '--color-panel', '--color-ok'], fmt: (v) => d3.format('+.0f')(v) + ' mm' },
     rain_since_oct1_mm: { dom: [0, 50, 150], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
+    rain_10d_mm: { dom: [0, 25, 80], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
+    rain_5d_mm: { dom: [0, 15, 50], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
     rain_mm: { dom: [0, 10, 30], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
   };
   let cache = null, cacheSrc = null, idx = null, timer = null;
@@ -700,8 +983,8 @@ dash.onData(() => {
     const rows = cache.prods.map((p) => ({ p, r: cache.byCell.get(cellKey(p, day, clat, clon)) }));
     stTable.querySelector('tbody').replaceChildren(...rows.map(({ p, r }) => {
       const tr = document.createElement('tr');
-      const cells = [KT.prodLabel[p], ...(r ? [f1(r.rain_mm), f1(r.rain_since_oct1_mm), f1(r.normal_since_oct1_mm),
-        r.anomaly_mm === '' ? '—' : d3.format('+.1f')(+r.anomaly_mm), r.pct_of_normal === '' ? '—' : KT.int(+r.pct_of_normal) + '%'] : ['no data', '', '', '', ''])];
+      const cells = [KT.prodLabel[p], ...(r ? [f1(r.rain_mm), f1(r.rain_5d_mm), f1(r.rain_10d_mm), f1(r.rain_since_oct1_mm), f1(r.normal_since_oct1_mm),
+        r.anomaly_mm === '' ? '—' : d3.format('+.1f')(+r.anomaly_mm), r.pct_of_normal === '' ? '—' : KT.int(+r.pct_of_normal) + '%'] : ['no data', '', '', '', '', '', ''])];
       cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c; if (i) td.className = 'num'; tr.appendChild(td); });
       return tr;
     }));
@@ -709,30 +992,11 @@ dash.onData(() => {
     stChartTitle.textContent = `${s.short_name}: ${metricSel.options[metricSel.selectedIndex].text} since 1 Oct`;
     const series = cache.prods.map((p) => ({ p, pts: cache.dates.map((dd) => ({ t: new Date(dd), r: cache.byCell.get(cellKey(p, dd, clat, clon)) }))
       .filter((q) => q.r && q.r[m] !== '' && isFinite(+q.r[m])).map((q) => ({ t: q.t, v: +q.r[m] })) }));
-    const all = series.flatMap((q) => q.pts.map((pt) => pt.v));
-    const W = stChart.clientWidth || 400, H = 190, mg = { t: 8, r: 12, b: 24, l: 44 };
-    const x = d3.scaleUtc(d3.extent(cache.dates, (dd) => new Date(dd)), [mg.l, W - mg.r]);
-    const lo = Math.min(0, d3.min(all) ?? 0), hi = Math.max(m === 'pct_of_normal' ? 100 : 1, d3.max(all) ?? 1);
-    const y = d3.scaleLinear([lo, hi], [H - mg.b, mg.t]).nice();
-    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-    svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 80))).tickFormat(d3.utcFormat('%-d %b')))
-      .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
-    svg.append('g').attr('transform', `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - mg.l - mg.r)))
-      .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
-      .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
-    if (m === 'pct_of_normal' || m === 'anomaly_mm') {
-      const ref = m === 'pct_of_normal' ? 100 : 0;
-      svg.append('line').attr('x1', mg.l).attr('x2', W - mg.r).attr('y1', y(ref)).attr('y2', y(ref)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
-    }
-    series.forEach(({ p, pts }, i) => {
-      svg.append('path').datum(pts).attr('fill', 'none').attr('stroke', dash.colors[i % dash.colors.length]).attr('stroke-width', 2)
-        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((q) => x(q.t)).y((q) => y(q.v)));
+    KT.lineChart(stChart, {
+      H: 190, xDomain: d3.extent(cache.dates, (dd) => new Date(dd)), marker: new Date(day), fmt: S.fmt,
+      yMax: m === 'pct_of_normal' ? 100 : 1, refY: m === 'pct_of_normal' ? [100] : m === 'anomaly_mm' ? [0] : [],
+      series: series.map(({ p, pts }, i) => ({ key: p, label: KT.prodLabel[p], color: dash.colors[i % dash.colors.length], pts })),
     });
-    const now = new Date(day);
-    svg.append('line').attr('x1', x(now)).attr('x2', x(now)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
-    const lg = document.createElement('div'); lg.className = 'kt-legend';
-    lg.append(...series.map(({ p }, i) => { const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[i % dash.colors.length]; sp.append(KT.prodLabel[p]); return sp; }));
-    stChart.replaceChildren(svg.node(), lg);
   };
 
   const draw = () => {
@@ -771,7 +1035,7 @@ dash.onData(() => {
       mapBox.replaceChildren(svg.node());
       if (!cells.length) mapBox.appendChild(Object.assign(document.createElement('div'), { className: 'kt-map-empty', textContent: 'No data for this day yet' }));
     });
-    legend.replaceChildren(...S.dom.map((v) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = color(v); s.append(S.fmt(v)); return s; }));
+    legend.replaceChildren(KT.colorbar(color, S.dom, S.fmt, metricSel.options[metricSel.selectedIndex].text));
     drawStation(m, S, day);
   };
 
@@ -811,7 +1075,9 @@ dash.onData(() => {
   const consensus = document.getElementById('fc-consensus');
   const stTable = document.getElementById('fc-st-table');
   const stChart = document.getElementById('fc-st-chart');
-  const SCALES = { cum_mm: [0, 40, 120], rain_mm: [0, 10, 30] };
+  const SCALES = { cum_mm: [0, 40, 120], rain_mm: [0, 10, 30], total_5d_mm: [0, 20, 60], total_10d_mm: [0, 40, 120], total_all_mm: [0, 40, 120] };
+  const TOTAL_DAYS = { total_5d_mm: 5, total_10d_mm: 10, total_all_mm: Infinity };
+  const ctrls = ['fc-prev', 'fc-play', 'fc-next', 'fc-day'].map((id) => document.getElementById(id));
   const label = {};
   let cache = null, cacheSrc = null, idx = 0, timer = null, shown = null;
 
@@ -820,7 +1086,19 @@ dash.onData(() => {
     rows.forEach((r) => { const k = r.model + '|' + r.date; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); label[r.model] = r.model_label; });
     const dates = [...new Set(rows.map((r) => r.date))].sort();
     const models = KT.models.filter((m) => rows.some((r) => r.model === m));
-    return { byKey, dates, models };
+    const totals = new Map(), horizon = {};
+    d3.groups(rows, (r) => r.model, (r) => `${r.lat}|${r.lon}`).forEach(([md, cells]) => {
+      const out = [];
+      cells.forEach(([, rs]) => {
+        rs.sort((a, b) => (a.date < b.date ? -1 : 1));
+        let c = 0;
+        rs.forEach((r, i) => { c += +r.rain_mm || 0; r.cum_mm = c; });
+        out.push({ lat: rs[0].lat, lon: rs[0].lon, total_5d_mm: rs[Math.min(4, rs.length - 1)].cum_mm, total_10d_mm: rs[Math.min(9, rs.length - 1)].cum_mm, total_all_mm: c });
+        horizon[md] = Math.max(horizon[md] || 0, rs.length);
+      });
+      totals.set(md, out);
+    });
+    return { byKey, dates, models, totals, horizon };
   };
   const colorOf = (m) => dash.colors[KT.models.indexOf(m) % dash.colors.length];
   const fmtDay = (s) => d3.utcFormat('%-d %b')(new Date(s));
@@ -854,35 +1132,27 @@ dash.onData(() => {
       if (!e) return null;
       const that = series.find((r) => r.model === md && r.date === day);
       const tr = document.createElement('tr');
-      const cells = [e.model_label, e.horizon_days, that ? KT.num(+that.rain_mm) : '—', KT.num(+e.total_7d_mm), KT.num(+e.total_all_mm),
+      const t5 = e.total_5d_mm !== undefined && e.total_5d_mm !== '' ? +e.total_5d_mm : d3.sum(series.filter((r) => r.model === md).slice(0, 5), (r) => +r.rain_mm);
+      const t10 = e.total_10d_mm !== undefined && e.total_10d_mm !== '' ? +e.total_10d_mm : d3.sum(series.filter((r) => r.model === md).slice(0, 10), (r) => +r.rain_mm);
+      const cells = [e.model_label, e.horizon_days, that ? KT.num(+that.rain_mm) : '—', KT.num(t5), KT.num(t10), KT.num(+e.total_all_mm),
         e.first_planting_rain ? fmtDay(e.first_planting_rain) : 'none in range', e.source || ''];
       cells.forEach((c, i) => {
         const td = document.createElement('td');
         if (i === 0) { const sw = document.createElement('span'); sw.className = 'kt-sw'; sw.style.background = colorOf(md); td.append(sw); }
         td.append(String(c));
-        if (i > 0 && i < 5) td.className = 'num';
+        if (i > 0 && i < 6) td.className = 'num';
         tr.appendChild(td);
       });
       return tr;
     }).filter(Boolean);
     stTable.querySelector('tbody').replaceChildren(...trs);
     // rain from today at the station, one line per visible model, marker at the current day
-    const W = stChart.clientWidth || 400, H = 190, mg = { t: 8, r: 12, b: 24, l: 40 };
-    const pts = series.map((r) => ({ md: r.model, t: new Date(r.date), v: +r.cum_mm }));
-    const x = d3.scaleUtc(d3.extent(cache.dates, (dd) => new Date(dd)), [mg.l, W - mg.r]);
-    const y = d3.scaleLinear([0, Math.max(20, d3.max(pts, (q) => q.v) || 0)], [H - mg.b, mg.t]).nice();
-    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-    svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 80))).tickFormat(d3.utcFormat('%-d %b')))
-      .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
-    svg.append('g').attr('transform', `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - mg.l - mg.r)))
-      .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
-      .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
-    d3.groups(pts, (q) => q.md).forEach(([md, p]) => {
-      svg.append('path').datum(p.sort((a, b) => a.t - b.t)).attr('fill', 'none').attr('stroke', colorOf(md)).attr('stroke-width', 2)
-        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((q) => x(q.t)).y((q) => y(q.v)));
+    KT.lineChart(stChart, {
+      H: 190, yMax: 20, xDomain: d3.extent(cache.dates, (dd) => new Date(dd)), marker: TOTAL_DAYS[metricSel.value] ? null : new Date(day),
+      fmt: (v) => KT.num(v) + ' mm',
+      series: KT.models.filter((md) => shown.has(md)).map((md) => ({ key: md, label: label[md] || md, color: colorOf(md),
+        pts: series.filter((r) => r.model === md).sort((q, w) => (q.date < w.date ? -1 : 1)).map((r) => ({ t: new Date(r.date), v: +r.cum_mm })) })),
     });
-    svg.append('line').attr('x1', x(new Date(day))).attr('x2', x(new Date(day))).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
-    stChart.replaceChildren(svg.node());
   };
 
   const draw = () => {
@@ -897,13 +1167,17 @@ dash.onData(() => {
     idx = Math.min(idx, dates.length - 1);
     slider.value = String(idx);
     const day = dates[idx];
-    dateEl.textContent = `${d3.utcFormat('%a %-d %B')(new Date(day))} (day ${idx + 1})`;
-    const m = metricSel.value, dom = SCALES[m];
+    const m = metricSel.value, dom = SCALES[m], nTot = TOTAL_DAYS[m];
+    ctrls.forEach((c) => { c.disabled = !!nTot; });
+    if (nTot) { stop(); dateEl.textContent = `${nTot === Infinity ? 'Whole range' : `Next ${nTot} days`}: ${fmtDay(dates[0])} – ${fmtDay(dates[Math.min(dates.length, nTot) - 1])}`; }
+    else dateEl.textContent = `${d3.utcFormat('%a %-d %B')(new Date(day))} (day ${idx + 1})`;
     const panel = KT.css('--color-panel'), c1 = KT.color(dash.colors[0]);
     const color = d3.scaleLinear(dom, [panel, d3.interpolateRgb(panel, c1)(0.5), c1]).interpolate(d3.interpolateRgb).clamp(true);
     const cards = vis.map((md) => {
       const wrap = document.createElement('div');
-      const h = document.createElement('h3'); h.textContent = label[md] || md; wrap.appendChild(h);
+      const h = document.createElement('h3'); h.textContent = label[md] || md;
+      if (nTot && cache.horizon[md] < Math.min(nTot, dates.length)) h.textContent += ` (${cache.horizon[md]} days only)`;
+      wrap.appendChild(h);
       const mapBox = document.createElement('div'); mapBox.className = 'kt-map'; wrap.appendChild(mapBox);
       return [md, wrap, mapBox];
     });
@@ -913,7 +1187,7 @@ dash.onData(() => {
       const x = d3.scaleLinear([33.5, 42.0], [0, W]), y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
       const cw = x(34.0) - x(33.5), ch = y(-5.0) - y(-4.5);
       const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-      const cells = byKey.get(md + '|' + day) || [];
+      const cells = nTot ? (cache.totals.get(md) || []) : (byKey.get(md + '|' + day) || []);
       svg.append('g').selectAll('rect').data(cells).join('rect')
         .attr('x', (c) => x(+c.lon - 0.25)).attr('y', (c) => y(+c.lat + 0.25)).attr('width', cw + 0.5).attr('height', ch + 0.5)
         .attr('fill', (c) => color(+c[m]));
@@ -922,7 +1196,7 @@ dash.onData(() => {
       if (!cells.length) mapBox.appendChild(Object.assign(document.createElement('div'), { className: 'kt-map-empty', textContent: 'Beyond this model’s range' }));
     });
     if (!vis.length) box.replaceChildren(Object.assign(document.createElement('p'), { className: 'kt-note', textContent: 'Tick at least one model above.' }));
-    legend.replaceChildren(...dom.map((v) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = color(v); s.append(KT.int(v) + ' mm'); return s; }));
+    legend.replaceChildren(KT.colorbar(color, dom, (v) => KT.int(v) + ' mm', metricSel.options[metricSel.selectedIndex].text));
     drawStation(day);
   };
 
