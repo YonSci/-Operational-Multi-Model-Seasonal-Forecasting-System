@@ -3,7 +3,10 @@
 track_site_inits.py
 ───────────────────
 Compare Short Rains onset / cessation / season length (LGP) at one site across every
-ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...).
+ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...), for each onset definition:
+Dunning, and the planting rule presets (>=20 mm in 3 days, no 7- or 10-day dry spell in the next 21 days;
+"<init> - Planting <k>d" models). Planting onset rows count members with no onset by 31 Dec as "after
+31 Dec" in the percentiles (they are late, not missing).
 
 Writes to outputs/site_tracker/<site>/:
   inits_summary.csv   one row per initialization x variable (median, P10-P90, terciles, anomaly)
@@ -12,6 +15,7 @@ Writes to outputs/site_tracker/<site>/:
 
 Usage:
   python scripts/track_site_inits.py --name "Kapiti Research Station Farm" --lat -1.63209 --lon 37.1479
+  python scripts/track_site_inits.py --all-kenya          # every Kenya monitored site, one data load
 """
 import argparse
 import csv
@@ -35,6 +39,8 @@ INITS = [
     ("Oct 01 + latest obs", "ECMWF SEAS5 (Oct+Obs latest)"),
 ]
 VARS = [("onset", "on_v", "Onset"), ("cessation", "cs_v", "Cessation"), ("lgp", "lg_v", "Season length")]
+# onset definitions: model-name suffix → label (planting presets only change the onset)
+DEFS = [("", "Dunning"), (" - Planting 7d", "Planting (no 7-day dry spell)"), (" - Planting 10d", "Planting (no 10-day dry spell)")]
 CATS = ["BN", "NN", "AN"]
 P_KEY = {"onset": "p_on", "cessation": "p_cs", "lgp": "p_lgp"}
 
@@ -51,63 +57,98 @@ def main():
     ap.add_argument("--lat", type=float, default=-1.63209)
     ap.add_argument("--lon", type=float, default=37.1479)
     ap.add_argument("--year", type=int, default=2026)
+    ap.add_argument("--all-kenya", action="store_true", help="every Kenya monitored site (mam_loader.SITES)")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     dl.configure()
     dl.load()
-    loaded = dl.get_state()["MODELS"]
+    sites = ([(s["site_name"], s["lat"], s["lon"]) for s in dl.SITES if s["country"] == "kenya"] if a.all_kenya
+             else [(a.name, a.lat, a.lon)])
+    for name, lat, lon in sites:
+        track(name, lat, lon, a.year)
 
-    out_dir = BASE_DIR / "outputs" / "site_tracker" / re.sub(r"[^A-Za-z0-9]+", "_", a.name).strip("_")
+
+def _pct(v, q):
+    """Percentile with no-onset members as +inf → NaN when the percentile falls among them."""
+    x = float(np.percentile(v, q)) if len(v) else float("nan")
+    return x if np.isfinite(x) else float("nan")
+
+
+def track(name, lat, lon, year):
+    loaded = dl.get_state()["MODELS"]
+    out_dir = BASE_DIR / "outputs" / "site_tracker" / re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summary, members, plot_data = [], [], []
-    for label, model in INITS:
-        if model not in loaded:
-            print(f"  skip {label}: {model} not loaded")
-            continue
-        px = dl.get_pixel_stats(a.lat, a.lon, season="short_rains", model=model, year=a.year)
-        st = px["models"][model]
-        for var, vkey, title in VARS:
-            vals = np.asarray(st[vkey], dtype=float)
-            clim = float(px["chirps_clim"][var])
-            p = st[P_KEY[var]]
-            med = float(np.median(vals)) if len(vals) else float("nan")
-            row = dict(
-                init=label, model=model, variable=var, window=f"DOY {px['win_doy_start']}-{px['win_doy_end']}",
-                n_valid=len(vals), n_members=st["nm"],
-                median=round(med, 1), p10=round(st.get(f"{vkey[:2]}_p10", np.nan), 1), p90=round(st.get(f"{vkey[:2]}_p90", np.nan), 1),
-                chirps_clim=round(clim, 1), anomaly=round(med - clim, 1),
-                t33=round(px["t33"][var], 1), t67=round(px["t67"][var], 1),
-                p_bn=round(p[0], 2), p_nn=round(p[1], 2), p_an=round(p[2], 2), dominant=CATS[int(np.argmax(p))],
-                median_date="" if var == "lgp" else doy_to_date(med, a.year),
-                clim_date="" if var == "lgp" else doy_to_date(clim, a.year),
-                p_fail=round(st["p_fail"], 3),
-            )
-            summary.append(row)
-            for i, v in enumerate(vals):
-                members.append(dict(init=label, variable=var, member_rank=i + 1, value=v))
-            plot_data.append((label, var, vals, clim, px["t33"][var], px["t67"][var], p))
+    for label, base in INITS:
+        for suffix, definition in DEFS:
+            model = base + suffix
+            if model not in loaded:
+                if not suffix:
+                    print(f"  skip {label}: {model} not loaded")
+                continue
+            md = loaded[model]
+            px = dl.get_pixel_stats(lat, lon, season="short_rains", model=model, year=year)
+            st = px["models"][model]
+            pi, pj = px["pi"], px["pj"]
+            for var, vkey, title in VARS:
+                if suffix and var != "onset":
+                    continue                                   # planting presets share cessation and LGP with Dunning
+                if suffix:
+                    # all members, no onset by 31 Dec = +inf (late), so percentiles stay honest
+                    yi = int(np.where(np.asarray(md["model_years"]) == year)[0][0])
+                    raw = np.asarray(md["onset_doy"][:, yi, pi, pj], dtype=float)
+                    allv = np.where(np.isfinite(raw), raw, np.inf)
+                    vals = raw[np.isfinite(raw)]
+                else:
+                    vals = np.asarray(st[vkey], dtype=float)
+                    allv = vals
+                clim = float(px["chirps_clim"][var])
+                p = st[P_KEY[var]]
+                med = _pct(allv, 50)
+                rpss = md.get("rpss_val", {}).get(var)
+                hr = md.get("hitrate_val", {}).get(var)
+                row = dict(
+                    init=label, model=model, definition=definition if var == "onset" else "", variable=var,
+                    window=f"DOY {px['win_doy_start']}-{px['win_doy_end']}",
+                    n_valid=len(vals), n_members=st["nm"], no_onset=int(len(allv) - len(vals)) if var == "onset" else 0,
+                    median=round(med, 1), p10=round(_pct(allv, 10), 1), p25=round(_pct(allv, 25), 1),
+                    p75=round(_pct(allv, 75), 1), p90=round(_pct(allv, 90), 1),
+                    chirps_clim=round(clim, 1), anomaly=round(med - clim, 1),
+                    t33=round(px["t33"][var], 1), t67=round(px["t67"][var], 1),
+                    p_bn=round(p[0], 2), p_nn=round(p[1], 2), p_an=round(p[2], 2), dominant=CATS[int(np.argmax(p))],
+                    median_date="" if var == "lgp" else (doy_to_date(med, year) if np.isfinite(med) else "after 31 Dec"),
+                    clim_date="" if var == "lgp" else doy_to_date(clim, year),
+                    p_fail=round(st["p_fail"], 3),
+                    rpss_val=round(float(rpss[pi, pj]), 2) if rpss is not None and np.isfinite(rpss[pi, pj]) else "",
+                    hitrate_val=round(float(hr[pi, pj]), 2) if hr is not None and np.isfinite(hr[pi, pj]) else "",
+                )
+                summary.append(row)
+                for i, v in enumerate(vals):
+                    members.append(dict(init=label, definition=row["definition"], variable=var, member_rank=i + 1, value=v))
+                if not suffix:
+                    plot_data.append((label, var, vals, clim, px["t33"][var], px["t67"][var], p))
 
     with open(out_dir / "inits_summary.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(summary[0]))
         w.writeheader()
         w.writerows(summary)
     with open(out_dir / "inits_members.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["init", "variable", "member_rank", "value"])
+        w = csv.DictWriter(f, fieldnames=["init", "definition", "variable", "member_rank", "value"])
         w.writeheader()
         w.writerows(members)
 
-    _plot(plot_data, a, out_dir / "inits_compare.png")
+    _plot(plot_data, argparse.Namespace(name=name, lat=lat, lon=lon, year=year), out_dir / "inits_compare.png")
 
-    print(f"\n{a.name} ({a.lat:.3f}, {a.lon:.3f})  —  Short Rains {a.year}")
+    print(f"\n{name} ({lat:.3f}, {lon:.3f})  —  Short Rains {year}")
     for r in summary:
         unit = "d" if r["variable"] == "lgp" else ""
         when = f" ({r['median_date']}, clim {r['clim_date']})" if r["median_date"] else f" (clim {r['chirps_clim']}d)"
-        print(f"  {r['init']:<17} {r['variable']:<9} median {r['median']}{unit}{when}  anom {r['anomaly']:+}d  "
-              f"P(BN/NN/AN) {r['p_bn']:.2f}/{r['p_nn']:.2f}/{r['p_an']:.2f}  [{r['window']}]")
-    print(f"\n  wrote {out_dir}")
+        print(f"  {r['init']:<20} {r['variable']:<9} {r['definition']:<31} median {r['median']}{unit}{when}  "
+              f"P(BN/NN/AN) {r['p_bn']:.2f}/{r['p_nn']:.2f}/{r['p_an']:.2f}" + (f"  no onset {r['no_onset']}" if r["no_onset"] else ""))
+    print(f"  wrote {out_dir}")
 
 
 def _plot(plot_data, a, path):

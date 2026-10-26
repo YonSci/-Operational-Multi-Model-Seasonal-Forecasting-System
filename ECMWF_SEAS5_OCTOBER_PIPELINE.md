@@ -155,6 +155,11 @@ schtasks /Create /TN "OND Forecast Update" /TR "D:\Operational-Multi-Model-Seaso
 | Update | Kapiti: forecast onset 22 Oct, no rain observed | Median communicated as a date; local skill weak (r 0.39, ±14.5 d); median earlier than any observed onset | Observation-updated runs, range + probability + skill note per site, planting-onset rule, ENS 1–15 d outlook | ✅ Addressed |
 | Update | ecCodes assertion in threaded ENS decode | ecCodes not thread-safe | Download in threads, decode on main thread | ✅ Resolved |
 | Update | D: drive full (NetCDF HDF error) | Unpacked global p05 GeoTIFFs ~69 MB each | Keep `.tif.gz`, read via `/vsigzip/` (1.1 GB → 51 MB) | ✅ Resolved |
+| 26 Oct | Tracker "Rain from today" forecast maps empty | `groupby` dropped grid rows (site = NaN) → `cum_mm` all NaN | `site.fillna("")` + `dropna=False` in `export_dashboard_data.py`; the page also recomputes running totals from `rain_mm` | ✅ Resolved |
+| 26 Oct | Daily update stopped at the ENS step | `data.ecmwf.int` slow; one byte-range request exhausted its retries; step ran with `check=True` | ENS step non-fatal (keeps the latest run on disk); 10 retries with longer back-off | ✅ Resolved |
+| 26 Oct | IMERG never downloaded | `gpm1.gesdisc` and the Earthdata-cloud CloudFront file host unreachable from this network (login itself works) | Granule found via CMR; Kenya box cut server-side by NASA cloud OPeNDAP (~36 KB/day) | ✅ Resolved |
+| 26 Oct | Update died silently at UKMO | Full global 10 km files (~88 × 3–5 MB) on a slow link; slow trickle never trips the read timeout | HTTP-range reads of only the Kenya chunks (h5py over a range file), 8 worker processes, 15-min budget; Open-Meteo used when a direct run is cut short and it has more days | ✅ Resolved |
+| 26 Oct | GSMaP not available | JAXA G-Portal needs registration; GEE needs a Cloud project ID | Readers ready (`gsmap_gee`, `imerg_gee`); waiting for an Earth Engine project ID in `~/.config/earthengine/project.txt` | ⏳ Open |
 
 ---
 

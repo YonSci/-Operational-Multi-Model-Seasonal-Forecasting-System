@@ -103,9 +103,9 @@ def _save(da_vals, dims, coords, path):
     xr.DataArray(da_vals, dims=dims, coords=coords).to_netcdf(path)
 
 
-def run_seasonal(seasonal_dir, rule):
+def run_seasonal(seasonal_dir, rule, out_name="agro_onset"):
     seasonal_dir = Path(seasonal_dir)
-    out = seasonal_dir / "agro_onset"
+    out = seasonal_dir / out_name
     out.mkdir(exist_ok=True)
     lat, lon, lm = _target_grid(seasonal_dir)
     bc = xr.open_dataarray(seasonal_dir / "ECMWF_bc_daily_all_years.nc")
@@ -234,6 +234,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("seasonal"); s.add_argument("seasonal_dir")
+    s.add_argument("--out-name", default="agro_onset", help="output folder inside seasonal_dir (one per rule preset)")
     e = sub.add_parser("ens"); e.add_argument("ens_file"); e.add_argument("seasonal_dir")
     for p in (s, e):
         p.add_argument("--rain-mm", type=float, default=RULE["rain_mm"])
@@ -245,6 +246,6 @@ if __name__ == "__main__":
     rule = dict(RULE, rain_mm=a.rain_mm, acc_days=a.acc_days, dry_spell=a.dry_spell,
                 lookahead=a.lookahead, search_start_doy=a.search_start_doy)
     if a.cmd == "seasonal":
-        run_seasonal(a.seasonal_dir, rule)
+        run_seasonal(a.seasonal_dir, rule, a.out_name)
     else:
         run_ens(a.ens_file, a.seasonal_dir, rule)

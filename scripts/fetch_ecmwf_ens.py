@@ -37,7 +37,7 @@ TARGET_LAT = np.round(np.arange(-4.875, 5.375 + 0.001, 0.25), 3)
 TARGET_LON = np.round(np.arange(33.625, 41.875 + 0.001, 0.25), 3)
 
 
-def _get(url, headers=None, tries=6):
+def _get(url, headers=None, tries=10):
     for i in range(tries):
         try:
             r = requests.get(url, headers=headers, timeout=120)
@@ -47,7 +47,7 @@ def _get(url, headers=None, tries=6):
                 return None
         except requests.RequestException:
             pass
-        time.sleep(3 * (i + 1))
+        time.sleep(5 * (i + 1))
     raise RuntimeError(f"failed to fetch {url}")
 
 

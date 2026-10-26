@@ -24,6 +24,7 @@ DATASETS = {
     "zone": "zone.csv", "verification": "verification.csv", "grid": "grid.csv", "inits": "inits.csv",
     "anim": "anim.csv", "boundaries": "boundaries.json", "stations": "stations.csv",
     "forecast": "forecast.csv", "forecast_sites": "forecast_sites.csv", "forecast_events": "forecast_events.csv",
+    "products": "products.csv", "inits_members": "inits_members.csv",
 }
 
 

@@ -479,6 +479,57 @@ def _attach_extra_short_rains(MODELS):
         MODELS[name] = entry
     _attach_packed_short_rains(MODELS, missing)
 
+PLANTING_SUFFIX = " - Planting {k}d"           # ASCII only: the name can end up in HTTP headers (bulletin filename)
+
+
+def _attach_planting_variants(MODELS, chirps_sep=None):
+    """For each Short Rains initialization add "<init> - Planting <k>d" models: the planting-onset rule
+    (≥20 mm in 3 days with no k-day dry spell in the next 21 days) from backend/demo_short_rains_planting.npz
+    (scripts/pack_planting_onset.py). Cessation, season length, rainfall and daily traces are shared with
+    the parent (Dunning) model; onset members, onset probabilities/skill, terciles and CHIRPS onset are replaced."""
+    p = os.path.join(os.path.dirname(__file__), "demo_short_rains_planting.npz")
+    if not os.path.isfile(p):
+        return
+    data = np.load(p, allow_pickle=False)
+    meta = json.loads(str(data["__meta__"]))
+    f32 = lambda key: data[key].astype(np.float32)
+    for parent, presets in meta.items():
+        base = MODELS.get(parent)
+        if base is None:
+            continue
+        for k, info in presets.items():
+            key = f"{parent}|d{k}"
+            onset = f32(f"{key}|onset_doy")
+            if not np.array_equal(np.asarray(info["model_years"]).astype(int), np.asarray(base["model_years"]).astype(int)):
+                print(f"  SKIP  {parent} planting d{k}: model years differ from the parent")
+                continue
+            e = dict(base)                                  # shallow copy: the parent's arrays are shared
+            e["onset_doy"] = onset
+            for fld, src in (("probs_damped", "probs"), ("alpha", "alpha"), ("hitrate_cal", "hitrate_cal"),
+                             ("hitrate_val", "hitrate_val"), ("rpss_val", "rpss_val")):
+                e[fld] = {**(base.get(fld) or {}), "onset": f32(f"{key}|{src}")}
+            e["t33_onset"], e["t67_onset"] = f32(f"{key}|t33"), f32(f"{key}|t67")
+            e["chirps_clim"] = {**(base.get("chirps_clim") or {}), "onset": f32(f"{key}|chirps_clim")}
+            # CHIRPS history (bulletin / historical panel): planting onset per year on the parent's history years
+            hist = base.get("chirps_hist")
+            if hist is None and chirps_sep:
+                hist = {h: chirps_sep[h] for h in ("onset_doy", "cessation_doy", "lgp_days", "chirps_years")}
+            if hist is not None:
+                c_on, c_years = f32(f"{key}|chirps_onset"), data[f"{key}|chirps_years"].astype(int)
+                hy = np.asarray(hist["chirps_years"]).astype(int)
+                aligned = np.full((len(hy), *c_on.shape[1:]), np.nan, np.float32)
+                for i, y in enumerate(hy):
+                    j = np.where(c_years == y)[0]
+                    if len(j):
+                        aligned[i] = c_on[j[0]]
+                e["chirps_hist"] = {**hist, "onset_doy": aligned, "chirps_clim": e["chirps_clim"]}
+            e["onset_definition"] = {"method": "planting", "dry_spell_days": int(k), "label": info["label"],
+                                     "skill": bool(info.get("skill", True)), "note": info.get("note", "")}
+            name = parent + PLANTING_SUFFIX.format(k=k)
+            MODELS[name] = e
+            print(f"  LOADED {name}: planting onset ({info['label']})")
+
+
 # ── Demo / Cloud fallback loader ──────────────────────────────────────────
 def _load_demo_npz():
     npz_path = os.path.join(os.path.dirname(__file__), "demo_data.npz")
@@ -970,6 +1021,7 @@ def _load_demo_npz():
     regime_map = data["regime_map"].astype(np.int8) if "regime_map" in data else None
 
     _attach_extra_short_rains(MODELS)
+    _attach_planting_variants(MODELS, chirps_sep)
     print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Deyr/Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}, RegimeMap: {regime_map is not None}).")
     return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
 
@@ -1025,6 +1077,7 @@ def load(force=False):
             entry = _load_model(name, out_dir, m_chirps, season=m_season, win_doy_start=m_start, win_doy_end=m_end)
             if entry is not None: MODELS[name] = entry
         _attach_extra_short_rains(MODELS)
+        _attach_planting_variants(MODELS, chirps_sep)
         if not MODELS:
             raise RuntimeError("No models loaded from NetCDF files.")
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")
@@ -1115,7 +1168,7 @@ def get_model_info(season=None):
             warnings.simplefilter("ignore", RuntimeWarning)
             hr = float(np.nanmean(md["hitrate_cal"]["onset"][m_lm]))
         
-        display_name = "ECMWF SEAS5" if ((is_short and "Sep" in name) or (is_kiremt and "Kiremt" in name) or (is_fmam and "FMAM" in name) or (is_bega and "Bega" in name)) else name
+        display_name = "ECMWF SEAS5" if ((is_short and name == "ECMWF SEAS5 (Sep)") or (is_kiremt and "Kiremt" in name) or (is_fmam and "FMAM" in name) or (is_bega and "Bega" in name)) else name
         op_y = int(md["model_years"][md["op_idx"]]) if ("op_idx" in md and "model_years" in md and md["op_idx"] < len(md["model_years"])) else (2025 if is_short else 2026)
         out.append(dict(name=display_name, raw_name=name, n_members=md["n_members"], op_idx=md["op_idx"],
                         op_year=op_y,

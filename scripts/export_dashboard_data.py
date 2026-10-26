@@ -29,6 +29,123 @@ def latest(pattern):
     return Path(f[-1]) if f else None
 
 
+# Product catalogue for the tracker's "Data sources" section: static facts here, latest data read from the files.
+# kind: obs = observed/estimated rainfall, nwp = 1–16 day forecast, seasonal = SEAS5
+PRODUCTS = [
+    dict(id="chirps", kind="obs", name="CHIRPS 2.0", provider="UC Santa Barbara Climate Hazards Center",
+         resolution="0.05° (used at 0.25°)", typical_latency="final ~3 weeks after the month; preliminary ~2–5 days",
+         link="https://www.chc.ucsb.edu/data/chirps",
+         about="Satellite infrared rainfall blended with rain-gauge reports, 1981 to present. The reference for this "
+               "tracker: climatology (1993–2016), bias correction and verification all use CHIRPS. The final record "
+               "ends with the last complete month; preliminary daily files fill the days after it."),
+    dict(id="arc2", kind="obs", name="ARC2", provider="NOAA Climate Prediction Center (FEWS NET)",
+         resolution="0.1°", typical_latency="~1–2 days", link="https://www.cpc.ncep.noaa.gov/products/fews/",
+         about="Africa Rainfall Climatology v2: Meteosat infrared cloud-top temperatures merged with daily GTS rain-gauge "
+               "reports. Quick and long record; tends to miss light rain and shows occasional single-cell spikes."),
+    dict(id="tamsat", kind="obs", name="TAMSAT v3.1", provider="University of Reading",
+         resolution="0.0375°", typical_latency="~2–5 days", link="https://www.tamsat.org.uk/",
+         about="Africa-only rainfall from Meteosat thermal-infrared cold-cloud duration, calibrated against "
+               "historical gauges. Good at telling rain from no rain; weaker for heavy amounts."),
+    dict(id="pdirnow", kind="obs", name="PDIR-Now", provider="UC Irvine CHRS",
+         resolution="0.04°", typical_latency="~1 day", link="https://chrsdata.eng.uci.edu/",
+         about="Precipitation from infrared imagery by a neural network (PERSIANN family), near-global, quasi-real-time. "
+               "Fastest product here; no gauge correction."),
+    dict(id="imerg", kind="obs", name="IMERG Late (V07)", provider="NASA GPM",
+         resolution="0.1°", typical_latency="~14 hours (daily file ~1–2 days)", link="https://gpm.nasa.gov/data/imerg",
+         about="Integrated Multi-satellitE Retrievals for GPM: passive-microwave rainfall from the GPM constellation, "
+               "gaps filled with infrared; the Late run has more microwave overpasses than Early. Fetched as a Kenya "
+               "subset through NASA's cloud OPeNDAP (Earthdata login)."),
+    dict(id="imerg_early", kind="obs", name="IMERG Early (V07)", provider="NASA GPM",
+         resolution="0.1°", typical_latency="~4 hours (daily file ~1 day)", link="https://gpm.nasa.gov/data/imerg",
+         about="Same algorithm as IMERG Late, issued sooner with fewer satellite overpasses; for monitoring when speed matters."),
+    dict(id="imerg_gee", kind="obs", name="IMERG via Earth Engine", provider="NASA GPM / Google Earth Engine",
+         resolution="0.1°", typical_latency="as IMERG",
+         link="https://developers.google.com/earth-engine/datasets/catalog/NASA_GPM_L3_IMERG_V07",
+         about="Half-hourly IMERG summed to daily in Google Earth Engine; an alternative route when NASA servers are unreachable."),
+    dict(id="gsmap_gee", kind="obs", name="GSMaP Gauge (operational v8)", provider="JAXA / Google Earth Engine",
+         resolution="0.1°", typical_latency="~3 days (gauge-adjusted)",
+         link="https://developers.google.com/earth-engine/datasets/catalog/JAXA_GPM_L3_GSMaP_v8_operational",
+         about="Global Satellite Mapping of Precipitation: microwave + infrared rainfall adjusted to the CPC gauge analysis. "
+               "Needs an Earth Engine project (or a JAXA G-Portal account) before it can be downloaded."),
+    dict(id="ecmwf_ifs025", kind="nwp", name="ECMWF IFS (HRES)", provider="ECMWF", resolution="0.25° open data",
+         typical_latency="00 UTC run published ~7–9 h later", link="https://www.ecmwf.int/en/forecasts/datasets/open-data",
+         about="ECMWF's deterministic global forecast, 15 days."),
+    dict(id="ecmwf_ens_median", kind="nwp", name="ECMWF ensemble (ENS)", provider="ECMWF", resolution="0.25° open data",
+         typical_latency="00 UTC run published ~8–10 h later", link="https://www.ecmwf.int/en/forecasts/datasets/open-data",
+         about="51-member ensemble, 15 days. The maps show the member median; the planting-rain chances use all 50 perturbed members."),
+    dict(id="gfs_global", kind="nwp", name="GFS", provider="NOAA NCEP", resolution="0.25°",
+         typical_latency="00 UTC run published ~3.5–5 h later", link="https://nomads.ncep.noaa.gov/",
+         about="NOAA's Global Forecast System, 16 days."),
+    dict(id="gem_global", kind="nwp", name="GDPS", provider="Environment and Climate Change Canada", resolution="15 km",
+         typical_latency="00 UTC run published ~4–6 h later", link="https://dd.weather.gc.ca/",
+         about="Canada's Global Deterministic Prediction System (GEM model), 10 days."),
+    dict(id="icon_global", kind="nwp", name="ICON", provider="Deutscher Wetterdienst (DWD)", resolution="13 km icosahedral",
+         typical_latency="00 UTC run published ~3–4 h later", link="https://opendata.dwd.de/weather/nwp/icon/",
+         about="Germany's ICOsahedral Nonhydrostatic global model, 7.5 days on the open-data server."),
+    dict(id="ukmo_global_deterministic_10km", kind="nwp", name="UKMO Global", provider="Met Office", resolution="10 km",
+         typical_latency="00 UTC run published ~5–6 h later",
+         link="https://registry.opendata.aws/met-office-global-deterministic/",
+         about="Met Office Unified Model global deterministic forecast on AWS open data, 7 days used here."),
+    dict(id="seas5", kind="seasonal", name="ECMWF SEAS5", provider="ECMWF / Copernicus C3S",
+         resolution="1° (bias-corrected to 0.25°)", typical_latency="new start every month, published on the 5th",
+         link="https://cds.climate.copernicus.eu/",
+         about="Seasonal ensemble (25 members for the forecast, hindcasts 1993–2016), bias-corrected against CHIRPS; observed "
+               "CHIRPS replaces the forecast up to the latest observed day."),
+]
+
+
+def product_status(today):
+    """Latest data per product from the files on disk → one row per catalogue entry."""
+    rows, last_obs = [], {}
+    for p in ["arc2", "tamsat", "pdirnow", "imerg", "imerg_early", "imerg_gee", "gsmap_gee"]:
+        f = BASE / "data" / "realtime_rain" / f"{p}_kenya_p25.nc"
+        if f.exists():
+            with xr.open_dataset(f) as ds:
+                last_obs[p] = pd.Timestamp(ds.time.values.max()).date()
+    ends = []
+    for f in (BASE / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc",
+              BASE / "data" / "chirps_prelim_2026" / "chirps_prelim_2026_p25_kenya.nc"):
+        if f.exists():
+            with xr.open_dataset(f) as ds:
+                ends.append(pd.Timestamp(ds.time.values.max()).date())
+    if ends:
+        last_obs["chirps"] = max(ends)
+    nwp = {}
+    nwp_f = latest("data/nwp/nwp_*.csv")
+    if nwp_f:
+        n = pd.read_csv(nwp_f)
+        for m, g in n.groupby("model"):
+            # day 1 of a 00 UTC run is the run date itself
+            nwp[m] = (pd.Timestamp(g.date.min()).date(), pd.Timestamp(g.date.max()).date(),
+                      g["source"].iloc[0] if "source" in g else "open-meteo")
+    meta_p = BASE / "outputs" / "ecmwf_oct_obs_latest" / "run_meta.json"
+    meta = json.loads(meta_p.read_text()) if meta_p.exists() else {}
+    init = meta.get("init", "2026-10-01")
+    for P in PRODUCTS:
+        r = {k: P[k] for k in ("id", "kind", "name", "provider", "resolution", "typical_latency", "about", "link")}
+        r.update(latest_data="", days_behind=None, run_date="", forecast_to="", note="")
+        if P["kind"] == "obs":
+            if P["id"] in last_obs:
+                d = last_obs[P["id"]]
+                r.update(latest_data=str(d), days_behind=(today - d).days)
+                if P["id"] == "chirps" and len(ends) == 2:
+                    r["note"] = f"final record to {ends[0]}, preliminary days after"
+            else:
+                r["note"] = "not downloaded yet (needs an account or project)"
+        elif P["kind"] == "nwp":
+            if P["id"] in nwp:
+                run, to, src = nwp[P["id"]]
+                r.update(latest_data=f"{run} 00 UTC run", run_date=str(run), forecast_to=str(to), days_behind=(today - run).days,
+                         note="direct from the provider" if src == "direct" else "through Open-Meteo")
+        else:
+            r.update(latest_data=f"{init} start", run_date=init, forecast_to="2026-12-31",
+                     days_behind=(today - pd.Timestamp(init).date()).days,
+                     note=f"observations spliced in to {meta.get('obs_end', '')}; next start 1 Nov, published 5 Nov")
+        r["checked"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
+        rows.append(r)
+    return pd.DataFrame(rows)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     rep_dir = Path(sorted(glob.glob(str(BASE / "outputs" / "site_reports" / "20*")))[-1])
@@ -131,6 +248,10 @@ def main():
         F = rr.load(p)
         if F is None:
             continue
+        # 5- and 10-day totals ending on each day use the days before 1 Oct as well
+        full = F.reindex(time=pd.date_range(since - pd.Timedelta(days=9), end))
+        roll5 = full.rolling(time=5, min_periods=5).sum().reindex(time=days).values
+        roll10 = full.rolling(time=10, min_periods=10).sum().reindex(time=days).values
         F = F.reindex(time=days)
         v = F.values
         have = np.isfinite(v).any(axis=(1, 2))
@@ -142,7 +263,8 @@ def main():
             with np.errstate(invalid="ignore", divide="ignore"):
                 pct = np.where(n > 0.5, 100 * c / n, np.nan)
             anim.append(pd.DataFrame({"date": str(d.date()), "product": p, "lat": rr.LAT[ii], "lon": rr.LON[jj],
-                                      "rain_mm": np.round(r, 1), "rain_since_oct1_mm": np.round(c, 1),
+                                      "rain_mm": np.round(r, 1), "rain_5d_mm": np.round(roll5[k, ii, jj], 1),
+                                      "rain_10d_mm": np.round(roll10[k, ii, jj], 1), "rain_since_oct1_mm": np.round(c, 1),
                                       "normal_since_oct1_mm": np.round(n, 1), "anomaly_mm": np.round(c - n, 1),
                                       "pct_of_normal": np.round(pct, 0)}))
     if anim:
@@ -155,10 +277,24 @@ def main():
     if nwp_f:
         labels = {"ecmwf_ifs025": "ECMWF IFS", "ecmwf_ens_median": "ECMWF ENS median", "gfs_global": "GFS (NOAA)",
                   "icon_global": "ICON (DWD)", "gem_global": "GDPS (ECCC)", "ukmo_global_deterministic_10km": "UKMO (Met Office)"}
-        nw = pd.read_csv(nwp_f).sort_values(["model", "kind", "site", "lat", "lon", "date"])
+        nw = pd.read_csv(nwp_f)
+        nw["site"] = nw["site"].fillna("")          # grid points have no site; NaN keys would be dropped by groupby
+        # a model from an older run (e.g. yesterday's ENS when today's download failed) starts on the newest
+        # run's first day, so every model's "next 5/10 days" covers the same dates
+        nw = nw[nw.date >= nw.groupby("model").date.min().max()]
+        nw = nw.sort_values(["model", "kind", "site", "lat", "lon", "date"])
         nw["model_label"] = nw.model.map(labels).fillna(nw.model)
-        nw["cum_mm"] = nw.groupby(["model", "kind", "site", "lat", "lon"]).rain_mm.cumsum().round(1)
+        keys = ["model", "kind", "site", "lat", "lon"]
+        nw["cum_mm"] = nw.groupby(keys, dropna=False).rain_mm.cumsum().round(1)
         nw[nw.kind == "grid"][["model", "model_label", "date", "lat", "lon", "rain_mm", "cum_mm"]].to_csv(OUT / "forecast.csv", index=False)
+        # Totals over the next 5 days, next 10 days and the model's whole range, per grid point (maps)
+        gr = nw[nw.kind == "grid"].copy()
+        gr["k"] = gr.groupby(keys, dropna=False).cumcount()                  # day index within each model's run
+        gr["r5"], gr["r10"] = gr.rain_mm.where(gr.k < 5), gr.rain_mm.where(gr.k < 10)
+        tot = gr.groupby(["model", "model_label", "lat", "lon"]).agg(horizon_days=("rain_mm", "size"), total_5d_mm=("r5", "sum"),
+                                                                    total_10d_mm=("r10", "sum"), total_all_mm=("rain_mm", "sum")).round(1).reset_index()
+        tot["first_day"] = nw.date.min()
+        tot.to_csv(OUT / "forecast_totals.csv", index=False)
         st = nw[nw.kind == "station"].copy()
         short = {r["site"]: r["short_name"] for r in pd.read_csv(OUT / "stations.csv").to_dict("records")} if (OUT / "stations.csv").exists() else {}
         st["short_name"] = st.site.map(short).fillna(st.site)
@@ -172,7 +308,8 @@ def main():
             src = g["source"].iloc[0] if "source" in g else "open-meteo"
             ev.append({"model": m, "model_label": labels.get(m, m), "source": "direct" if src == "direct" else "Open-Meteo",
                        "site": site, "short_name": short.get(site, site),
-                       "horizon_days": len(r), "total_7d_mm": round(float(r[:7].sum()), 1), "total_all_mm": round(float(r.sum()), 1),
+                       "horizon_days": len(r), "total_5d_mm": round(float(r[:5].sum()), 1), "total_7d_mm": round(float(r[:7].sum()), 1),
+                       "total_10d_mm": round(float(r[:10].sum()), 1), "total_all_mm": round(float(r.sum()), 1),
                        "first_planting_rain": first, "planting_rain_within_7d": int(len(trig) > 0 and trig[0] < 7)})
         pd.DataFrame(ev).to_csv(OUT / "forecast_events.csv", index=False)
 
@@ -185,6 +322,19 @@ def main():
         parts.append(d)
     if parts:
         pd.concat(parts).to_csv(OUT / "inits.csv", index=False)
+    # every member's value per run / definition (Season outlook member dots)
+    mem = []
+    for f in sorted((BASE / "outputs" / "site_tracker").glob("*/inits_members.csv")):
+        d = pd.read_csv(f)
+        d.insert(0, "site", site_by_slug.get(f.parent.name, f.parent.name.replace("_", " ")))
+        mem.append(d)
+    if mem:
+        m = pd.concat(mem)
+        if "definition" not in m:
+            m["definition"] = ""
+        m["value"] = m["value"].round(1)
+        m.to_csv(OUT / "inits_members.csv", index=False)
+    product_status(pd.Timestamp.today().date()).to_csv(OUT / "products.csv", index=False)
     for f in sorted(OUT.glob("*.csv")):
         print(f"  {f.name:18s} {f.stat().st_size / 1024:7.1f} KB  {len(pd.read_csv(f))} rows")
 

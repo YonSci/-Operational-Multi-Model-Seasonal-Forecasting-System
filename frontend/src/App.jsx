@@ -54,7 +54,16 @@ const SHORT_RAINS_INITS = [
   { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
   { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
 ]
-const shortRainsModel = (init) => (SHORT_RAINS_INITS.find(i=>i.init===init) ?? SHORT_RAINS_INITS[0]).model
+// Onset definition (Short Rains): Dunning cumulative anomaly, or the planting rule presets
+// (>=20 mm in 3 days, no 7- or 10-day dry spell in the next 21 days) served as "<init> - Planting <k>d" models
+const ONSET_DEFS = [
+  { id:'dunning', label:'Dunning',              suffix:'',               title:'Dunning et al. (2016): turning point of accumulated rainfall anomaly, 1 Sep - 31 Dec' },
+  { id:'d7',      label:'Planting · 7-day dry', suffix:' - Planting 7d',  title:'Planting onset: first day from 1 Oct with >=20 mm in 3 days and no 7-day dry spell (<1 mm/day) in the next 21 days' },
+  { id:'d10',     label:'Planting · 10-day dry', suffix:' - Planting 10d', title:'Planting onset: first day from 1 Oct with >=20 mm in 3 days and no 10-day dry spell (<1 mm/day) in the next 21 days' },
+]
+const hasModel = (modelsData, name) => Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === name || m?.raw_name === name)
+const shortRainsModel = (init, onsetDef='dunning') =>
+  (SHORT_RAINS_INITS.find(i=>i.init===init) ?? SHORT_RAINS_INITS[0]).model + ((ONSET_DEFS.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]).suffix)
 const INIT_LABELS = Object.fromEntries(
   [...Object.values(SEASONS).flat(), ...SHORT_RAINS_INITS].map(s=>[s.init,s.initLabel])
 )
@@ -2479,7 +2488,7 @@ const TABS = [
 // Tabs that take the full width (no map panel beside them)
 const FULL_PAGE_TABS = ['about', 'tracker']
 
-function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
+function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
   const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
@@ -2561,6 +2570,18 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                     .filter(i => i.init === '0901' || Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === i.model || m?.raw_name === i.model))
                     .map(i=><option key={i.init} value={i.init}>{i.initLabel}</option>)}
                 </select>
+                {setOnsetDef && (()=>{
+                  const avail = ONSET_DEFS.filter(d => d.id === 'dunning' || hasModel(modelsData, shortRainsModel(selectedInit, d.id)))
+                  const cur = ONSET_DEFS.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]
+                  return avail.length > 1 ? (
+                    <>
+                      <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Onset</label>
+                      <select value={avail.some(d=>d.id===onsetDef) ? onsetDef : 'dunning'} onChange={e=>setOnsetDef(e.target.value)} style={selStyle} title={cur.title}>
+                        {avail.map(d=><option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
+                      </select>
+                    </>
+                  ) : null
+                })()}
               </div>
             ) : (
               <span style={{fontSize:9,color:'var(--header-muted)',whiteSpace:'nowrap'}}>Init {INIT_LABELS[selectedInit]??selectedInit}</span>
@@ -2617,6 +2638,7 @@ export default function App() {
   const [mapGridData,   setMapGridData]   = useState(null)
   const [selectedYear,  setSelectedYear]  = useState(2026)
   const [selectedInit,  setSelectedInit]  = useState('0901')
+  const [onsetDef,      setOnsetDef]      = useState('dunning')
   const [selectedSeason,setSelectedSeason]= useState('short_rains')
   const [bulletinModalOpen, setBulletinModalOpen] = useState(false)
   const [mobileViewMode, setMobileViewMode]       = useState('split') // 'split' | 'map' | 'charts'
@@ -2688,6 +2710,11 @@ export default function App() {
   const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const isKiremt = !isBega && selectedSeason === 'kiremt'
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
+  // Short Rains model for the chosen init + onset definition (falls back to Dunning if that preset is not served)
+  const srModel = (() => {
+    const m = shortRainsModel(selectedInit, onsetDef)
+    return modelsData?.models && !hasModel(modelsData, m) ? shortRainsModel(selectedInit) : m
+  })()
   const effectiveModel = isBega
     ? 'ECMWF SEAS5 (Bega)'
     : (isFmam
@@ -2695,7 +2722,7 @@ export default function App() {
       : (isKiremt
         ? 'ECMWF SEAS5 (Kiremt)'
         : ((selectedSeason === 'short_rains' && (selectedModel === 'ECMWF SEAS5' || !selectedModel))
-          ? shortRainsModel(selectedInit)
+          ? srModel
           : (selectedModel !== 'multimodel' ? selectedModel : ''))))
   const { data: pixelData,  isLoading: pixelLoading } = usePixelStats(querySite, selectedSeason, effectiveModel)
   const { data: chirpsHist }                           = useChirpsHistorical(querySite, selectedSeason, selectedSeason === 'short_rains' ? effectiveModel : '')
@@ -2712,7 +2739,7 @@ export default function App() {
     } else if (selectedSeason === 'kiremt') {
       model = 'ECMWF SEAS5 (Kiremt)'
     } else if (selectedSeason === 'short_rains' && (model === 'ECMWF SEAS5' || !model)) {
-      model = shortRainsModel(selectedInit)
+      model = srModel
     }
     const {variable,layer}=mapLayer
     const url = `${API_BASE}/grid?variable=${variable}&layer=${layer}&bust=true&season=${selectedSeason}` + (model ? `&model=${encodeURIComponent(model)}` : '')
@@ -2722,7 +2749,7 @@ export default function App() {
       .then(data=>setMapGridData(data))
       .catch(err=>{if(err.name!=='AbortError') console.warn('[Grid fetch error]',err)})
     return ()=>ctrl.abort()
-  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason,selectedInit])
+  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason,selectedInit,srModel])
 
   if (showLanding) {
     return (
@@ -2742,6 +2769,7 @@ export default function App() {
               selectedModel={selectedModel} setSelectedModel={setSelectedModel}
               selectedYear={selectedYear} setSelectedYear={setSelectedYear}
               selectedInit={selectedInit} setSelectedInit={setSelectedInit}
+              onsetDef={onsetDef} setOnsetDef={setOnsetDef}
               onOpenBulletin={()=>setBulletinModalOpen(true)}
               darkMode={darkMode} setDarkMode={setDarkMode}/>
 
@@ -2822,7 +2850,7 @@ export default function App() {
         onClose={()=>setBulletinModalOpen(false)}
         selectedSite={selectedSite}
         selectedSeason={selectedSeason}
-        shortRainsModelName={selectedSeason === 'short_rains' ? shortRainsModel(selectedInit) : undefined}
+        shortRainsModelName={selectedSeason === 'short_rains' ? srModel : undefined}
         selectedYear={selectedYear}
         country={country}
       />
