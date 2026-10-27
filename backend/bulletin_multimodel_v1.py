@@ -499,11 +499,11 @@ def _draw_ad_plume(ax, pi, pj):
         if isinstance(bc_obj, dict):
             raw = bc_obj.get(OP_YEAR)
             if raw is not None and hasattr(raw, "ndim") and raw.ndim == 4:
-                all_bc = raw[:, :, pi, pj]
+                all_bc = raw[:, :, pi, pj].astype(np.float32)   # traces may be held as float16
             else:
                 continue
         elif hasattr(bc_obj, "ndim") and bc_obj.ndim == 5:
-            all_bc = bc_obj[:, oi, :, pi, pj]  # (n_mem, n_days)
+            all_bc = bc_obj[:, oi, :, pi, pj].astype(np.float32)  # (n_mem, n_days)
         else:
             continue
 

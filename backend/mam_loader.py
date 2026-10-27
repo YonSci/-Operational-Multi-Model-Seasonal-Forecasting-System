@@ -670,9 +670,9 @@ def _load_demo_npz():
 
         sep_bc_daily = {}
         if "sep_ecmwf_bc_daily_2026" in data:
-            sep_bc_daily[2026] = data["sep_ecmwf_bc_daily_2026"].astype(np.float32)
+            sep_bc_daily[2026] = data["sep_ecmwf_bc_daily_2026"]   # float16 as stored: ~85 MB less on the 512 MB host; slices are widened where read
         if "sep_ecmwf_bc_daily_2025" in data:
-            sep_bc_daily[2025] = data["sep_ecmwf_bc_daily_2025"].astype(np.float32)
+            sep_bc_daily[2025] = data["sep_ecmwf_bc_daily_2025"]
 
         MODELS["ECMWF SEAS5 (Sep)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -767,7 +767,7 @@ def _load_demo_npz():
 
         k_bc_daily = {}
         if "kiremt_ecmwf_bc_daily_2026" in data:
-            k_bc_daily[2026] = data["kiremt_ecmwf_bc_daily_2026"].astype(np.float32)
+            k_bc_daily[2026] = data["kiremt_ecmwf_bc_daily_2026"]
 
         MODELS["ECMWF SEAS5 (Kiremt)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -864,7 +864,7 @@ def _load_demo_npz():
 
         f_bc_daily = {}
         if "fmam_ecmwf_bc_daily_2026" in data:
-            f_bc_daily[2026] = data["fmam_ecmwf_bc_daily_2026"].astype(np.float32)
+            f_bc_daily[2026] = data["fmam_ecmwf_bc_daily_2026"]
 
         MODELS["ECMWF SEAS5 (FMAM)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -961,7 +961,7 @@ def _load_demo_npz():
 
         b_bc_daily = {}
         if "bega_ecmwf_bc_daily_2026" in data:
-            b_bc_daily[2026] = data["bega_ecmwf_bc_daily_2026"].astype(np.float32)
+            b_bc_daily[2026] = data["bega_ecmwf_bc_daily_2026"]
 
         MODELS["ECMWF SEAS5 (Bega)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -1291,11 +1291,11 @@ def _build_bc_pixel(s, md, mkey, oi, nm, pi, pj, on_m, cs_m, on_med, cs_med):
             target_yr = int(md["model_years"][oi]) if ("model_years" in md and len(md["model_years"]) > oi) else _OP_YEAR
             raw = bc_obj.get(target_yr)
             if raw is not None and hasattr(raw, "ndim") and raw.ndim == 4:
-                raw = raw[:, :, pi, pj]
+                raw = raw[:, :, pi, pj].astype(np.float32)      # traces may be held as float16
             else:
                 raw = np.array([])
         elif hasattr(bc_obj, "ndim") and bc_obj.ndim == 5:
-            raw = bc_obj[:, oi, :, pi, pj]
+            raw = bc_obj[:, oi, :, pi, pj].astype(np.float32)
         else:
             raw = np.array([])
         if raw.size > 0 and float(np.nanmax(raw)) > 0.01:

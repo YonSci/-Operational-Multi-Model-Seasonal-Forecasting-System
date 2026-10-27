@@ -804,9 +804,9 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     if isinstance(bc_arr, dict):
         raw = bc_arr.get(f_year)
         if raw is not None and hasattr(raw, "ndim") and raw.ndim == 4:
-            daily_mem = raw[:, :, pi, pj] # (nm, n_days)
+            daily_mem = raw[:, :, pi, pj].astype(np.float32) # (nm, n_days); traces may be held as float16
     elif bc_arr is not None and hasattr(bc_arr, "ndim") and bc_arr.ndim == 5:
-        daily_mem = bc_arr[:, oi, :, pi, pj] # (nm, n_days)
+        daily_mem = bc_arr[:, oi, :, pi, pj].astype(np.float32) # (nm, n_days)
 
     if daily_mem is not None and hasattr(daily_mem, "ndim") and daily_mem.ndim == 2 and not np.all(daily_mem == 0):
         pass
