@@ -54,12 +54,13 @@ const SHORT_RAINS_INITS = [
   { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
   { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
 ]
-// Onset definition (Short Rains): Dunning cumulative anomaly, or the planting rule presets
-// (>=20 mm in 3 days, no 7- or 10-day dry spell in the next 21 days) served as "<init> - Planting <k>d" models
+// Onset / cessation method (Short Rains): Dunning cumulative anomaly, or the ICPAC operational rules
+// (scripts/onset_rules.py) served as "<init> - ICPAC rule <k>" models; each rule sets onset, cessation and season length
 const ONSET_DEFS = [
-  { id:'dunning', label:'Dunning',              suffix:'',               title:'Dunning et al. (2016): turning point of accumulated rainfall anomaly, 1 Sep - 31 Dec' },
-  { id:'d7',      label:'Planting · 7-day dry', suffix:' - Planting 7d',  title:'Planting onset: first day from 1 Oct with >=20 mm in 3 days and no 7-day dry spell (<1 mm/day) in the next 21 days' },
-  { id:'d10',     label:'Planting · 10-day dry', suffix:' - Planting 10d', title:'Planting onset: first day from 1 Oct with >=20 mm in 3 days and no 10-day dry spell (<1 mm/day) in the next 21 days' },
+  { id:'dunning', label:'Dunning',      suffix:'',                title:'Dunning et al. (2016): turning points of the accumulated rainfall anomaly, 1 Sep - 31 Dec' },
+  { id:'r1',      label:'ICPAC rule 1', suffix:' - ICPAC rule 1', title:'Onset: wet day (>=1 mm) starting >20 mm in 3 days, no dry spell of 7+ days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET (modified Hargreaves), the day a 100 mm soil store is empty. Search 15 Aug - 31 Dec (ICPAC: to 15 Jan; forecasts end 31 Dec)' },
+  { id:'r2',      label:'ICPAC rule 2', suffix:' - ICPAC rule 2', title:'Onset: >=20 mm in 5 days with at least 3 rainy days (>=1 mm), no dry spell longer than 7 days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET, the day a 100 mm soil store is empty. Search 15 Aug - 31 Dec' },
+  { id:'r3',      label:'ICPAC rule 3', suffix:' - ICPAC rule 3', title:'Onset: >20 mm in 3 days, no dry spell longer than 10 days in the next 30 days. Cessation: first day of a 10-day period with rain <0.5 x PET (modified Hargreaves). Search 15 Aug - 31 Dec' },
 ]
 const hasModel = (modelsData, name) => Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === name || m?.raw_name === name)
 const shortRainsModel = (init, onsetDef='dunning') =>
@@ -2575,7 +2576,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                   const cur = ONSET_DEFS.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]
                   return avail.length > 1 ? (
                     <>
-                      <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Onset</label>
+                      <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Method</label>
                       <select value={avail.some(d=>d.id===onsetDef) ? onsetDef : 'dunning'} onChange={e=>setOnsetDef(e.target.value)} style={selStyle} title={cur.title}>
                         {avail.map(d=><option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
                       </select>

@@ -134,13 +134,20 @@
       <div class="kt-row">
         <h3>Season outlook</h3>
         <select id="season-run" aria-label="Forecast run" data-source="inits"></select>
+        <select id="season-method" aria-label="Onset and cessation method" data-source="inits">
+          <option value="">All methods</option>
+          <option value="Dunning">Dunning</option>
+          <option value="ICPAC rule 1">ICPAC rule 1</option>
+          <option value="ICPAC rule 2">ICPAC rule 2</option>
+          <option value="ICPAC rule 3">ICPAC rule 3</option>
+        </select>
       </div>
       <p class="kt-note" id="season-cond" data-source="sites">—</p>
       <div class="kt-chart dash-skeleton" id="season-chart" data-source="inits inits_members" style="min-height: 13rem"></div>
       <div class="kt-scroll">
         <table id="season-table" data-source="inits" data-row-key="site,init,variable,definition">
           <thead><tr>
-            <th>Variable</th>
+            <th>Method · variable</th>
             <th>Most likely</th>
             <th>Likely (half the members)</th>
             <th>Wide (8 in 10)</th>
@@ -148,14 +155,19 @@
             <th class="num">Normal</th>
             <th class="num">Late / long</th>
             <th>Long-term average</th>
-            <th class="num">No onset by 31 Dec</th>
+            <th class="num">None by 31 Dec</th>
             <th class="num">RPSS</th>
             <th class="num">Hit rate</th>
           </tr></thead>
           <tbody></tbody>
         </table>
       </div>
-      <p class="kt-note">Planting onset = first day from 1 Oct with at least 20 mm in 3 days and no dry spell (7 or 10 days under 1 mm) in the next 21 days. Members with no planting onset by 31 Dec count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
+      <p class="kt-note"><b>Methods.</b> Dunning: turning points of the accumulated rainfall anomaly, 1 Sep – 31 Dec.
+        <b>ICPAC rule 1</b>: onset on a wet day (≥1 mm) starting more than 20 mm in 3 days, with no dry spell of 7 days or more in the next 21 days.
+        <b>Rule 2</b>: at least 20 mm in 5 days with 3 or more rainy days, no dry spell longer than 7 days in the next 21.
+        <b>Rule 3</b>: more than 20 mm in 3 days, no dry spell longer than 10 days in the next 30.
+        Cessation (rules 1–2): after a 10-day period with rain below half the potential evapotranspiration (modified Hargreaves), the day a 100 mm soil store runs dry; rule 3: the first day of that 10-day period.
+        ICPAC rules search from 15 Aug; forecasts end on 31 Dec, so “none by 31 Dec” members count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
     </div>
   </section>
 
@@ -296,17 +308,17 @@
     <h2 id="init-title">Forecast by initialization</h2>
     <p class="kt-note">The same season at the selected station, seen by each seasonal forecast run (1 Sep, 1 Oct, 1 Oct with observed September, 1 Oct with the latest observations). Pick the station in Site detail.</p>
     <div class="kt-card kt-scroll">
-      <table id="init-table" data-source="inits" data-row-key="site,init,variable">
+      <table id="init-table" data-source="inits" data-row-key="site,init,variable,definition">
         <thead><tr>
           <th data-field="init">Run</th>
-          <th data-field="variable">Variable</th>
+          <th data-field="variable">Method · variable</th>
           <th data-field="median_date">Most likely</th>
           <th data-field="p25">Likely (half the members)</th>
           <th class="num" data-field="anomaly">vs normal (days)</th>
           <th class="num" data-field="p_bn">Early / short</th>
           <th class="num" data-field="p_nn">Normal</th>
           <th class="num" data-field="p_an">Late / long</th>
-          <th class="num" data-field="no_onset">No onset by 31 Dec</th>
+          <th class="num" data-field="no_onset">None by 31 Dec</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -317,7 +329,7 @@
     <h2>How these numbers are made</h2>
     <div class="kt-methods">
       <p><b>Seasonal forecast.</b> ECMWF SEAS5 started 1 October 2026, 25 members, bias-corrected day by day against CHIRPS 1993–2016 by quantile mapping. Observed CHIRPS rainfall replaces the forecast up to the latest observed day in every year, so skill is measured the same way it is used.</p>
-      <p><b>Onset definitions.</b> Dunning onset is the turning point of accumulated rainfall anomaly over 1 Sep – 31 Dec. Planting onset is the first day from 1 Oct with at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
+      <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives the three ICPAC operational rules (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. The near-term planting rains and planting onset (headline, ECMWF 15-day) use at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
       <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Local skill compares past forecasts at the site's cell with CHIRPS: useful, limited or no skill.</p>
       <p><b>Next 15 days.</b> ECMWF IFS ensemble (open data, 50 members), not bias-corrected. The combined planting onset continues each member with a seasonal member to check for dry spells beyond day 15.</p>
       <p><b>Satellite products.</b> CHIRPS (preliminary after September), ARC2, TAMSAT v3.1, PDIR-Now and NASA IMERG Late and Early, averaged onto the same 0.25° grid. GSMaP is not included yet (needs an Earth Engine project or a JAXA account). Each product is described under Data sources below.</p>
@@ -395,6 +407,9 @@ KT.pct = d3.format('.0%');
 KT.num = d3.format(',.1f');
 KT.int = d3.format(',.0f');
 KT.doyDate = (doy) => d3.utcFormat('%-d %b')(new Date(Date.UTC(2026, 0, 1) + (doy - 1) * 864e5));
+// Onset / cessation methods in display order (Dunning, ICPAC rules 1–3); rows without a definition are Dunning
+KT.methods = ['Dunning', 'ICPAC rule 1', 'ICPAC rule 2', 'ICPAC rule 3'];
+KT.methodRank = (r) => Math.max(0, KT.methods.indexOf(r.definition || 'Dunning'));
 KT.site = () => (dash.params().site || 'Kapiti Research Station Farm');
 KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early', 'imerg_gee', 'gsmap_gee'];
 KT.prodLabel = { chirps: 'CHIRPS', arc2: 'ARC2', tamsat: 'TAMSAT', pdirnow: 'PDIR-Now', imerg: 'IMERG Late', imerg_early: 'IMERG Early', imerg_gee: 'IMERG (GEE)', gsmap_gee: 'GSMaP (GEE)' };
@@ -687,27 +702,28 @@ dash.onData(() => {
 </script>
 
 <script>
-// Season outlook for the picked site and run: one row per onset definition (Dunning, planting 7-day, planting
-// 10-day) plus cessation. Hover a row for its numbers (a cursor shows the date under the pointer); the legend
-// switches layers on and off; the table below follows the same run.
+// Season outlook for the picked site, run and method: onset and cessation rows for Dunning and the ICPAC rules 1–3
+// (or one method). Hover a row for its numbers (a cursor shows the date under the pointer); the legend
+// switches layers on and off; the table below follows the same run and method.
 (() => {
   const box = document.getElementById('season-chart');
   const table = document.getElementById('season-table');
   const runSel = document.getElementById('season-run');
+  const methodSel = document.getElementById('season-method');
   const RUNS = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
   const LAYERS = [['members', 'Members'], ['wide', 'Wide range (8 in 10)'], ['likely', 'Likely range (half)'],
                   ['normal', 'Normal third'], ['avg', 'Long-term average'], ['today', 'Today']];
-  const END = 366;                                           // right edge: after 31 Dec (no onset)
+  const END = 366;                                           // right edge: after 31 Dec (none by then)
   const off = new Set();
   let run = null;
   const num = (v) => (v === '' || v == null || !isFinite(+v) ? NaN : +v);
-  const isPlant = (r) => r.variable === 'onset' && r.definition && r.definition !== 'Dunning';
-  const rowLabel = (r) => (r.variable === 'onset'
-    ? (isPlant(r) ? `Planting onset (no ${r.definition.includes('7-day') ? 7 : 10}-day dry spell)` : 'Onset (Dunning)')
-    : r.variable === 'cessation' ? 'Cessation' : 'Season length');
-  const order = (r) => (r.variable === 'onset' ? (!isPlant(r) ? 0 : r.definition.includes('7-day') ? 1 : 2) : r.variable === 'cessation' ? 3 : 4);
+  const defOf = (r) => r.definition || 'Dunning';
+  const rowLabel = (r) => `${defOf(r)} · ${r.variable === 'onset' ? 'onset' : r.variable === 'cessation' ? 'cessation' : 'season length'}`;
+  const order = (r) => KT.methodRank(r) * 3 + ['onset', 'cessation', 'lgp'].indexOf(r.variable);
+  const none = (r) => (r.variable === 'onset' ? +r.no_onset || 0 : r.variable === 'cessation' ? +r.no_cessation || 0 : 0);
   const fd = (v) => (isFinite(v) ? (v >= END ? 'after 31 Dec' : KT.doyDate(v)) : 'after 31 Dec');
   runSel.addEventListener('change', () => { run = runSel.value; draw(); });
+  methodSel.addEventListener('change', () => draw());
 
   const draw = () => {
     const d = dash.data('inits');
@@ -720,15 +736,15 @@ dash.onData(() => {
     if (!run || !runs.includes(run)) run = runs[runs.length - 1];
     runSel.replaceChildren(...runs.map((k) => new Option(k === 'Oct 01 + latest obs' ? `Run: ${k} (newest)` : `Run: ${k}`, k)));
     runSel.value = run;
-    const rows = all.filter((r) => r.init === run).sort((a, b) => order(a) - order(b));
-    const dates = rows.filter((r) => r.variable !== 'lgp').map((r) => ({ ...r, key: `${r.variable}|${r.definition || ''}`, label: rowLabel(r),
+    const rows = all.filter((r) => r.init === run && (!methodSel.value || defOf(r) === methodSel.value)).sort((a, b) => order(a) - order(b));
+    const dates = rows.filter((r) => r.variable !== 'lgp').map((r) => ({ ...r, key: `${r.variable}|${defOf(r)}`, label: rowLabel(r),
       ...Object.fromEntries(['p10', 'p25', 'median', 'p75', 'p90', 'chirps_clim', 't33', 't67'].map((k) => [k, num(r[k])])) }));
     const mem = dash.data('inits_members');
     const memOf = (r) => (mem.status === 'ok' ? mem.data.filter((q) => q.site === r.site && q.init === r.init && q.variable === r.variable
-      && (q.definition || '') === (r.definition || '')).map((q) => +q.value) : []);
+      && (q.definition || 'Dunning') === defOf(r)).map((q) => +q.value) : []);
 
     const lo = d3.min(dates, (r) => d3.min([r.p10, r.t33, r.chirps_clim].filter(isFinite))) ?? 274;
-    const x0 = lo < 274 ? 244 : 274;
+    const x0 = lo < 244 ? 227 : lo < 274 ? 244 : 274;
     const W = box.clientWidth || 600, rowH = 50, m = { t: 22, r: 18, b: 28, l: Math.min(240, W * 0.36) };
     const H = m.t + m.b + rowH * dates.length;
     const x = d3.scaleLinear([x0, END], [m.l, W - m.r]).clamp(true);
@@ -736,7 +752,7 @@ dash.onData(() => {
     const y = d3.scaleBand(dates.map((r) => r.key), [m.t, H - m.b]).padding(0.28);
     const bh = y.bandwidth();
     const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-    const ticks = (W < 520 ? [244, 274, 305, 335, END] : [244, 259, 274, 288, 305, 319, 335, 349, END]).filter((t) => t >= x0);
+    const ticks = (W < 520 ? [227, 244, 274, 305, 335, END] : [227, 244, 259, 274, 288, 305, 319, 335, 349, END]).filter((t) => t >= x0);
     svg.append('g').attr('transform', `translate(0,${H - m.b})`)
       .call(d3.axisBottom(x).tickValues(ticks).tickFormat((t) => (t === END ? '31 Dec+' : KT.doyDate(t))).tickSize(-(H - m.t - m.b)))
       .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
@@ -749,8 +765,7 @@ dash.onData(() => {
     const g = svg.append('g').selectAll('g').data(dates).join('g').attr('transform', (r) => `translate(0,${y(r.key)})`);
     const bg = g.append('rect').attr('x', 0).attr('y', -bh * 0.15).attr('width', W).attr('height', bh * 1.3).attr('rx', 4).attr('fill', 'var(--color-fg)').attr('opacity', 0);
     g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').attr('font-size', 12).text((r) => r.label);
-    const c0 = dash.colors[0], c1 = dash.colors[1];
-    const col = (r) => (isPlant(r) ? c1 : c0);
+    const col = (r) => dash.colors[KT.methodRank(r)];
     if (!off.has('normal')) g.append('rect').attr('x', (r) => xv(r.t33)).attr('width', (r) => Math.max(0, xv(r.t67) - xv(r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
     if (!off.has('wide')) g.append('line').attr('x1', (r) => xv(r.p10)).attr('x2', (r) => xv(r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', col).attr('stroke-width', 2).attr('stroke-linecap', 'round');
     if (!off.has('likely')) g.append('rect').attr('x', (r) => xv(r.p25)).attr('width', (r) => Math.max(3, xv(r.p75) - xv(r.p25))).attr('y', bh * 0.22).attr('height', bh * 0.56).attr('rx', 4).attr('fill', col).attr('opacity', 0.85);
@@ -760,7 +775,7 @@ dash.onData(() => {
         const gg = d3.select(this);
         gg.selectAll('circle.m').data(vals).join('circle').attr('class', 'm').attr('cx', (v) => x(v)).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
           .attr('fill', 'var(--color-fg)').attr('opacity', 0.55);
-        const n = +r.no_onset || 0;          // members with no onset by 31 Dec, drawn hollow at the right edge
+        const n = none(r);                   // members with no onset / cessation by 31 Dec, drawn hollow at the right edge
         gg.selectAll('circle.n').data(d3.range(n)).join('circle').attr('class', 'n').attr('cx', x(END) - 4).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
           .attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('opacity', 0.7);
       });
@@ -787,7 +802,7 @@ dash.onData(() => {
           ['Long-term average', fd(r.chirps_clim)], ['Normal third', `${fd(r.t33)} – ${fd(r.t67)}`],
           [r.variable === 'onset' ? 'Early / normal / late' : 'Early / normal / late end', `${pct(r.p_bn)} / ${pct(r.p_nn)} / ${pct(r.p_an)}`],
         ];
-        if (r.variable === 'onset' && +r.no_onset) lines.push(['No onset by 31 Dec', `${r.no_onset} of ${r.n_members} members`]);
+        if (none(r)) lines.push([r.variable === 'onset' ? 'No onset by 31 Dec' : 'No cessation by 31 Dec', `${none(r)} of ${r.n_members} members`]);
         if (isFinite(num(r.rpss_val))) lines.push(['Past skill here', `RPSS ${d3.format('+.2f')(num(r.rpss_val))}, hit rate ${pct(r.hitrate_val)}`]);
         else lines.push(['Past skill here', 'not available for this run']);
         tip.hidden = false;
@@ -805,9 +820,9 @@ dash.onData(() => {
       b.setAttribute('aria-pressed', String(!off.has(k))); b.title = 'Click to hide or show'; b.textContent = name;
       b.addEventListener('click', () => { if (off.has(k)) off.delete(k); else off.add(k); draw(); });
       return b;
-    }), ...[[c0, 'Dunning onset, cessation'], [c1, 'Planting rule']].map(([c, t]) => {
-      const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = c; sp.append(t); return sp;
-    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: no onset by 31 Dec' }));
+    }), ...[...new Set(dates.map(defOf))].map((t) => {
+      const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[KT.methodRank({ definition: t })]; sp.append(t); return sp;
+    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: none by 31 Dec' }));
     box.style.minHeight = H + 'px';
     box.replaceChildren(svg.node(), tip, lg);
 
@@ -821,7 +836,7 @@ dash.onData(() => {
       ['p10', (v, r) => `${dv(r, 'p10')} – ${dv(r, 'p90')}`],
       ['p_bn', (v) => KT.pct(+v), 'num'], ['p_nn', (v) => KT.pct(+v), 'num'], ['p_an', (v) => KT.pct(+v), 'num'],
       ['chirps_clim', (v, r) => dv(r, 'chirps_clim')],
-      ['no_onset', (v, r) => (r.variable === 'onset' ? `${v} of ${r.n_members}` : ''), 'num'],
+      ['no_onset', (v, r) => (r.variable === 'lgp' || defOf(r) === 'Dunning' ? '' : `${none(r)} of ${r.n_members}`), 'num'],
       ['rpss_val', (v) => d3.format('+.2f')(+v), 'num'], ['hitrate_val', (v) => d3.format('.2f')(+v), 'num'],
     ]);
     [...table.querySelectorAll('tbody tr')].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable, rows[i].definition || ''].map(encodeURIComponent).join(','); });
@@ -882,18 +897,17 @@ dash.onData(() => {
   const n = dash.data('inits');
   const nt = document.getElementById('init-table');
   if (n.status === 'ok') {
-    const plant = (r) => r.variable === 'onset' && r.definition && r.definition !== 'Dunning';
-    const label = (r) => (r.variable === 'onset' ? (plant(r) ? `Planting onset (no ${r.definition.includes('7-day') ? 7 : 10}-day dry spell)` : 'Onset (Dunning)')
-      : r.variable === 'cessation' ? 'Cessation' : 'Season length');
-    const rank = (r) => (r.variable === 'onset' ? (plant(r) ? (r.definition.includes('7-day') ? 1 : 2) : 0) : r.variable === 'cessation' ? 3 : 4);
+    const label = (r) => `${r.definition || 'Dunning'} · ${r.variable === 'onset' ? 'onset' : r.variable === 'cessation' ? 'cessation' : 'season length'}`;
+    const rank = (r) => KT.methodRank(r) * 3 + ['onset', 'cessation', 'lgp'].indexOf(r.variable);
     const runs = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
     const rows = n.data.filter((r) => r.site === KT.site()).sort((a, b) => runs.indexOf(a.init) - runs.indexOf(b.init) || rank(a) - rank(b));
     document.getElementById('init-title').textContent = `Forecast by initialization: ${KT.site()}`;
     const dd = (v, r) => (v === '' || v == null || !isFinite(+v) ? (r.variable === 'lgp' ? '—' : 'after 31 Dec') : r.variable === 'lgp' ? `${KT.int(+v)} d` : KT.doyDate(+v));
-    const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x, r) => label(r)], ['median_date', (x, r) => x || `${KT.int(+r.median)} d`],
+    const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x, r) => label(r)], ['median_date', (x, r) => x || (isFinite(+r.median) && r.median !== '' ? `${KT.int(+r.median)} d` : '—')],
       ['init', (x, r) => (r.p25 === undefined ? '—' : `${dd(r.p25, r)} – ${dd(r.p75, r)}`)],
-      ['anomaly', (x) => d3.format('+.0f')(+x), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num'],
-      ['no_onset', (x, r) => (r.variable === 'onset' ? `${x} of ${r.n_members}` : ''), 'num']]);
+      ['anomaly', (x) => (x === '' || x == null || !isFinite(+x) ? '—' : d3.format('+.0f')(+x)), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num'],
+      ['no_onset', (x, r) => (r.variable === 'lgp' || !r.definition || r.definition === 'Dunning' ? ''
+        : `${r.variable === 'onset' ? x : r.no_cessation || 0} of ${r.n_members}`), 'num']]);
     [...tb.children].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable, rows[i].definition || ''].map(encodeURIComponent).join(','); });
   } else nt.querySelector('tbody').replaceChildren();
 

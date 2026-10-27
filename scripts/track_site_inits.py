@@ -3,10 +3,10 @@
 track_site_inits.py
 ───────────────────
 Compare Short Rains onset / cessation / season length (LGP) at one site across every
-ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...), for each onset definition:
-Dunning, and the planting rule presets (>=20 mm in 3 days, no 7- or 10-day dry spell in the next 21 days;
-"<init> - Planting <k>d" models). Planting onset rows count members with no onset by 31 Dec as "after
-31 Dec" in the percentiles (they are late, not missing).
+ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...), for each method: Dunning, and the
+ICPAC operational rules 1–3 (scripts/onset_rules.py; "<init> - ICPAC rule <k>" models), which set onset, cessation
+and season length. ICPAC rows count members with no onset / no cessation by 31 Dec as "after 31 Dec" in the
+percentiles (late, not missing); season length is 0 without onset and open-ended without cessation.
 
 Writes to outputs/site_tracker/<site>/:
   inits_summary.csv   one row per initialization x variable (median, P10-P90, terciles, anomaly)
@@ -39,8 +39,9 @@ INITS = [
     ("Oct 01 + latest obs", "ECMWF SEAS5 (Oct+Obs latest)"),
 ]
 VARS = [("onset", "on_v", "Onset"), ("cessation", "cs_v", "Cessation"), ("lgp", "lg_v", "Season length")]
-# onset definitions: model-name suffix → label (planting presets only change the onset)
-DEFS = [("", "Dunning"), (" - Planting 7d", "Planting (no 7-day dry spell)"), (" - Planting 10d", "Planting (no 10-day dry spell)")]
+# methods: model-name suffix → label
+DEFS = [("", "Dunning")] + [(f" - ICPAC rule {k}", f"ICPAC rule {k}") for k in (1, 2, 3)]
+M_KEY = {"onset": "onset_doy", "cessation": "cessation_doy", "lgp": "lgp_days"}
 CATS = ["BN", "NN", "AN"]
 P_KEY = {"onset": "p_on", "cessation": "p_cs", "lgp": "p_lgp"}
 
@@ -93,15 +94,20 @@ def track(name, lat, lon, year):
             px = dl.get_pixel_stats(lat, lon, season="short_rains", model=model, year=year)
             st = px["models"][model]
             pi, pj = px["pi"], px["pj"]
+            if suffix:
+                yi = int(np.where(np.asarray(md["model_years"]) == year)[0][0])
+                raw = {v: np.asarray(md[M_KEY[v]][:, yi, pi, pj], dtype=float) for v in M_KEY}
+                has_on = np.isfinite(raw["onset"])
             for var, vkey, title in VARS:
-                if suffix and var != "onset":
-                    continue                                   # planting presets share cessation and LGP with Dunning
                 if suffix:
-                    # all members, no onset by 31 Dec = +inf (late), so percentiles stay honest
-                    yi = int(np.where(np.asarray(md["model_years"]) == year)[0][0])
-                    raw = np.asarray(md["onset_doy"][:, yi, pi, pj], dtype=float)
-                    allv = np.where(np.isfinite(raw), raw, np.inf)
-                    vals = raw[np.isfinite(raw)]
+                    # all members: no onset / no cessation by 31 Dec = +inf (late), LGP 0 without onset
+                    if var == "onset":
+                        allv = np.where(has_on, raw["onset"], np.inf)
+                    elif var == "cessation":
+                        allv = np.where(np.isfinite(raw["cessation"]), raw["cessation"], np.inf)[has_on]
+                    else:
+                        allv = np.where(~has_on, 0.0, np.where(np.isfinite(raw["lgp"]), raw["lgp"], np.inf))
+                    vals = raw[var][np.isfinite(raw[var])]
                 else:
                     vals = np.asarray(st[vkey], dtype=float)
                     allv = vals
@@ -111,9 +117,10 @@ def track(name, lat, lon, year):
                 rpss = md.get("rpss_val", {}).get(var)
                 hr = md.get("hitrate_val", {}).get(var)
                 row = dict(
-                    init=label, model=model, definition=definition if var == "onset" else "", variable=var,
+                    init=label, model=model, definition=definition, variable=var,
                     window=f"DOY {px['win_doy_start']}-{px['win_doy_end']}",
-                    n_valid=len(vals), n_members=st["nm"], no_onset=int(len(allv) - len(vals)) if var == "onset" else 0,
+                    n_valid=len(vals), n_members=st["nm"], no_onset=int(st["nm"] - len(vals)) if (suffix and var == "onset") else 0,
+                    no_cessation=int(np.sum(has_on & np.isnan(raw["cessation"]))) if (suffix and var == "cessation") else 0,
                     median=round(med, 1), p10=round(_pct(allv, 10), 1), p25=round(_pct(allv, 25), 1),
                     p75=round(_pct(allv, 75), 1), p90=round(_pct(allv, 90), 1),
                     chirps_clim=round(clim, 1), anomaly=round(med - clim, 1),

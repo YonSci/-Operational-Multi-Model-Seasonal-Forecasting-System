@@ -42,9 +42,13 @@ CHIRPS_PATH = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.n
 
 
 # ── Core rule ───────────────────────────────────────────────────────────────
-def detect(daily, start_idx, rain_mm=20.0, acc_days=3, dry_spell=10, dry_day_mm=1.0, lookahead=21, **_):
+def detect(daily, start_idx, rain_mm=20.0, acc_days=3, dry_spell=10, dry_day_mm=1.0, lookahead=21,
+           strict=False, min_wet_days=0, first_day_wet=True, end_idx=None, **_):
     """
     daily : (..., n_days) mm/day; NaN = unknown day (e.g. beyond the observed record).
+    Trigger on day d: rain over d..d+acc_days-1 >= rain_mm (> rain_mm when strict), at least min_wet_days
+    days >= dry_day_mm in that window, and day d itself wet when first_day_wet; no run of >= dry_spell
+    dry days in d+1..d+lookahead. Days before start_idx / after end_idx never trigger.
     Returns (onset_idx, provisional): float index into the day axis (NaN = none), bool.
     Unknown days never trigger, and count as 'not dry' in the dry-spell check (→ provisional).
     """
@@ -58,8 +62,15 @@ def detect(daily, start_idx, rain_mm=20.0, acc_days=3, dry_spell=10, dry_day_mm=
 
     csum = np.concatenate([np.zeros(x.shape[:-1] + (1,), np.float32), np.cumsum(xz, axis=-1)], axis=-1)
     acc = csum[..., acc_days:acc_days + n] - csum[..., :n]                       # rain over d..d+acc-1
-    trig = kn[..., :n] & (xz[..., :n] >= dry_day_mm) & (acc >= rain_mm)
+    trig = kn[..., :n] & ((acc > rain_mm) if strict else (acc >= rain_mm))
+    if first_day_wet:
+        trig &= xz[..., :n] >= dry_day_mm
+    if min_wet_days:
+        wsum = np.concatenate([np.zeros(x.shape[:-1] + (1,), np.int16), np.cumsum(xz >= dry_day_mm, axis=-1, dtype=np.int16)], axis=-1)
+        trig &= (wsum[..., acc_days:acc_days + n] - wsum[..., :n]) >= min_wet_days
     trig[..., :start_idx] = False
+    if end_idx is not None:
+        trig[..., end_idx + 1:] = False
 
     dry = kn & (xz < dry_day_mm)                                                  # unknown days are not dry
     run = np.zeros_like(xz, dtype=np.int16)                                      # dry run length ending at t
@@ -80,6 +91,45 @@ def detect(daily, start_idx, rain_mm=20.0, acc_days=3, dry_spell=10, dry_day_mm=
 
 
 # ── Seasonal pipeline ──────────────────────────────────────────────────────
+def tercile_probs_skill(c_f, e_f, c_years, m_years, lm):
+    """CHIRPS terciles (CAL years), calibrated tercile probabilities for every member year, and skill.
+    c_f (year, lat, lon) observed and e_f (member, year, lat, lon) forecast values with no NaN for "none"
+    (the caller maps it to a sentinel). Without CAL-period forecast years (e.g. only the latest years) the
+    probabilities stay raw and alpha / skill are NaN.
+    Returns t33, t67, probs (3, year, lat, lon), alpha, skill {rpss_cal, rpss_val, hitrate_cal, hitrate_val},
+    correlation and mean absolute error of the ensemble median against CHIRPS."""
+    cal_c = np.isin(c_years, CAL_YEARS)
+    t33, t67, _ = dl.estimate_terciles(c_f[cal_c], lm, 12)
+    p_raw = dl.estimate_probs(e_f, t33, t67)
+    ov = np.intersect1d(m_years[np.isfinite(e_f).any(axis=(0, 2, 3))], c_years)       # years with forecast data
+    e_idx = np.where(np.isin(m_years, ov))[0]
+    c_idx = np.where(np.isin(c_years, ov))[0]
+    cal_ov, val_ov = np.isin(ov, CAL_YEARS), np.isin(ov, VAL_YEARS)
+    nanmap = np.full(lm.shape, np.nan, np.float32)
+    if cal_ov.sum() < 5:
+        return t33, t67, p_raw, nanmap, {k: nanmap for k in ("rpss_cal", "rpss_val", "hitrate_cal", "hitrate_val")}, nanmap, nanmap
+    obs_cat = np.where(c_f[c_idx] < t33, 0, np.where(c_f[c_idx] < t67, 1, 2)).astype(np.int8)
+    obs_cat[np.isnan(c_f[c_idx])] = -1
+    alpha = dl.optimise_alpha(p_raw[:, e_idx[cal_ov]], obs_cat[cal_ov], ALPHA_GRID)
+    p_d = dl.apply_pooling(p_raw, alpha)
+    skill = {}
+    for tag, msk in (("cal", cal_ov), ("val", val_ov)):
+        rps = np.nanmean(dl.rps_batch(p_d[:, e_idx[msk]], obs_cat[msk]), axis=0)
+        rps_c = np.nanmean(dl.rps_clim_batch(obs_cat[msk]), axis=0)
+        skill[f"rpss_{tag}"] = dl.compute_rpss(rps, rps_c)
+        skill[f"hitrate_{tag}"] = dl.compute_hitrate(p_d[:, e_idx[msk]], obs_cat[msk])
+    # Deterministic agreement of the ensemble median with observations (all overlap years)
+    med = np.nanmedian(e_f[:, e_idx], axis=0)
+    obs = c_f[c_idx]
+    with np.errstate(invalid="ignore"):
+        ma, oa = med - np.nanmean(med, 0), obs - np.nanmean(obs, 0)
+        corr = np.nansum(ma * oa, 0) / np.sqrt(np.nansum(ma ** 2, 0) * np.nansum(oa ** 2, 0))
+        mae = np.nanmean(np.abs(med - obs), 0)
+    corr[~lm] = np.nan
+    mae[~lm] = np.nan
+    return t33, t67, p_d, alpha, skill, corr, mae
+
+
 def _target_grid(seasonal_dir):
     q = xr.open_dataarray(seasonal_dir / "chirps_Q_bar.nc")
     lat, lon = q.lat.values, q.lon.values
@@ -133,33 +183,7 @@ def run_seasonal(seasonal_dir, rule, out_name="agro_onset"):
 
     # Terciles / probabilities / calibration with "no onset" counted as late
     fill = lambda a: np.where(lm & np.isnan(a), NO_ONSET, a)
-    c_f, e_f = fill(c_on), fill(e_on)
-    cal_c = np.isin(c_years, CAL_YEARS)
-    t33, t67, _ = dl.estimate_terciles(c_f[cal_c], lm, 12)
-    p_raw = dl.estimate_probs(e_f, t33, t67)
-    ov = np.intersect1d(m_years, c_years)
-    e_idx = np.where(np.isin(m_years, ov))[0]
-    c_idx = np.where(np.isin(c_years, ov))[0]
-    obs_cat = np.where(c_f[c_idx] < t33, 0, np.where(c_f[c_idx] < t67, 1, 2)).astype(np.int8)
-    obs_cat[np.isnan(c_f[c_idx])] = -1
-    cal_ov, val_ov = np.isin(ov, CAL_YEARS), np.isin(ov, VAL_YEARS)
-    alpha = dl.optimise_alpha(p_raw[:, e_idx[cal_ov]], obs_cat[cal_ov], ALPHA_GRID)
-    p_d = dl.apply_pooling(p_raw, alpha)
-    skill = {}
-    for tag, msk in (("cal", cal_ov), ("val", val_ov)):
-        rps = np.nanmean(dl.rps_batch(p_d[:, e_idx[msk]], obs_cat[msk]), axis=0)
-        rps_c = np.nanmean(dl.rps_clim_batch(obs_cat[msk]), axis=0)
-        skill[f"rpss_{tag}"] = dl.compute_rpss(rps, rps_c)
-        skill[f"hitrate_{tag}"] = dl.compute_hitrate(p_d[:, e_idx[msk]], obs_cat[msk])
-    # Deterministic agreement of the ensemble median with observations (all overlap years)
-    med = np.nanmedian(e_f[:, e_idx], axis=0)
-    obs = c_f[c_idx]
-    with np.errstate(invalid="ignore"):
-        ma, oa = med - np.nanmean(med, 0), obs - np.nanmean(obs, 0)
-        corr = np.nansum(ma * oa, 0) / np.sqrt(np.nansum(ma ** 2, 0) * np.nansum(oa ** 2, 0))
-        mae = np.nanmean(np.abs(med - obs), 0)
-    corr[~lm] = np.nan
-    mae[~lm] = np.nan
+    t33, t67, p_d, alpha, skill, corr, mae = tercile_probs_skill(fill(c_on), fill(e_on), c_years, m_years, lm)
 
     g = {"lat": lat, "lon": lon}
     _save(c_on, ["year", "lat", "lon"], {"year": c_years, **g}, out / "CHIRPS_agro_onset_doy.nc")

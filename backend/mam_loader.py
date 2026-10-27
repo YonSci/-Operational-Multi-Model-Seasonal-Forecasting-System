@@ -373,7 +373,8 @@ def _load_model(name, out_dir, chirps, season="long_rains", win_doy_start=32, wi
     _nc = {}
     for _root, _, _files in os.walk(out_dir):
         for _f in _files:
-            if _f.endswith(".nc"): _nc[_f[:-3].lower()] = os.path.join(_root, _f)
+            # top-down walk: the run's own files win over same-named files in method subfolders (icpac_rule<k>/)
+            if _f.endswith(".nc"): _nc.setdefault(_f[:-3].lower(), os.path.join(_root, _f))
     _missing = []
     def _skill(metric, variable, period=None):
         tokens = [metric, variable] + ([period] if period else [])
@@ -479,55 +480,108 @@ def _attach_extra_short_rains(MODELS):
         MODELS[name] = entry
     _attach_packed_short_rains(MODELS, missing)
 
-PLANTING_SUFFIX = " - Planting {k}d"           # ASCII only: the name can end up in HTTP headers (bulletin filename)
+RULE_SUFFIX = " - ICPAC rule {k}"             # ASCII only: the name can end up in HTTP headers (bulletin filename)
+_RULE_VARS = (("onset", "onset_doy", "onset"), ("cessation", "cessation_doy", "cess"), ("lgp", "lgp_days", "lgp"))
 
 
-def _attach_planting_variants(MODELS, chirps_sep=None):
-    """For each Short Rains initialization add "<init> - Planting <k>d" models: the planting-onset rule
-    (≥20 mm in 3 days with no k-day dry spell in the next 21 days) from backend/demo_short_rains_planting.npz
-    (scripts/pack_planting_onset.py). Cessation, season length, rainfall and daily traces are shared with
-    the parent (Dunning) model; onset members, onset probabilities/skill, terciles and CHIRPS onset are replaced."""
-    p = os.path.join(os.path.dirname(__file__), "demo_short_rains_planting.npz")
+def _attach_rule_variants(MODELS, chirps_sep=None):
+    """For each Short Rains initialization add "<init> - ICPAC rule <k>" models: the ICPAC operational onset and
+    cessation rules (scripts/onset_rules.py, packed by scripts/pack_onset_rules.py into
+    backend/demo_short_rains_rules.npz). Onset, cessation and season length members, probabilities, skill,
+    terciles and CHIRPS history are replaced; seasonal rainfall and daily traces are shared with the parent
+    (Dunning) model. Members stay float16 (whole days, NaN = none by 31 Dec) to keep the hosted API small;
+    runs packed as "same_as" another share its arrays."""
+    p = os.path.join(os.path.dirname(__file__), "demo_short_rains_rules.npz")
     if not os.path.isfile(p):
         return
     data = np.load(p, allow_pickle=False)
     meta = json.loads(str(data["__meta__"]))
-    f32 = lambda key: data[key].astype(np.float32)
-    for parent, presets in meta.items():
+    cache = {}
+
+    def arr(src, k, key, dtype=None):
+        full = f"{src}|r{k}|{key}"
+        if full not in cache:
+            a = data[full]
+            cache[full] = a if dtype is None else a.astype(dtype)
+        return cache[full]
+
+    for parent, rules in meta.items():
         base = MODELS.get(parent)
         if base is None:
             continue
-        for k, info in presets.items():
-            key = f"{parent}|d{k}"
-            onset = f32(f"{key}|onset_doy")
+        for k, info in rules.items():
+            src = info.get("same_as", parent)
             if not np.array_equal(np.asarray(info["model_years"]).astype(int), np.asarray(base["model_years"]).astype(int)):
-                print(f"  SKIP  {parent} planting d{k}: model years differ from the parent")
+                print(f"  SKIP  {parent} ICPAC rule {k}: model years differ from the parent")
                 continue
-            e = dict(base)                                  # shallow copy: the parent's arrays are shared
-            e["onset_doy"] = onset
-            for fld, src in (("probs_damped", "probs"), ("alpha", "alpha"), ("hitrate_cal", "hitrate_cal"),
-                             ("hitrate_val", "hitrate_val"), ("rpss_val", "rpss_val")):
-                e[fld] = {**(base.get(fld) or {}), "onset": f32(f"{key}|{src}")}
-            e["t33_onset"], e["t67_onset"] = f32(f"{key}|t33"), f32(f"{key}|t67")
-            e["chirps_clim"] = {**(base.get("chirps_clim") or {}), "onset": f32(f"{key}|chirps_clim")}
-            # CHIRPS history (bulletin / historical panel): planting onset per year on the parent's history years
+            e = dict(base)                                  # shallow copy: the parent's rainfall arrays are shared
+            for fld in ("probs_damped", "alpha", "hitrate_cal", "hitrate_val", "rpss_val", "chirps_clim"):
+                e[fld] = dict(base.get(fld) or {})
+            for var, mkey, tkey in _RULE_VARS:
+                e[mkey] = arr(src, k, f"{var}|members")
+                e["probs_damped"][var] = arr(src, k, f"{var}|probs")
+                for fld in ("alpha", "hitrate_cal", "hitrate_val", "rpss_val"):
+                    e[fld][var] = arr(src, k, f"{var}|{fld}")
+                e[f"t33_{tkey}"], e[f"t67_{tkey}"] = arr(src, k, f"{var}|t33"), arr(src, k, f"{var}|t67")
+                e["chirps_clim"][var] = arr(src, k, f"{var}|chirps_clim")
+            # CHIRPS history (bulletin / historical panel) on the parent's history years
             hist = base.get("chirps_hist")
             if hist is None and chirps_sep:
                 hist = {h: chirps_sep[h] for h in ("onset_doy", "cessation_doy", "lgp_days", "chirps_years")}
             if hist is not None:
-                c_on, c_years = f32(f"{key}|chirps_onset"), data[f"{key}|chirps_years"].astype(int)
+                c_years = arr(src, k, "chirps_years").astype(int)
                 hy = np.asarray(hist["chirps_years"]).astype(int)
-                aligned = np.full((len(hy), *c_on.shape[1:]), np.nan, np.float32)
-                for i, y in enumerate(hy):
-                    j = np.where(c_years == y)[0]
-                    if len(j):
-                        aligned[i] = c_on[j[0]]
-                e["chirps_hist"] = {**hist, "onset_doy": aligned, "chirps_clim": e["chirps_clim"]}
-            e["onset_definition"] = {"method": "planting", "dry_spell_days": int(k), "label": info["label"],
-                                     "skill": bool(info.get("skill", True)), "note": info.get("note", "")}
-            name = parent + PLANTING_SUFFIX.format(k=k)
+                new_hist = dict(hist)
+                for var, mkey, _ in _RULE_VARS:
+                    c = arr(src, k, f"{var}|chirps")
+                    aligned = np.full((len(hy), *c.shape[1:]), np.nan, np.float32)
+                    for i, y in enumerate(hy):
+                        j = np.where(c_years == y)[0]
+                        if len(j):
+                            aligned[i] = c[j[0]]
+                    new_hist[mkey] = aligned
+                e["chirps_hist"] = {**new_hist, "chirps_clim": e["chirps_clim"]}
+            # Runs with members for only some years (Sep 01: 2025 and 2026) keep just those years
+            yrs = np.asarray(info["model_years"]).astype(int)
+            keep = np.asarray(info.get("data_years", yrs)).astype(int)
+            if len(keep) < len(yrs):
+                ix = np.where(np.isin(yrs, keep))[0]
+                for _, mkey, _ in _RULE_VARS:
+                    e[mkey] = np.ascontiguousarray(e[mkey][:, ix])
+                e["probs_damped"] = {v: (a[:, ix] if v in ("onset", "cessation", "lgp") else a)
+                                     for v, a in e["probs_damped"].items()}
+                e["model_years"] = yrs[ix]
+                e["op_idx"] = int(np.where(yrs[ix] == yrs[base["op_idx"]])[0][0]) if yrs[base["op_idx"]] in yrs[ix] else len(ix) - 1
+            rule = info.get("rule", {})
+            e["onset_definition"] = {"method": "icpac", "rule": int(k), "label": info["label"],
+                                     "skill": bool(info.get("skill", True)), "note": info.get("note", ""),
+                                     "search_doy": rule.get("search_doy"), "cessation": rule.get("cessation")}
+            name = parent + RULE_SUFFIX.format(k=k)
             MODELS[name] = e
-            print(f"  LOADED {name}: planting onset ({info['label']})")
+            print(f"  LOADED {name}" + (f" (arrays shared with {src})" if src != parent else ""))
+
+
+class _LazyTraces(dict):
+    """Daily bias-corrected traces {year: (member, day, lat, lon) float16} read from the demo .npz only when a
+    year is requested (pixel plume, bulletin) instead of being held in memory: ~85 MB less on the 512 MB host.
+    Readers use .get(year) and widen their pixel slice to float32."""
+
+    def __init__(self, npz_path, keys):
+        super().__init__({int(y): None for y in keys})
+        self._path, self._keys = npz_path, {int(y): k for y, k in keys.items()}
+
+    def get(self, year, default=None):
+        key = self._keys.get(int(year)) if year is not None else None
+        if key is None:
+            return default
+        with np.load(self._path, allow_pickle=False) as z:
+            return z[key]
+
+    def __getitem__(self, year):
+        out = self.get(year)
+        if out is None:
+            raise KeyError(year)
+        return out
 
 
 # ── Demo / Cloud fallback loader ──────────────────────────────────────────
@@ -668,11 +722,8 @@ def _load_demo_npz():
         op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
         n_members = int(m_on.shape[0])
 
-        sep_bc_daily = {}
-        if "sep_ecmwf_bc_daily_2026" in data:
-            sep_bc_daily[2026] = data["sep_ecmwf_bc_daily_2026"]   # float16 as stored: ~85 MB less on the 512 MB host; slices are widened where read
-        if "sep_ecmwf_bc_daily_2025" in data:
-            sep_bc_daily[2025] = data["sep_ecmwf_bc_daily_2025"]
+        sep_bc_daily = _LazyTraces(npz_path, {y: f"sep_ecmwf_bc_daily_{y}" for y in (2025, 2026)
+                                              if f"sep_ecmwf_bc_daily_{y}" in data})
 
         MODELS["ECMWF SEAS5 (Sep)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -765,9 +816,7 @@ def _load_demo_npz():
         op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
         n_members = int(m_on.shape[0])
 
-        k_bc_daily = {}
-        if "kiremt_ecmwf_bc_daily_2026" in data:
-            k_bc_daily[2026] = data["kiremt_ecmwf_bc_daily_2026"]
+        k_bc_daily = _LazyTraces(npz_path, {2026: "kiremt_ecmwf_bc_daily_2026"} if "kiremt_ecmwf_bc_daily_2026" in data else {})
 
         MODELS["ECMWF SEAS5 (Kiremt)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -862,9 +911,7 @@ def _load_demo_npz():
         op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
         n_members = int(m_on.shape[0])
 
-        f_bc_daily = {}
-        if "fmam_ecmwf_bc_daily_2026" in data:
-            f_bc_daily[2026] = data["fmam_ecmwf_bc_daily_2026"]
+        f_bc_daily = _LazyTraces(npz_path, {2026: "fmam_ecmwf_bc_daily_2026"} if "fmam_ecmwf_bc_daily_2026" in data else {})
 
         MODELS["ECMWF SEAS5 (FMAM)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -959,9 +1006,7 @@ def _load_demo_npz():
         op_idx = int(np.where(op_mask)[0][0]) if op_mask.any() else len(m_years) - 1
         n_members = int(m_on.shape[0])
 
-        b_bc_daily = {}
-        if "bega_ecmwf_bc_daily_2026" in data:
-            b_bc_daily[2026] = data["bega_ecmwf_bc_daily_2026"]
+        b_bc_daily = _LazyTraces(npz_path, {2026: "bega_ecmwf_bc_daily_2026"} if "bega_ecmwf_bc_daily_2026" in data else {})
 
         MODELS["ECMWF SEAS5 (Bega)"] = dict(
             onset_doy=m_on, cessation_doy=m_cs, lgp_days=m_lg,
@@ -1021,7 +1066,11 @@ def _load_demo_npz():
     regime_map = data["regime_map"].astype(np.int8) if "regime_map" in data else None
 
     _attach_extra_short_rains(MODELS)
-    _attach_planting_variants(MODELS, chirps_sep)
+    _attach_rule_variants(MODELS, chirps_sep)
+    # Tercile probabilities lie in [0, 1]: float16 keeps them to ~0.0005 and halves their memory on the hosted API
+    for md in MODELS.values():
+        if md.get("probs_damped"):
+            md["probs_damped"] = {k: (v.astype(np.float16) if isinstance(v, np.ndarray) else v) for k, v in md["probs_damped"].items()}
     print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Deyr/Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}, RegimeMap: {regime_map is not None}).")
     return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
 
@@ -1077,7 +1126,7 @@ def load(force=False):
             entry = _load_model(name, out_dir, m_chirps, season=m_season, win_doy_start=m_start, win_doy_end=m_end)
             if entry is not None: MODELS[name] = entry
         _attach_extra_short_rains(MODELS)
-        _attach_planting_variants(MODELS, chirps_sep)
+        _attach_rule_variants(MODELS, chirps_sep)
         if not MODELS:
             raise RuntimeError("No models loaded from NetCDF files.")
         print(f"\n[data_loader] Loaded {len(MODELS)}/{len(MODEL_DIRS)} models from NetCDF. Ready.")

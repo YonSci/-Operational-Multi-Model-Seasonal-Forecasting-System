@@ -8,7 +8,7 @@ Refresh the Kenya Short Rains forecast as new observations and medium-range fore
      daily p05 GeoTIFFs after the final record ends; rebuild the 0.25° preliminary NetCDF
   2. Seasonal (ECMWF SEAS5, latest init) re-run with observed CHIRPS spliced in up to the latest day
      → outputs/ecmwf_<mon>_obs_latest/ (+ run_meta.json); skipped when the observation date is unchanged
-  3. Agronomic (planting) onset: CHIRPS + members, terciles, calibration, skill
+  3. Agronomic (planting) onset: CHIRPS + members, terciles, calibration, skill; ICPAC onset/cessation rules 1–3
   4. Latest ECMWF ENS (open data) → 1–15 day outlook and composite planting-onset dates
   5. Site reports for the Kenya monitored sites (outputs/site_reports/<today>/)
   6. Hot-reload the local backend if it is running
@@ -143,13 +143,13 @@ def main():
     changed = run_seasonal(obs_end, a.force)
     if changed or not (OUT_DIR / "agro_onset" / "rule.json").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "seasonal", str(OUT_DIR)], check=True, env=env)
-    # Planting-onset presets for the platform's Onset selector (no 7- / 10-day dry spell in the next 21 days),
-    # packed for the backend, then every site's comparison across initializations and onset definitions
-    if changed or not all((OUT_DIR / f"agro_onset_d{k}" / "rule.json").exists() for k in (7, 10)):
-        for k in (7, 10):
-            subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "seasonal", str(OUT_DIR), "--dry-spell", str(k),
-                            "--out-name", f"agro_onset_d{k}"], check=True, env=env)
-        subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_planting_onset.py")], check=True, env=env)
+    # ICPAC onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once),
+    # packed for the backend, then every site's comparison across initializations and methods
+    if changed or not all((OUT_DIR / f"icpac_rule{k}" / "rule.json").exists() for k in (1, 2, 3)):
+        if not (BASE_DIR / "data" / "worldclim" / "pet_mhargreaves_clim_kenya.nc").exists():
+            subprocess.run([PY, str(BASE_DIR / "scripts" / "pet_hargreaves.py")], check=True, env=env)
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "onset_rules.py"), str(OUT_DIR)], check=True, env=env)
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_onset_rules.py")], check=True, env=env)
         subprocess.run([PY, str(BASE_DIR / "scripts" / "track_site_inits.py"), "--all-kenya"], check=False,
                        env={**env, "LOAD_BC_DAILY": "0"})
 
