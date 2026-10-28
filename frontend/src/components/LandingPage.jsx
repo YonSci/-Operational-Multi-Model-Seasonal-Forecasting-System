@@ -1,12 +1,12 @@
 import {
   CloudRain, Percent, Layers, CheckCircle2, History as HistoryIcon,
-  ArrowRight, Sun, Moon, Sprout, MapPin, BookOpen
+  ArrowRight, Sun, Moon, Sprout, MapPin, BookOpen, Satellite
 } from 'lucide-react'
 
 const FEATURES = [
   {
     id: 'forecast', icon: CloudRain, title: 'Forecasting',
-    desc: 'Deterministic onset, cessation and LGP outlooks per model, with A(D) accumulated-anomaly plume diagnostics.'
+    desc: 'Onset, cessation and season-length outlooks for the chosen method: rainfall plume, the A(D) plume (Dunning), the dates of every member (Agri rules, FAO) and the soil-water outlook (FAO).'
   },
   {
     id: 'probabilistic', icon: Percent, title: 'Probabilistic',
@@ -24,10 +24,34 @@ const FEATURES = [
     id: 'historical', icon: HistoryIcon, title: 'Historical',
     desc: 'Observed CHIRPS onset, cessation and season-length time series with long-term trend.'
   },
+  {
+    id: 'tracker', icon: Satellite, title: 'Short Rains Tracker',
+    desc: 'Satellite rainfall day by day, 10-16 day forecasts from six weather models and the season outlook at the monitored sites, updated daily.'
+  },
+]
+
+// Onset / cessation methods offered for the Kenya Short Rains (Method selector in the dashboard)
+const METHODS = [
+  { name: 'Dunning', tag: 'Cumulative anomaly',
+    rule: 'Onset and cessation are the turning points of the accumulated rainfall anomaly, A(D), over 1 Sep - 31 Dec (Dunning et al. 2016).',
+    data: 'CHIRPS v2 · ECMWF SEAS5', chart: 'C(d) / A(D) plume' },
+  { name: 'Agri rule 1', tag: 'Agricultural (ICPAC)',
+    rule: 'Onset: a wet day starting more than 20 mm in 3 days, with no 7-day dry spell in the next 21. Cessation: after a 10-day rain deficit (< 0.5 PET), the day a 100 mm soil store runs dry.',
+    data: 'CHIRPS v2 · SEAS5 · Hargreaves PET', chart: 'Member onset and cessation dates' },
+  { name: 'Agri rule 2', tag: 'Agricultural (ICPAC)',
+    rule: 'Onset: at least 20 mm in 5 days with 3 or more rainy days, no dry spell longer than 7 days in the next 21. Cessation as rule 1.',
+    data: 'CHIRPS v2 · SEAS5 · Hargreaves PET', chart: 'Member onset and cessation dates' },
+  { name: 'Agri rule 3', tag: 'Agricultural (ICPAC)',
+    rule: 'Onset: more than 20 mm in 3 days, no dry spell longer than 10 days in the next 30. Cessation: the first 10-day period with rain below half the PET.',
+    data: 'CHIRPS v2 · SEAS5 · Hargreaves PET', chart: 'Member onset and cessation dates' },
+  { name: 'FAO water balance', tag: 'Soil water and crop need · new',
+    rule: 'Agricultural onset when rain meets half the atmospheric demand (FAO-56 ET0) and plant-available water holds at 20% or more of the root zone; agricultural cessation when soil water, crop water use and rain all fall short. Rainfall and crop-water definitions alongside, each with its own season length.',
+    data: 'CHIRPS v3 · ERA5-Land · SoilGrids · SEAS5', chart: 'Member dates · soil-water outlook · timing chances' },
 ]
 
 const STATS = [
   { label: 'Seasonal Models', value: '8' },
+  { label: 'Onset Methods', value: '5' },
   { label: 'Countries', value: '2' },
   { label: 'Calibration Years', value: '36' },
   { label: 'Grid Resolution', value: '0.25 deg' },
@@ -99,7 +123,7 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
           </h1>
 
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 660, marginTop: 18, lineHeight: 1.7, padding: '0 8px' }}>
-            Operational seasonal climate forecasting for Kenya and Ethiopia -- multi-model C3S ensemble and single-model operational runs, calibrated against CHIRPS observations to deliver onset, cessation, and season-length outlooks.
+            Operational seasonal climate forecasting for Kenya and Ethiopia -- multi-model C3S ensemble and single-model operational runs, calibrated against CHIRPS observations to deliver onset, cessation, and season-length outlooks. For the Kenya Short Rains, five onset methods: Dunning, Agri rules 1-3 and the FAO water balance.
           </p>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: 440 }}>
@@ -160,6 +184,34 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
                 </button>
               )
             })}
+          </div>
+        </div>
+
+        {/* Onset and cessation methods */}
+        <div style={{ padding: '8px 16px 40px', maxWidth: 1180, margin: '0 auto', width: '100%' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+            Onset and cessation methods (Kenya Short Rains)
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
+            Pick one with the Method selector in the dashboard; maps, probabilities, skill, charts and the bulletin follow it. Agri rules 1-3 are adapted from the ICPAC operational definitions.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+            {METHODS.map(mt => (
+              <div key={mt.name} style={{
+                padding: '14px 16px', borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
+                display: 'flex', flexDirection: 'column', gap: 8
+              }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{mt.name}</div>
+                  <div style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent-blue)', marginTop: 3 }}>{mt.tag}</div>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, flex: 1 }}>{mt.rule}</div>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  <div><b>Data:</b> {mt.data}</div>
+                  <div><b>Chart:</b> {mt.chart}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

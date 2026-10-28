@@ -16,6 +16,7 @@ Public API
 """
 from __future__ import annotations
 import os, warnings, json
+import datetime as _dt
 from itertools import permutations
 from pathlib import Path
 from typing import Optional
@@ -481,6 +482,14 @@ def _attach_extra_short_rains(MODELS):
     _attach_packed_short_rains(MODELS, missing)
 
 RULE_SUFFIX = " - Agri rule {k}"             # ASCII only: the name can end up in HTTP headers (bulletin filename)
+FAO_SUFFIX = " - FAO water balance ({d})"    # d: agricultural | rainfall | cropwater
+# FAO water-balance definitions: what onset, cessation and season length mean in each (kept apart in labels)
+FAO_LABELS = {
+    "agricultural": {"onset": "Agricultural onset", "cessation": "Agricultural cessation", "lgp": "Agricultural LGP"},
+    "rainfall": {"onset": "Rainfall onset", "cessation": "Rainfall cessation", "lgp": "Rainfall LGP"},
+    "cropwater": {"onset": "Agricultural onset", "cessation": "Crop-water cessation", "lgp": "Crop-water LGP"},
+}
+LATE_METHODS = ("icpac", "fao")              # methods whose "none by the search end" members count as late
 _RULE_VARS = (("onset", "onset_doy", "onset"), ("cessation", "cessation_doy", "cess"), ("lgp", "lgp_days", "lgp"))
 
 
@@ -496,10 +505,12 @@ def _attach_rule_variants(MODELS, chirps_sep=None):
         return
     data = np.load(p, allow_pickle=False)
     meta = json.loads(str(data["__meta__"]))
+    aliases = meta.pop("__aliases__", {})                   # identical arrays stored once (e.g. crop-water onset)
     cache = {}
 
     def arr(src, k, key, dtype=None):
         full = f"{src}|r{k}|{key}"
+        full = aliases.get(full, full)
         if full not in cache:
             a = data[full]
             cache[full] = a if dtype is None else a.astype(dtype)
@@ -546,21 +557,41 @@ def _attach_rule_variants(MODELS, chirps_sep=None):
             keep = np.asarray(info.get("data_years", yrs)).astype(int)
             if len(keep) < len(yrs):
                 ix = np.where(np.isin(yrs, keep))[0]
+                packed = "packed_years" in info                    # arrays already stored for the kept years only
                 for _, mkey, _ in _RULE_VARS:
-                    e[mkey] = np.ascontiguousarray(e[mkey][:, ix])
-                e["probs_damped"] = {v: (a[:, ix] if v in ("onset", "cessation", "lgp") else a)
+                    e[mkey] = e[mkey] if packed else np.ascontiguousarray(e[mkey][:, ix])
+                e["probs_damped"] = {v: (a[:, ix] if v in ("onset", "cessation", "lgp") and not packed else a)
                                      for v, a in e["probs_damped"].items()}
                 e["model_years"] = yrs[ix]
                 e["op_idx"] = int(np.where(yrs[ix] == yrs[base["op_idx"]])[0][0]) if yrs[base["op_idx"]] in yrs[ix] else len(ix) - 1
             rule = info.get("rule", {})
-            e["onset_definition"] = {"method": "icpac", "rule": int(k), "label": info["label"],
+            fao = str(k).startswith("fao-")
+            e["onset_definition"] = {"method": "fao" if fao else "icpac", "rule": k if fao else int(k), "label": info["label"],
                                      "skill": bool(info.get("skill", True)), "note": info.get("note", ""),
                                      "search_doy": rule.get("search_doy"), "cessation": rule.get("cessation"),
                                      "onset_by": rule.get("onset_by", "31 Dec"), "none_by": rule.get("none_by", "31 Dec"),
                                      "data_end_doy": rule.get("data_end_doy", 365)}
-            name = parent + RULE_SUFFIX.format(k=k)
+            if fao:
+                d = k.removeprefix("fao-")
+                e["onset_definition"].update(definition=d, var_labels=FAO_LABELS.get(d), crop=rule.get("crop_label"),
+                                             rainfall=rule.get("rainfall"), et0=rule.get("et0"), soil=rule.get("soil"),
+                                             obs_end_doy=rule.get("obs_end_doy"))
+                try:                                                # PAW/TAW outlook (packed with the agricultural definition;
+                    first_doy, year = (int(x) for x in arr(src, k, "paw|meta"))   # shared by all three: same bucket)
+                    e["fao_paw"] = {q: arr(src, k, f"paw|{q}") for q in ("p10", "p50", "p90", "p_below")}
+                    e["fao_paw"].update(first_doy=first_doy, year=year, threshold=(rule.get("cessation") or {}).get("paw_fraction_threshold", 0.2))
+                except KeyError:
+                    pass
+                name = parent + FAO_SUFFIX.format(d=d)
+            else:
+                name = parent + RULE_SUFFIX.format(k=k)
             MODELS[name] = e
             print(f"  LOADED {name}" + (f" (arrays shared with {src})" if src != parent else ""))
+        paw = next((MODELS[n]["fao_paw"] for n in MODELS if n.startswith(parent + " - FAO") and "fao_paw" in MODELS[n]), None)
+        if paw is not None:
+            for n in MODELS:
+                if n.startswith(parent + " - FAO"):
+                    MODELS[n].setdefault("fao_paw", paw)
 
 
 class _LazyTraces(dict):
@@ -1255,12 +1286,20 @@ def _pct(arr, q): return float(np.percentile(arr,q)) if len(arr)>0 else float("n
 
 _NONE = 1.0e6          # "none by the search end" in _late_members (finite: percentiles interpolate cleanly)
 
+def _dom(p):
+    return int(np.nanargmax(p)) if np.isfinite(p).any() else None
+
+
+def _agree(p):
+    return float(np.nanmax(p)) if np.isfinite(p).any() else float("nan")
+
+
 def _late_members(md, arr_key, oi):
     """Members [m, ...] of arr_key for year index oi. For the ICPAC rule models a member with no onset (cessation)
     by the search end counts as later than any date (_NONE): onset none → _NONE; cessation: no cessation → _NONE,
     no onset → excluded (NaN); season length: no onset → 0, no cessation → _NONE. Other models: values as stored."""
     a = md[arr_key][:, oi].astype(np.float32)
-    if (md.get("onset_definition") or {}).get("method") != "icpac" or arr_key not in ("onset_doy", "cessation_doy", "lgp_days"):
+    if (md.get("onset_definition") or {}).get("method") not in LATE_METHODS or arr_key not in ("onset_doy", "cessation_doy", "lgp_days"):
         return a
     has_on = np.isfinite(md["onset_doy"][:, oi].astype(np.float32))
     no_cs = np.isnan(md["cessation_doy"][:, oi].astype(np.float32))
@@ -1277,6 +1316,33 @@ def _late_pct(md, arr_key, oi, q):
         r = np.nanpercentile(_late_members(md, arr_key, oi), q, axis=0)
     r = np.asarray(r, np.float32)
     return np.where(r < _NONE / 10, r, np.nan)
+
+def _fao_pixel(md, late, oi, pi, pj):
+    """FAO water balance at a pixel: chance that the onset / cessation of this definition happens within 7, 14 and 21
+    days of today (latest year only; members with none by the search end count as later), and the PAW/TAW outlook
+    (median, 10–90 % range and chance below the cessation threshold by day) when packed for this definition."""
+    out = {}
+    paw = md.get("fao_paw")
+    yr = int(md["model_years"][oi])
+    if yr == int(md["model_years"][md["op_idx"]]):
+        today = (_dt.date.today() - _dt.date(yr, 1, 1)).days + 1
+        out["today_doy"] = int(today)
+        for var, key in (("onset", "onset_doy"), ("cessation", "cessation_doy")):
+            v = late[key].astype(np.float64)
+            v = v[np.isfinite(v)]
+            if len(v):
+                out[f"p_{var}_by"] = {str(h): float(np.mean(v <= today + h)) for h in (0, 7, 14, 21)}
+    if paw is not None and int(paw["year"]) == yr:
+        sl = lambda a: np.asarray(a[pi, pj], dtype=np.float32)
+        p50 = sl(paw["p50"])
+        ok = np.isfinite(p50)
+        if ok.any():
+            doy = paw["first_doy"] + np.arange(len(p50))
+            r = lambda a: [None if not np.isfinite(x) else round(float(x), 3) for x in sl(a)[ok]]
+            out["paw"] = {"doy": doy[ok].tolist(), "p10": r(paw["p10"]), "p50": r(paw["p50"]), "p90": r(paw["p90"]),
+                          "p_below": r(paw["p_below"]), "threshold": float(paw["threshold"])}
+    return out
+
 
 def _model_pixel_stats(mkey, pi, pj, year=None):
     s = _state
@@ -1338,11 +1404,14 @@ def _model_pixel_stats(mkey, pi, pj, year=None):
         lg_p10=_lp("lgp_days",10), lg_p90=_lp("lgp_days",90),
         on_none=int(np.sum(late["onset_doy"] == _NONE)), cs_none=int(np.sum(late["cessation_doy"] == _NONE)),
         n_members=int(late["onset_doy"].shape[0]),
-        none_by=od.get("none_by") if od.get("method") == "icpac" else None,
-        onset_by=od.get("onset_by") if od.get("method") == "icpac" else None,
+        none_by=od.get("none_by") if od.get("method") in LATE_METHODS else None,
+        onset_by=od.get("onset_by") if od.get("method") in LATE_METHODS else None,
+        var_labels=od.get("var_labels"), method=od.get("method"), definition=od.get("definition"), rule=od.get("rule"),
+        fao=_fao_pixel(md, late, oi, pi, pj) if od.get("method") == "fao" else None,
         p_on=p_on.tolist(), p_cs=p_cs.tolist(), p_lgp=p_lgp.tolist(),
-        dom_on=int(np.argmax(p_on)), dom_cs=int(np.argmax(p_cs)), dom_lgp=int(np.argmax(p_lgp)),
-        agree_on=float(np.max(p_on)), agree_cs=float(np.max(p_cs)), agree_lgp=float(np.max(p_lgp)),
+        # no tercile forecast (all NaN, e.g. FAO cells without climatological spread): no dominant category
+        dom_on=_dom(p_on), dom_cs=_dom(p_cs), dom_lgp=_dom(p_lgp),
+        agree_on=_agree(p_on), agree_cs=_agree(p_cs), agree_lgp=_agree(p_lgp),
         p_fail=float(np.sum(np.isnan(on_m)))/max(nm,1),
         hr_on=hr_on, hr_cs=hr_cs, hr_lgp=hr_lgp,
         rpss_on=rpss_on, rpss_cs=rpss_cs, rpss_lgp=rpss_lgp,

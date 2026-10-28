@@ -2,8 +2,12 @@
 """
 pack_onset_rules.py
 ───────────────────
-Pack the ICPAC onset / cessation rules (onset_rules.py → <run>/icpac_rule<k>/) for every Short Rains initialization
-into backend/demo_short_rains_rules.npz. mam_loader builds a "<init> - Agri rule <k>" model from it next to each
+Pack the onset / cessation methods computed outside the seasonal pipeline for every Short Rains initialization
+into backend/demo_short_rains_rules.npz:
+  Agri rules 1–3           onset_rules.py → <run>/icpac_rule<k>/          (key "<k>")
+  FAO water balance        fao_water_balance.py → <run>/fao_wb_<def>/     (key "fao-<def>": agricultural,
+                           rainfall, cropwater; plus the agricultural run's PAW/TAW outlook for the latest year)
+mam_loader builds a "<init> - Agri rule <k>" or "<init> - FAO water balance (<def>)" model from it next to each
 parent (Dunning) model: onset, cessation and season length members, probabilities, skill, terciles and CHIRPS
 history replaced; seasonal rainfall and daily traces shared with the parent.
 
@@ -24,6 +28,8 @@ RUNS = {"ECMWF SEAS5 (Sep)": "outputs/ecmwf_sep_demo", "ECMWF SEAS5 (Oct)": "out
         "ECMWF SEAS5 (Oct+Obs)": "outputs/ecmwf_oct_obs", "ECMWF SEAS5 (Oct+Obs latest)": "outputs/ecmwf_oct_obs_latest"}
 VARS = ("onset", "cessation", "lgp")
 CAL = (1993, 2016)
+KEEP_FROM = 2020       # members and probabilities are packed from this year on (the dashboard offers 2023 – latest;
+                       # skill, terciles and CHIRPS history are precomputed over all years) to keep the API small
 
 
 def load(d):
@@ -48,19 +54,35 @@ def load(d):
     return out
 
 
+def method_dirs(run):
+    """(key, directory, description json) for every packed method of a run."""
+    for d in sorted(run.glob("icpac_rule*")):
+        if (d / "rule.json").exists():
+            yield d.name.removeprefix("icpac_rule"), d, json.loads((d / "rule.json").read_text())
+    for d in sorted(run.glob("fao_wb_*")):
+        if (d / "method.json").exists():
+            yield "fao-" + d.name.removeprefix("fao_wb_"), d, json.loads((d / "method.json").read_text())
+
+
 def main():
     arrays, meta, seen = {}, {}, {}
     for name, rel in RUNS.items():
-        for d in sorted((BASE / rel).glob("icpac_rule*")):
-            if not (d / "rule.json").exists():
-                continue
-            k = int(d.name.removeprefix("icpac_rule"))
-            rule = json.loads((d / "rule.json").read_text())
+        for k, d, rule in method_dirs(BASE / rel):
             data = load(d)
+            if (d / "paw_outlook.nc").exists():                          # FAO: PAW/TAW outlook for the latest year
+                with xr.open_dataset(d / "paw_outlook.nc") as ds:
+                    for q in ("p10", "p50", "p90", "p_below"):
+                        data[f"paw|{q}"] = ds[q].values.astype(np.float16)
+                    data["paw|meta"] = np.array([ds.attrs["first_doy"], ds.attrs["year"]], np.int32)
             has = (np.isfinite(data["onset|members"].astype(np.float32)).any(axis=(0, 2, 3))
                    | np.isfinite(data["onset|probs"].astype(np.float32)).any(axis=(0, 2, 3)))     # years with members
+            keep = has & (data["model_years"] >= KEEP_FROM)
+            for v in VARS:                                                   # members (m, year, …), probs (3, year, …)
+                data[f"{v}|members"] = np.ascontiguousarray(data[f"{v}|members"][:, keep])
+                data[f"{v}|probs"] = np.ascontiguousarray(data[f"{v}|probs"][:, keep])
             info = {"label": rule["label"], "rule": rule, "model_years": data["model_years"].tolist(),
-                    "data_years": data["model_years"][has].tolist(), "skill": bool(rule.get("skill", True))}
+                    "data_years": data["model_years"][keep].tolist(), "packed_years": data["model_years"][keep].tolist(),
+                    "skill": bool(rule.get("skill", True))}
             twin = next((src for src, ref in seen.get(k, {}).items()
                          if all(np.array_equal(ref[x], data[x], equal_nan=True) for x in data)), None)
             if twin:
@@ -69,10 +91,21 @@ def main():
                 arrays.update({f"{name}|r{k}|{x}": val for x, val in data.items() if x != "model_years"})
                 seen.setdefault(k, {})[name] = data
             meta.setdefault(name, {})[str(k)] = info
+    # identical arrays (e.g. the crop-water definition's onset = the agricultural onset) are stored once
+    aliases, by_hash = {}, {}
+    for key in list(arrays):
+        v = arrays[key]
+        h = (v.dtype.str, v.shape, __import__("hashlib").sha1(np.ascontiguousarray(v).tobytes()).hexdigest())
+        if h in by_hash:
+            aliases[key] = by_hash[h]
+            del arrays[key]
+        else:
+            by_hash[h] = key
+    meta["__aliases__"] = aliases
     np.savez_compressed(OUT, __meta__=np.array(json.dumps(meta)), **arrays)
     print(f"wrote {OUT} ({OUT.stat().st_size / 1e6:.1f} MB): " + "; ".join(
         f"{n}: rules {', '.join(k + (' (= ' + v['same_as'] + ')' if 'same_as' in v else '') for k, v in r.items())}"
-        for n, r in meta.items()))
+        for n, r in meta.items() if n != "__aliases__") + f"; {len(aliases)} duplicate array(s) aliased")
 
 
 if __name__ == "__main__":

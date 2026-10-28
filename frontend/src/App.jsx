@@ -64,6 +64,14 @@ const ONSET_DEFS = [
   { id:'r1',      label:'Agri rule 1', suffix:' - Agri rule 1', title:'Onset: wet day (>=1 mm) starting >20 mm in 3 days, no dry spell of 7+ days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET (modified Hargreaves), the day a 100 mm soil store is empty. Onset searched 15 Aug - 15 Jan, cessation to 28 Feb (Sep 01 run: to 31 Dec). Adapted from the ICPAC operational definitions.' },
   { id:'r2',      label:'Agri rule 2', suffix:' - Agri rule 2', title:'Onset: >=20 mm in 5 days with at least 3 rainy days (>=1 mm), no dry spell longer than 7 days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET, the day a 100 mm soil store is empty. Onset searched 15 Aug - 15 Jan, cessation to 28 Feb (Sep 01 run: to 31 Dec). Adapted from the ICPAC operational definitions.' },
   { id:'r3',      label:'Agri rule 3', suffix:' - Agri rule 3', title:'Onset: >20 mm in 3 days, no dry spell longer than 10 days in the next 30 days. Cessation: first day of a 10-day period with rain <0.5 x PET (modified Hargreaves). Onset searched 15 Aug - 15 Jan, cessation to 28 Feb (Sep 01 run: to 31 Dec). Adapted from the ICPAC operational definitions.' },
+  // FAO crop-water-requirement / soil-water balance (scripts/fao_water_balance.py): one method, three definitions
+  // ("<init> - FAO water balance (<def>)" models); the Method list shows it once and a Definition picker switches
+  { id:'fao-agricultural', group:'fao', label:'FAO water balance', defLabel:'Agricultural', suffix:' - FAO water balance (agricultural)',
+    title:'Agricultural onset: 10-day rain >= 0.5 x ET0 and plant-available water >= 20% of TAW for 5 days, no 7-day spell below 20% in the next 21 days. Agricultural cessation: 7 days with PAW/TAW < 20%, ETa/ETc < 0.5 and a 10-day rain deficit (< 0.5 x ET0). LGP between them. FAO-56 Penman-Monteith ET0 (ERA5-Land), maize Kc and soil water (SoilGrids), CHIRPS v3 rainfall.' },
+  { id:'fao-rainfall', group:'fao', label:'FAO water balance', defLabel:'Rainfall', suffix:' - FAO water balance (rainfall)',
+    title:'Rainfall onset: first wet day from which 10-day rain >= 0.5 x ET0. Rainfall cessation: 10-day rain < 0.5 x ET0 for two consecutive dekads. Rainfall LGP between them. Rainfall and atmospheric demand only, no soil water.' },
+  { id:'fao-cropwater', group:'fao', label:'FAO water balance', defLabel:'Crop-water', suffix:' - FAO water balance (cropwater)',
+    title:'Agricultural onset (as Agricultural); crop-water-requirement cessation: after the climatological rainfall peak, 21-day rain < 0.5 x crop water need (ETc = Kc x ET0) with PAW/TAW falling below 20%. Crop-water LGP between them.' },
 ]
 const hasModel = (modelsData, name) => Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === name || m?.raw_name === name)
 const shortRainsModel = (init, onsetDef='dunning') =>
@@ -881,6 +889,10 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
   // Agri rules: a median among the members with no onset / cessation by the search end reads "After <date>"
   const one = entries.length === 1 ? entries[0][1] : null
+  // FAO water balance: each definition names its own onset / cessation / LGP (agricultural, rainfall, crop-water)
+  const secLabel = sec => ({ ONSET: one?.var_labels?.onset, CESSATION: one?.var_labels?.cessation, 'SEASON LENGTH': one?.var_labels?.lgp })[sec] ?? sec
+  // upper end of the spread among the members with none by the search end: "after <date>"
+  const lateP50Range = sec => sec === 'ONSET' ? (one?.on_none > 0 ? one?.onset_by : null) : sec === 'CESSATION' ? (one?.cs_none > 0 ? one?.none_by : null) : null
   const lateP50 = sec => {
     const [n, by] = sec === 'ONSET' ? [one?.on_none, one?.onset_by] : sec === 'CESSATION' ? [one?.cs_none, one?.none_by] : [0, null]
     return n > 0 && by ? { value: 'After ' + by, sub: n + '/' + one.n_members + ' members none' } : null
@@ -937,12 +949,21 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
             <PrecipPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason}/>
           </div>
         </Card>
-        <Card title={'C(d) / A(D) Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
-              className="flex-1 min-h-[260px]">
-          <div className="w-full h-[240px] sm:h-[260px] lg:h-full min-h-[220px] p-2">
-            <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason} selectedYear={opYear}/>
-          </div>
-        </Card>
+        {one?.method === 'icpac' || one?.method === 'fao' ? (
+          <Card title={(one.var_labels ? 'Member dates' : 'Member onset and cessation dates')+'  -  '+(one.method === 'fao' ? 'FAO water balance' : 'Agri rule ' + (one.rule ?? ''))+'  -  '+seasonCode+' '+opYear}
+                className="flex-1 min-h-[260px]">
+            <div className="w-full h-[240px] sm:h-[260px] lg:h-full min-h-[220px] p-2">
+              <MemberDatesChart stats={one} year={opYear}/>
+            </div>
+          </Card>
+        ) : (
+          <Card title={'C(d) / A(D) Plume  -  '+displayModel+'  -  '+seasonCode+' '+opYear}
+                className="flex-1 min-h-[260px]">
+            <div className="w-full h-[240px] sm:h-[260px] lg:h-full min-h-[220px] p-2">
+              <ADPlume pixelData={pixelData} selectedModel={selectedModel} activeModels={activeModels} selectedSeason={selectedSeason} selectedYear={opYear}/>
+            </div>
+          </Card>
+        )}
       </div>
       <div className="flex flex-col gap-2 shrink-0 w-full xl:w-[320px] min-h-0 h-full">
         <Card title={'Ensemble Forecast Summary  -  '+displayModel+'  -  '+seasonCode+' '+opYear} className="flex-1 min-h-0 h-full flex flex-col">
@@ -951,12 +972,13 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
               ['CESSATION',mmmCs,mmmCsAnom,allCsP10,allCsP90,chirpsCs,'DOY'],
               ['SEASON LENGTH',mmmLg,mmmLgAnom,allLgP10,allLgP90,chirpsLg,'d']].map(([sec,p50,anom,p10s,p90s,cal,unit])=>(
               <div key={sec} className="mb-2">
-                <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{sec}</div>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{secLabel(sec)}</div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-1.5">
                   <StatBox label="P50" value={p50?(unit==='DOY'?'DOY '+Math.round(p50):Math.round(p50)+'d'):(lateP50(sec)?.value??'--')}
                            sub={!p50&&lateP50(sec)?lateP50(sec).sub:(unit==='DOY'?doy(p50, opYear):null)}/>
                   <StatBox label="Anomaly" value={anom!=null?(anom>0?'+':'')+fmt(anom)+'d':'--'} color={anom>5?'text-orange-400':anom<-5?'text-emerald-400':''}/>
-                  <StatBox label="Spread" value={p10s.length&&p90s.length?(unit==='DOY'?doyRange(Math.min(...p10s),Math.max(...p90s), opYear):Math.round(Math.min(...p10s))+'-'+Math.round(Math.max(...p90s))+'d'):'--'}/>
+                  <StatBox label="Spread" value={p10s.length&&p90s.length?(unit==='DOY'?doyRange(Math.min(...p10s),Math.max(...p90s), opYear):Math.round(Math.min(...p10s))+'-'+Math.round(Math.max(...p90s))+'d')
+                    :(p10s.length&&unit==='DOY'&&lateP50Range(sec)?'DOY '+Math.round(Math.min(...p10s))+' - after '+lateP50Range(sec):'--')}/>
                   <StatBox label="CAL mean" value={cal?(unit==='DOY'?'DOY '+Math.round(cal):Math.round(cal)+'d'):'--'} sub={unit==='DOY'?doy(cal, opYear):null}/>
                 </div>
               </div>
@@ -967,7 +989,135 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
             </div>
           </div>
         </Card>
+        {one?.fao && <FaoPanel fao={one.fao} labels={one.var_labels} year={opYear}/>}
       </div>
+      </div>
+    </div>
+  )
+}
+
+// --- FAO water balance: timing chances and soil-water outlook at the pixel ----
+// Chance (share of members) that this definition's onset / cessation has happened by today and within 7, 14 and
+// 21 days; plant-available water as a share of the root zone's total (PAW/TAW), median and 10-90% of members, with
+// the 0.20 critical level. Not a single deterministic date.
+function FaoPanel({ fao, labels, year }) {
+  const pct = v => (v == null ? '--' : Math.round(v * 100) + '%')
+  const rows = [['onset', labels?.onset ?? 'Onset'], ['cessation', labels?.cessation ?? 'Cessation']].filter(([k]) => fao['p_' + k + '_by'])
+  const paw = fao.paw
+  const data = paw ? paw.doy.map((d, i) => ({ doy: d, band: [paw.p10[i], paw.p90[i]], p50: paw.p50[i], pb: paw.p_below[i] })) : []
+  const ticks = paw ? [{ doy: 213, label: 'Aug' }, ...DOY_MONTHS_OND_EXT].filter(m => m.doy >= paw.doy[0] && m.doy <= paw.doy[paw.doy.length - 1]) : []
+  return (
+    <Card title="FAO water balance: timing chances and soil water" className="shrink-0">
+      <div className="p-3 space-y-3" style={{fontSize:11}}>
+        {rows.length > 0 && (
+          <table style={{width:'100%',borderCollapse:'collapse',fontVariantNumeric:'tabular-nums'}}>
+            <thead><tr style={{color:'var(--text-muted)',fontSize:9,textTransform:'uppercase',letterSpacing:'0.08em'}}>
+              <th style={{textAlign:'left',fontWeight:600}}>Chance</th>{['By today','7 days','14 days','21 days'].map(h=><th key={h} style={{textAlign:'right',fontWeight:600}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{rows.map(([k, lab]) => (
+              <tr key={k}><td>{lab}</td>{['0','7','14','21'].map(h=><td key={h} style={{textAlign:'right'}}>{pct(fao['p_' + k + '_by'][h])}</td>)}</tr>
+            ))}</tbody>
+          </table>
+        )}
+        {paw && (
+          <div>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Plant-available water (PAW/TAW)</div>
+            <div style={{height:150}}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data} margin={{top:6,right:8,bottom:4,left:-18}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)"/>
+                  <XAxis dataKey="doy" type="number" domain={[paw.doy[0], paw.doy[paw.doy.length - 1]]} ticks={ticks.map(t=>t.doy)}
+                         tickFormatter={d => ticks.find(t=>t.doy===d)?.label ?? ''} tick={{fontSize:9,fill:'var(--chart-axis)'}} stroke="var(--chart-axis)"/>
+                  <YAxis domain={[0,1]} ticks={[0,0.2,0.5,1]} tick={{fontSize:9,fill:'var(--chart-axis)'}} stroke="var(--chart-axis)"/>
+                  <Tooltip contentStyle={{background:'var(--chart-tooltip-bg)',border:'1px solid var(--border-primary)',borderRadius:6,fontSize:10,color:'var(--text-primary)'}}
+                           labelFormatter={d => doy(d, year)}
+                           formatter={(v, n, it) => n === 'band' ? [`${v[0]} – ${v[1]}`, '10–90% of members'] : [v, 'Median']}/>
+                  <Area dataKey="band" stroke="none" fill="#4a8fc4" fillOpacity={0.22} isAnimationActive={false}/>
+                  <Line dataKey="p50" stroke="#4a8fc4" strokeWidth={2} dot={false} isAnimationActive={false}/>
+                  <ReferenceLine y={paw.threshold} stroke="#f97316" strokeDasharray="4 2" label={{value:'critical', position:'insideTopRight', fontSize:8, fill:'#f97316'}}/>
+                  {fao.today_doy && <ReferenceLine x={fao.today_doy} stroke="var(--text-muted)" label={{value:'today', position:'top', fontSize:8, fill:'var(--text-muted)'}}/>}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{color:'var(--text-muted)',fontSize:10,marginTop:4}}>
+              Root-zone water above wilting point as a share of the total it can hold. Line: median of members; band: 10–90%. Below {paw.threshold} is critically low.
+              {fao.today_doy && (() => { const i = paw.doy.indexOf(fao.today_doy + 14); return i >= 0 ? ` Chance below ${paw.threshold} in 14 days: ${pct(paw.p_below[i])}.` : '' })()}
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+// --- Member onset / cessation dates (Agri rules, FAO water balance) ----------
+// Every member's date as a dot, the likely range (25-75% of members) as a bar, the wide range (10-90%) as a line,
+// the median as a ringed circle, the CHIRPS normal third (t33-t67) shaded and the long-term average dashed.
+// Members with no onset / cessation by the search end count as later than any date (hollow dots at the right).
+const BY_DOY = { '31 Dec': 365, '15 Jan': 380, '28 Feb': 424 }
+const pctLate = (vals, nNone, q) => {
+  const a = [...vals].sort((x, y) => x - y).concat(Array(nNone).fill(Infinity))
+  if (!a.length) return null
+  const r = (a.length - 1) * q / 100, lo = Math.floor(r), hi = Math.ceil(r)
+  return a[lo] === Infinity || a[hi] === Infinity ? Infinity : a[lo] + (a[hi] - a[lo]) * (r - lo)
+}
+function MemberDatesSvg({ width = 600, height = 220, stats, year }) {
+  const lab = stats.var_labels ?? {}
+  const end = BY_DOY[stats.none_by] ?? 365
+  const nm = stats.n_members ?? stats.nm ?? 25
+  const rows = [
+    { key: 'onset', label: lab.onset ?? 'Onset', vals: stats.on_v ?? [], none: stats.on_none ?? 0, col: '#34d399', by: stats.onset_by ?? stats.none_by },
+    { key: 'cessation', label: lab.cessation ?? 'Cessation', vals: stats.cs_v ?? [], none: stats.cs_none ?? 0, col: '#f97316', by: stats.none_by },
+  ].map(r => ({ ...r, p: Object.fromEntries([10, 25, 50, 75, 90].map(q => [q, pctLate(r.vals, r.none, q)])),
+                t33: stats.t33?.[r.key], t67: stats.t67?.[r.key], clim: stats.chirps_clim?.[r.key] }))
+  const finite = rows.flatMap(r => [...r.vals, r.t33, r.t67, r.clim]).filter(v => v != null && isFinite(v))
+  const x0 = Math.max(213, Math.floor(((finite.length ? Math.min(...finite) : 274) - 10) / 10) * 10)
+  const m = { l: 16, r: 22, t: 18, b: 34 }
+  const x = d => m.l + (Math.min(d, end) - x0) / (end - x0) * (width - m.l - m.r)
+  const rh = (height - m.t - m.b) / rows.length
+  const ticks = [213, 244, 274, 305, 335, 366, 397].filter(t => t > x0 && t < end).concat([end])
+  const tickLab = t => t === end ? (stats.none_by ?? doy(t, year)) + '+' : ({ 213: 'Aug', 244: 'Sep', 274: 'Oct', 305: 'Nov', 335: 'Dec', 366: 'Jan', 397: 'Feb' })[t]
+  const fd = v => v == null ? '--' : (!isFinite(v) ? 'after ' : '') + (isFinite(v) ? doy(v, year) : '')
+  return (
+    <svg width={width} height={height} style={{ display: 'block', fontFamily: 'inherit' }}>
+      {ticks.map(t => (
+        <g key={t}>
+          <line x1={x(t)} x2={x(t)} y1={m.t} y2={height - m.b} stroke="var(--chart-grid)" strokeDasharray="3 3"/>
+          <text x={x(t)} y={height - m.b + 14} fontSize={9} textAnchor="middle" fill="var(--chart-axis)">{tickLab(t)}</text>
+        </g>
+      ))}
+      {rows.map((r, i) => {
+        const cy = m.t + rh * i + rh / 2, bh = Math.min(26, rh * 0.42)
+        const fx = v => (v == null ? null : x(isFinite(v) ? v : end))
+        const tip = `${r.label}: most likely ${fd(r.p[50])}; likely ${fd(r.p[25])} – ${fd(r.p[75])}; wide ${fd(r.p[10])} – ${fd(r.p[90])}; ` +
+                    `normal ${fd(r.t33)} – ${fd(r.t67)}; long-term average ${fd(r.clim)}; none by ${r.by}: ${r.none} of ${nm}`
+        return (
+          <g key={r.key}>
+            <title>{tip}</title>
+            <text x={m.l} y={cy - rh * 0.4 - 4} fontSize={10} fill="var(--text-primary)" fontWeight={600}>{r.label}</text>
+            {r.t33 != null && r.t67 != null && <rect x={fx(r.t33)} y={cy - rh * 0.4} width={Math.max(0, fx(r.t67) - fx(r.t33))} height={rh * 0.8} rx={4} fill="var(--chart-axis)" opacity={0.12}/>}
+            {r.clim != null && isFinite(r.clim) && <line x1={x(r.clim)} x2={x(r.clim)} y1={cy - rh * 0.4} y2={cy + rh * 0.4} stroke="var(--text-muted)" strokeDasharray="4 3"/>}
+            {r.p[10] != null && <line x1={fx(r.p[10])} x2={fx(r.p[90])} y1={cy} y2={cy} stroke={r.col} strokeWidth={2} strokeLinecap="round"/>}
+            {r.p[25] != null && <rect x={fx(r.p[25])} y={cy - bh / 2} width={Math.max(3, fx(r.p[75]) - fx(r.p[25]))} height={bh} rx={4} fill={r.col} opacity={0.35}/>}
+            {r.vals.map((v, k) => <circle key={k} cx={x(v)} cy={cy + ((k * 37) % 11 - 5) * bh / 14} r={2.8} fill={r.col} opacity={0.75}/>)}
+            {Array.from({ length: r.none }).map((_, k) => <circle key={'n' + k} cx={x(end) - 3 - (k % 3) * 6} cy={cy - 9 + Math.floor(k / 3) * 6} r={2.6} fill="none" stroke={r.col} strokeWidth={1.2}/>)}
+            {r.p[50] != null && <circle cx={fx(r.p[50])} cy={cy} r={6} fill="var(--bg-surface)" stroke={r.col} strokeWidth={2.5}/>}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+function MemberDatesChart({ stats, year }) {
+  const lab = stats?.var_labels ?? {}
+  return (
+    <div className="w-full h-full flex flex-col">
+      <div className="flex-1 min-h-[160px]">
+        <ResponsiveContainer width="100%" height="100%"><MemberDatesSvg stats={stats} year={year}/></ResponsiveContainer>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 9, color: 'var(--text-muted)', padding: '2px 4px 0' }}>
+        <span>● member date</span><span>◯ none by {stats?.none_by ?? 'search end'}</span><span>bar: likely (half the members)</span>
+        <span>line: wide (8 in 10)</span><span>ringed circle: most likely</span><span>grey: normal third</span><span>dashed: long-term average</span>
       </div>
     </div>
   )
@@ -2583,13 +2733,22 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                 </select>
                 {setOnsetDef && (()=>{
                   const avail = ONSET_DEFS.filter(d => d.id === 'dunning' || hasModel(modelsData, shortRainsModel(selectedInit, d.id)))
-                  const cur = ONSET_DEFS.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]
+                  const cur = avail.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]
+                  const methods = avail.filter((d, i) => !d.group || avail.findIndex(x => x.group === d.group) === i)
+                  const defs = cur.group ? avail.filter(d => d.group === cur.group) : []
                   return avail.length > 1 ? (
                     <>
                       <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Method</label>
-                      <select value={avail.some(d=>d.id===onsetDef) ? onsetDef : 'dunning'} onChange={e=>setOnsetDef(e.target.value)} style={selStyle} title={cur.title}>
-                        {avail.map(d=><option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
+                      <select value={cur.group ? methods.find(d => d.group === cur.group).id : cur.id} style={selStyle} title={cur.title}
+                              onChange={e=>{ const d = ONSET_DEFS.find(x => x.id === e.target.value); setOnsetDef(d?.group && cur.group === d.group ? cur.id : e.target.value) }}>
+                        {methods.map(d=><option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
                       </select>
+                      {defs.length > 1 && (<>
+                        <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Definition</label>
+                        <select value={cur.id} onChange={e=>setOnsetDef(e.target.value)} style={selStyle} title={cur.title}>
+                          {defs.map(d=><option key={d.id} value={d.id} title={d.title}>{d.defLabel}</option>)}
+                        </select>
+                      </>)}
                     </>
                   ) : null
                 })()}

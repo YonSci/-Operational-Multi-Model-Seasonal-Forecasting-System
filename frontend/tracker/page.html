@@ -195,6 +195,9 @@
           <option value="Agri rule 1">Agri rule 1</option>
           <option value="Agri rule 2">Agri rule 2</option>
           <option value="Agri rule 3">Agri rule 3</option>
+          <option value="FAO agricultural">FAO water balance: agricultural</option>
+          <option value="FAO rainfall">FAO water balance: rainfall</option>
+          <option value="FAO crop-water">FAO water balance: crop-water</option>
         </select>
       </div>
       <p class="kt-note" id="season-cond" data-source="sites">—</p>
@@ -222,6 +225,9 @@
         <b>Rule 2</b>: at least 20 mm in 5 days with 3 or more rainy days, no dry spell longer than 7 days in the next 21.
         <b>Rule 3</b>: more than 20 mm in 3 days, no dry spell longer than 10 days in the next 30.
         Cessation (rules 1–2): after a 10-day period with rain below half the potential evapotranspiration (modified Hargreaves), the day a 100 mm soil store runs dry; rule 3: the first day of that 10-day period.
+        <b>FAO water balance</b> (CHIRPS v3 rainfall, FAO-56 Penman-Monteith ET0 from ERA5-Land, maize water need, SoilGrids soil water):
+        <i>agricultural</i> onset when 10-day rain reaches half the atmospheric demand (ET0) and plant-available water stays at ≥20% of what the root zone holds for 5 days with no 7-day fall below it in the next 21; agricultural cessation after 7 days of critically low soil water (&lt;20%), crop water use below half its need and a 10-day rain deficit.
+        <i>Rainfall</i> onset and cessation use rain against ET0 only; <i>crop-water</i> cessation is when 21 days of rain fall short of half the crop's water need after the seasonal peak. Each definition has its own season length.
         Agri rules 1–3 follow ICPAC's operational onset/cessation definitions. They search onset from 15 Aug to 15 Jan and cessation to 28 Feb (the 1 Oct runs carry the forecast to 28 Feb; the Sep 01 run stops at 31 Dec); members with none by then count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
     </div>
     <div class="kt-card kt-scroll" id="inits">
@@ -349,7 +355,7 @@ KT.num = d3.format(',.1f');
 KT.int = d3.format(',.0f');
 KT.doyDate = (doy) => d3.utcFormat('%-d %b')(new Date(Date.UTC(2026, 0, 1) + (doy - 1) * 864e5));
 // Onset / cessation methods in display order (Dunning, Agri rules 1–3); rows without a definition are Dunning
-KT.methods = ['Dunning', 'Agri rule 1', 'Agri rule 2', 'Agri rule 3'];
+KT.methods = ['Dunning', 'Agri rule 1', 'Agri rule 2', 'Agri rule 3', 'FAO agricultural', 'FAO rainfall', 'FAO crop-water'];
 KT.methodRank = (r) => Math.max(0, KT.methods.indexOf(r.definition || 'Dunning'));
 KT.site = () => (dash.params().site || 'Kapiti Research Station Farm');
 KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early', 'imerg_gee', 'gsmap_gee'];
@@ -712,7 +718,7 @@ dash.onData(() => {
       return b;
     }), ...[...new Set(dates.map(defOf))].map((t) => {
       const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[KT.methodRank({ definition: t })]; sp.append(t); return sp;
-    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: none by the search end (Dunning 31 Dec; Agri rules: onset 15 Jan, cessation 28 Feb)' }));
+    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: none by the search end (Dunning 31 Dec; Agri rules and FAO water balance: onset 15 Jan, cessation 28 Feb)' }));
     box.style.minHeight = H + 'px';
     box.replaceChildren(svg.node(), tip, lg);
 

@@ -3,9 +3,10 @@
 track_site_inits.py
 ───────────────────
 Compare Short Rains onset / cessation / season length (LGP) at one site across every
-ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...), for each method: Dunning, and the
+ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...), for each method: Dunning, the
 ICPAC operational rules 1–3 (scripts/onset_rules.py; "<init> - Agri rule <k>" models), which set onset, cessation
-and season length. ICPAC rows count members with no onset / no cessation by the search end (onset 15 Jan,
+and season length, and the FAO water balance (scripts/fao_water_balance.py; "<init> - FAO water balance (<def>)"
+models, rows "FAO agricultural", "FAO rainfall", "FAO crop-water"). Agri-rule and FAO rows count members with no onset / no cessation by the search end (onset 15 Jan,
 cessation 28 Feb for the 1 Oct runs; 31 Dec for Sep 01 — column none_by) as later than any date in the percentiles
 (late, not missing); season length is 0 without onset and open-ended without cessation.
 
@@ -40,8 +41,11 @@ INITS = [
     ("Oct 01 + latest obs", "ECMWF SEAS5 (Oct+Obs latest)"),
 ]
 VARS = [("onset", "on_v", "Onset"), ("cessation", "cs_v", "Cessation"), ("lgp", "lg_v", "Season length")]
-# methods: model-name suffix → label
-DEFS = [("", "Dunning")] + [(f" - Agri rule {k}", f"Agri rule {k}") for k in (1, 2, 3)]
+# methods: model-name suffix → label (FAO water balance: one entry per definition, scripts/fao_water_balance.py)
+DEFS = ([("", "Dunning")] + [(f" - Agri rule {k}", f"Agri rule {k}") for k in (1, 2, 3)]
+        + [(f" - FAO water balance ({d})", f"FAO {lab}") for d, lab in (("agricultural", "agricultural"), ("rainfall", "rainfall"),
+                                                                          ("cropwater", "crop-water"))])
+SKIP = {"FAO crop-water": {"onset"}}   # its onset is the agricultural onset (listed under FAO agricultural)
 M_KEY = {"onset": "onset_doy", "cessation": "cessation_doy", "lgp": "lgp_days"}
 CATS = ["BN", "NN", "AN"]
 P_KEY = {"onset": "p_on", "cessation": "p_cs", "lgp": "p_lgp"}
@@ -104,6 +108,8 @@ def track(name, lat, lon, year):
                 raw = {v: np.asarray(md[M_KEY[v]][:, yi, pi, pj], dtype=float) for v in M_KEY}
                 has_on = np.isfinite(raw["onset"])
             for var, vkey, title in VARS:
+                if var in SKIP.get(definition, ()):
+                    continue
                 if suffix:
                     # all members: no onset / no cessation by the search end = NONE (late), LGP 0 without onset
                     if var == "onset":
