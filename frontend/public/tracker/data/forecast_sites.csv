@@ -1,88 +1,94 @@
 model,model_label,site,short_name,date,rain_mm,cum_mm
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-28,1.5,1.5
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-29,4.3,5.8
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-30,5.4,11.2
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-31,8.8,20.0
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-01,3.2,23.2
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-02,1.8,25.0
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-03,3.8,28.8
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-04,2.7,31.5
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-05,1.5,33.0
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-06,1.3,34.3
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-07,2.8,37.1
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-08,2.2,39.3
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-09,2.4,41.7
-ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-10,3.1,44.8
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-28,6.9,6.9
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-29,6.8,13.7
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-30,3.5,17.2
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-31,3.6,20.8
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-01,0.8,21.6
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-02,0.5,22.1
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-03,1.3,23.4
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-04,1.0,24.4
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-05,1.8,26.2
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-06,3.5,29.7
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-07,2.3,32.0
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-08,2.3,34.3
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-09,2.1,36.4
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-10,2.1,38.5
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-28,2.1,2.1
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-29,3.1,5.2
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-30,4.9,10.1
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-31,7.9,18.0
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-01,2.7,20.7
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-02,2.8,23.5
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-03,3.3,26.8
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-04,2.7,29.5
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-05,2.0,31.5
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-06,2.5,34.0
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-07,2.1,36.1
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-08,1.6,37.7
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-09,2.4,40.1
-ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-10,2.1,42.2
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-28,2.9,2.9
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-29,6.2,9.1
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-30,6.6,15.7
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-31,12.2,27.9
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-01,4.9,32.8
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-02,3.5,36.3
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-03,4.4,40.7
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-04,4.2,44.9
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-05,2.7,47.6
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-06,2.7,50.3
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-07,3.6,53.9
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-08,2.6,56.5
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-09,3.4,59.9
-ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-10,4.6,64.5
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-28,4.7,4.7
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-29,7.0,11.7
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-30,5.2,16.9
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-31,7.4,24.3
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-01,2.5,26.8
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-02,1.9,28.7
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-03,3.6,32.3
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-04,3.5,35.8
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-05,4.7,40.5
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-06,3.2,43.7
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-07,4.2,47.9
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-08,3.5,51.4
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-09,3.0,54.4
-ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-10,3.2,57.6
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-28,1.5,1.5
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-29,4.3,5.8
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-30,5.4,11.2
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-31,8.8,20.0
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-01,3.2,23.2
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-02,1.8,25.0
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-03,3.8,28.8
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-04,2.7,31.5
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-05,1.5,33.0
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-06,1.3,34.3
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-07,2.8,37.1
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-08,2.2,39.3
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-09,2.4,41.7
-ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-10,3.1,44.8
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-28,2.5,2.5
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-29,9.1,11.6
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-30,5.3,16.9
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-10-31,9.1,26.0
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-01,3.6,29.6
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-02,2.6,32.2
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-03,3.5,35.7
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-04,3.5,39.2
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-05,4.0,43.2
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-06,3.8,47.0
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-07,3.1,50.1
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-08,3.2,53.3
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-09,2.2,55.5
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-10,2.1,57.6
+ecmwf_ens_median,ECMWF ENS median,El Karama Sahiwals Farm,El Karama,2026-11-11,3.1,60.7
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-28,8.1,8.1
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-29,8.7,16.8
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-30,2.3,19.1
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-10-31,4.3,23.4
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-01,1.4,24.8
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-02,1.0,25.8
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-03,1.8,27.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-04,1.1,28.7
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-05,2.0,30.7
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-06,2.9,33.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-07,2.3,35.9
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-08,2.7,38.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-09,1.6,40.2
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-10,2.3,42.5
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Maralal Samburu Farm,Maralal,2026-11-11,2.3,44.8
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-28,3.8,3.8
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-29,3.5,7.3
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-30,4.7,12.0
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-10-31,10.6,22.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-01,1.7,24.3
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-02,3.1,27.4
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-03,4.2,31.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-04,3.2,34.8
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-05,3.9,38.7
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-06,2.8,41.5
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-07,2.1,43.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-08,2.0,45.6
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-09,1.7,47.3
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-10,1.8,49.1
+ecmwf_ens_median,ECMWF ENS median,Genco LTD Tana River Farm,Tana River,2026-11-11,2.0,51.1
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-28,5.1,5.1
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-29,9.9,15.0
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-30,6.6,21.6
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-10-31,14.2,35.8
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-01,4.5,40.3
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-02,5.0,45.3
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-03,5.6,50.9
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-04,5.1,56.0
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-05,5.5,61.5
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-06,6.0,67.5
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-07,4.5,72.0
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-08,4.1,76.1
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-09,3.4,79.5
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-10,3.1,82.6
+ecmwf_ens_median,ECMWF ENS median,"KALRO Kiboko, Makueni Farm",KALRO Kiboko,2026-11-11,4.0,86.6
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-28,7.0,7.0
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-29,11.0,18.0
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-30,4.4,22.4
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-10-31,7.5,29.9
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-01,3.0,32.9
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-02,2.7,35.6
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-03,4.3,39.9
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-04,4.7,44.6
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-05,6.1,50.7
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-06,5.1,55.8
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-07,3.4,59.2
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-08,3.8,63.0
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-09,2.4,65.4
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-10,2.7,68.1
+ecmwf_ens_median,ECMWF ENS median,Kapiti Research Station Farm,Kapiti,2026-11-11,3.0,71.1
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-28,2.5,2.5
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-29,9.1,11.6
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-30,5.3,16.9
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-10-31,9.1,26.0
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-01,3.6,29.6
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-02,2.6,32.2
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-03,3.5,35.7
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-04,3.5,39.2
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-05,4.0,43.2
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-06,3.8,47.0
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-07,3.1,50.1
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-08,3.2,53.3
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-09,2.2,55.5
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-10,2.1,57.6
+ecmwf_ens_median,ECMWF ENS median,"LiveMo LTD, Memerush, Kajiado",LiveMo Kajiado,2026-11-11,3.1,60.7
 ecmwf_ifs025,ECMWF IFS,El Karama Sahiwals Farm,El Karama,2026-10-28,4.4,4.4
 ecmwf_ifs025,ECMWF IFS,El Karama Sahiwals Farm,El Karama,2026-10-29,9.8,14.2
 ecmwf_ifs025,ECMWF IFS,El Karama Sahiwals Farm,El Karama,2026-10-30,3.7,17.9
