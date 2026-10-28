@@ -12,6 +12,7 @@ and push them to origin/main, which redeploys the dashboard (GitHub Pages) and t
 Only data is published. The commit is made in a separate worktree (outputs/publish_worktree, detached at
 origin/main), so the branch checked out here is never touched. Nothing is published when this checkout's code
 differs from origin/main (a feature branch with unmerged changes), so data never goes live ahead of its code.
+After publishing, a checkout on main is fast-forwarded to the new commit (its data files already match it).
 
 Usage:
   python scripts/publish_daily.py              # commit and push when the data changed
@@ -39,6 +40,23 @@ def git(*args, cwd=BASE, check=True):
     if check and r.returncode:
         raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()}")
     return r
+
+
+def sync_checkout():
+    """Fast-forward this checkout (when on main) to the published commit. Its data files already hold that content
+    but would block the next morning's `git pull`, leaving the checkout behind and later publishes skipped."""
+    if git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "main":
+        return
+    git("fetch", "--quiet", "origin", "main")
+    if git("diff", "--quiet", "origin/main", "--", *DATA_PATHS, check=False).returncode:
+        log("checkout left as is: its data differ from origin/main")
+        return
+    git("checkout", "--quiet", "HEAD", "--", *DATA_PATHS)          # same content as origin/main, restored by the merge
+    if git("merge", "--quiet", "--ff-only", "origin/main", check=False).returncode:
+        git("checkout", "--quiet", "origin/main", "--", *DATA_PATHS)
+        log("checkout could not be fast-forwarded (local commits?); data kept")
+    else:
+        log("checkout fast-forwarded to origin/main")
 
 
 def main():
@@ -70,6 +88,7 @@ def main():
     stat = git("diff", "--cached", "--stat", cwd=WT).stdout.strip()
     if not stat:
         log("live data already current")
+        sync_checkout()
         return 0
     log("changes:\n" + stat)
     if a.dry_run:
@@ -82,6 +101,7 @@ def main():
         r = git("push", "--quiet", "origin", "HEAD:main", cwd=WT, check=False)
         if not r.returncode:
             log(f"pushed to origin/main: {msg}")
+            sync_checkout()
             return 0
         log(f"push rejected ({r.stderr.strip()[:200]}); rebasing on the new origin/main")
         git("fetch", "--quiet", "origin", "main")
