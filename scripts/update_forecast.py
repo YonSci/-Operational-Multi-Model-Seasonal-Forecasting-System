@@ -59,6 +59,8 @@ def download(url, dest, tries=6):
             with requests.get(url, stream=True, timeout=180) as r:
                 if r.status_code == 404:
                     return False
+                if r.status_code == 403:                # access refused: do not keep asking
+                    raise RuntimeError(f"access refused (403): {url}")
                 r.raise_for_status()
                 with open(tmp, "wb") as f:
                     for chunk in r.iter_content(1 << 20):
@@ -72,13 +74,18 @@ def download(url, dest, tries=6):
 
 def sync_final():
     url = f"{CHC}/global_daily/netcdf/p25/{FINAL.name}"
-    h = requests.head(url, timeout=60)
-    remote = email.utils.parsedate_to_datetime(h.headers["Last-Modified"]).timestamp()
-    if not FINAL.exists() or remote > FINAL.stat().st_mtime + 60:
-        log(f"CHIRPS final {YEAR}: updated on server, downloading")
-        FINAL.parent.mkdir(parents=True, exist_ok=True)
-        download(url, FINAL)
-        os.utime(FINAL, (remote, remote))
+    try:
+        h = requests.head(url, timeout=60)
+        h.raise_for_status()
+        remote = email.utils.parsedate_to_datetime(h.headers["Last-Modified"]).timestamp()
+        if not FINAL.exists() or remote > FINAL.stat().st_mtime + 60:
+            log(f"CHIRPS final {YEAR}: updated on server, downloading")
+            FINAL.parent.mkdir(parents=True, exist_ok=True)
+            download(url, FINAL)
+            os.utime(FINAL, (remote, remote))
+    except (requests.RequestException, KeyError, RuntimeError) as exc:
+        # the CHC server can refuse access for a while (HTTP 403); keep the copy on disk and carry on
+        log(f"CHIRPS final {YEAR}: server not reachable ({str(exc)[:120]}); using the copy on disk")
     with xr.open_dataset(FINAL) as ds:
         end = pd.Timestamp(ds.time.values.max()).date()
     log(f"CHIRPS final {YEAR} covers to {end}")
@@ -92,8 +99,12 @@ def sync_prelim(final_end):
     while day <= dt.date.today():
         name = f"chirps-v2.0.{day:%Y.%m.%d}.tif.gz"
         if not (PRELIM_DIR / name).exists():
-            if not download(f"{CHC}/prelim/global_daily/tifs/p05/{day.year}/{name}", PRELIM_DIR / name):
-                break                                   # not published yet
+            try:
+                if not download(f"{CHC}/prelim/global_daily/tifs/p05/{day.year}/{name}", PRELIM_DIR / name):
+                    break                               # not published yet
+            except RuntimeError as exc:                 # server refusing access: keep the days already on disk
+                log(f"CHIRPS preliminary: server not reachable ({str(exc)[:120]}); using the days on disk")
+                break
             got += 1
         day += dt.timedelta(days=1)
     # keep only preliminary days after the final record (final data supersedes them)
