@@ -1156,6 +1156,13 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
         n_none_on, n_none_cs = int(np.isnan(on_m).sum()), int((~np.isnan(on_m) & np.isnan(cs_m)).sum())
         on_def = (f" (Agri rule {od['rule']}, after ICPAC; cessation & LGP same rule; dates are medians of members with one — "
                   f"no onset by {od.get('onset_by', '31 Dec')}: {n_none_on}/{nm}, no cessation by {by}: {n_none_cs}/{nm})")
+    elif od.get("method") == "fao":
+        lab = od.get("var_labels") or {}
+        by = od.get("none_by", "28 Feb")
+        n_none_on, n_none_cs = int(np.isnan(on_m).sum()), int((~np.isnan(on_m) & np.isnan(cs_m)).sum())
+        on_def = (f" (FAO water balance, {od.get('definition', '')}: {lab.get('onset', 'onset')} / {lab.get('cessation', 'cessation')}"
+                  f" / {lab.get('lgp', 'LGP')}; {od.get('crop') or 'crop'}; medians of members with a date — "
+                  f"none by {od.get('onset_by', '15 Jan')}: {n_none_on}/{nm}, no cessation by {by}: {n_none_cs}/{nm})")
     else:
         on_def = ""
     fig.text(0.04, FTR_H * 0.65,

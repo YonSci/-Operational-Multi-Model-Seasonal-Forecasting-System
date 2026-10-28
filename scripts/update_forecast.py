@@ -9,7 +9,8 @@ Refresh the Kenya Short Rains forecast as new observations and medium-range fore
   2. Seasonal (ECMWF SEAS5, latest init) re-run with observed CHIRPS spliced in up to the latest day
      → outputs/ecmwf_<mon>_obs_latest/ (+ run_meta.json); skipped when the observation date is unchanged
   3. Agronomic (planting) onset: CHIRPS + members, terciles, calibration, skill; Agri onset/cessation rules 1–3
-     (after ICPAC); the seasonal runs and rules repacked for the hosted API
+     (after ICPAC); FAO water balance (CHIRPS v3 + ERA5-Land, when new CHIRPS v3 days arrive); the seasonal runs,
+     rules and FAO definitions repacked for the hosted API
   4. Latest ECMWF ENS (open data) → 1–15 day outlook and composite planting-onset dates
   5. Satellite rainfall, multi-model 10–16 day forecasts, site reports, tracker data and page
   6. Hot-reload the local backend if it is running
@@ -144,6 +145,37 @@ def run_seasonal(obs_end, force):
     return True
 
 
+def update_fao(env):
+    """FAO water balance (fao_water_balance.py): fetch new CHIRPS v3 days (Earth Engine, then CHC preliminary) and
+    the latest ERA5-Land ET0 (Earth Engine; at most 45 min — days ERA5-Land does not have yet use the ET0
+    climatology), then re-run this season's observed water balance and the "+ latest obs" forecast when CHIRPS v3
+    has advanced. Returns True when re-run."""
+    hist = BASE_DIR / "outputs" / "fao_wb" / "historical" / "fao_wb_seasons.nc"
+    if not hist.exists():
+        log("FAO water balance: no historical run yet (python scripts/fao_water_balance.py historical); skipped")
+        return False
+    subprocess.run([PY, str(BASE_DIR / "scripts" / "fao_download_chirps_v3.py"), "--years", str(YEAR)], check=False, env=env)
+    try:
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "fao_era5land_gee.py"), "--years", str(YEAR)],
+                       check=False, env=env, timeout=45 * 60)
+    except subprocess.TimeoutExpired:
+        log("FAO water balance: ERA5-Land (Earth Engine) took over 45 min; ET0 climatology fills the latest days")
+    v3 = BASE_DIR / "data" / "chirps_v3" / f"chirps_v3_p25_kenya_{YEAR}.nc"
+    with xr.open_dataset(v3) as ds:
+        last = str(pd.Timestamp(ds.time.values[-1]).date())
+    meta_p = BASE_DIR / "outputs" / "fao_wb" / "run_meta.json"
+    old = json.loads(meta_p.read_text()) if meta_p.exists() else {}
+    if old.get("chirps_v3_end") == last and (OUT_DIR / "fao_wb_agricultural" / "method.json").exists():
+        log(f"FAO water balance: already up to date (CHIRPS v3 to {last})")
+        return False
+    fw = str(BASE_DIR / "scripts" / "fao_water_balance.py")
+    subprocess.run([PY, fw, "historical", "--years", str(YEAR)], check=True, env=env)
+    subprocess.run([PY, fw, "forecast", str(OUT_DIR)], check=True, env=env)
+    meta_p.write_text(json.dumps({"chirps_v3_end": last, "updated": dt.datetime.now().isoformat(timespec="seconds")}, indent=1))
+    log(f"FAO water balance: CHIRPS v3 to {last}; season so far and the latest-obs forecast updated")
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--force", action="store_true")
@@ -161,12 +193,19 @@ def main():
     # the hosted API reads the October runs (incl. this one) from backend/demo_short_rains_extra.npz
     if changed or not (BASE_DIR / "backend" / "demo_short_rains_extra.npz").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_short_rains_demo.py")], check=True, env=env)
-    # Agri onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once),
-    # packed for the backend, then every site's comparison across initializations and methods
-    if changed or not all((OUT_DIR / f"icpac_rule{k}" / "rule.json").exists() for k in (1, 2, 3)):
-        if not (BASE_DIR / "data" / "worldclim" / "pet_mhargreaves_clim_kenya.nc").exists():
-            subprocess.run([PY, str(BASE_DIR / "scripts" / "pet_hargreaves.py")], check=True, env=env)
-        subprocess.run([PY, str(BASE_DIR / "scripts" / "onset_rules.py"), str(OUT_DIR)], check=True, env=env)
+    # Agri onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once) and the
+    # FAO water balance, packed for the backend, then every site's comparison across initializations and methods
+    rules_missing = not all((OUT_DIR / f"icpac_rule{k}" / "rule.json").exists() for k in (1, 2, 3))
+    try:
+        fao_changed = update_fao(env)
+    except Exception as exc:                            # the FAO module must not stop the daily update
+        log(f"FAO water balance: failed ({str(exc)[:160]}); previous FAO outputs kept")
+        fao_changed = False
+    if changed or rules_missing or fao_changed:
+        if changed or rules_missing:
+            if not (BASE_DIR / "data" / "worldclim" / "pet_mhargreaves_clim_kenya.nc").exists():
+                subprocess.run([PY, str(BASE_DIR / "scripts" / "pet_hargreaves.py")], check=True, env=env)
+            subprocess.run([PY, str(BASE_DIR / "scripts" / "onset_rules.py"), str(OUT_DIR)], check=True, env=env)
         subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_onset_rules.py")], check=True, env=env)
         subprocess.run([PY, str(BASE_DIR / "scripts" / "track_site_inits.py"), "--all-kenya"], check=False,
                        env={**env, "LOAD_BC_DAILY": "0"})

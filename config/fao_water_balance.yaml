@@ -1,0 +1,82 @@
+# FAO crop-water-requirement / soil-water-balance onset, cessation and LGP (scripts/fao_water_balance.py)
+#
+# Every threshold, window and crop parameter used by the module is read from this file. Dates are month-day
+# ("MM-DD") in the season year; a date earlier than the onset search start falls in the next calendar year
+# (e.g. "02-28" = 28 Feb after the OND season). Day-of-year values in the outputs count from 1 Jan of the season
+# year and continue past 365 (366 = 1 Jan of the next year).
+
+crop: maize                      # key of `crops` below; "reference" = generic reference-crop mode (Kc = 1)
+
+crops:
+  maize:                         # FAO-56 Tables 11, 12, 22: maize (grain), short-season tropical stage lengths
+    label: "Maize (grain)"
+    kc: {initial: 0.30, mid: 1.20, end: 0.60}
+    stage_days: {initial: 20, development: 35, mid: 40, late: 30}     # 125-day cycle from planting (agricultural onset)
+    rooting_depth_m: 1.0         # Zr (FAO-56: 1.0–1.7 m; 1.0 m for the shallow soils and short rains of Kenya)
+    depletion_fraction_p: 0.55   # FAO-56 Table 22
+  rangeland_grass:               # FAO-56 Table 12: "grazing pasture – extensive grazing"
+    label: "Rangeland grass"
+    kc: {initial: 0.30, mid: 0.75, end: 0.75}
+    stage_days: {initial: 10, development: 20, mid: 90, late: 30}
+    rooting_depth_m: 1.0
+    depletion_fraction_p: 0.60
+  reference:                     # generic reference-crop mode: ETc = ET0 throughout
+    label: "Reference crop (Kc = 1)"
+    kc: {initial: 1.0, mid: 1.0, end: 1.0}
+    stage_days: {initial: 1, development: 1, mid: 400, late: 1}
+    rooting_depth_m: 1.0
+    depletion_fraction_p: 0.50
+
+water_balance:
+  start: "08-01"                 # bucket start; initial storage from ERA5-Land root-zone soil moisture (below)
+  initial_storage: era5land_scaled   # era5land_scaled | zero
+  kc_before_onset: initial       # Kc before agricultural onset (bare / sparsely covered soil): "initial" = the crop's Kc_ini
+  adjust_p_for_etc: true         # FAO-56 Eq. 82 / Table 22 note: p = p_table + 0.04 (5 − ETc), limited to 0.1–0.8
+  runoff: none                   # none | infiltration_cap  (more advanced runoff / infiltration can be added here)
+  infiltration_cap_mm_day: 60    # used when runoff = infiltration_cap: rain above it runs off the same day
+  # Rain first refills the root zone; water above TAW leaves as drainage (deep percolation / runoff); evapotranspiration
+  # (Ks × ETc) then depletes the store. Storage is kept within 0 ≤ SW ≤ TAW (SW = plant-available water above θWP).
+
+onset:
+  search_start: "08-15"
+  search_end: "01-15"
+  window_days: 10                # rolling (forward) accumulation for the effective-rainfall test
+  rain_to_et0_ratio: 0.5         # P_window ≥ 0.5 × ET0_window
+  rainfall_first_day_wet_mm: 1.0 # rainfall onset falls on a wet day (0 = off)
+  paw_fraction_threshold: 0.20   # agricultural onset: PAW / TAW ≥ this (0.20–0.30)
+  persistence_days: 5            # PAW / TAW stays ≥ the threshold for this many days from the onset day
+  false_onset_lookahead_days: 21 # false-onset test period after the onset day
+  false_onset_dry_days: 7        # reject the onset if PAW / TAW < threshold for this many consecutive days in it
+
+cessation:
+  search_start: "11-01"          # and never before agricultural / rainfall onset + the false-onset look-ahead
+  search_end: "02-28"
+  window_days: 10                # dekadal accumulation
+  rain_to_et0_ratio: 0.5         # rainfall cessation: P_window < 0.5 × ET0_window …
+  rainfall_persistence_windows: 2   # … for this many consecutive windows (two dekads)
+  paw_fraction_threshold: 0.20   # agricultural cessation: PAW / TAW below this …
+  et_stress_ratio: 0.50          # … and ETa / ETc (or ETa / ET0) below this …
+  et_stress_reference: etc       # etc | et0
+  stress_persistence_days: 7     # … together with a 10-day rain deficit, for this many consecutive days
+  crop_water:                    # crop-water-requirement cessation (agricultural end-of-season indicator)
+    after: climatological_peak   # climatological_peak (CHIRPS 1993–2016, 31-day mean, per cell) | search_start
+    rain_to_etc_ratio: 0.5       # accumulated P < 0.5 × accumulated ETc …
+    persistence_days: 21         # … over this many consecutive days …
+    paw_fraction_threshold: 0.20 # … with PAW / TAW falling below this within them
+
+forecast:
+  et0: era5land_climatology      # daily ET0 climatology (ERA5-Land, CAL years) for the forecast days of every member
+  rainfall_bias_correction: eqm_chirps_v3   # SEAS5 members quantile-mapped to CHIRPS v3 (CAL years, ±7-day pool)
+  qm_window_days: 7
+  probability_horizons_days: [7, 14, 21]
+
+sources:
+  rainfall: chirps_v3            # CHIRPS v3 daily (final rnl via Earth Engine; CHC prelim sat averaged to 0.25°)
+  meteorological_forcing: era5land   # ERA5-Land via Earth Engine (fao_era5land_gee.py) or the CDS (fao_download_era5land.py)
+  soil: soilgrids_saxton_rawls   # SoilGrids 2.0 texture + SOC → θFC, θWP (Saxton & Rawls 2006)
+  calibration_years: [1993, 2016]
+  validation_years: [2017, 2025]
+
+grid:
+  lat: [-4.875, 5.375]           # platform 0.25° Kenya grid, cell centres
+  lon: [33.625, 41.875]
