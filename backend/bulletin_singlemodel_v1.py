@@ -1151,7 +1151,13 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ))
 
     od = md.get("onset_definition") or {}
-    on_def = f" (ICPAC rule {od['rule']}; cessation & LGP same rule, by 31 Dec)" if od.get("method") == "icpac" else ""
+    if od.get("method") == "icpac":
+        by = od.get("none_by", "31 Dec")
+        n_none_on, n_none_cs = int(np.isnan(on_m).sum()), int((~np.isnan(on_m) & np.isnan(cs_m)).sum())
+        on_def = (f" (Agri rule {od['rule']}, after ICPAC; cessation & LGP same rule; dates are medians of members with one — "
+                  f"no onset by {od.get('onset_by', '31 Dec')}: {n_none_on}/{nm}, no cessation by {by}: {n_none_cs}/{nm})")
+    else:
+        on_def = ""
     fig.text(0.04, FTR_H * 0.65,
              f"FORECAST SUMMARY   |   Onset{on_def}: {_doy_to_date_str(on_med)} ({on_med:.1f} DOY, {on_anom:+.1f}d, {on_tl}, {on_pctile}th pctile)   |   Cessation: {_doy_to_date_str(cs_med)} ({cs_med:.1f} DOY, {cs_anom:+.1f}d, {cs_tl}, {cs_pctile}th pctile)   |   LGP: {lg_med:.0f}d ({lg_tl}, {lg_pctile}th pctile)   |   Sowing window: {sow_optimal_start} – {sow_optimal_end}",
              fontsize=9.0, fontweight="bold", color="#F5D98C", va="center", transform=fig.transFigure, zorder=11)

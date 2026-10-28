@@ -480,12 +480,12 @@ def _attach_extra_short_rains(MODELS):
         MODELS[name] = entry
     _attach_packed_short_rains(MODELS, missing)
 
-RULE_SUFFIX = " - ICPAC rule {k}"             # ASCII only: the name can end up in HTTP headers (bulletin filename)
+RULE_SUFFIX = " - Agri rule {k}"             # ASCII only: the name can end up in HTTP headers (bulletin filename)
 _RULE_VARS = (("onset", "onset_doy", "onset"), ("cessation", "cessation_doy", "cess"), ("lgp", "lgp_days", "lgp"))
 
 
 def _attach_rule_variants(MODELS, chirps_sep=None):
-    """For each Short Rains initialization add "<init> - ICPAC rule <k>" models: the ICPAC operational onset and
+    """For each Short Rains initialization add "<init> - Agri rule <k>" models: the ICPAC operational onset and
     cessation rules (scripts/onset_rules.py, packed by scripts/pack_onset_rules.py into
     backend/demo_short_rains_rules.npz). Onset, cessation and season length members, probabilities, skill,
     terciles and CHIRPS history are replaced; seasonal rainfall and daily traces are shared with the parent
@@ -512,7 +512,7 @@ def _attach_rule_variants(MODELS, chirps_sep=None):
         for k, info in rules.items():
             src = info.get("same_as", parent)
             if not np.array_equal(np.asarray(info["model_years"]).astype(int), np.asarray(base["model_years"]).astype(int)):
-                print(f"  SKIP  {parent} ICPAC rule {k}: model years differ from the parent")
+                print(f"  SKIP  {parent} Agri rule {k}: model years differ from the parent")
                 continue
             e = dict(base)                                  # shallow copy: the parent's rainfall arrays are shared
             for fld in ("probs_damped", "alpha", "hitrate_cal", "hitrate_val", "rpss_val", "chirps_clim"):
@@ -555,7 +555,9 @@ def _attach_rule_variants(MODELS, chirps_sep=None):
             rule = info.get("rule", {})
             e["onset_definition"] = {"method": "icpac", "rule": int(k), "label": info["label"],
                                      "skill": bool(info.get("skill", True)), "note": info.get("note", ""),
-                                     "search_doy": rule.get("search_doy"), "cessation": rule.get("cessation")}
+                                     "search_doy": rule.get("search_doy"), "cessation": rule.get("cessation"),
+                                     "onset_by": rule.get("onset_by", "31 Dec"), "none_by": rule.get("none_by", "31 Dec"),
+                                     "data_end_doy": rule.get("data_end_doy", 365)}
             name = parent + RULE_SUFFIX.format(k=k)
             MODELS[name] = e
             print(f"  LOADED {name}" + (f" (arrays shared with {src})" if src != parent else ""))
@@ -1251,6 +1253,31 @@ def _nearest_pixel(lat, lon, target_lat=None, target_lon=None, lm=None):
 
 def _pct(arr, q): return float(np.percentile(arr,q)) if len(arr)>0 else float("nan")
 
+_NONE = 1.0e6          # "none by the search end" in _late_members (finite: percentiles interpolate cleanly)
+
+def _late_members(md, arr_key, oi):
+    """Members [m, ...] of arr_key for year index oi. For the ICPAC rule models a member with no onset (cessation)
+    by the search end counts as later than any date (_NONE): onset none → _NONE; cessation: no cessation → _NONE,
+    no onset → excluded (NaN); season length: no onset → 0, no cessation → _NONE. Other models: values as stored."""
+    a = md[arr_key][:, oi].astype(np.float32)
+    if (md.get("onset_definition") or {}).get("method") != "icpac" or arr_key not in ("onset_doy", "cessation_doy", "lgp_days"):
+        return a
+    has_on = np.isfinite(md["onset_doy"][:, oi].astype(np.float32))
+    no_cs = np.isnan(md["cessation_doy"][:, oi].astype(np.float32))
+    if arr_key == "onset_doy":
+        return np.where(has_on, a, _NONE)
+    if arr_key == "cessation_doy":
+        return np.where(has_on, np.where(no_cs, _NONE, a), np.nan)
+    return np.where(has_on, np.where(no_cs, _NONE, a), 0.0)
+
+def _late_pct(md, arr_key, oi, q):
+    """Member percentile (axis 0) of _late_members; NaN where it falls among the "none" members or no data."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        r = np.nanpercentile(_late_members(md, arr_key, oi), q, axis=0)
+    r = np.asarray(r, np.float32)
+    return np.where(r < _NONE / 10, r, np.nan)
+
 def _model_pixel_stats(mkey, pi, pj, year=None):
     s = _state
     md = s["MODELS"][mkey]
@@ -1274,9 +1301,16 @@ def _model_pixel_stats(mkey, pi, pj, year=None):
     p_on  = md["probs_damped"]["onset"][:,oi,pi,pj]
     p_cs  = md["probs_damped"]["cessation"][:,oi,pi,pj]
     p_lgp = md["probs_damped"]["lgp"][:,oi,pi,pj]
-    on_med = float(np.nanmedian(on_v)) if len(on_v)>0 else float("nan")
-    cs_med = float(np.nanmedian(cs_v)) if len(cs_v)>0 else float("nan")
-    lg_med = float(np.nanmedian(lg_v)) if len(lg_v)>0 else float("nan")
+    # Medians / percentiles; the ICPAC rules count members with none by the search end as late (NaN when the
+    # percentile falls among them — "none by <date>")
+    late = {k: _late_members(md, k, oi)[:, pi, pj] for k in ("onset_doy", "cessation_doy", "lgp_days")}
+    def _lp(k, q):
+        v = late[k][~np.isnan(late[k])]
+        if not len(v): return float("nan")
+        r = float(np.percentile(v, q))
+        return r if r < _NONE / 10 else float("nan")
+    on_med, cs_med, lg_med = _lp("onset_doy", 50), _lp("cessation_doy", 50), _lp("lgp_days", 50)
+    od = md.get("onset_definition") or {}
 
     # Use model-specific seasonal climatology
     md_clim = md.get("chirps_clim") or s["chirps_clim"]
@@ -1298,10 +1332,14 @@ def _model_pixel_stats(mkey, pi, pj, year=None):
         on_anom=on_med-c_on if not np.isnan(on_med) else 0.0,
         cs_anom=cs_med-c_cs if not np.isnan(cs_med) else 0.0,
         lg_anom=lg_med-c_lg if not np.isnan(lg_med) else 0.0,
-        on_p10=_pct(on_v,10), on_p25=_pct(on_v,25),
-        on_p75=_pct(on_v,75), on_p90=_pct(on_v,90),
-        cs_p10=_pct(cs_v,10), cs_p90=_pct(cs_v,90),
-        lg_p10=_pct(lg_v,10), lg_p90=_pct(lg_v,90),
+        on_p10=_lp("onset_doy",10), on_p25=_lp("onset_doy",25),
+        on_p75=_lp("onset_doy",75), on_p90=_lp("onset_doy",90),
+        cs_p10=_lp("cessation_doy",10), cs_p90=_lp("cessation_doy",90),
+        lg_p10=_lp("lgp_days",10), lg_p90=_lp("lgp_days",90),
+        on_none=int(np.sum(late["onset_doy"] == _NONE)), cs_none=int(np.sum(late["cessation_doy"] == _NONE)),
+        n_members=int(late["onset_doy"].shape[0]),
+        none_by=od.get("none_by") if od.get("method") == "icpac" else None,
+        onset_by=od.get("onset_by") if od.get("method") == "icpac" else None,
         p_on=p_on.tolist(), p_cs=p_cs.tolist(), p_lgp=p_lgp.tolist(),
         dom_on=int(np.argmax(p_on)), dom_cs=int(np.argmax(p_cs)), dom_lgp=int(np.argmax(p_lgp)),
         agree_on=float(np.max(p_on)), agree_cs=float(np.max(p_cs)), agree_lgp=float(np.max(p_lgp)),
@@ -1763,11 +1801,11 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
     p_nn_arr = None
     p_an_arr = None
     if layer == "anomaly":
-        meds = [np.nanmedian(md[arr_key][:,md["op_idx"],:,:],axis=0) for md in MODELS.values()]
+        meds = [_late_pct(md, arr_key, md["op_idx"], 50) for md in MODELS.values()]
         out  = np.where(lm, np.nanmedian(np.stack(meds,axis=0),axis=0) - clim_map, np.nan).astype(np.float32)
         units = "days (+ = late)"
     elif layer == "median":
-        meds = [np.nanmedian(md[arr_key][:,md["op_idx"],:,:],axis=0) for md in MODELS.values()]
+        meds = [_late_pct(md, arr_key, md["op_idx"], 50) for md in MODELS.values()]
         out  = np.where(lm, np.nanmedian(np.stack(meds,axis=0),axis=0), np.nan).astype(np.float32)
         units = "DOY"
     elif layer == "spread":
@@ -1781,12 +1819,9 @@ def get_grid_stats(variable="onset", layer="anomaly", model=None, season="long_r
         else:
             # Single model -- use member P90-P10 as spread
             md = list(MODELS.values())[0]
-            all_mem = md[arr_key][:,md["op_idx"],:,:]  # [members, lat, lon]
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore",RuntimeWarning)
-                p90 = np.nanpercentile(all_mem, 90, axis=0)
-                p10 = np.nanpercentile(all_mem, 10, axis=0)
-                out = np.where(lm, p90 - p10, np.nan).astype(np.float32)
+            p90 = _late_pct(md, arr_key, md["op_idx"], 90)
+            p10 = _late_pct(md, arr_key, md["op_idx"], 10)
+            out = np.where(lm, p90 - p10, np.nan).astype(np.float32)
 
     elif layer in ("prob_bn","prob_nn","prob_an"):
         cat  = 0 if layer=="prob_bn" else 1 if layer=="prob_nn" else 2

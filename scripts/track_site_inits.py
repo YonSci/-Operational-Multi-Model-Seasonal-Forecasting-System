@@ -4,9 +4,10 @@ track_site_inits.py
 ───────────────────
 Compare Short Rains onset / cessation / season length (LGP) at one site across every
 ECMWF SEAS5 initialization the backend has loaded (Sep, Oct, Oct+Obs, ...), for each method: Dunning, and the
-ICPAC operational rules 1–3 (scripts/onset_rules.py; "<init> - ICPAC rule <k>" models), which set onset, cessation
-and season length. ICPAC rows count members with no onset / no cessation by 31 Dec as "after 31 Dec" in the
-percentiles (late, not missing); season length is 0 without onset and open-ended without cessation.
+ICPAC operational rules 1–3 (scripts/onset_rules.py; "<init> - Agri rule <k>" models), which set onset, cessation
+and season length. ICPAC rows count members with no onset / no cessation by the search end (onset 15 Jan,
+cessation 28 Feb for the 1 Oct runs; 31 Dec for Sep 01 — column none_by) as later than any date in the percentiles
+(late, not missing); season length is 0 without onset and open-ended without cessation.
 
 Writes to outputs/site_tracker/<site>/:
   inits_summary.csv   one row per initialization x variable (median, P10-P90, terciles, anomaly)
@@ -40,7 +41,7 @@ INITS = [
 ]
 VARS = [("onset", "on_v", "Onset"), ("cessation", "cs_v", "Cessation"), ("lgp", "lg_v", "Season length")]
 # methods: model-name suffix → label
-DEFS = [("", "Dunning")] + [(f" - ICPAC rule {k}", f"ICPAC rule {k}") for k in (1, 2, 3)]
+DEFS = [("", "Dunning")] + [(f" - Agri rule {k}", f"Agri rule {k}") for k in (1, 2, 3)]
 M_KEY = {"onset": "onset_doy", "cessation": "cessation_doy", "lgp": "lgp_days"}
 CATS = ["BN", "NN", "AN"]
 P_KEY = {"onset": "p_on", "cessation": "p_cs", "lgp": "p_lgp"}
@@ -71,10 +72,13 @@ def main():
         track(name, lat, lon, a.year)
 
 
+NONE = 1.0e6     # "none by the search end" (finite, so percentiles on an exact member stay exact)
+
+
 def _pct(v, q):
-    """Percentile with no-onset members as +inf → NaN when the percentile falls among them."""
+    """Percentile with "none" members as NONE → NaN when the percentile falls among them."""
     x = float(np.percentile(v, q)) if len(v) else float("nan")
-    return x if np.isfinite(x) else float("nan")
+    return x if x < NONE / 10 else float("nan")
 
 
 def track(name, lat, lon, year):
@@ -94,19 +98,20 @@ def track(name, lat, lon, year):
             px = dl.get_pixel_stats(lat, lon, season="short_rains", model=model, year=year)
             st = px["models"][model]
             pi, pj = px["pi"], px["pj"]
+            od = md.get("onset_definition") or {}
             if suffix:
                 yi = int(np.where(np.asarray(md["model_years"]) == year)[0][0])
                 raw = {v: np.asarray(md[M_KEY[v]][:, yi, pi, pj], dtype=float) for v in M_KEY}
                 has_on = np.isfinite(raw["onset"])
             for var, vkey, title in VARS:
                 if suffix:
-                    # all members: no onset / no cessation by 31 Dec = +inf (late), LGP 0 without onset
+                    # all members: no onset / no cessation by the search end = NONE (late), LGP 0 without onset
                     if var == "onset":
-                        allv = np.where(has_on, raw["onset"], np.inf)
+                        allv = np.where(has_on, raw["onset"], NONE)
                     elif var == "cessation":
-                        allv = np.where(np.isfinite(raw["cessation"]), raw["cessation"], np.inf)[has_on]
+                        allv = np.where(np.isfinite(raw["cessation"]), raw["cessation"], NONE)[has_on]
                     else:
-                        allv = np.where(~has_on, 0.0, np.where(np.isfinite(raw["lgp"]), raw["lgp"], np.inf))
+                        allv = np.where(~has_on, 0.0, np.where(np.isfinite(raw["lgp"]), raw["lgp"], NONE))
                     vals = raw[var][np.isfinite(raw[var])]
                 else:
                     vals = np.asarray(st[vkey], dtype=float)
@@ -114,6 +119,7 @@ def track(name, lat, lon, year):
                 clim = float(px["chirps_clim"][var])
                 p = st[P_KEY[var]]
                 med = _pct(allv, 50)
+                by = (od.get("onset_by" if var == "onset" else "none_by", "31 Dec") if suffix else "31 Dec")
                 rpss = md.get("rpss_val", {}).get(var)
                 hr = md.get("hitrate_val", {}).get(var)
                 row = dict(
@@ -126,7 +132,8 @@ def track(name, lat, lon, year):
                     chirps_clim=round(clim, 1), anomaly=round(med - clim, 1),
                     t33=round(px["t33"][var], 1), t67=round(px["t67"][var], 1),
                     p_bn=round(p[0], 2), p_nn=round(p[1], 2), p_an=round(p[2], 2), dominant=CATS[int(np.argmax(p))],
-                    median_date="" if var == "lgp" else (doy_to_date(med, year) if np.isfinite(med) else "after 31 Dec"),
+                    median_date="" if var == "lgp" else (doy_to_date(med, year) if np.isfinite(med) else f"after {by}"),
+                    none_by=by,
                     clim_date="" if var == "lgp" else doy_to_date(clim, year),
                     p_fail=round(st["p_fail"], 3),
                     rpss_val=round(float(rpss[pi, pj]), 2) if rpss is not None and np.isfinite(rpss[pi, pj]) else "",

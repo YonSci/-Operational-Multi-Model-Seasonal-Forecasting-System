@@ -3,7 +3,7 @@
 pack_onset_rules.py
 ───────────────────
 Pack the ICPAC onset / cessation rules (onset_rules.py → <run>/icpac_rule<k>/) for every Short Rains initialization
-into backend/demo_short_rains_rules.npz. mam_loader builds a "<init> - ICPAC rule <k>" model from it next to each
+into backend/demo_short_rains_rules.npz. mam_loader builds a "<init> - Agri rule <k>" model from it next to each
 parent (Dunning) model: onset, cessation and season length members, probabilities, skill, terciles and CHIRPS
 history replaced; seasonal rainfall and daily traces shared with the parent.
 

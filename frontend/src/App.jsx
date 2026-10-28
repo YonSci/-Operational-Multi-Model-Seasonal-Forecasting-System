@@ -28,6 +28,9 @@ function doyToDate(d,year=2026){
 function pct(v){ return v!=null&&!isNaN(v)?(v*100).toFixed(0)+'%':'--' }
 const DOY_MONTHS_MAM=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
 const DOY_MONTHS_OND=[{doy:244,label:'Sep'},{doy:274,label:'Oct'},{doy:305,label:'Nov'},{doy:335,label:'Dec'}]
+const DOY_MONTHS_OND_EXT=[...DOY_MONTHS_OND,{doy:366,label:'Jan'},{doy:397,label:'Feb'}]
+// Short Rains chart right edge: 31 Dec, or later when an Agri-rule median falls in Jan-Feb (searched to 28 Feb)
+const ondEnd=models=>Math.min(425,Math.max(365,...Object.values(models??{}).flatMap(m=>[m?.on_med,m?.cs_med]).filter(v=>v!=null&&isFinite(v)).map(v=>Math.ceil(v)+3)))
 const DOY_MONTHS_KIREMT=[{doy:122,label:'May'},{doy:152,label:'Jun'},{doy:182,label:'Jul'},{doy:213,label:'Aug'},{doy:244,label:'Sep'},{doy:274,label:'Oct'}]
 const DOY_MONTHS_FMAM=[{doy:32,label:'Feb'},{doy:60,label:'Mar'},{doy:91,label:'Apr'},{doy:121,label:'May'},{doy:152,label:'Jun'}]
 const DOY_MONTHS_BEGA=[{doy:244,label:'Sep'},{doy:274,label:'Oct'},{doy:305,label:'Nov'},{doy:335,label:'Dec'},{doy:366,label:'Jan'}]
@@ -54,13 +57,13 @@ const SHORT_RAINS_INITS = [
   { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
   { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
 ]
-// Onset / cessation method (Short Rains): Dunning cumulative anomaly, or the ICPAC operational rules
-// (scripts/onset_rules.py) served as "<init> - ICPAC rule <k>" models; each rule sets onset, cessation and season length
+// Onset / cessation method (Short Rains): Dunning cumulative anomaly, or the agricultural rules adapted from ICPAC's operational definitions
+// (scripts/onset_rules.py) served as "<init> - Agri rule <k>" models; each rule sets onset, cessation and season length
 const ONSET_DEFS = [
   { id:'dunning', label:'Dunning',      suffix:'',                title:'Dunning et al. (2016): turning points of the accumulated rainfall anomaly, 1 Sep - 31 Dec' },
-  { id:'r1',      label:'ICPAC rule 1', suffix:' - ICPAC rule 1', title:'Onset: wet day (>=1 mm) starting >20 mm in 3 days, no dry spell of 7+ days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET (modified Hargreaves), the day a 100 mm soil store is empty. Search 15 Aug - 31 Dec (ICPAC: to 15 Jan; forecasts end 31 Dec)' },
-  { id:'r2',      label:'ICPAC rule 2', suffix:' - ICPAC rule 2', title:'Onset: >=20 mm in 5 days with at least 3 rainy days (>=1 mm), no dry spell longer than 7 days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET, the day a 100 mm soil store is empty. Search 15 Aug - 31 Dec' },
-  { id:'r3',      label:'ICPAC rule 3', suffix:' - ICPAC rule 3', title:'Onset: >20 mm in 3 days, no dry spell longer than 10 days in the next 30 days. Cessation: first day of a 10-day period with rain <0.5 x PET (modified Hargreaves). Search 15 Aug - 31 Dec' },
+  { id:'r1',      label:'Agri rule 1', suffix:' - Agri rule 1', title:'Onset: wet day (>=1 mm) starting >20 mm in 3 days, no dry spell of 7+ days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET (modified Hargreaves), the day a 100 mm soil store is empty. Onset searched 15 Aug - 15 Jan, cessation to 28 Feb (Sep 01 run: to 31 Dec). Adapted from the ICPAC operational definitions.' },
+  { id:'r2',      label:'Agri rule 2', suffix:' - Agri rule 2', title:'Onset: >=20 mm in 5 days with at least 3 rainy days (>=1 mm), no dry spell longer than 7 days in the next 21 days. Cessation: after a 10-day period with rain <0.5 x PET, the day a 100 mm soil store is empty. Onset searched 15 Aug - 15 Jan, cessation to 28 Feb (Sep 01 run: to 31 Dec). Adapted from the ICPAC operational definitions.' },
+  { id:'r3',      label:'Agri rule 3', suffix:' - Agri rule 3', title:'Onset: >20 mm in 3 days, no dry spell longer than 10 days in the next 30 days. Cessation: first day of a 10-day period with rain <0.5 x PET (modified Hargreaves). Onset searched 15 Aug - 15 Jan, cessation to 28 Feb (Sep 01 run: to 31 Dec). Adapted from the ICPAC operational definitions.' },
 ]
 const hasModel = (modelsData, name) => Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === name || m?.raw_name === name)
 const shortRainsModel = (init, onsetDef='dunning') =>
@@ -112,9 +115,9 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   const isKiremt = !isBega && !isFmam && (selectedSeason === 'kiremt' || (pixelData?.win_doy_start === 122) || (pixelData?.season === 'kiremt'))
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
   const isSingle = isBega || isFmam || isKiremt || isShort
-  const monthTicks = isBega ? DOY_MONTHS_BEGA : (isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM)))
   const winStart = isBega ? 244 : (isFmam ? 32 : (isKiremt ? 122 : (isShort ? (pixelData?.win_doy_start ?? 244) : 32)))
-  const winEnd   = isBega ? 396 : (isFmam ? 166 : (isKiremt ? 304 : (isShort ? 365 : 213)))
+  const winEnd   = isBega ? 396 : (isFmam ? 166 : (isKiremt ? 304 : (isShort ? ondEnd(models) : 213)))
+  const monthTicks = isBega ? DOY_MONTHS_BEGA : (isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND_EXT.filter(m => m.doy <= winEnd) : DOY_MONTHS_MAM)))
   const Q_bar    = pixelData.Q_bar_pixel   ?? 0   // pixel climatological daily rainfall mean
   const C_vec    = pixelData.C_clim_vec    ?? []  // CHIRPS CAL C(d) -- already cumulative, plot directly
   const d_s_chirps = (isSingle && pixelData.d_s_pixel != null && (
@@ -333,8 +336,8 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
   const isShort = !isBega && !isFmam && !isKiremt && (selectedSeason === 'short_rains' || (pixelData?.win_doy_start ?? 32) >= 200)
   const isSingle = isBega || isFmam || isKiremt || isShort
   const DOY_START = isBega ? 244 : (isFmam ? 32 : (isKiremt ? 122 : (isShort ? (pixelData?.win_doy_start ?? 244) : 32)))
-  const N_DAYS = isBega ? 153 : (isFmam ? 135 : (isKiremt ? 183 : (isShort ? 365 - DOY_START + 1 : 150)))
-  const MONTH_TICKS = isBega ? DOY_MONTHS_BEGA : (isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND : DOY_MONTHS_MAM)))
+  const N_DAYS = isBega ? 153 : (isFmam ? 135 : (isKiremt ? 183 : (isShort ? ondEnd(pixelData?.models) - DOY_START + 1 : 150)))
+  const MONTH_TICKS = isBega ? DOY_MONTHS_BEGA : (isFmam ? DOY_MONTHS_FMAM : (isKiremt ? DOY_MONTHS_KIREMT : (isShort ? DOY_MONTHS_OND_EXT.filter(m => m.doy < DOY_START + N_DAYS) : DOY_MONTHS_MAM)))
   const DRY_THRESHOLD = 0.5
 
   if (!pixelData) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--text-faint)',fontSize:12}}>No data</div>
@@ -404,8 +407,8 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
         <XAxis dataKey="doy" type="number" domain={[DOY_START,DOY_START+N_DAYS-1]}
                ticks={MONTH_TICKS.map(m=>m.doy)} tickFormatter={d=>MONTH_TICKS.find(m=>m.doy===d)?.label??''}
                tick={{fontSize:9,fill:'var(--chart-axis)'}} stroke="var(--chart-axis)"/>
-        <YAxis tick={{fontSize:9,fill:'var(--chart-axis)'}} stroke="var(--chart-axis)"
-               domain={[0,yMax]} label={{value:'mm/day',angle:-90,position:'insideLeft',fontSize:9,fill:'var(--chart-axis)',offset:8}}/>
+        <YAxis tick={{fontSize:9,fill:'var(--chart-axis)'}} stroke="var(--chart-axis)" allowDataOverflow
+               domain={[0,yMax]} tickFormatter={v=>Math.round(v)} label={{value:'mm/day',angle:-90,position:'insideLeft',fontSize:9,fill:'var(--chart-axis)',offset:8}}/>
         <Tooltip contentStyle={{background:'var(--chart-tooltip-bg)',border:'1px solid var(--border-primary)',borderRadius:6,fontSize:10,color:'var(--text-primary)'}}
                  labelFormatter={d=>'DOY '+d}/>
         <ReferenceLine y={DRY_THRESHOLD} stroke="#f97316" strokeDasharray="4 2" strokeWidth={1}
@@ -876,6 +879,12 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   const allLgP10 = entries.map(([,m]) => m.lg_p10).filter(v => v != null)
   const allLgP90 = entries.map(([,m]) => m.lg_p90).filter(v => v != null)
   const lgSpread = allLgP10.length && allLgP90.length ? Math.round(Math.min(...allLgP10)) + '-' + Math.round(Math.max(...allLgP90)) + 'd' : null
+  // Agri rules: a median among the members with no onset / cessation by the search end reads "After <date>"
+  const one = entries.length === 1 ? entries[0][1] : null
+  const lateP50 = sec => {
+    const [n, by] = sec === 'ONSET' ? [one?.on_none, one?.onset_by] : sec === 'CESSATION' ? [one?.cs_none, one?.none_by] : [0, null]
+    return n > 0 && by ? { value: 'After ' + by, sub: n + '/' + one.n_members + ' members none' } : null
+  }
   const opYear = selectedYear ?? 2026
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
 
@@ -944,7 +953,8 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
               <div key={sec} className="mb-2">
                 <div style={{fontSize:9,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{sec}</div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-1.5">
-                  <StatBox label="P50" value={p50?(unit==='DOY'?'DOY '+Math.round(p50):Math.round(p50)+'d'):'--'} sub={unit==='DOY'?doy(p50, opYear):null}/>
+                  <StatBox label="P50" value={p50?(unit==='DOY'?'DOY '+Math.round(p50):Math.round(p50)+'d'):(lateP50(sec)?.value??'--')}
+                           sub={!p50&&lateP50(sec)?lateP50(sec).sub:(unit==='DOY'?doy(p50, opYear):null)}/>
                   <StatBox label="Anomaly" value={anom!=null?(anom>0?'+':'')+fmt(anom)+'d':'--'} color={anom>5?'text-orange-400':anom<-5?'text-emerald-400':''}/>
                   <StatBox label="Spread" value={p10s.length&&p90s.length?(unit==='DOY'?doyRange(Math.min(...p10s),Math.max(...p90s), opYear):Math.round(Math.min(...p10s))+'-'+Math.round(Math.max(...p90s))+'d'):'--'}/>
                   <StatBox label="CAL mean" value={cal?(unit==='DOY'?'DOY '+Math.round(cal):Math.round(cal)+'d'):'--'} sub={unit==='DOY'?doy(cal, opYear):null}/>
