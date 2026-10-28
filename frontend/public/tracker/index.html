@@ -62,6 +62,11 @@
 .kt-src h3 { color: var(--color-fg); }
 .kt-src a { color: inherit; overflow-wrap: anywhere; }
 .kt-late { color: var(--color-warn); }
+.kt-station-bar { margin-top: var(--cds-gap-md); }
+.kt-toc { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); margin-top: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); }
+.kt-toc a { color: var(--color-fg-muted); }
+.kt-toc a:hover { color: var(--color-fg); }
+.kt-station-panel { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
 /* Sortable tables */
 .kt th[data-sort] { cursor: pointer; user-select: none; }
 .kt th[data-sort]:hover { color: var(--color-fg); }
@@ -87,52 +92,134 @@
       <b><span data-source="headline" data-field="kapiti_p7">—</span></b> chance of planting rains within 7 days; the seasonal outlook puts Kapiti's planting onset most likely on
       <b><span data-source="headline" data-field="kapiti_season">—</span></b>.
     </p>
+    <div class="kt-row kt-station-bar">
+      <label for="site-pick"><b>Station</b></label>
+      <select id="site-pick" data-source="sites"></select>
+      <span class="kt-note">Charts and tables below are for this station; maps show all of Kenya with the station circled.</span>
+    </div>
+    <nav class="kt-toc" aria-label="On this page">
+      <a href="#observed">1. Rain so far</a><a href="#next">2. Next two weeks</a><a href="#season">3. Season outlook</a>
+      <a href="#verify">4. How reliable the satellite data are</a><a href="#methods">5. Methods</a><a href="#sources">6. Data sources</a>
+    </nav>
   </header>
 
-  <section class="kt-sec" id="sites">
-    <h2>Site status</h2>
-    <p class="kt-note">Planting rains = at least 20 mm within 1–3 days. Planting onset = planting rains with no 10-day dry spell in the 21 days after. Click a row to see that site below.</p>
-    <div class="kt-card kt-scroll">
-      <table id="site-table" data-source="sites" data-row-key="site">
-        <thead><tr>
-          <th data-field="site">Site</th>
-          <th data-field="obs_through">Satellite data to</th>
-          <th class="num" data-field="rain_since_oct1_chirps_mm">CHIRPS since 1 Oct (mm)</th>
-          <th class="num" data-field="pct_of_normal">% of normal</th>
-          <th class="num" data-field="products_with_onset">Products showing onset</th>
-          <th class="num" data-field="p_event_7d">Planting rains ≤7 d</th>
-          <th class="num" data-field="p_onset_15d">Planting onset ≤15 d</th>
-          <th data-field="season_onset_median">Seasonal onset, most likely</th>
-          <th data-field="season_onset_likely">Likely range</th>
-          <th data-field="season_skill">Local skill</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
+  <section class="kt-sec" id="observed">
+    <h2>1. Rain so far: what the satellites observed</h2>
+    <p class="kt-note">How much rain has fallen at the station and across Kenya since the season began, from six satellite rainfall products.</p>
+    <div class="kt-card" id="rain-card">
+      <h3>Daily rainfall at the station since 1 September, by satellite product</h3>
+      <p class="kt-note">Each line is one satellite product at the site's 0.25° cell. CHIRPS is final to 30 Sep, preliminary after.</p>
+        <div class="kt-legend" id="rain-legend" data-source="rain_daily"></div>
+        <div class="kt-chart dash-skeleton" id="rain-chart" data-source="rain_daily"></div>
+    </div>
+    <div class="kt-card" id="anim-card">
+      <div class="kt-row">
+        <h3>Rainfall maps by satellite product, day by day since 1 October</h3>
+        <select id="anim-metric" aria-label="Measure">
+          <option value="pct_of_normal">% of normal</option>
+          <option value="anomaly_mm">Anomaly (mm)</option>
+          <option value="rain_since_oct1_mm">Total since 1 Oct (mm)</option>
+          <option value="rain_10d_mm">Total, last 10 days (mm)</option>
+          <option value="rain_5d_mm">Total, last 5 days (mm)</option>
+          <option value="rain_mm">Daily rain (mm)</option>
+        </select>
+      </div>
+      <div class="kt-row">
+        <button type="button" id="anim-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
+        <button type="button" id="anim-play" class="kt-btn">Play</button>
+        <button type="button" id="anim-next" class="kt-btn" aria-label="Next day">Next ▶</button>
+        <input type="range" id="anim-day" min="0" max="0" value="0" step="1" aria-label="Day">
+      </div>
+      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. 5- and 10-day totals end on the day shown. A product stops on its last available day. Click a table header to sort; hover the chart for values and click its legend to hide a product.</p>
+      <div data-source="anim boundaries stations">
+        <p class="kt-anim-date" id="anim-date">—</p>
+        <div class="kt-maps dash-skeleton" id="anim-maps" style="min-height: 16rem"></div>
+        <div class="kt-legend" id="anim-legend"></div>
+        <div class="kt-grid kt-station-panel">
+          <div class="kt-scroll">
+            <h3 id="anim-st-title">Station</h3>
+            <table id="anim-st-table">
+              <thead><tr>
+                <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Last 5 days (mm)</th><th class="num">Last 10 days (mm)</th>
+                <th class="num">Since 1 Oct (mm)</th><th class="num">Normal (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div>
+            <h3 id="anim-st-chart-title">Over time</h3>
+            <div class="kt-chart" id="anim-st-chart" style="min-height: 12rem"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="kt-sec" id="detail">
-    <div class="kt-row">
-      <h2>Site detail</h2>
-      <select id="site-pick" aria-label="Site" data-source="sites"></select>
-    </div>
-    <div class="kt-grid">
-      <div class="kt-card" id="rain-card">
-        <h3>Daily rainfall since 1 September</h3>
-        <p class="kt-note">Each line is one satellite product at the site's 0.25° cell. CHIRPS is final to 30 Sep, preliminary after.</p>
-        <div class="kt-legend" id="rain-legend" data-source="rain_daily"></div>
-        <div class="kt-chart dash-skeleton" id="rain-chart" data-source="rain_daily"></div>
-      </div>
-      <div class="kt-card" id="ens-card">
-        <h3>Next 15 days, ECMWF ensemble</h3>
-        <p class="kt-note">Share of 50 members with rain on each day, and with planting rains starting that day. Raw model output: light-rain days are overstated.</p>
+  <section class="kt-sec" id="next">
+    <h2>2. Next two weeks: weather forecasts</h2>
+    <p class="kt-note">Will planting rains come soon? The ECMWF ensemble gives chances; six global models give rainfall amounts.</p>
+    <div class="kt-card" id="ens-card">
+      <h3>Chance of rain and of planting rains at the station, next 15 days (ECMWF ensemble)</h3>
+      <p class="kt-note">Share of 50 members with rain on each day, and with planting rains starting that day. Raw model output: light-rain days are overstated.</p>
         <div class="kt-legend" id="ens-legend"></div>
         <div class="kt-chart dash-skeleton" id="ens-chart" data-source="ens_daily"></div>
+    </div>
+    <div class="kt-card" id="fc-card">
+      <div class="kt-row">
+        <h3>Rainfall forecast by model, next 10–16 days</h3>
+        <select id="fc-metric" aria-label="Measure">
+          <option value="rain_mm">Daily rain (mm)</option>
+          <option value="cum_mm">Rain from today to the day shown (mm)</option>
+          <option value="total_5d_mm">Total, next 5 days (mm)</option>
+          <option value="total_10d_mm">Total, next 10 days (mm)</option>
+          <option value="total_all_mm">Total, whole range (mm)</option>
+        </select>
+      </div>
+      <div class="kt-row" id="fc-models" data-source="forecast_events" aria-label="Models shown"></div>
+      <div class="kt-row">
+        <button type="button" id="fc-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
+        <button type="button" id="fc-play" class="kt-btn">Play</button>
+        <button type="button" id="fc-next" class="kt-btn" aria-label="Next day">Next ▶</button>
+        <input type="range" id="fc-day" min="0" max="0" value="0" step="1" aria-label="Forecast day">
+      </div>
+      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7–8. A model stops at the end of its range; its totals cover only the days it has. Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
+      <div data-source="forecast boundaries stations">
+        <p class="kt-anim-date" id="fc-date">—</p>
+        <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
+        <div class="kt-legend" id="fc-legend"></div>
+      </div>
+      <div class="kt-station-panel">
+        <div class="kt-scroll">
+          <h3 id="fc-st-title">Station</h3>
+          <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
+          <table id="fc-st-table" data-source="forecast_events forecast_sites">
+            <thead><tr>
+              <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 5 days (mm)</th>
+              <th class="num">Next 10 days (mm)</th><th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+            <h3 id="fc-st-chart-title">Daily rain by model</h3>
+            <p class="kt-note">One bar per model per day. The shaded day is the one shown on the maps.</p>
+            <div class="kt-chart" id="fc-st-chart" data-source="forecast_sites" style="min-height: 12rem"></div>
+          </div>
+          <div>
+            <h3 id="fc-tot-chart-title">Forecast totals by model</h3>
+            <p class="kt-note">Faded bar: the model's range is shorter than the period, so its total covers fewer days.</p>
+            <div class="kt-chart" id="fc-tot-chart" data-source="forecast_events" style="min-height: 12rem"></div>
+          </div>
       </div>
     </div>
+  </section>
+
+  <section class="kt-sec" id="season">
+    <h2>3. Season outlook: onset, cessation and season length</h2>
+    <p class="kt-note">When the season is likely to start and end at the station, from the ECMWF seasonal forecast (25 members).</p>
     <div class="kt-card" id="season-card">
       <div class="kt-row">
-        <h3>Season outlook</h3>
+        <h3>Outlook for one forecast run</h3>
         <select id="season-run" aria-label="Forecast run" data-source="inits"></select>
         <select id="season-method" aria-label="Onset and cessation method" data-source="inits">
           <option value="">All methods</option>
@@ -169,112 +256,20 @@
         Cessation (rules 1–2): after a 10-day period with rain below half the potential evapotranspiration (modified Hargreaves), the day a 100 mm soil store runs dry; rule 3: the first day of that 10-day period.
         Agri rules 1–3 follow ICPAC's operational onset/cessation definitions. They search onset from 15 Aug to 15 Jan and cessation to 28 Feb (the 1 Oct runs carry the forecast to 28 Feb; the Sep 01 run stops at 31 Dec); members with none by then count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
     </div>
-  </section>
-
-  <section class="kt-sec" id="zone">
-    <h2>Kenya short-rains zone</h2>
-    <p class="kt-note">0.25° cells; cells outside the short-rains zone are faded. Lines are county boundaries; dots are the monitored stations.</p>
-    <div class="kt-card">
-      <div class="kt-maps" data-source="grid boundaries stations">
-        <div><h3>Rain since 1 Oct, % of normal (CHIRPS)</h3><div class="kt-map dash-skeleton" id="map-pct"></div></div>
-        <div><h3>Chance of planting rains within 7 days (ECMWF)</h3><div class="kt-map dash-skeleton" id="map-ens"></div></div>
-        <div><h3>Seasonal chance of an early planting onset</h3><div class="kt-map dash-skeleton" id="map-early"></div></div>
-      </div>
-    </div>
-    <div class="kt-card" id="anim-card">
-      <div class="kt-row">
-        <h3>Day by day since 1 October</h3>
-        <select id="anim-metric" aria-label="Measure">
-          <option value="pct_of_normal">% of normal</option>
-          <option value="anomaly_mm">Anomaly (mm)</option>
-          <option value="rain_since_oct1_mm">Total since 1 Oct (mm)</option>
-          <option value="rain_10d_mm">Total, last 10 days (mm)</option>
-          <option value="rain_5d_mm">Total, last 5 days (mm)</option>
-          <option value="rain_mm">Daily rain (mm)</option>
-        </select>
-        <select id="anim-station" aria-label="Station" data-source="stations"></select>
-      </div>
-      <div class="kt-row">
-        <button type="button" id="anim-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
-        <button type="button" id="anim-play" class="kt-btn">Play</button>
-        <button type="button" id="anim-next" class="kt-btn" aria-label="Next day">Next ▶</button>
-        <input type="range" id="anim-day" min="0" max="0" value="0" step="1" aria-label="Day">
-      </div>
-      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. 5- and 10-day totals end on the day shown. A product stops on its last available day. Click a table header to sort; hover the chart for values and click its legend to hide a product.</p>
-      <div data-source="anim boundaries stations">
-        <p class="kt-anim-date" id="anim-date">—</p>
-        <div class="kt-maps dash-skeleton" id="anim-maps" style="min-height: 16rem"></div>
-        <div class="kt-legend" id="anim-legend"></div>
-        <div class="kt-grid kt-station-panel">
-          <div class="kt-scroll">
-            <h3 id="anim-st-title">Station</h3>
-            <table id="anim-st-table">
-              <thead><tr>
-                <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Last 5 days (mm)</th><th class="num">Last 10 days (mm)</th>
-                <th class="num">Since 1 Oct (mm)</th><th class="num">Normal (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <div>
-            <h3 id="anim-st-chart-title">Over time</h3>
-            <div class="kt-chart" id="anim-st-chart" style="min-height: 12rem"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="kt-card" id="fc-card">
-      <div class="kt-row">
-        <h3>Next 10–16 days: model forecasts</h3>
-        <select id="fc-metric" aria-label="Measure">
-          <option value="cum_mm">Rain from today to the day shown (mm)</option>
-          <option value="rain_mm">Daily rain (mm)</option>
-          <option value="total_5d_mm">Total, next 5 days (mm)</option>
-          <option value="total_10d_mm">Total, next 10 days (mm)</option>
-          <option value="total_all_mm">Total, whole range (mm)</option>
-        </select>
-      </div>
-      <div class="kt-row" id="fc-models" data-source="forecast_events" aria-label="Models shown"></div>
-      <div class="kt-row">
-        <button type="button" id="fc-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
-        <button type="button" id="fc-play" class="kt-btn">Play</button>
-        <button type="button" id="fc-next" class="kt-btn" aria-label="Next day">Next ▶</button>
-        <input type="range" id="fc-day" min="0" max="0" value="0" step="1" aria-label="Forecast day">
-      </div>
-      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7–8. A model stops at the end of its range; its totals cover only the days it has. Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
-      <div data-source="forecast boundaries stations">
-        <p class="kt-anim-date" id="fc-date">—</p>
-        <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
-        <div class="kt-legend" id="fc-legend"></div>
-      </div>
-      <div class="kt-grid kt-station-panel">
-        <div class="kt-scroll">
-          <h3 id="fc-st-title">Station</h3>
-          <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
-          <table id="fc-st-table" data-source="forecast_events forecast_sites">
-            <thead><tr>
-              <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 5 days (mm)</th>
-              <th class="num">Next 10 days (mm)</th><th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
-            </tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div>
-          <h3 id="fc-st-chart-title">Rain from today</h3>
-          <div class="kt-chart" id="fc-st-chart" data-source="forecast_sites" style="min-height: 12rem"></div>
-        </div>
-      </div>
-    </div>
-    <div class="kt-card kt-scroll">
-      <h3>Satellite products over the zone since 1 October</h3>
-      <table id="zone-table" data-source="zone" data-row-key="product">
+    <div class="kt-card kt-scroll" id="inits">
+      <h3 id="init-title">How the outlook changed between forecast runs</h3>
+      <p class="kt-note">The same season seen by each seasonal forecast run: 1 Sep, 1 Oct, 1 Oct with observed September, and 1 Oct with the latest observations.</p>
+      <table id="init-table" data-source="inits" data-row-key="site,init,variable,definition">
         <thead><tr>
-          <th data-field="label">Product</th>
-          <th data-field="last_day">Data to</th>
-          <th class="num" data-field="ond_zone_mean_mm">Zone mean (mm)</th>
-          <th class="num" data-field="ond_zone_normal_mm">Normal (mm)</th>
-          <th class="num" data-field="ond_zone_pct_normal">% of normal</th>
-          <th class="num" data-field="ond_zone_pct_onset_detected">Zone with planting onset</th>
+          <th data-field="init">Run</th>
+          <th data-field="variable">Method · variable</th>
+          <th data-field="median_date">Most likely</th>
+          <th data-field="p25">Likely (half the members)</th>
+          <th class="num" data-field="anomaly">vs normal (days)</th>
+          <th class="num" data-field="p_bn">Early / short</th>
+          <th class="num" data-field="p_nn">Normal</th>
+          <th class="num" data-field="p_an">Late / long</th>
+          <th class="num" data-field="no_onset">None by search end</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -282,7 +277,7 @@
   </section>
 
   <section class="kt-sec" id="verify">
-    <h2>How the real-time products compare with CHIRPS</h2>
+    <h2>4. How reliable the satellite data are: comparison with CHIRPS</h2>
     <p class="kt-note">Daily rainfall over the short-rains zone against CHIRPS (gauge-blended). Oct–Dec 2025 is the main test; 2026 is the current season so far. POD = share of CHIRPS rain days the product also caught; FAR = share of the product's rain days CHIRPS did not have.</p>
     <div class="kt-card kt-scroll">
       <table id="ver-table" data-source="verification" data-row-key="product,period">
@@ -304,29 +299,8 @@
     </div>
   </section>
 
-  <section class="kt-sec" id="inits">
-    <h2 id="init-title">Forecast by initialization</h2>
-    <p class="kt-note">The same season at the selected station, seen by each seasonal forecast run (1 Sep, 1 Oct, 1 Oct with observed September, 1 Oct with the latest observations). Pick the station in Site detail.</p>
-    <div class="kt-card kt-scroll">
-      <table id="init-table" data-source="inits" data-row-key="site,init,variable,definition">
-        <thead><tr>
-          <th data-field="init">Run</th>
-          <th data-field="variable">Method · variable</th>
-          <th data-field="median_date">Most likely</th>
-          <th data-field="p25">Likely (half the members)</th>
-          <th class="num" data-field="anomaly">vs normal (days)</th>
-          <th class="num" data-field="p_bn">Early / short</th>
-          <th class="num" data-field="p_nn">Normal</th>
-          <th class="num" data-field="p_an">Late / long</th>
-          <th class="num" data-field="no_onset">None by search end</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-
   <section class="kt-sec" id="methods">
-    <h2>How these numbers are made</h2>
+    <h2>5. How these numbers are made</h2>
     <div class="kt-methods">
       <p><b>Seasonal forecast.</b> ECMWF SEAS5 started 1 October 2026, 25 members, bias-corrected day by day against CHIRPS 1993–2016 by quantile mapping. Observed CHIRPS rainfall replaces the forecast up to the latest observed day in every year, so skill is measured the same way it is used.</p>
       <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives three agricultural rules, Agri rules 1–3, adapted from ICPAC's operational definitions (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. The near-term planting rains and planting onset (headline, ECMWF 15-day) use at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
@@ -338,7 +312,7 @@
   </section>
 
   <section class="kt-sec" id="sources">
-    <h2>Data sources</h2>
+    <h2>6. Data sources</h2>
     <p class="kt-note">Every update checks each provider for anything newer than the copy here and downloads only what is missing. Days behind = days between the latest data and the check (for forecasts: age of the run). Typical delay is what the provider usually needs to publish.</p>
     <div class="kt-card kt-scroll">
       <table id="src-table" data-source="products" data-row-key="id">
@@ -567,6 +541,59 @@ KT.lineChart = (box, o) => {
   box.replaceChildren(svg.node(), tip, lg);
 };
 
+// Grouped bar chart: one group per category, one bar per series; hover a group for every value.
+// o = { groups: [{ key, label }], series: [{ key, label, color }], val: (g, s) => number, partial: (g, s) => bool,
+//       note: (g, s) => string, H, fmt, yMax, mark: group key to shade, title: (g) => tooltip heading }
+KT.barChart = (box, o) => {
+  const W = box.clientWidth || 500, H = o.H || 220, mg = { t: 8, r: 8, b: 26, l: 40 };
+  const fmt = o.fmt || ((v) => KT.num(v));
+  const x0 = d3.scaleBand(o.groups.map((g) => g.key), [mg.l, W - mg.r]).paddingInner(0.22).paddingOuter(0.08);
+  const x1 = d3.scaleBand(o.series.map((q) => q.key), [0, x0.bandwidth()]).paddingInner(0.15);
+  const vals = o.groups.flatMap((g) => o.series.map((q) => o.val(g, q))).filter((v) => v != null && isFinite(v));
+  const y = d3.scaleLinear([0, Math.max(o.yMax ?? 1, d3.max(vals) ?? 1)], [H - mg.b, mg.t]).nice();
+  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const every = Math.ceil(o.groups.length / Math.max(2, Math.floor(W / 64)));
+  const lab = new Map(o.groups.map((g) => [g.key, g.label]));
+  if (o.mark != null && x0(o.mark) !== undefined) {
+    svg.append('rect').attr('x', x0(o.mark) - (x0.step() - x0.bandwidth()) / 2).attr('width', x0.step()).attr('y', mg.t).attr('height', H - mg.t - mg.b)
+      .attr('fill', 'var(--color-fg)').attr('opacity', 0.06);
+  }
+  svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x0).tickValues(o.groups.map((g) => g.key).filter((_, i) => i % every === 0)).tickFormat((k) => lab.get(k)))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+  svg.append('g').attr('transform', `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(W - mg.l - mg.r)))
+    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
+    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
+  const bw = x1.bandwidth(), rr = Math.min(4, bw / 2);
+  // bars with rounded data ends, square at the baseline
+  const bar = (x, y0, h) => (h <= 0 ? '' : `M${x},${y0}v${-(h - rr)}a${rr},${rr} 0 0 1 ${rr},${-rr}h${bw - 2 * rr}a${rr},${rr} 0 0 1 ${rr},${rr}v${h - rr}z`);
+  o.groups.forEach((g) => {
+    o.series.forEach((q) => {
+      const v = o.val(g, q);
+      if (v == null || !isFinite(v)) return;
+      svg.append('path').attr('d', bar(x0(g.key) + x1(q.key), y(0), y(0) - y(v))).attr('fill', q.color).attr('opacity', o.partial && o.partial(g, q) ? 0.4 : 1);
+    });
+  });
+  const tip = KT.tip(box);
+  svg.append('g').selectAll('rect').data(o.groups).join('rect')
+    .attr('x', (g) => x0(g.key) - (x0.step() - x0.bandwidth()) / 2).attr('width', x0.step()).attr('y', mg.t).attr('height', H - mg.t - mg.b).attr('fill', 'transparent')
+    .on('pointerenter', (ev, g) => {
+      const items = o.series.map((q) => [q, o.val(g, q)]).filter(([, v]) => v != null && isFinite(v)).sort((p1, p2) => p2[1] - p1[1]);
+      tip.hidden = false;
+      tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: o.title ? o.title(g) : g.label }),
+        ...(items.length ? items.map(([q, v]) => {
+          const div = document.createElement('div'); div.innerHTML = '<span class="kt-sw"></span>'; div.firstChild.style.background = q.color;
+          div.append(`${q.label}: ${fmt(v)}${o.note ? o.note(g, q) : ''}`); return div;
+        }) : [Object.assign(document.createElement('div'), { textContent: 'No model reaches this day' })]));
+      const cx = x0(g.key) + x0.bandwidth() / 2;
+      tip.style.top = '4px'; tip.style.left = (cx / W * box.clientWidth) + 'px';
+      tip.style.transform = cx > W * 0.55 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)';
+    })
+    .on('pointerleave', () => { tip.hidden = true; });
+  const lg = document.createElement('div'); lg.className = 'kt-legend';
+  lg.append(...o.series.map((q) => { const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = q.color; sp.append(q.label); return sp; }));
+  box.replaceChildren(svg.node(), tip, lg);
+};
+
 dash.calc('headline', {
   title: 'Headline figures',
   description: 'Sites with under 5 mm since 1 Oct, and Kapiti’s 7-day planting-rain chance and seasonal onset.',
@@ -598,36 +625,13 @@ dash.onData(() => {
 </script>
 
 <script>
-// Site status table + site picker
-const siteTable = document.getElementById('site-table');
+// Station picker at the top of the page; every station chart and table follows it
 const pick = document.getElementById('site-pick');
 pick.addEventListener('change', () => dash.setParams({ site: pick.value }));
-siteTable.addEventListener('click', (e) => {
-  const tr = e.target.closest('tr[data-key]');
-  if (tr) { dash.setParams({ site: tr.dataset.key }); document.getElementById('detail').scrollIntoView({ behavior: 'smooth' }); }
-});
 dash.onData(() => {
   const d = dash.data('sites');
-  if (d.status !== 'ok') { siteTable.querySelector('tbody').replaceChildren(); return; }
+  if (d.status !== 'ok') return;
   const rows = d.data;
-  const tb = KT.fillTable(siteTable, rows, [
-    ['site'],
-    ['obs_through', (v) => d3.utcFormat('%-d %b')(new Date(v))],
-    ['rain_since_oct1_chirps_mm', (v) => KT.num(Number(v)), (v) => 'num' + (Number(v) < 5 ? ' kt-dry' : '')],
-    ['pct_of_normal', (v) => KT.int(Number(v)) + '%', 'num'],
-    ['products_with_onset', (v, r) => `${v} of ${r.products}`, 'num'],
-    ['p_event_7d', (v) => KT.pct(Number(v)), 'num'],
-    ['p_onset_15d', (v) => KT.pct(Number(v)), 'num'],
-    ['season_onset_median'],
-    ['season_onset_likely'],
-    ['season_skill', (v) => v + ' skill'],
-  ]);
-  [...tb.children].forEach((tr, i) => {
-    tr.dataset.key = rows[i].site;
-    tr.classList.toggle('kt-pick', rows[i].site === KT.site());
-    const sk = tr.lastElementChild; const pill = document.createElement('span');
-    pill.className = 'kt-pill ' + rows[i].season_skill; pill.textContent = sk.textContent; sk.replaceChildren(pill);
-  });
   pick.replaceChildren(...rows.map((r) => new Option(r.site, r.site)));
   pick.value = KT.site();
   const me = rows.find((r) => r.site === KT.site());
@@ -852,44 +856,8 @@ dash.onData(() => {
 </script>
 
 <script>
-// Maps
+// Verification, initialization and data-source tables
 dash.onData(() => {
-  const d = dash.data('grid');
-  const specs = [['map-pct', 'chirps_pct_normal', [0, 100, 200], ['--color-bad', '--color-panel', '--color-ok'], (v) => KT.int(v) + '%'],
-                 ['map-ens', 'ens_p_event_7d', [0, 1], ['--color-panel', null], KT.pct],
-                 ['map-early', 'season_p_early', [0, 0.333, 0.7], ['--color-panel', '--color-panel', null], KT.pct]];
-  specs.forEach(([id, field, dom, toks, fmt]) => {
-    const box = document.getElementById(id);
-    if (KT.fail(box, d)) return;
-    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
-    box.classList.remove('dash-skeleton');
-    const rows = d.data.map((r) => ({ lat: +r.lat, lon: +r.lon, z: +r.in_zone, v: r[field] === '' || r[field] == null ? NaN : +r[field] }));
-    const cols = toks.map((t) => (t ? KT.css(t) : KT.color(dash.colors[0])));
-    const color = d3.scaleLinear(dom, cols).interpolate(d3.interpolateRgb).clamp(true);
-    const W = box.clientWidth || 300, H = Math.round(W * 10.5 / 8.5);
-    const x = d3.scaleLinear([33.5, 42.0], [0, W]); const y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
-    const cw = x(33.75) - x(33.5), ch = y(-5.0) - y(-4.75);
-    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-    svg.append('g').selectAll('rect').data(rows.filter((r) => isFinite(r.v))).join('rect')
-      .attr('x', (r) => x(r.lon - 0.125)).attr('y', (r) => y(r.lat + 0.125)).attr('width', cw + 0.5).attr('height', ch + 0.5)
-      .attr('fill', (r) => color(r.v)).attr('opacity', (r) => (r.z ? 1 : 0.3));
-    KT.overlay(svg, x, y, W);
-    box.replaceChildren(svg.node(), KT.colorbar(color, dom, fmt));
-  });
-});
-</script>
-
-<script>
-// Zone, verification and initialization tables
-dash.onData(() => {
-  const z = dash.data('zone');
-  const zt = document.getElementById('zone-table');
-  if (z.status === 'ok') {
-    const tb = KT.fillTable(zt, z.data, [['label'], ['last_day', (v) => d3.utcFormat('%-d %b')(new Date(v))], ['ond_zone_mean_mm', (v) => KT.num(+v), 'num'],
-      ['ond_zone_normal_mm', (v) => KT.num(+v), 'num'], ['ond_zone_pct_normal', (v) => KT.int(+v) + '%', 'num'], ['ond_zone_pct_onset_detected', (v) => KT.int(+v) + '%', 'num']]);
-    [...tb.children].forEach((tr, i) => { tr.dataset.key = z.data[i].product; });
-  } else zt.querySelector('tbody').replaceChildren();
-
   const v = dash.data('verification');
   const vt = document.getElementById('ver-table');
   if (v.status === 'ok') {
@@ -907,7 +875,7 @@ dash.onData(() => {
     const rank = (r) => KT.methodRank(r) * 3 + ['onset', 'cessation', 'lgp'].indexOf(r.variable);
     const runs = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
     const rows = n.data.filter((r) => r.site === KT.site()).sort((a, b) => runs.indexOf(a.init) - runs.indexOf(b.init) || rank(a) - rank(b));
-    document.getElementById('init-title').textContent = `Forecast by initialization: ${KT.site()}`;
+    document.getElementById('init-title').textContent = `How the outlook changed between forecast runs: ${KT.site()}`;
     const dd = (v, r) => (v === '' || v == null || !isFinite(+v) ? (r.variable === 'lgp' ? '—' : `after ${r.none_by || '31 Dec'}`) : r.variable === 'lgp' ? `${KT.int(+v)} d` : KT.doyDate(+v));
     const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x, r) => label(r)], ['median_date', (x, r) => x || (isFinite(+r.median) && r.median !== '' ? `${KT.int(+r.median)} d` : '—')],
       ['init', (x, r) => (r.p25 === undefined ? '—' : `${dd(r.p25, r)} – ${dd(r.p75, r)}`)],
@@ -965,7 +933,6 @@ dash.onData(() => {
   };
   let cache = null, cacheSrc = null, idx = null, timer = null;
 
-  const stSel = document.getElementById('anim-station');
   const stTable = document.getElementById('anim-st-table');
   const stTitle = document.getElementById('anim-st-title');
   const stChart = document.getElementById('anim-st-chart');
@@ -996,8 +963,6 @@ dash.onData(() => {
   const drawStation = (m, S, day) => {
     const st = dash.data('stations');
     if (st.status !== 'ok' || !cache) return;
-    stSel.replaceChildren(...st.data.map((r) => new Option(r.short_name, r.site)));
-    stSel.value = KT.site();
     const s = st.data.find((r) => r.site === KT.site()) || st.data[0];
     const [clat, clon] = cellOf(+s.lat, +s.lon);
     stTitle.textContent = `${s.short_name} on ${d3.utcFormat('%-d %b')(new Date(day))}`;
@@ -1077,7 +1042,6 @@ dash.onData(() => {
   const step = (k) => { stop(); if (!cache) return; idx = Math.max(0, Math.min(cache.dates.length - 1, idx + k)); draw(); };
   document.getElementById('anim-prev').addEventListener('click', () => step(-1));
   document.getElementById('anim-next').addEventListener('click', () => step(1));
-  stSel.addEventListener('change', () => dash.setParams({ site: stSel.value }));
   metricSel.addEventListener('change', draw);
   dash.onData(draw);
 })();
@@ -1097,6 +1061,7 @@ dash.onData(() => {
   const consensus = document.getElementById('fc-consensus');
   const stTable = document.getElementById('fc-st-table');
   const stChart = document.getElementById('fc-st-chart');
+  const totChart = document.getElementById('fc-tot-chart');
   const SCALES = { cum_mm: [0, 40, 120], rain_mm: [0, 10, 30], total_5d_mm: [0, 20, 60], total_10d_mm: [0, 40, 120], total_all_mm: [0, 40, 120] };
   const TOTAL_DAYS = { total_5d_mm: 5, total_10d_mm: 10, total_all_mm: Infinity };
   const ctrls = ['fc-prev', 'fc-play', 'fc-next', 'fc-day'].map((id) => document.getElementById(id));
@@ -1142,7 +1107,9 @@ dash.onData(() => {
     const site = KT.site();
     const rows = ev.data.filter((r) => r.site === site && shown.has(r.model));
     const shortName = (ev.data.find((r) => r.site === site) || {}).short_name || site;
-    stTitle.textContent = `${shortName}: each model`;
+    stTitle.textContent = `${shortName}: forecast by model`;
+    document.getElementById('fc-st-chart-title').textContent = `Daily rain at ${shortName} by model (mm)`;
+    document.getElementById('fc-tot-chart-title').textContent = `Forecast totals at ${shortName} by model (mm)`;
     const within = rows.filter((r) => +r.planting_rain_within_7d === 1);
     consensus.textContent = rows.length
       ? `${within.length} of ${rows.length} models shown give planting rains within 7 days` +
@@ -1168,12 +1135,23 @@ dash.onData(() => {
       return tr;
     }).filter(Boolean);
     stTable.querySelector('tbody').replaceChildren(...trs);
-    // rain from today at the station, one line per visible model, marker at the current day
-    KT.lineChart(stChart, {
-      H: 190, yMax: 20, xDomain: d3.extent(cache.dates, (dd) => new Date(dd)), marker: TOTAL_DAYS[metricSel.value] ? null : new Date(day),
-      fmt: (v) => KT.num(v) + ' mm',
-      series: KT.models.filter((md) => shown.has(md)).map((md) => ({ key: md, label: label[md] || md, color: colorOf(md),
-        pts: series.filter((r) => r.model === md).sort((q, w) => (q.date < w.date ? -1 : 1)).map((r) => ({ t: new Date(r.date), v: +r.cum_mm })) })),
+    // daily rain at the station: one bar per visible model per forecast day, the map's day shaded
+    const vis = KT.models.filter((md) => shown.has(md));
+    const ser = vis.map((md) => ({ key: md, label: label[md] || md, color: colorOf(md) }));
+    const daily = new Map(series.map((r) => [r.model + '|' + r.date, +r.rain_mm]));
+    KT.barChart(stChart, {
+      H: 220, yMax: 5, fmt: (v) => KT.num(v) + ' mm', mark: TOTAL_DAYS[metricSel.value] ? null : day,
+      groups: cache.dates.map((dd) => ({ key: dd, label: fmtDay(dd) })), series: ser,
+      val: (g, q) => daily.get(q.key + '|' + g.key), title: (g) => d3.utcFormat('%a %-d %b')(new Date(g.key)),
+    });
+    // totals: next 5 days, next 10 days and each model's whole range; faded where the range is shorter
+    const ev1 = new Map(rows.map((r) => [r.model, r]));
+    const PER = [{ key: 'total_5d_mm', label: 'Next 5 days', n: 5 }, { key: 'total_10d_mm', label: 'Next 10 days', n: 10 }, { key: 'total_all_mm', label: 'Whole range', n: 0 }];
+    KT.barChart(totChart, {
+      H: 220, yMax: 10, fmt: (v) => KT.num(v) + ' mm', groups: PER, series: ser,
+      val: (g, q) => { const e = ev1.get(q.key); return e && e[g.key] !== '' ? +e[g.key] : undefined; },
+      partial: (g, q) => { const e = ev1.get(q.key); return !!(e && g.n && +e.horizon_days < g.n); },
+      note: (g, q) => { const e = ev1.get(q.key); return e && (!g.n || +e.horizon_days < g.n) ? ` (${e.horizon_days} days)` : ''; },
     });
   };
 
