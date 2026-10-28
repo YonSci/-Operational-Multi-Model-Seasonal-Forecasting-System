@@ -13,14 +13,15 @@
 <div id="dash-root">
 <style>
 /* Layout: one column of sections; site detail as a card grid driven by a site picker */
-.kt { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); }
+.kt { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans);
+      --cds-font-size-caption: 14px; --cds-font-size-body: 16px; --cds-font-size-heading: 20px; font-size: var(--cds-font-size-body); }
+.kt svg { font-size: 14px; }                                  /* chart axes keep their size */
 .kt h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
 .kt h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
 .kt h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); margin: 0; }
-.kt-take { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); max-width: 70ch; }
-.kt-take b, .kt b { font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
+.kt b { font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
 .kt-sec { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
-.kt-note { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); max-width: 80ch; }
+.kt-note { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
 .kt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
 .kt-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
 .kt-chart { position: relative; min-height: 15rem; }
@@ -48,7 +49,7 @@
 [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
 .kt-btn { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); cursor: pointer; }
 .kt-btn:focus-visible, .kt select:focus-visible, #anim-day:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
-#anim-day { flex: 1 1 10rem; min-width: 8rem; }
+#anim-day, #fc-day { flex: 1 1 10rem; min-width: 8rem; }
 .kt-station-panel { margin-top: var(--cds-gap-md); grid-template-columns: 1fr; }   /* table above its chart so all columns fit */
 .kt-anim-date { margin: 0; font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-heading); font-variant-numeric: tabular-nums; }
 .kt-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
@@ -85,17 +86,9 @@
 <div class="kt">
   <header id="top">
     <h1>Kenya Short Rains 2026 Tracker</h1>
-    <p class="kt-take" id="takeaway">
-      Satellite rainfall since 1 October: <b><span data-source="headline" data-field="dry_sites" class="dash-skeleton">—</span> of
-      <span data-source="headline" data-field="n_sites">—</span></b> monitored sites have had less than 5 mm and none has a confirmed planting onset.
-      The ECMWF ensemble issued <span data-source="headline" data-field="ens_init">—</span> gives Kapiti a
-      <b><span data-source="headline" data-field="kapiti_p7">—</span></b> chance of planting rains within 7 days; the seasonal outlook puts Kapiti's planting onset most likely on
-      <b><span data-source="headline" data-field="kapiti_season">—</span></b>.
-    </p>
     <div class="kt-row kt-station-bar">
       <label for="site-pick"><b>Station</b></label>
       <select id="site-pick" data-source="sites"></select>
-      <span class="kt-note">Charts and tables below are for this station; maps show all of Kenya with the station circled.</span>
     </div>
     <nav class="kt-toc" aria-label="On this page">
       <a href="#observed">1. Rain so far</a><a href="#next">2. Next two weeks</a><a href="#season">3. Season outlook</a>
@@ -105,13 +98,7 @@
 
   <section class="kt-sec" id="observed">
     <h2>1. Rain so far: what the satellites observed</h2>
-    <p class="kt-note">How much rain has fallen at the station and across Kenya since the season began, from six satellite rainfall products.</p>
-    <div class="kt-card" id="rain-card">
-      <h3>Daily rainfall at the station since 1 September, by satellite product</h3>
-      <p class="kt-note">Each line is one satellite product at the site's 0.25° cell. CHIRPS is final to 30 Sep, preliminary after.</p>
-        <div class="kt-legend" id="rain-legend" data-source="rain_daily"></div>
-        <div class="kt-chart dash-skeleton" id="rain-chart" data-source="rain_daily"></div>
-    </div>
+    <p class="kt-note">How much rain has fallen at the station and across Kenya since 1 October, from six satellite rainfall products.</p>
     <div class="kt-card" id="anim-card">
       <div class="kt-row">
         <h3>Rainfall maps by satellite product, day by day since 1 October</h3>
@@ -157,13 +144,7 @@
 
   <section class="kt-sec" id="next">
     <h2>2. Next two weeks: weather forecasts</h2>
-    <p class="kt-note">Will planting rains come soon? The ECMWF ensemble gives chances; six global models give rainfall amounts.</p>
-    <div class="kt-card" id="ens-card">
-      <h3>Chance of rain and of planting rains at the station, next 15 days (ECMWF ensemble)</h3>
-      <p class="kt-note">Share of 50 members with rain on each day, and with planting rains starting that day. Raw model output: light-rain days are overstated.</p>
-        <div class="kt-legend" id="ens-legend"></div>
-        <div class="kt-chart dash-skeleton" id="ens-chart" data-source="ens_daily"></div>
-    </div>
+    <p class="kt-note">Will planting rains come soon? Rainfall forecasts from six global weather models.</p>
     <div class="kt-card" id="fc-card">
       <div class="kt-row">
         <h3>Rainfall forecast by model, next 10–16 days</h3>
@@ -194,7 +175,7 @@
           <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
           <table id="fc-st-table" data-source="forecast_events forecast_sites">
             <thead><tr>
-              <th>Model</th><th class="num">Range (days)</th><th class="num">Rain that day (mm)</th><th class="num">Next 5 days (mm)</th>
+              <th>Model</th><th class="num">Range (days)</th><th class="num" id="fc-day-col">Rain on the day (mm)</th><th class="num">Next 5 days (mm)</th>
               <th class="num">Next 10 days (mm)</th><th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
             </tr></thead>
             <tbody></tbody>
@@ -303,9 +284,8 @@
     <h2>5. How these numbers are made</h2>
     <div class="kt-methods">
       <p><b>Seasonal forecast.</b> ECMWF SEAS5 started 1 October 2026, 25 members, bias-corrected day by day against CHIRPS 1993–2016 by quantile mapping. Observed CHIRPS rainfall replaces the forecast up to the latest observed day in every year, so skill is measured the same way it is used.</p>
-      <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives three agricultural rules, Agri rules 1–3, adapted from ICPAC's operational definitions (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. The near-term planting rains and planting onset (headline, ECMWF 15-day) use at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
+      <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives three agricultural rules, Agri rules 1–3, adapted from ICPAC's operational definitions (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. In the weather forecasts, planting rains are at least 20 mm within 3 days.</p>
       <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Local skill compares past forecasts at the site's cell with CHIRPS: useful, limited or no skill.</p>
-      <p><b>Next 15 days.</b> ECMWF IFS ensemble (open data, 50 members), not bias-corrected. The combined planting onset continues each member with a seasonal member to check for dry spells beyond day 15.</p>
       <p><b>Satellite products.</b> CHIRPS (preliminary after September), ARC2, TAMSAT v3.1, PDIR-Now and NASA IMERG Late and Early, averaged onto the same 0.25° grid. GSMaP is not included yet (needs an Earth Engine project or a JAXA account). Each product is described under Data sources below.</p>
       <p><b>Seasonal conditioning.</b> Where no product shows an onset, members with an onset before the ensemble start date are dropped and the probabilities recomputed.</p>
     </div>
@@ -594,34 +574,8 @@ KT.barChart = (box, o) => {
   box.replaceChildren(svg.node(), tip, lg);
 };
 
-dash.calc('headline', {
-  title: 'Headline figures',
-  description: 'Sites with under 5 mm since 1 Oct, and Kapiti’s 7-day planting-rain chance and seasonal onset.',
-  inputs: ['sites'],
-  fn: (sites) => {
-    const k = sites.find((s) => s.site === 'Kapiti Research Station Farm') || {};
-    return [{
-      dry_sites: sites.filter((s) => Number(s.rain_since_oct1_chirps_mm) < 5).length,
-      n_sites: sites.length,
-      ens_init: k.ens_init,
-      kapiti_p7: k.p_event_7d,
-      kapiti_season: k.season_onset_median,
-    }];
-  },
-});
-
 document.querySelectorAll('.kt table').forEach(KT.sortable);
 
-dash.onData(() => {
-  const h = dash.data('headline');
-  document.querySelectorAll('#takeaway [data-source=headline]').forEach((el) => {
-    el.classList.remove('dash-skeleton');
-    if (h.status !== 'ok' || !h.data.length) { el.textContent = '—'; return; }
-    const v = h.data[0][el.dataset.field];
-    el.textContent = el.dataset.field === 'kapiti_p7' ? KT.pct(Number(v))
-      : el.dataset.field === 'ens_init' ? d3.utcFormat('%-d %b')(new Date(v)) : String(v);
-  });
-});
 </script>
 
 <script>
@@ -641,67 +595,6 @@ dash.onData(() => {
     : +me.products_with_onset > 0
       ? `All 25 members shown. ${me.products_with_onset} of ${me.products} satellite products already show a planting onset here.`
       : `All 25 members shown. No satellite product shows a planting onset here so far, so members left of “today” have already been ruled out.`;
-});
-</script>
-
-<script>
-// Daily rainfall by product at the picked site
-dash.onData(() => {
-  const box = document.getElementById('rain-chart');
-  const leg = document.getElementById('rain-legend');
-  const d = dash.data('rain_daily');
-  if (KT.fail(box, d)) return;
-  if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
-  box.classList.remove('dash-skeleton');
-  const rows = d.data.filter((r) => r.site === KT.site()).map((r) => ({ ...r, t: new Date(r.date), mm: Number(r.mm) }));
-  const prods = KT.products.filter((p) => rows.some((r) => r.product === p));
-  leg.replaceChildren();                                   // the chart draws its own clickable legend
-  KT.lineChart(box, {
-    H: 240, yMax: 10, fmt: (v) => KT.num(v) + ' mm', refX: [new Date('2026-10-01')],
-    series: prods.map((p, i) => ({ key: p, label: KT.prodLabel[p], color: dash.colors[i % dash.colors.length],
-      pts: rows.filter((r) => r.product === p && isFinite(r.mm)).sort((q, w) => q.t - w.t).map((r) => ({ t: r.t, v: r.mm })) })),
-  });
-});
-</script>
-
-<script>
-// ECMWF ensemble next 15 days at the picked site
-dash.onData(() => {
-  const box = document.getElementById('ens-chart');
-  const leg = document.getElementById('ens-legend');
-  const d = dash.data('ens_daily');
-  if (KT.fail(box, d)) return;
-  if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
-  box.classList.remove('dash-skeleton');
-  const rows = d.data.filter((r) => r.site === KT.site()).map((r) => ({ date: r.date, t: new Date(r.date), p_rain: +r.p_rain, p_10mm: +r.p_10mm, p_trigger: +r.p_trigger, median_mm: +r.median_mm }));
-  const series = [['p_rain', 'Rain ≥1 mm', 'var(--cds-chart-muted)'], ['p_10mm', 'Rain ≥10 mm', dash.colors[0]], ['p_trigger', 'Planting rains start', dash.colors[1]]];
-  leg.replaceChildren(...series.map(([, n, c]) => { const s = document.createElement('span'); s.innerHTML = '<span class="kt-sw"></span>'; s.firstChild.style.background = c; s.append(n); return s; }));
-  const W = box.clientWidth || 600, H = 240, m = { t: 8, r: 12, b: 26, l: 38 };
-  const x = d3.scaleBand(rows.map((r) => r.date), [m.l, W - m.r]).padding(0.25);
-  const y = d3.scaleLinear([0, 1], [H - m.b, m.t]);
-  const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-  const every = Math.ceil(rows.length / Math.max(2, Math.floor(W / 60)));
-  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(rows.map((r) => r.date).filter((_, i) => i % every === 0)).tickFormat((s) => d3.utcFormat('%-d %b')(new Date(s))))
-    .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
-  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(KT.pct).tickSize(-(W - m.l - m.r)))
-    .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
-    .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
-  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.bandwidth()).attr('y', (r) => y(r.p_rain)).attr('height', (r) => y(0) - y(r.p_rain)).attr('rx', 3).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.5);
-  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.bandwidth()).attr('y', (r) => y(r.p_10mm)).attr('height', (r) => y(0) - y(r.p_10mm)).attr('rx', 3).attr('fill', dash.colors[0]);
-  const cx = (r) => x(r.date) + x.bandwidth() / 2;
-  svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', dash.colors[1]).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x(cx).y((r) => y(r.p_trigger)));
-  svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', cx).attr('cy', (r) => y(r.p_trigger)).attr('r', 3).attr('fill', dash.colors[1]);
-  const tip = KT.tip(box);
-  svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.bandwidth()).attr('y', m.t).attr('height', H - m.t - m.b).attr('fill', 'transparent')
-    .on('mouseenter', (ev, r) => {
-      tip.hidden = false;
-      tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: d3.utcFormat('%a %-d %b')(r.t) }),
-        ...[['Rain ≥1 mm', KT.pct(r.p_rain)], ['Rain ≥10 mm', KT.pct(r.p_10mm)], ['Planting rains start', KT.pct(r.p_trigger)], ['Median rain', KT.num(r.median_mm) + ' mm']]
-          .map(([a, b]) => Object.assign(document.createElement('div'), { textContent: `${a}: ${b}` })));
-      const px = Math.min(cx(r) + 10, W - 170); tip.style.left = (px / W * box.clientWidth) + 'px'; tip.style.top = '8px';
-    })
-    .on('mouseleave', () => { tip.hidden = true; });
-  box.replaceChildren(svg.node(), tip);
 });
 </script>
 
@@ -1108,6 +1001,7 @@ dash.onData(() => {
     const rows = ev.data.filter((r) => r.site === site && shown.has(r.model));
     const shortName = (ev.data.find((r) => r.site === site) || {}).short_name || site;
     stTitle.textContent = `${shortName}: forecast by model`;
+    document.getElementById('fc-day-col').textContent = `Rain on ${d3.utcFormat('%a %-d %b')(new Date(day))} (mm)`;
     document.getElementById('fc-st-chart-title').textContent = `Daily rain at ${shortName} by model (mm)`;
     document.getElementById('fc-tot-chart-title').textContent = `Forecast totals at ${shortName} by model (mm)`;
     const within = rows.filter((r) => +r.planting_rain_within_7d === 1);
