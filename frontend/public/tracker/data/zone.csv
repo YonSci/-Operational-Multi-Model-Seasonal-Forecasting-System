@@ -1,7 +1,7 @@
 product,label,last_day,days,days_missing,ond_zone_mean_mm,ond_zone_normal_mm,ond_zone_pct_normal,ond_zone_pct_onset_detected
-chirps,CHIRPS (final+prelim),2026-10-20,20,0,12.7,29.6,43.0,10.0
-arc2,ARC2 (NOAA CPC),2026-10-25,25,0,26.6,40.5,66.0,17.0
+chirps,CHIRPS (final+prelim),2026-10-25,25,0,14.4,40.5,35.0,8.0
+arc2,ARC2 (NOAA CPC),2026-10-26,26,0,30.2,42.7,71.0,22.0
 tamsat,TAMSAT v3.1,2026-10-25,25,0,34.5,40.5,85.0,17.0
-pdirnow,PDIR-Now (UCI CHRS),2026-10-25,25,0,31.1,40.5,77.0,15.0
-imerg,IMERG Late (NASA),2026-10-25,25,0,38.1,40.5,94.0,24.0
-imerg_early,IMERG Early (NASA),2026-10-25,25,0,38.3,40.5,94.0,23.0
+pdirnow,PDIR-Now (UCI CHRS),2026-10-27,27,0,53.4,46.2,116.0,43.0
+imerg,IMERG Late (NASA),2026-10-26,26,0,46.4,42.7,109.0,38.0
+imerg_early,IMERG Early (NASA),2026-10-27,27,0,59.2,46.2,128.0,50.0

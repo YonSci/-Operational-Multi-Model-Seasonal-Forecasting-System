@@ -124,9 +124,9 @@
         <select id="season-method" aria-label="Onset and cessation method" data-source="inits">
           <option value="">All methods</option>
           <option value="Dunning">Dunning</option>
-          <option value="ICPAC rule 1">ICPAC rule 1</option>
-          <option value="ICPAC rule 2">ICPAC rule 2</option>
-          <option value="ICPAC rule 3">ICPAC rule 3</option>
+          <option value="Agri rule 1">Agri rule 1</option>
+          <option value="Agri rule 2">Agri rule 2</option>
+          <option value="Agri rule 3">Agri rule 3</option>
         </select>
       </div>
       <p class="kt-note" id="season-cond" data-source="sites">—</p>
@@ -142,7 +142,7 @@
             <th class="num">Normal</th>
             <th class="num">Late / long</th>
             <th>Long-term average</th>
-            <th class="num">None by 31 Dec</th>
+            <th class="num">None by search end</th>
             <th class="num">RPSS</th>
             <th class="num">Hit rate</th>
           </tr></thead>
@@ -150,11 +150,11 @@
         </table>
       </div>
       <p class="kt-note"><b>Methods.</b> Dunning: turning points of the accumulated rainfall anomaly, 1 Sep – 31 Dec.
-        <b>ICPAC rule 1</b>: onset on a wet day (≥1 mm) starting more than 20 mm in 3 days, with no dry spell of 7 days or more in the next 21 days.
+        <b>Agri rule 1</b>: onset on a wet day (≥1 mm) starting more than 20 mm in 3 days, with no dry spell of 7 days or more in the next 21 days.
         <b>Rule 2</b>: at least 20 mm in 5 days with 3 or more rainy days, no dry spell longer than 7 days in the next 21.
         <b>Rule 3</b>: more than 20 mm in 3 days, no dry spell longer than 10 days in the next 30.
         Cessation (rules 1–2): after a 10-day period with rain below half the potential evapotranspiration (modified Hargreaves), the day a 100 mm soil store runs dry; rule 3: the first day of that 10-day period.
-        ICPAC rules search from 15 Aug; forecasts end on 31 Dec, so “none by 31 Dec” members count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
+        Agri rules 1–3 follow ICPAC's operational onset/cessation definitions. They search onset from 15 Aug to 15 Jan and cessation to 28 Feb (the 1 Oct runs carry the forecast to 28 Feb; the Sep 01 run stops at 31 Dec); members with none by then count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
     </div>
   </section>
 
@@ -305,7 +305,7 @@
           <th class="num" data-field="p_bn">Early / short</th>
           <th class="num" data-field="p_nn">Normal</th>
           <th class="num" data-field="p_an">Late / long</th>
-          <th class="num" data-field="no_onset">None by 31 Dec</th>
+          <th class="num" data-field="no_onset">None by search end</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -316,7 +316,7 @@
     <h2>How these numbers are made</h2>
     <div class="kt-methods">
       <p><b>Seasonal forecast.</b> ECMWF SEAS5 started 1 October 2026, 25 members, bias-corrected day by day against CHIRPS 1993–2016 by quantile mapping. Observed CHIRPS rainfall replaces the forecast up to the latest observed day in every year, so skill is measured the same way it is used.</p>
-      <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives the three ICPAC operational rules (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. The near-term planting rains and planting onset (headline, ECMWF 15-day) use at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
+      <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives three agricultural rules, Agri rules 1–3, adapted from ICPAC's operational definitions (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. The near-term planting rains and planting onset (headline, ECMWF 15-day) use at least 20 mm in 1–3 days and no run of 10 days under 1 mm in the following 21 days.</p>
       <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Local skill compares past forecasts at the site's cell with CHIRPS: useful, limited or no skill.</p>
       <p><b>Next 15 days.</b> ECMWF IFS ensemble (open data, 50 members), not bias-corrected. The combined planting onset continues each member with a seasonal member to check for dry spells beyond day 15.</p>
       <p><b>Satellite products.</b> CHIRPS (preliminary after September), ARC2, TAMSAT v3.1, PDIR-Now and NASA IMERG Late and Early, averaged onto the same 0.25° grid. GSMaP is not included yet (needs an Earth Engine project or a JAXA account). Each product is described under Data sources below.</p>
@@ -394,8 +394,8 @@ KT.pct = d3.format('.0%');
 KT.num = d3.format(',.1f');
 KT.int = d3.format(',.0f');
 KT.doyDate = (doy) => d3.utcFormat('%-d %b')(new Date(Date.UTC(2026, 0, 1) + (doy - 1) * 864e5));
-// Onset / cessation methods in display order (Dunning, ICPAC rules 1–3); rows without a definition are Dunning
-KT.methods = ['Dunning', 'ICPAC rule 1', 'ICPAC rule 2', 'ICPAC rule 3'];
+// Onset / cessation methods in display order (Dunning, Agri rules 1–3); rows without a definition are Dunning
+KT.methods = ['Dunning', 'Agri rule 1', 'Agri rule 2', 'Agri rule 3'];
 KT.methodRank = (r) => Math.max(0, KT.methods.indexOf(r.definition || 'Dunning'));
 KT.site = () => (dash.params().site || 'Kapiti Research Station Farm');
 KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early', 'imerg_gee', 'gsmap_gee'];
@@ -689,7 +689,7 @@ dash.onData(() => {
 </script>
 
 <script>
-// Season outlook for the picked site, run and method: onset and cessation rows for Dunning and the ICPAC rules 1–3
+// Season outlook for the picked site, run and method: onset and cessation rows for Dunning and the Agri rules 1–3
 // (or one method). Hover a row for its numbers (a cursor shows the date under the pointer); the legend
 // switches layers on and off; the table below follows the same run and method.
 (() => {
@@ -700,7 +700,9 @@ dash.onData(() => {
   const RUNS = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
   const LAYERS = [['members', 'Members'], ['wide', 'Wide range (8 in 10)'], ['likely', 'Likely range (half)'],
                   ['normal', 'Normal third'], ['avg', 'Long-term average'], ['today', 'Today']];
-  const END = 366;                                           // right edge: after 31 Dec (none by then)
+  let END = 366;                                             // right edge: after the last searched day (31 Dec, or 28 Feb for the Agri rules)
+  const byOf = (r) => r.none_by || '31 Dec';                 // "none by" date of the row's search
+  const endOf = (r) => ({ '31 Dec': 366, '15 Jan': 381 })[byOf(r)] ?? 425;
   const off = new Set();
   let run = null;
   const num = (v) => (v === '' || v == null || !isFinite(+v) ? NaN : +v);
@@ -708,7 +710,7 @@ dash.onData(() => {
   const rowLabel = (r) => `${defOf(r)} · ${r.variable === 'onset' ? 'onset' : r.variable === 'cessation' ? 'cessation' : 'season length'}`;
   const order = (r) => KT.methodRank(r) * 3 + ['onset', 'cessation', 'lgp'].indexOf(r.variable);
   const none = (r) => (r.variable === 'onset' ? +r.no_onset || 0 : r.variable === 'cessation' ? +r.no_cessation || 0 : 0);
-  const fd = (v) => (isFinite(v) ? (v >= END ? 'after 31 Dec' : KT.doyDate(v)) : 'after 31 Dec');
+  const fd = (v, r) => (isFinite(v) && v < endOf(r) ? KT.doyDate(v) : `after ${byOf(r)}`);
   runSel.addEventListener('change', () => { run = runSel.value; draw(); });
   methodSel.addEventListener('change', () => draw());
 
@@ -730,18 +732,21 @@ dash.onData(() => {
     const memOf = (r) => (mem.status === 'ok' ? mem.data.filter((q) => q.site === r.site && q.init === r.init && q.variable === r.variable
       && (q.definition || 'Dunning') === defOf(r)).map((q) => +q.value) : []);
 
+    END = d3.max(dates, endOf) ?? 366;
     const lo = d3.min(dates, (r) => d3.min([r.p10, r.t33, r.chirps_clim].filter(isFinite))) ?? 274;
     const x0 = lo < 244 ? 227 : lo < 274 ? 244 : 274;
     const W = box.clientWidth || 600, rowH = 50, m = { t: 22, r: 18, b: 28, l: Math.min(240, W * 0.36) };
     const H = m.t + m.b + rowH * dates.length;
     const x = d3.scaleLinear([x0, END], [m.l, W - m.r]).clamp(true);
     const xv = (v) => x(isFinite(v) ? v : END);
+    const xr = (r) => x(endOf(r)) - 4;                     // a row's "none by" position (hollow dots)
     const y = d3.scaleBand(dates.map((r) => r.key), [m.t, H - m.b]).padding(0.28);
     const bh = y.bandwidth();
     const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-    const ticks = (W < 520 ? [227, 244, 274, 305, 335, END] : [227, 244, 259, 274, 288, 305, 319, 335, 349, END]).filter((t) => t >= x0);
+    const ticks = (END > 366 ? (W < 520 ? [227, 274, 335, 397, END] : [227, 244, 274, 305, 335, 366, 397, END])
+      : (W < 520 ? [227, 244, 274, 305, 335, END] : [227, 244, 259, 274, 288, 305, 319, 335, 349, END])).filter((t) => t >= x0);
     svg.append('g').attr('transform', `translate(0,${H - m.b})`)
-      .call(d3.axisBottom(x).tickValues(ticks).tickFormat((t) => (t === END ? '31 Dec+' : KT.doyDate(t))).tickSize(-(H - m.t - m.b)))
+      .call(d3.axisBottom(x).tickValues(ticks).tickFormat((t) => (t === END ? (END > 366 ? '28 Feb+' : '31 Dec+') : KT.doyDate(t))).tickSize(-(H - m.t - m.b)))
       .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
       .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
     const today = d3.utcDay.count(d3.utcYear(new Date()), new Date()) + 1;
@@ -753,21 +758,22 @@ dash.onData(() => {
     const bg = g.append('rect').attr('x', 0).attr('y', -bh * 0.15).attr('width', W).attr('height', bh * 1.3).attr('rx', 4).attr('fill', 'var(--color-fg)').attr('opacity', 0);
     g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').attr('font-size', 12).text((r) => r.label);
     const col = (r) => dash.colors[KT.methodRank(r)];
-    if (!off.has('normal')) g.append('rect').attr('x', (r) => xv(r.t33)).attr('width', (r) => Math.max(0, xv(r.t67) - xv(r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
-    if (!off.has('wide')) g.append('line').attr('x1', (r) => xv(r.p10)).attr('x2', (r) => xv(r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', col).attr('stroke-width', 2).attr('stroke-linecap', 'round');
-    if (!off.has('likely')) g.append('rect').attr('x', (r) => xv(r.p25)).attr('width', (r) => Math.max(3, xv(r.p75) - xv(r.p25))).attr('y', bh * 0.22).attr('height', bh * 0.56).attr('rx', 4).attr('fill', col).attr('opacity', 0.85);
+    const xw = (r, v) => Math.min(xv(v), x(endOf(r)));     // clip "after" values to the row's own search end
+    if (!off.has('normal')) g.append('rect').attr('x', (r) => xw(r, r.t33)).attr('width', (r) => Math.max(0, xw(r, r.t67) - xw(r, r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
+    if (!off.has('wide')) g.append('line').attr('x1', (r) => xw(r, r.p10)).attr('x2', (r) => xw(r, r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', col).attr('stroke-width', 2).attr('stroke-linecap', 'round');
+    if (!off.has('likely')) g.append('rect').attr('x', (r) => xw(r, r.p25)).attr('width', (r) => Math.max(3, xw(r, r.p75) - xw(r, r.p25))).attr('y', bh * 0.22).attr('height', bh * 0.56).attr('rx', 4).attr('fill', col).attr('opacity', 0.85);
     if (!off.has('members')) {
       g.each(function (r) {
         const vals = memOf(r), rng = d3.randomLcg(r.key.length * 97 + 7);
         const gg = d3.select(this);
         gg.selectAll('circle.m').data(vals).join('circle').attr('class', 'm').attr('cx', (v) => x(v)).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
           .attr('fill', 'var(--color-fg)').attr('opacity', 0.55);
-        const n = none(r);                   // members with no onset / cessation by 31 Dec, drawn hollow at the right edge
-        gg.selectAll('circle.n').data(d3.range(n)).join('circle').attr('class', 'n').attr('cx', x(END) - 4).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
+        const n = none(r);                   // members with no onset / cessation by the search end, drawn hollow there
+        gg.selectAll('circle.n').data(d3.range(n)).join('circle').attr('class', 'n').attr('cx', xr(r)).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
           .attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('opacity', 0.7);
       });
     }
-    g.append('circle').attr('cx', (r) => xv(r.median)).attr('cy', bh / 2).attr('r', 5.5).attr('fill', 'var(--color-panel)').attr('stroke', col).attr('stroke-width', 2.5);
+    g.append('circle').attr('cx', (r) => xw(r, r.median)).attr('cy', bh / 2).attr('r', 5.5).attr('fill', 'var(--color-panel)').attr('stroke', col).attr('stroke-width', 2.5);
     if (!off.has('avg')) g.append('line').attr('x1', (r) => xv(r.chirps_clim)).attr('x2', (r) => xv(r.chirps_clim)).attr('y1', -2).attr('y2', bh + 2).attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
 
     // hover: row highlight, date cursor and a tooltip with the row's numbers
@@ -783,13 +789,13 @@ dash.onData(() => {
         const r = dates[i];
         bg.attr('opacity', (q) => (q === r ? 0.06 : 0));
         const dv = Math.round(x.invert(px));
-        cursor.attr('display', null); cl.attr('x1', px).attr('x2', px); ct.attr('x', px).text(dv >= END ? 'after 31 Dec' : KT.doyDate(dv));
+        cursor.attr('display', null); cl.attr('x1', px).attr('x2', px); ct.attr('x', px).text(fd(dv, r));
         const lines = [
-          ['Most likely', fd(r.median)], ['Likely (half the members)', `${fd(r.p25)} – ${fd(r.p75)}`], ['Wide (8 in 10)', `${fd(r.p10)} – ${fd(r.p90)}`],
-          ['Long-term average', fd(r.chirps_clim)], ['Normal third', `${fd(r.t33)} – ${fd(r.t67)}`],
+          ['Most likely', fd(r.median, r)], ['Likely (half the members)', `${fd(r.p25, r)} – ${fd(r.p75, r)}`], ['Wide (8 in 10)', `${fd(r.p10, r)} – ${fd(r.p90, r)}`],
+          ['Long-term average', fd(r.chirps_clim, r)], ['Normal third', `${fd(r.t33, r)} – ${fd(r.t67, r)}`],
           [r.variable === 'onset' ? 'Early / normal / late' : 'Early / normal / late end', `${pct(r.p_bn)} / ${pct(r.p_nn)} / ${pct(r.p_an)}`],
         ];
-        if (none(r)) lines.push([r.variable === 'onset' ? 'No onset by 31 Dec' : 'No cessation by 31 Dec', `${none(r)} of ${r.n_members} members`]);
+        if (none(r)) lines.push([`${r.variable === 'onset' ? 'No onset' : 'No cessation'} by ${byOf(r)}`, `${none(r)} of ${r.n_members} members`]);
         if (isFinite(num(r.rpss_val))) lines.push(['Past skill here', `RPSS ${d3.format('+.2f')(num(r.rpss_val))}, hit rate ${pct(r.hitrate_val)}`]);
         else lines.push(['Past skill here', 'not available for this run']);
         tip.hidden = false;
@@ -809,13 +815,13 @@ dash.onData(() => {
       return b;
     }), ...[...new Set(dates.map(defOf))].map((t) => {
       const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[KT.methodRank({ definition: t })]; sp.append(t); return sp;
-    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: none by 31 Dec' }));
+    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: none by the search end (Dunning 31 Dec; Agri rules: onset 15 Jan, cessation 28 Feb)' }));
     box.style.minHeight = H + 'px';
     box.replaceChildren(svg.node(), tip, lg);
 
     // table: every variable of the chosen run, including season length (days)
     const isL = (r) => r.variable === 'lgp';
-    const dv = (r, k) => (isL(r) ? (isFinite(num(r[k])) ? KT.int(num(r[k])) + ' d' : '—') : fd(num(r[k])));
+    const dv = (r, k) => (isL(r) ? (isFinite(num(r[k])) ? KT.int(num(r[k])) + ' d' : '—') : fd(num(r[k]), r));
     KT.fillTable(table, rows, [
       ['variable', (v, r) => rowLabel(r)],
       ['median', (v, r) => dv(r, 'median')],
@@ -889,7 +895,7 @@ dash.onData(() => {
     const runs = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
     const rows = n.data.filter((r) => r.site === KT.site()).sort((a, b) => runs.indexOf(a.init) - runs.indexOf(b.init) || rank(a) - rank(b));
     document.getElementById('init-title').textContent = `Forecast by initialization: ${KT.site()}`;
-    const dd = (v, r) => (v === '' || v == null || !isFinite(+v) ? (r.variable === 'lgp' ? '—' : 'after 31 Dec') : r.variable === 'lgp' ? `${KT.int(+v)} d` : KT.doyDate(+v));
+    const dd = (v, r) => (v === '' || v == null || !isFinite(+v) ? (r.variable === 'lgp' ? '—' : `after ${r.none_by || '31 Dec'}`) : r.variable === 'lgp' ? `${KT.int(+v)} d` : KT.doyDate(+v));
     const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x, r) => label(r)], ['median_date', (x, r) => x || (isFinite(+r.median) && r.median !== '' ? `${KT.int(+r.median)} d` : '—')],
       ['init', (x, r) => (r.p25 === undefined ? '—' : `${dd(r.p25, r)} – ${dd(r.p75, r)}`)],
       ['anomaly', (x) => (x === '' || x == null || !isFinite(+x) ? '—' : d3.format('+.0f')(+x)), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num'],
@@ -965,10 +971,12 @@ dash.onData(() => {
     });
     const dates = [...new Set(rows.map((r) => r.date))].sort();
     const prods = KT.products.filter((p) => rows.some((r) => r.product === p));
-    // open on the latest day that the most products share (the newest day often has only one product)
+    // open on the newest day that at least half the products have (products arrive 1–5 days apart, so the
+    // newest day often has only one or two, and the day all share can be several days old)
     const count = (dd) => prods.filter((p) => byKey.has(p + '|' + dd)).length;
-    const best = d3.max(dates, count);
-    const startIdx = d3.maxIndex(dates, (dd, i) => (count(dd) === best ? i : -1));
+    const need = Math.ceil(prods.length / 2);
+    const last = d3.maxIndex(dates, (dd, i) => (count(dd) >= need ? i : -1));
+    const startIdx = count(dates[last]) >= need ? last : dates.length - 1;
     return { byKey, byCell, dates, prods, startIdx };
   };
 

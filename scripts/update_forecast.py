@@ -8,15 +8,18 @@ Refresh the Kenya Short Rains forecast as new observations and medium-range fore
      daily p05 GeoTIFFs after the final record ends; rebuild the 0.25° preliminary NetCDF
   2. Seasonal (ECMWF SEAS5, latest init) re-run with observed CHIRPS spliced in up to the latest day
      → outputs/ecmwf_<mon>_obs_latest/ (+ run_meta.json); skipped when the observation date is unchanged
-  3. Agronomic (planting) onset: CHIRPS + members, terciles, calibration, skill; ICPAC onset/cessation rules 1–3
+  3. Agronomic (planting) onset: CHIRPS + members, terciles, calibration, skill; Agri onset/cessation rules 1–3
+     (after ICPAC); the seasonal runs and rules repacked for the hosted API
   4. Latest ECMWF ENS (open data) → 1–15 day outlook and composite planting-onset dates
-  5. Site reports for the Kenya monitored sites (outputs/site_reports/<today>/)
+  5. Satellite rainfall, multi-model 10–16 day forecasts, site reports, tracker data and page
   6. Hot-reload the local backend if it is running
+  7. With --publish: push the refreshed data to origin/main (publish_daily.py), which redeploys the live platform
 
 Usage:
   python scripts/update_forecast.py                 # everything, skip steps that are already current
   python scripts/update_forecast.py --force         # re-run seasonal + agro even if obs date unchanged
   python scripts/update_forecast.py --no-ens        # skip the ENS download
+  python scripts/update_forecast.py --publish       # also publish the new data to the live platform
 """
 import argparse
 import datetime as dt
@@ -134,6 +137,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--no-ens", action="store_true")
+    ap.add_argument("--publish", action="store_true", help="push the refreshed data to origin/main (live platform)")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -143,7 +147,10 @@ def main():
     changed = run_seasonal(obs_end, a.force)
     if changed or not (OUT_DIR / "agro_onset" / "rule.json").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "seasonal", str(OUT_DIR)], check=True, env=env)
-    # ICPAC onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once),
+    # the hosted API reads the October runs (incl. this one) from backend/demo_short_rains_extra.npz
+    if changed or not (BASE_DIR / "backend" / "demo_short_rains_extra.npz").exists():
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_short_rains_demo.py")], check=True, env=env)
+    # Agri onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once),
     # packed for the backend, then every site's comparison across initializations and methods
     if changed or not all((OUT_DIR / f"icpac_rule{k}" / "rule.json").exists() for k in (1, 2, 3)):
         if not (BASE_DIR / "data" / "worldclim" / "pet_mhargreaves_clim_kenya.nc").exists():
@@ -192,6 +199,9 @@ def main():
         log(f"backend reload: {r.status_code}")
     except requests.RequestException:
         log("backend not running (no reload needed)")
+    if a.publish:
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "publish_daily.py"), "--note", f"observations to {obs_end}"],
+                       check=False, env=env)
     log("update complete")
 
 
