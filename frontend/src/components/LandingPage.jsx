@@ -16,7 +16,7 @@ const FEATURES = [
   { id: 'historical', icon: HistoryIcon, title: 'Historical rainfall',
     desc: 'Observed onset, cessation and season length in past years, with the long-term trend.' },
   { id: 'tracker', icon: Satellite, title: 'Short Rains Tracker',
-    desc: 'Satellite rainfall and 10–16 day weather forecasts at monitored sites, updated every day.' },
+    desc: 'Satellite rainfall, near real-time conditions and 10–15 day weather forecasts at monitored sites, updated every day.' },
 ]
 
 // Onset / cessation methods offered for the Kenya Short Rains (Method selector in the dashboard)
@@ -34,11 +34,11 @@ const METHODS = [
 
 const FACTS = [
   { value: '7', label: 'C3S seasonal models' },
-  { value: '5', label: 'onset methods for the Kenya Short Rains' },
-  { value: '7', label: 'rainy seasons covered' },
+  { value: '5', label: 'methods' },
+  { value: '5', label: 'seasons: 3 for Ethiopia and 2 for Kenya' },
   { value: '2', label: 'countries: Kenya and Ethiopia' },
   { value: '0.25°', label: 'analysis grid (about 28 km)' },
-  { value: 'Daily', label: 'Short Rains updates' },
+  { value: '10–15', label: 'days of medium-range forecasts, with satellite and near real-time data to track rain conditions' },
 ]
 
 export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) {
