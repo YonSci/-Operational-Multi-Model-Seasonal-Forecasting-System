@@ -7,6 +7,8 @@ import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
+import { version } from '../package.json'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, Database, CalendarRange, Map as MapIcon, FileCode2 } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 
 // --- Helpers --------------------------------------------------------------
@@ -1819,30 +1821,32 @@ function MultiModelTab({ pixelData, activeModels, modelsData, selectedSeason='lo
 
 
 function AboutTab() {
-  const [subTab, setSubTab] = useState('blueprint')
+  const [section, setSection] = useState('overview')
+  const scrollRef = React.useRef(null)
+  const go = id => { setSection(id); scrollRef.current?.scrollTo({ top: 0 }) }
 
-  const S = ({title,children})=>(<div style={{marginBottom:22}}><div style={{fontSize:11,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--accent-blue)',marginBottom:10,paddingBottom:5,borderBottom:'1px solid var(--border-primary)'}}>{title}</div>{children}</div>)
-  const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:9}}><thead><tr style={{borderBottom:'1px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} style={{padding:'5px 8px',textAlign:'left',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',fontSize:8,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)',background:i%2===0?'transparent':'var(--bg-elevated)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'5px 8px',color:j===0?'var(--text-primary)':'var(--text-secondary)',fontWeight:j===0?600:400,lineHeight:1.5,verticalAlign:'top',whiteSpace:j===0?'nowrap':'normal'}}>{c}</td>))}</tr>))}</tbody></table></div>)
-  const KV = ({label,value,mono=false,wide=false})=>(<div style={{display:'flex',gap:8,marginBottom:6,alignItems:'flex-start'}}><span style={{fontSize:9,color:'var(--text-muted)',minWidth:wide?220:170,flexShrink:0,textTransform:'uppercase',letterSpacing:'0.07em',paddingTop:1}}>{label}</span><span style={{fontSize:10,color:'var(--text-primary)',lineHeight:1.5,fontFamily:mono?"'IBM Plex Mono',monospace":'inherit'}}>{value}</span></div>)
+  const S = ({title,children})=>(<section className="about-block"><h3>{title}</h3>{children}</section>)
+  const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:15}}><thead><tr style={{borderBottom:'2px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} scope="col" style={{padding:'8px 10px',textAlign:'left',color:'var(--text-meta)',fontWeight:600,fontSize:14,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'10px',color:j===0?'var(--heading)':'var(--text-body)',fontWeight:j===0?600:400,lineHeight:1.6,verticalAlign:'top',minWidth:j===0?140:120}}>{c}</td>))}</tr>))}</tbody></table></div>)
+  const KV = ({label,value,wide=false})=>(<div style={{display:'flex',flexWrap:'wrap',gap:'2px 16px',padding:'10px 0',borderBottom:'1px solid var(--border-primary)'}}><span style={{flex:`0 0 ${wide?240:200}px`,fontSize:14,fontWeight:600,color:'var(--text-meta)',lineHeight:1.6,fontFamily:label.startsWith('GET ')?"'IBM Plex Mono',monospace":'inherit'}}>{label}</span><span style={{flex:'1 1 320px',minWidth:0,fontSize:16,color:'var(--text-body)',lineHeight:1.65}}>{value}</span></div>)
   const Step = ({n,title,eq,desc,table})=>(
-    <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'flex-start'}}>
-      <div style={{flexShrink:0,width:24,height:24,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,background:'var(--accent-blue)',color:'#fff',marginTop:2}}>{n}</div>
+    <div style={{display:'flex',gap:14,marginBottom:24,alignItems:'flex-start'}}>
+      <div style={{flexShrink:0,width:30,height:30,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,background:'var(--btn-primary)',color:'#fff',marginTop:1}}>{n}</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:11,fontWeight:700,color:'var(--text-primary)',marginBottom:3}}>{title}</div>
-        {eq&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:'#60a5fa',fontWeight:700,background:'var(--bg-elevated)',borderRadius:6,padding:'6px 10px',marginBottom:5,overflowX:'auto',whiteSpace:'pre'}}>{eq}</div>}
-        {desc&&<div style={{fontSize:10,color:'var(--text-secondary)',lineHeight:1.6,marginBottom:table?5:0}}>{desc}</div>}
-        {table&&(<div style={{overflowX:'auto',marginTop:4}}><table style={{borderCollapse:'collapse',fontSize:9,width:'100%'}}><tbody>{table.map(([sym,def],i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)',background:i%2===0?'transparent':'var(--bg-elevated)'}}><td style={{padding:'4px 8px',fontFamily:"'IBM Plex Mono',monospace",color:'#60a5fa',whiteSpace:'nowrap',verticalAlign:'top'}}>{sym}</td><td style={{padding:'4px 8px',color:'var(--text-secondary)',lineHeight:1.5}}>{def}</td></tr>))}</tbody></table></div>)}
+        <h4 style={{fontSize:18,fontWeight:600,color:'var(--heading)',margin:'0 0 6px',lineHeight:1.4}}>{title}</h4>
+        {eq&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,color:'var(--heading)',background:'var(--bg-elevated)',border:'1px solid var(--border-primary)',borderRadius:8,padding:'10px 14px',marginBottom:8,overflowX:'auto',whiteSpace:'pre'}}>{eq}</div>}
+        {desc&&<p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:table?'0 0 8px':0}}>{desc}</p>}
+        {table&&(<div style={{overflowX:'auto',marginTop:4}}><table style={{borderCollapse:'collapse',fontSize:15,width:'100%'}}><tbody>{table.map(([sym,def],i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}><td style={{padding:'7px 10px',fontFamily:"'IBM Plex Mono',monospace",fontSize:14,color:'var(--accent-text)',whiteSpace:'nowrap',verticalAlign:'top'}}>{sym}</td><td style={{padding:'7px 10px',color:'var(--text-body)',lineHeight:1.6}}>{def}</td></tr>))}</tbody></table></div>)}
       </div>
     </div>
   )
   const GaugeDef = ({name,thresh,derivation,justification,strength})=>(
     <div style={{marginBottom:8,padding:'8px 10px',background:'var(--bg-elevated)',borderRadius:8,border:'1px solid var(--border-primary)'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
-        <span style={{fontSize:10,fontWeight:700,color:'var(--text-primary)'}}>{name}</span>
-        <span style={{fontSize:9,color:'#60a5fa',fontFamily:"'IBM Plex Mono',monospace",whiteSpace:'nowrap',marginLeft:8}}>{thresh}</span>
+      <div style={{display:'flex',flexWrap:'wrap',justifyContent:'space-between',alignItems:'flex-start',gap:'2px 12px',marginBottom:4}}>
+        <span style={{fontSize:16,fontWeight:700,color:'var(--text-primary)'}}>{name}</span>
+        <span style={{fontSize:14,color:'var(--accent-text)',fontFamily:"'IBM Plex Mono',monospace"}}>{thresh}</span>
       </div>
-      <div style={{fontSize:9,color:'var(--text-secondary)',lineHeight:1.5,marginBottom:3}}>{justification}</div>
-      <div style={{display:'flex',gap:12,fontSize:8,color:'var(--text-faint)',flexWrap:'wrap'}}>
+      <div style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.5,marginBottom:3}}>{justification}</div>
+      <div style={{display:'flex',gap:12,fontSize:13,color:'var(--text-faint)',flexWrap:'wrap'}}>
         <span><strong style={{color:'var(--text-muted)'}}>Derivation:</strong> {derivation}</span>
         <span><strong style={{color:'var(--text-muted)'}}>Strength:</strong> {strength}</span>
       </div>
@@ -1881,131 +1885,167 @@ function AboutTab() {
   ]
 
 
-  const SUB_TABS = [
-    { id: 'blueprint',    label: '🏛️ Scientific Blueprint & Regimes' },
-    { id: 'methods',      label: '🌱 Onset, Cessation & LGP Methods' },
-    { id: 'maps',         label: '🗺️ Regimes & Seasonal Maps (Images & GIS)' },
-    { id: 'algorithm',    label: '⚙️ Dunning Algorithm (8 Steps)' },
-    { id: 'stations',     label: '📍 20-Site Diagnostic Agreement' },
-    { id: 'gauges',       label: '🛡️ Risk Gauges & Models' },
-    { id: 'architecture', label: '💻 System Architecture & General Workflow' },
+  const SECTIONS = [
+    { id: 'overview',    label: 'Overview',                  icon: Info },
+    { id: 'data',        label: 'Data & coverage',           icon: Database },
+    { id: 'methods',     label: 'Forecast methods',          icon: CalendarRange },
+    { id: 'regimes',     label: 'Rainfall regimes',          icon: MapIcon },
+    { id: 'performance', label: 'Performance & limitations', icon: ShieldCheck },
+    { id: 'technical',   label: 'Technical documentation',   icon: FileCode2 },
   ]
+  const current = SECTIONS.find(s => s.id === section) ?? SECTIONS[0]
+  const Link = ({to, children}) => <button type="button" className="about-link" onClick={() => go(to)}>{children}</button>
 
   return (
-    <div className="h-full overflow-y-auto touch-scroll p-3 sm:p-5 flex flex-col gap-4">
-      {/* Header Banner */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.25) 0%, rgba(15, 23, 42, 0.4) 100%)',
-        border: '1px solid var(--border-primary)',
-        borderRadius: 12,
-        padding: '14px 18px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6
-      }}>
-        <div style={{fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em'}}>
-          Scientific &amp; Operational Rainfall Regime Classification &amp; Seasonal Onset/Cessation System
-        </div>
-        <div style={{fontSize: 11, color: 'var(--accent-blue)', fontWeight: 600}}>
-          Dunning Harmonic Baseline with Ethiopia-Specific Climatological Regime Refinement (EMI Climatology) · Five Onset Methods for the Kenya Short Rains
-        </div>
-        <div style={{fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5}}>
-          An objective, peer-reviewed meteorological framework unifying Fourier harmonic analysis (Dunning et al. 2016), local peak-timing physics, and Ethiopian Meteorological Institute (EMI) regional rainfall climatology across Kenya and Ethiopia.
-        </div>
-        <div style={{
-          marginTop: 4,
-          padding: '8px 12px',
-          borderRadius: 8,
-          background: 'rgba(239, 68, 68, 0.12)',
-          border: '1px solid rgba(239, 68, 68, 0.35)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontSize: 10,
-          color: '#fca5a5',
-          fontWeight: 600,
-          lineHeight: 1.5
-        }}>
-          <span style={{fontSize: 14}}>⚠️</span>
-          <span><strong>CRITICAL REGIONAL SPECIFICATION:</strong> The Four Objective Climate Regimes (Regimes 0, 1, 2, 3) apply <strong>STRICTLY to Ethiopia</strong> to resolve its micro-climates, complex orography, and asynchronous monsoon vs pastoral cycles. <strong>Kenya</strong> operates under its standard East African Equatorial dual regime (MAM Long Rains and OND Short Rains).</span>
-        </div>
-      </div>
+    <div ref={scrollRef} className="site h-full overflow-y-auto touch-scroll">
+     <div className="about-shell">
+      <header className="about-head">
+        <p className="site-eyebrow">About</p>
+        <h1>About the platform</h1>
+        <p className="about-lede">The Seasonal Climate Forecast Dashboard helps users explore the timing and uncertainty of rainfall seasons in Kenya and Ethiopia.</p>
+      </header>
+      <div className="about-layout">
+       <nav className="about-nav" aria-label="About sections">
+        <p className="about-nav-label">On this page</p>
+        {SECTIONS.map(s => { const Icon = s.icon; return (
+          <button key={s.id} type="button" aria-current={section === s.id ? 'true' : undefined} onClick={() => go(s.id)}>
+            <Icon size={18} aria-hidden="true" />{s.label}
+          </button>) })}
+       </nav>
+       <article className="about-article">
+        <h2>{current.label}</h2>
 
-      {/* Sub-tab Navigation */}
-      <div style={{
-        display: 'flex',
-        gap: 6,
-        flexWrap: 'wrap',
-        borderBottom: '1px solid var(--border-primary)',
-        paddingBottom: 10
-      }}>
-        {SUB_TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setSubTab(t.id)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 8,
-              fontSize: 11,
-              fontWeight: subTab === t.id ? 700 : 500,
-              background: subTab === t.id ? 'var(--accent-blue)' : 'var(--bg-elevated)',
-              color: subTab === t.id ? '#ffffff' : 'var(--text-secondary)',
-              border: '1px solid ' + (subTab === t.id ? 'var(--accent-blue)' : 'var(--border-primary)'),
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {section === 'overview' && (
+        <div className="about-prose">
+          <h3>What you can explore</h3>
+          <p>
+            The platform presents estimates of rainfall <strong>onset</strong>, <strong>cessation</strong> and <strong>season length</strong>, together with
+            probabilities and the spread of outcomes across forecast members. It brings together seasonal climate-model forecasts, CHIRPS-based rainfall
+            estimates and recent weather information. You can compare the available models, examine historical seasons and review forecast performance.
+          </p>
+          <p>The Short Rains Tracker adds recent satellite rainfall and short- to medium-range weather forecasts for monitored sites.</p>
+
+          <h3>How seasonal timing is defined</h3>
+          <p>
+            Onset and cessation depend on the definition selected. A change in the rainfall pattern, a sustained wet spell and enough soil moisture for
+            crop establishment can occur at different times.
+          </p>
+          <p>
+            For Kenya’s Short Rains, the dashboard offers the Dunning cumulative-anomaly method, three agricultural rainfall rules adapted from ICPAC
+            definitions, and a water-balance approach that uses FAO-56 reference evapotranspiration with soil-water and crop-demand criteria.
+          </p>
+          <p>
+            For Ethiopia, the platform uses a rainfall-regime classification to represent regional differences in seasonal behaviour. It combines a Dunning
+            harmonic baseline with refinements informed by Ethiopian rainfall climatology.
+          </p>
+          <p>
+            The Dunning method follows a published approach (Dunning, Black and Allan, 2016). The Ethiopian regime refinements, the adaptation of the ICPAC
+            rules and the water-balance criteria were developed for this platform. Thresholds, assumptions and references are under <Link to="methods">Forecast
+            methods</Link>, <Link to="regimes">Rainfall regimes</Link> and <Link to="technical">Technical documentation</Link>.
+          </p>
+
+          <h3>How to interpret the results</h3>
+          <p>
+            A forecast date is a representative estimate within a range of possible outcomes. Read it alongside the date range, the probabilities, the
+            selected method and the available evidence of forecast skill.
+          </p>
+          <p>
+            As the season approaches, combine the seasonal outlook with recent rainfall observations, updated weather forecasts and local conditions. An onset
+            estimate alone does not establish that a particular crop has enough water for planting or establishment.
+          </p>
+
+          <h3>Coverage and limitations</h3>
+          <div className="about-callout" style={{margin:'0 0 20px'}}>
+            <Info size={20} aria-hidden="true" />
+            <div><strong>Regional coverage</strong>The four rainfall-regime categories apply to Ethiopia. Kenya’s seasonal products use their own regional definitions, including the Long Rains and Short Rains.</div>
+          </div>
+          <p>
+            <strong>Season length</strong> is the interval between the selected onset and cessation dates. A crop-specific length of growing period also needs
+            crop and water-availability assumptions; the FAO water balance makes them explicit (maize by default).
+          </p>
+          <p>
+            Forecast skill, data availability and uncertainty vary by location, season, model and method. See <Link to="performance">Performance &amp;
+            limitations</Link> and the Validation tab when interpreting the results.
+          </p>
+        </div>
+      )}
+
+      {section === 'data' && (
+        <div>
+          <p className="about-intro">
+            Every product is computed on the same 0.25° analysis grid (about 28 km) from daily rainfall. Observed rainfall comes from CHIRPS; forecasts are
+            bias-corrected against it, so forecast and observed dates are directly comparable.
+          </p>
+          <S title="Countries and seasons">
+            <Tbl head={['Country','Season','Forecast start','Models']} rows={[
+              ['Kenya', 'Short Rains (OND)', '1 Sep; 1 Oct, also with observed rainfall to 30 Sep or to the latest day', 'ECMWF SEAS5'],
+              ['Kenya', 'Long Rains (MAM)', '1 Feb', 'Seven C3S models, single and combined'],
+              ['Ethiopia', 'Kiremt (JJAS), highland main rains', '1 May', 'ECMWF SEAS5'],
+              ['Ethiopia', 'Belg (FMAM), highland early rains', '1 Jan', 'ECMWF SEAS5'],
+              ['Ethiopia', 'Annual wet season (western unimodal)', '1 May', 'ECMWF SEAS5'],
+              ['Ethiopia', 'Gu/Ganna (MAM), spring rains', '1 Jan', 'ECMWF SEAS5'],
+              ['Ethiopia', 'Deyr/Hagaya (SON–OND), autumn rains', '1 Sep', 'ECMWF SEAS5'],
+            ]}/>
+          </S>
+          <S title="Datasets">
+            <Tbl head={['Dataset','Used for','Resolution','Period']} rows={[
+              ['CHIRPS v2 daily rainfall', 'Observed onset, cessation and season length; terciles; bias correction of the forecasts', '0.25°', '1981 on (Long Rains), 1993 on (other seasons)'],
+              ['CHIRPS v3 daily rainfall', 'FAO water balance: observations, terciles and its own bias correction', '0.05°, averaged to 0.25°', '1993 on'],
+              ['ECMWF SEAS5 and C3S seasonal models', 'Seasonal forecasts and hindcasts (25 members for SEAS5)', 'Regridded to 0.25°', 'SEAS5 hindcasts from 1981 (Long Rains) or 1993; other C3S models from 1993'],
+              ['ERA5-Land', 'FAO-56 reference evapotranspiration (ET0) and starting soil moisture', '0.1°, averaged to 0.25°', '1993 on'],
+              ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
+              ['Satellite rainfall and 10–16 day forecasts', 'Short Rains Tracker at monitored sites', 'Site', 'Current season'],
+            ]}/>
+          </S>
+          <S title="Reference periods and updates">
+            <KV label="Calibration" value="Hindcast years up to 2016: 1981–2016 for the Long Rains (36 years), 1993–2016 for the Short Rains and the Ethiopia seasons (24 years). Terciles, bias correction and probability calibration use these years."/>
+            <KV label="Validation" value="Independent years after calibration; 2017–2024 for the Short Rains methods."/>
+            <KV label="Observed record" value="CHIRPS 1993–2025 for the Short Rains historical view and the Ethiopia regime diagnostics; 1981 on for the Long Rains."/>
+            <KV label="Reference normal" value="WMO standard normal 1991–2020, for climatological context."/>
+            <KV label="Grid and land masks" value="0.25° analysis grid; 842 land cells in Kenya and 1,485 in Ethiopia. Ethiopia maps are shown only inside each season’s climatological domain."/>
+            <KV label="Updates" value="The Short Rains run with the latest observations and the Short Rains Tracker are refreshed daily. Other seasons are updated when a new forecast is processed."/>
+            <KV label="Developers" value="ILRI Climate Services in collaboration with ICPAC, EMI and KMD"/>
+            <KV label="Version" value={`v${version}`}/>
+          </S>
+        </div>
+      )}
+
+      {section === 'regimes' && (
+        <div className="about-callout" style={{marginBottom:32}}><Info size={20} aria-hidden="true"/><div><strong>Regional coverage</strong>The four rainfall-regime categories shown here apply to Ethiopia. Kenya’s seasonal products use their own regional definitions, including the Long Rains and Short Rains.</div></div>
+      )}
 
       {/* SUB-TAB 1: BLUEPRINT & REGIMES */}
-      {subTab === 'blueprint' && (
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="w-full lg:w-[54%] min-w-0 flex flex-col gap-4">
-            <S title="System Overview & Reference Standards">
-              <KV label="System" value="Operational Seasonal Climate Forecast Dashboard (Onset, Cessation & LGP)"/>
-              <KV label="Version" value="v3.1.0 Operational (Peer-Reviewed Methodology)" mono/>
-              <KV label="Methodology" value="Dunning Harmonic Baseline with Ethiopia-Specific Climatological Regime Refinement"/>
-              <KV label="Onset Methods (Kenya OND)" value="Dunning cumulative anomaly · Agri rules 1–3 (adapted from ICPAC) · FAO water balance (FAO-56; agricultural, rainfall and crop-water definitions)"/>
-              <KV label="Developers" value="ILRI Climate Services in collaboration with ICPAC, EMI, and KMD"/>
-              <KV label="Reference Normal" value="WMO Standard Normal (1991–2020) for climatological reference" mono/>
-              <KV label="Calibration Window" value="1993–2025 (33-year CHIRPS & ECMWF SEAS5 paired hindcast window)" mono/>
-              <KV label="Grid Resolution" value="0.25° (~28 km) CHIRPS native spatial resolution" mono/>
-              <KV label="Land Sovereign Mask" value="1,485 pixels (Ethiopia sovereign) | 842 pixels (Kenya)" mono/>
-              <KV label="Core Citation" value="Dunning, Black & Allan (2016) J. Geophys. Res. Atmos., 121(19), doi:10.1002/2016JD025428"/>
-              <KV label="Climatology Citation" value="Ethiopian Meteorological Institute (EMI) Rainfall Regime Classifications & Normal Bulletins"/>
-            </S>
-
+      {section === 'regimes' && (
+        <div className="flex flex-col 2xl:flex-row gap-6">
+          <div className="w-full 2xl:w-[54%] min-w-0 flex flex-col gap-4">
             <S title="Two-Stage Classification Blueprint">
-              <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:10, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
-                <strong style={{color:'var(--accent-blue)'}}>Why strict r_H &ge; 1.0 under-detects Type-1 bimodality:</strong> Dunning et al. (2016) establish that annual regimes have <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_H = C_2 / C_1 &lt; 1.0</span> and biannual regimes have <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_H &ge; 1.0</span>. In the Ethiopian Highlands, Kiremt monsoon rainfall (~220–320 mm/mo) is 3 to 4 times larger than Belg early rains (~70–140 mm/mo). This massive amplitude disparity inflates the annual Fourier fundamental C_1, depressing r_H to 0.40–0.85. A strict r_H &ge; 1.0 threshold misclassifies the entire central/eastern agricultural highlands as unimodal, completely erasing the critical Belg early crop season.
+              <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:16, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
+                <strong style={{color:'var(--accent-blue)'}}>Why strict r_H &ge; 1.0 under-detects Type-1 bimodality:</strong> Dunning et al. (2016) establish that annual regimes have <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_H = C_2 / C_1 &lt; 1.0</span> and biannual regimes have <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_H &ge; 1.0</span>. In the Ethiopian Highlands, Kiremt monsoon rainfall (~220–320 mm/mo) is 3 to 4 times larger than Belg early rains (~70–140 mm/mo). This massive amplitude disparity inflates the annual Fourier fundamental C_1, depressing r_H to 0.40–0.85. A strict r_H &ge; 1.0 threshold misclassifies the entire central/eastern agricultural highlands as unimodal, completely erasing the critical Belg early crop season.
               </div>
 
               <div style={{display:'flex', flexDirection:'column', gap:8}}>
                 <div style={{padding:'8px 12px', background:'var(--bg-surface)', borderRadius:8, border:'1px solid var(--border-primary)'}}>
-                  <div style={{fontSize:10, fontWeight:700, color:'#f87171', marginBottom:2}}>Stage 0: Arid / Marginal Screening</div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
-                    Project-defined screening: <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#fca5a5'}}>P_ann &lt; 200 mm</span> or <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#fca5a5'}}>(P_ann &lt; 300 mm &amp; P_ond &lt; 30 mm)</span>. Excludes 64 hyper-arid pixels (4.3% of Ethiopia) in the Danakil Depression/Afar where low rainfall generates spurious harmonic ratios (informed by Dunning low-rainfall caution).
+                  <div style={{fontSize:16, fontWeight:700, color:'var(--bad-text)', marginBottom:2}}>Stage 0: Arid / Marginal Screening</div>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
+                    Project-defined screening: <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--bad-text)'}}>P_ann &lt; 200 mm</span> or <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--bad-text)'}}>(P_ann &lt; 300 mm &amp; P_ond &lt; 30 mm)</span>. Excludes 64 hyper-arid pixels (4.3% of Ethiopia) in the Danakil Depression/Afar where low rainfall generates spurious harmonic ratios (informed by Dunning low-rainfall caution).
                   </div>
                 </div>
 
                 <div style={{padding:'8px 12px', background:'var(--bg-surface)', borderRadius:8, border:'1px solid var(--border-primary)'}}>
-                  <div style={{fontSize:10, fontWeight:700, color:'#60a5fa', marginBottom:2}}>Stage 1: Dunning Harmonic Ratio Baseline</div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
-                    Fourier decomposition across 365-day CHIRPS climatology computes annual fundamental C_1 and semi-annual harmonic C_2. Pixels with <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_H = C_2 / C_1 &ge; 1.0</span> are designated as candidate biannual zones.
+                  <div style={{fontSize:16, fontWeight:700, color:'var(--accent-text)', marginBottom:2}}>Stage 1: Dunning Harmonic Ratio Baseline</div>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
+                    Fourier decomposition across 365-day CHIRPS climatology computes annual fundamental C_1 and semi-annual harmonic C_2. Pixels with <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_H = C_2 / C_1 &ge; 1.0</span> are designated as candidate biannual zones.
                   </div>
                 </div>
 
                 <div style={{padding:'8px 12px', background:'var(--bg-surface)', borderRadius:8, border:'1px solid var(--border-primary)'}}>
-                  <div style={{fontSize:10, fontWeight:700, color:'#34d399', marginBottom:2}}>Stage 2: EMI Climatological Regime Refinement</div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
+                  <div style={{fontSize:16, fontWeight:700, color:'var(--ok-text)', marginBottom:2}}>Stage 2: EMI Climatological Regime Refinement</div>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
                     For transition pixels (r_H &lt; 1.0), local peak timing and water-season detection promote pixels with dual robust peaks:
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'#34d399', background:'var(--bg-elevated)', padding:'4px 8px', borderRadius:4, marginTop:4}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--ok-text)', background:'var(--bg-elevated)', padding:'4px 8px', borderRadius:4, marginTop:4}}>
                       Type 1 = [r_H &ge; 0.8 &or; N_peaks &ge; 2] &and; [P_1 &isin; MAM] &and; [P_2 &isin; JJA/JA] &and; [P_FMAM &ge; 50mm] &and; [P_JJAS &ge; 120mm]
                     </div>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'#fbbf24', background:'var(--bg-elevated)', padding:'4px 8px', borderRadius:4, marginTop:4}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--warn-text)', background:'var(--bg-elevated)', padding:'4px 8px', borderRadius:4, marginTop:4}}>
                       Type 2 = [r_H &ge; 1.0 &or; N_peaks &ge; 2] &and; [P_1 &isin; MAM] &and; [P_2 &isin; SON/OND] &and; [P_JJA &lt; 1.3 &times; P_OND]
                     </div>
                   </div>
@@ -2014,45 +2054,45 @@ function AboutTab() {
             </S>
           </div>
 
-          <div className="w-full lg:w-[46%] min-w-0 flex flex-col gap-4">
+          <div className="w-full 2xl:w-[46%] min-w-0 flex flex-col gap-4">
             <S title="The Four Objective Climate Regimes">
               <div style={{display:'grid', gridTemplateColumns:'1fr', gap:8}}>
-                <div style={{padding:'10px 12px', background:'rgba(2, 132, 199, 0.08)', borderRadius:8, border:'1px solid rgba(2, 132, 199, 0.3)'}}>
+                <div style={{padding:'10px 12px', background:'rgba(2, 132, 199, 0.08)', borderRadius:8, border:'1px solid rgba(2, 132, 199, 0.3)', borderLeft:'4px solid #0284c7'}}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3}}>
-                    <span style={{fontSize:11, fontWeight:700, color:'#38bdf8'}}>🌾 Regime 1: Western Unimodal</span>
-                    <span style={{fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:'#38bdf8'}}>427 px (28.8%)</span>
+                    <span style={{fontSize:17, fontWeight:700, color:'var(--heading)'}}>Regime 1: Western Unimodal</span>
+                    <span style={{fontSize:14, fontFamily:"'IBM Plex Mono',monospace", color:'var(--r1-text)'}}>427 px (28.8%)</span>
                   </div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
                     Single continuous wet season extending from spring to autumn (Feb/Mar to Oct/Nov), peaking Jul–Aug. Gambella, Assosa, Jimma, Bahir Dar, Gondar, Bedele. Operational product: <strong>Annual Wet Season</strong> (426 active px).
                   </div>
                 </div>
 
-                <div style={{padding:'10px 12px', background:'rgba(22, 163, 74, 0.08)', borderRadius:8, border:'1px solid rgba(22, 163, 74, 0.3)'}}>
+                <div style={{padding:'10px 12px', background:'rgba(22, 163, 74, 0.08)', borderRadius:8, border:'1px solid rgba(22, 163, 74, 0.3)', borderLeft:'4px solid #16a34a'}}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3}}>
-                    <span style={{fontSize:11, fontWeight:700, color:'#4ade80'}}>🏔️ Regime 2: Bimodal Type 1 Highlands</span>
-                    <span style={{fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:'#4ade80'}}>416 px (28.0%)</span>
+                    <span style={{fontSize:17, fontWeight:700, color:'var(--heading)'}}>Regime 2: Bimodal Type 1 Highlands</span>
+                    <span style={{fontSize:14, fontFamily:"'IBM Plex Mono',monospace", color:'var(--r2-text)'}}>416 px (28.0%)</span>
                   </div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
                     Central, Eastern &amp; Northern Highlands. Belg (FMAM) early rains followed by a June pause, then Kiremt (JJAS) main rains. Addis Ababa, Wollo, Kombolcha, Tigray, Harar, Hawassa. Operational products: <strong>Belg Early Rains</strong> (416 px) and <strong>Kiremt Bimodal Onset</strong> (416 px).
                   </div>
                 </div>
 
-                <div style={{padding:'10px 12px', background:'rgba(217, 119, 6, 0.08)', borderRadius:8, border:'1px solid rgba(217, 119, 6, 0.3)'}}>
+                <div style={{padding:'10px 12px', background:'rgba(217, 119, 6, 0.08)', borderRadius:8, border:'1px solid rgba(217, 119, 6, 0.3)', borderLeft:'4px solid #d97706'}}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3}}>
-                    <span style={{fontSize:11, fontWeight:700, color:'#fbbf24'}}>🐪 Regime 3: Bimodal Type 2 Pastoral Lowlands</span>
-                    <span style={{fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:'#fbbf24'}}>578 px (38.9%)</span>
+                    <span style={{fontSize:17, fontWeight:700, color:'var(--heading)'}}>Regime 3: Bimodal Type 2 Pastoral Lowlands</span>
+                    <span style={{fontSize:14, fontFamily:"'IBM Plex Mono',monospace", color:'var(--warn-text)'}}>578 px (38.9%)</span>
                   </div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
                     Southern &amp; Southeastern lowlands (Somali, Borana, Guji, South Omo). Equatorial symmetric bimodal; dry summer (JJAS). Operational products: <strong>Spring rains — Gu/Ganna (MAM)</strong> (578 px) and <strong>Autumn rains — Deyr/Hagaya (SON–OND)</strong> (578 px).
                   </div>
                 </div>
 
-                <div style={{padding:'10px 12px', background:'rgba(148, 163, 184, 0.08)', borderRadius:8, border:'1px solid rgba(148, 163, 184, 0.3)'}}>
+                <div style={{padding:'10px 12px', background:'rgba(148, 163, 184, 0.08)', borderRadius:8, border:'1px solid rgba(148, 163, 184, 0.3)', borderLeft:'4px solid #94a3b8'}}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3}}>
-                    <span style={{fontSize:11, fontWeight:700, color:'#94a3b8'}}>🏜️ Regime 0: Arid / Marginal</span>
-                    <span style={{fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:'#94a3b8'}}>64 px (4.3%)</span>
+                    <span style={{fontSize:17, fontWeight:700, color:'var(--heading)'}}>Regime 0: Arid / Marginal</span>
+                    <span style={{fontSize:14, fontFamily:"'IBM Plex Mono',monospace", color:'var(--text-meta)'}}>64 px (4.3%)</span>
                   </div>
-                  <div style={{fontSize:9, color:'var(--text-secondary)', lineHeight:1.5}}>
+                  <div style={{fontSize:14, color:'var(--text-secondary)', lineHeight:1.5}}>
                     Danakil Depression and dry Afar lowlands. Non-seasonal hyper-arid desert. Screened out and flagged with: <em>"Project-defined rainfall screening indicates insufficient seasonal rainfall for robust onset/cessation estimation."</em>
                   </div>
                 </div>
@@ -2060,8 +2100,8 @@ function AboutTab() {
             </S>
 
             <S title="Operational Mask Arithmetic vs Regime Eligibility">
-              <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:9, lineHeight:1.6, color:'var(--text-secondary)'}}>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa', fontWeight:700, marginBottom:4}}>
+              <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:14, lineHeight:1.6, color:'var(--text-secondary)'}}>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)', fontWeight:700, marginBottom:4}}>
                   Operational Mask = Regime_Valid &and; Rainfall_Significance &and; DR_Valid &and; Spatial_QC
                 </div>
                 <div><strong>National JJAS Monsoon Domain:</strong> Regime 1 (427 px) + Regime 2 (416 px) = <strong>843 regime-eligible pixels</strong>.</div>
@@ -2074,10 +2114,10 @@ function AboutTab() {
       )}
 
       {/* SUB-TAB: ONSET, CESSATION & LGP METHODS (Kenya Short Rains) */}
-      {subTab === 'methods' && (
+      {section === 'methods' && (
         <div className="flex flex-col gap-4">
           <S title="Five Onset & Cessation Methods (Kenya Short Rains, OND)">
-            <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:10, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
+            <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:16, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
               Pick a method with the <strong>Method</strong> selector above the map (Short Rains season). The maps, probabilities, skill, charts and bulletin all follow it. The methods ask different questions, so their onset, cessation and season length are not interchangeable: Dunning finds the turning points of the season's rainfall, the Agri rules find the first rains a farmer could plant on, and the FAO water balance tracks whether the soil holds enough water for a maize crop.
             </div>
             <Tbl head={['Method','Onset','Cessation','Season length','Data','Runs']} rows={[
@@ -2087,13 +2127,13 @@ function AboutTab() {
               ['Agri rule 3', '> 20 mm in 3 days; no dry spell longer than 10 days in the next 30', 'First day of a 10-day period with rain < 0.5 × PET', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
               ['FAO water balance', 'Agricultural: 10-day rain ≥ 0.5 × ET0 and PAW/TAW ≥ 0.20 for 5 days; no 7-day spell below 0.20 in the next 21', 'Agricultural: 7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit', 'Three LGPs, one per definition', 'CHIRPS v3 · ERA5-Land ET0 · SoilGrids · SEAS5 (bias-corrected to CHIRPS v3)', 'Oct 01, Oct 01 + latest obs'],
             ]}/>
-            <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+            <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
               Agri rules 1–3 are adapted from the ICPAC operational definitions; onset is searched 15 Aug – 15 Jan and cessation to 28 Feb (Sep 01 run: to 31 Dec). Dunning searches 1 Sep – 31 Dec. Dry day: &lt; 1 mm.
             </div>
           </S>
 
-          <div className="flex flex-col lg:flex-row gap-6">
-            <div className="w-full lg:w-[48%] min-w-0 flex flex-col gap-4">
+          <div className="flex flex-col 2xl:flex-row gap-6">
+            <div className="w-full 2xl:w-[48%] min-w-0 flex flex-col gap-4">
               <S title="Forecast Runs (Init Selector)">
                 <Tbl head={['Run','Rainfall used','Methods']} rows={[
                   ['Sep 01', 'ECMWF SEAS5 from 1 Sep, to 31 Dec', 'Dunning, Agri rules 1–3'],
@@ -2101,7 +2141,7 @@ function AboutTab() {
                   ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
                   ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
                 ]}/>
-                <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
                   25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.
                 </div>
               </S>
@@ -2114,23 +2154,9 @@ function AboutTab() {
                 <KV label="Flat terciles (FAO)" value="Where the observed record has no spread (33rd = 67th percentile), no tercile forecast is issued: probabilities and skill are left blank (western Kenya and the coast, where onset falls on the first search day)."/>
               </S>
 
-              <S title="FAO Water Balance Validation">
-                <Tbl head={['Check','Result']} rows={[
-                  ['Hindcast agricultural onset vs observed (VAL 2017–2024)', '68% within ±7 days, 81% within ±14 (Oct 01); 79% / 89% with latest obs'],
-                  ['Hindcast agricultural cessation vs observed', '40% within ±7 days, 66% within ±14 (Oct 01)'],
-                  ['Hindcast agricultural LGP vs observed', 'r = 0.83, 74% within ±14 days (Oct 01)'],
-                  ['RPSS (VAL 2017–2024), agricultural definition', 'Onset +0.43, cessation +0.10, LGP +0.34 (Oct 01); +0.60, +0.15, +0.40 with latest obs'],
-                  ['Onsets in the GIEWS maize planting window (Oct–Nov)', 'FAO agricultural 66%, FAO rainfall 64%, Agri rule 1 70% (observed 1993–2025)'],
-                  ['Bucket PAW/TAW vs ERA5-Land 0–100 cm wetness', 'r = 0.73 (daily, Aug–Feb)'],
-                  ['Dekadal ETa vs WaPOR v3 AETI (Oct–Dec 2018–2025)', 'Bias 0.0 mm/day, r = 0.65'],
-                ]}/>
-                <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
-                  Full tables: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>outputs/fao_wb/validation/validation_report.md</span> (python scripts/fao_validate.py).
-                </div>
-              </S>
             </div>
 
-            <div className="w-full lg:w-[52%] min-w-0 flex flex-col gap-4">
+            <div className="w-full 2xl:w-[52%] min-w-0 flex flex-col gap-4">
               <S title="FAO Water Balance: FAO-56 Daily Soil-Water Bucket">
                 <Step n="1" title="Reference evapotranspiration  ET0" eq={"ET0 = [0.408 Δ (Rn − G) + γ (900/(T+273)) u2 (es − ea)] / [Δ + γ (1 + 0.34 u2)]"} desc="FAO-56 Penman-Monteith (Eq. 6) from ERA5-Land daily Tmax, Tmin, dewpoint, 2 m wind, solar radiation and surface pressure; G = 0 for daily steps. Forecast days use the ERA5-Land ET0 climatology (1993–2016, ±7-day smoothed), the same for every member."/>
                 <Step n="2" title="Crop water need  ETc" eq={"ETc = Kc × ET0"} desc="Maize Kc 0.30 / 1.20 / 0.60 (initial / mid / end), stages 20 / 35 / 40 / 30 days from planting, which is the agricultural onset. Kc_ini applies before it."/>
@@ -2145,7 +2171,7 @@ function AboutTab() {
                   ['Crop-water cessation', 'After the climatological rainfall peak, 21-day rain < 0.5 × ETc with PAW/TAW falling below 0.20'],
                   ['Definition picker', 'Agricultural: agricultural onset → agricultural cessation. Rainfall: rainfall onset → rainfall cessation. Crop-water: agricultural onset → crop-water cessation. LGP = cessation − onset + 1 for each.'],
                 ]}/>
-                <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5}}>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5}}>
                   Rainfall cessation usually comes before agricultural cessation, because the soil keeps supplying water after the rains stop. The pixel panel shows the chance that onset or cessation has happened by today and within 7, 14 and 21 days, and the members' PAW/TAW outlook against the 0.20 critical level. Method notes: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>FAO_WATER_BALANCE_METHOD.md</span>.
                 </div>
               </S>
@@ -2163,8 +2189,9 @@ function AboutTab() {
         </div>
       )}
 
+      {section === 'regimes' && <h3 style={{margin:'8px 0 16px'}}>Regime and season maps, GIS files</h3>}
       {/* SUB-TAB: MAPS & GIS SHAPEFILES */}
-      {subTab === 'maps' && (
+      {section === 'regimes' && (
         <div className="w-full flex flex-col gap-5">
           {/* Top Info Banner & Download Shapefiles */}
           <div style={{
@@ -2178,16 +2205,16 @@ function AboutTab() {
           }}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10}}>
               <div>
-                <div style={{fontSize:13, fontWeight:800, color:'var(--text-primary)', marginBottom:4}}>
-                  🗺️ Climatological Regimes &amp; Seasonal Domain Shapefiles (Ethiopia Only)
+                <div style={{fontSize:20, fontWeight:800, color:'var(--text-primary)', marginBottom:4}}>
+                  Climatological Regimes &amp; Seasonal Domain Shapefiles (Ethiopia Only)
                 </div>
-                <div style={{fontSize:10, color:'var(--text-secondary)', lineHeight:1.5, maxWidth:720}}>
+                <div style={{fontSize:16, color:'var(--text-secondary)', lineHeight:1.5, maxWidth:720}}>
                   Standard ESRI Shapefiles (.shp, .shx, .dbf, .prj) and GeoJSON (.geojson) files in <strong>WGS 84 (EPSG:4326)</strong> for GIS analysis in QGIS, ArcGIS, Python (GeoPandas), and R.
                   These boundary datasets define the sovereign meteorological domains used in operational onset/cessation tracking.
                 </div>
               </div>
               <a
-                href="/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip"
+                href={import.meta.env.BASE_URL + 'shapefiles/ethiopia_climate_regimes_and_masks_shp.zip'}
                 download="ethiopia_climate_regimes_and_masks_shp.zip"
                 style={{
                   display: 'inline-flex',
@@ -2198,24 +2225,24 @@ function AboutTab() {
                   background: 'var(--accent-blue)',
                   color: '#ffffff',
                   fontWeight: 700,
-                  fontSize: 11,
+                  fontSize: 17,
                   textDecoration: 'none',
                   boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
                   transition: 'all 0.15s ease'
                 }}
               >
-                <span>📦</span>
+                <span></span>
                 <span>Download Shapefiles Package (.zip, 20 KB)</span>
               </a>
             </div>
 
             {/* Shapefiles Inventory Table */}
             <div style={{overflowX:'auto', borderTop:'1px solid var(--border-primary)', paddingTop:10}}>
-              <table style={{width:'100%', borderCollapse:'collapse', fontSize:9}}>
+              <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
                 <thead>
                   <tr style={{borderBottom:'1px solid var(--border-primary)', background:'var(--bg-surface)'}}>
                     {['Dataset Layer', 'Shapefile (.shp)', 'GeoJSON', 'Pixels', 'Land %', 'Climatological Description'].map(h=>(
-                      <th key={h} style={{padding:'5px 8px', textAlign:'left', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase', fontSize:8}}>{h}</th>
+                      <th key={h} style={{padding:'5px 8px', textAlign:'left', color:'var(--text-muted)', fontWeight:700, textTransform:'uppercase', fontSize:13}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -2229,8 +2256,8 @@ function AboutTab() {
                   ].map(([title, shp, geojson, px, pct, desc], i) => (
                     <tr key={shp} style={{borderBottom:'1px solid var(--border-primary)', background: i%2===0?'transparent':'var(--bg-elevated)'}}>
                       <td style={{padding:'5px 8px', color:'var(--text-primary)', fontWeight:700}}>{title}</td>
-                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>{shp}</td>
-                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'#34d399'}}>{geojson}</td>
+                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>{shp}</td>
+                      <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'var(--ok-text)'}}>{geojson}</td>
                       <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'var(--text-primary)'}}>{px}</td>
                       <td style={{padding:'5px 8px', fontFamily:"'IBM Plex Mono',monospace", color:'var(--text-secondary)'}}>{pct}</td>
                       <td style={{padding:'5px 8px', color:'var(--text-secondary)'}}>{desc}</td>
@@ -2242,16 +2269,16 @@ function AboutTab() {
           </div>
 
           {/* High-Resolution Maps Grid */}
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(340px, 1fr))', gap:16}}>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap:16}}>
             {/* Map 1: Four Regimes */}
             <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
               <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
-                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🗺️ The Four Objective Climate Regimes</span>
-                <span style={{fontSize:9, background:'rgba(239, 68, 68, 0.15)', color:'#f87171', border:'1px solid rgba(239, 68, 68, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>ETHIOPIA ONLY</span>
+                <span style={{fontSize:17, fontWeight:700, color:'var(--text-primary)'}}>The Four Objective Climate Regimes</span>
+                <span style={{fontSize:14, background:'var(--info-bg)', color:'var(--accent-text)', border:'1px solid var(--info-border)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>ETHIOPIA ONLY</span>
               </div>
-              <img src="/figures/ethiopia_four_climate_regimes_map.png" alt="Four Objective Climate Regimes of Ethiopia" style={{width:'100%', height:'auto', display:'block'}} />
-              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
-                <strong>Classification Basis:</strong> Dunning Fourier decomposition (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_H = C_2 / C_1</span>) + EMI local peak-timing rules.
+              <img src={import.meta.env.BASE_URL + 'figures/ethiopia_four_climate_regimes_map.png'} alt="Four Objective Climate Regimes of Ethiopia" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:15, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Classification Basis:</strong> Dunning Fourier decomposition (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_H = C_2 / C_1</span>) + EMI local peak-timing rules.
                 Partitions Ethiopia into 4 disjoint meteorological domains: Regime 1 (Western Unimodal, 28.7%), Regime 2 (Bimodal Type-1 Highlands, 28.0%), Regime 3 (Bimodal Type-2 Lowlands, 38.9%), and Regime 0 (Arid/Marginal Afar, 4.4%).
               </div>
             </div>
@@ -2259,11 +2286,11 @@ function AboutTab() {
             {/* Diagram: Workflow & Architecture */}
             <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
               <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
-                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>⚙️ Scientific Architecture &amp; Operational Workflow</span>
-                <span style={{fontSize:9, background:'rgba(37, 99, 235, 0.15)', color:'#60a5fa', border:'1px solid rgba(37, 99, 235, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>END-TO-END PIPELINE</span>
+                <span style={{fontSize:17, fontWeight:700, color:'var(--text-primary)'}}>Scientific Architecture &amp; Operational Workflow</span>
+                <span style={{fontSize:14, background:'rgba(37, 99, 235, 0.15)', color:'var(--accent-text)', border:'1px solid rgba(37, 99, 235, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>END-TO-END PIPELINE</span>
               </div>
-              <img src="/figures/scientific_architecture_workflow.png" alt="Scientific Architecture & Workflow Diagram" style={{width:'100%', height:'auto', display:'block'}} />
-              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+              <img src={import.meta.env.BASE_URL + 'figures/scientific_architecture_workflow.png'} alt="Scientific Architecture & Workflow Diagram" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:15, color:'var(--text-secondary)', lineHeight:1.5}}>
                 <strong>Five-Stage Architecture:</strong> Stage 1 (Data Ingestion) &rarr; Stage 2 (Fourier Diagnostics) &rarr; Stage 3 (Regime Partition — Ethiopia Only) &rarr; Stage 4 (Dynamic Domain Masking) &rarr; Stage 5 (Onset/Cessation Anomalous Accumulation Calculation &amp; GIS Products).
               </div>
             </div>
@@ -2271,23 +2298,23 @@ function AboutTab() {
             {/* Map 2: Kiremt JJAS */}
             <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
               <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
-                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🌧️ Kiremt / Main Rains Operational Domain (JJAS)</span>
-                <span style={{fontSize:9, background:'rgba(2, 132, 199, 0.15)', color:'#38bdf8', border:'1px solid rgba(2, 132, 199, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>832 PIXELS (56.0%)</span>
+                <span style={{fontSize:17, fontWeight:700, color:'var(--text-primary)'}}>Kiremt / Main Rains Operational Domain (JJAS)</span>
+                <span style={{fontSize:14, background:'rgba(2, 132, 199, 0.15)', color:'var(--r1-text)', border:'1px solid rgba(2, 132, 199, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>832 PIXELS (56.0%)</span>
               </div>
-              <img src="/figures/mask_kiremt_jjas.png" alt="Kiremt Main Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
-              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
-                <strong>Summer Monsoon Footprint:</strong> Encompasses the Highlands (Regime 2) and Western Unimodal belt (Regime 1). Screened by <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>P_JJAS &ge; 120 mm</span> and <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>r_JJAS &ge; 20%</span>. Eliminates southern/southeastern pastoral lowlands where summer is a cold dry pause.
+              <img src={import.meta.env.BASE_URL + 'figures/mask_kiremt_jjas.png'} alt="Kiremt Main Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:15, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Summer Monsoon Footprint:</strong> Encompasses the Highlands (Regime 2) and Western Unimodal belt (Regime 1). Screened by <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>P_JJAS &ge; 120 mm</span> and <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_JJAS &ge; 20%</span>. Eliminates southern/southeastern pastoral lowlands where summer is a cold dry pause.
               </div>
             </div>
 
             {/* Map 3: Belg Early Rains */}
             <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
               <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
-                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🌱 Belg Early Rains Operational Domain (FMAM)</span>
-                <span style={{fontSize:9, background:'rgba(5, 150, 105, 0.15)', color:'#34d399', border:'1px solid rgba(5, 150, 105, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>416 PIXELS (28.0%)</span>
+                <span style={{fontSize:17, fontWeight:700, color:'var(--text-primary)'}}>Belg Early Rains Operational Domain (FMAM)</span>
+                <span style={{fontSize:14, background:'rgba(5, 150, 105, 0.15)', color:'var(--ok-text)', border:'1px solid rgba(5, 150, 105, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>416 PIXELS (28.0%)</span>
               </div>
-              <img src="/figures/mask_belg_early_rains.png" alt="Belg Early Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
-              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+              <img src={import.meta.env.BASE_URL + 'figures/mask_belg_early_rains.png'} alt="Belg Early Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:15, color:'var(--text-secondary)', lineHeight:1.5}}>
                 <strong>Central &amp; Eastern Highlands Belg:</strong> Strictly limited to Regime 2 (Type-1 Highlands) where spring rains represent a discrete agricultural cycle followed by a June pause. Western unimodal zone is excluded to avoid artificial cessation dates in June.
               </div>
             </div>
@@ -2295,23 +2322,23 @@ function AboutTab() {
             {/* Map 4: Deyr & Gu Pastoral Lowlands */}
             <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
               <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
-                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🐪 Deyr / Short Rains &amp; Gu Domain (SON–OND &amp; MAM)</span>
-                <span style={{fontSize:9, background:'rgba(217, 119, 6, 0.15)', color:'#fbbf24', border:'1px solid rgba(217, 119, 6, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>578 PIXELS (38.9%)</span>
+                <span style={{fontSize:17, fontWeight:700, color:'var(--text-primary)'}}>Deyr / Short Rains &amp; Gu Domain (SON–OND &amp; MAM)</span>
+                <span style={{fontSize:14, background:'rgba(217, 119, 6, 0.15)', color:'var(--warn-text)', border:'1px solid rgba(217, 119, 6, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>578 PIXELS (38.9%)</span>
               </div>
-              <img src="/figures/mask_deyr_short_rains.png" alt="Deyr Autumn and Gu Spring Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
-              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
-                <strong>Bimodal Pastoral Rangelands:</strong> Somali Region, Borana, Guji, and Bale lowlands. Driven by the equatorial biannual cycle (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#fbbf24'}}>r_H &ge; 1.0</span>) with major Gu/Ganna rains (MAM) and secondary Deyr/Hagaya rains (SON–OND).
+              <img src={import.meta.env.BASE_URL + 'figures/mask_deyr_short_rains.png'} alt="Deyr Autumn and Gu Spring Rains Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:15, color:'var(--text-secondary)', lineHeight:1.5}}>
+                <strong>Bimodal Pastoral Rangelands:</strong> Somali Region, Borana, Guji, and Bale lowlands. Driven by the equatorial biannual cycle (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--warn-text)'}}>r_H &ge; 1.0</span>) with major Gu/Ganna rains (MAM) and secondary Deyr/Hagaya rains (SON–OND).
               </div>
             </div>
 
             {/* Map 5: Western Extended Season */}
             <div style={{background:'var(--bg-elevated)', borderRadius:10, border:'1px solid var(--border-primary)', overflow:'hidden', display:'flex', flexDirection:'column'}}>
               <div style={{padding:'10px 14px', borderBottom:'1px solid var(--border-primary)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg-surface)'}}>
-                <span style={{fontSize:11, fontWeight:700, color:'var(--text-primary)'}}>🌾 Western Ethiopia Extended Annual Wet Season</span>
-                <span style={{fontSize:9, background:'rgba(99, 102, 241, 0.15)', color:'#a5b4fc', border:'1px solid rgba(99, 102, 241, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>426 PIXELS (28.7%)</span>
+                <span style={{fontSize:17, fontWeight:700, color:'var(--text-primary)'}}>Western Ethiopia Extended Annual Wet Season</span>
+                <span style={{fontSize:14, background:'rgba(99, 102, 241, 0.15)', color:'var(--violet-text)', border:'1px solid rgba(99, 102, 241, 0.3)', padding:'2px 6px', borderRadius:4, fontWeight:700}}>426 PIXELS (28.7%)</span>
               </div>
-              <img src="/figures/mask_western_extended_season.png" alt="Western Ethiopia Extended Annual Wet Season Domain" style={{width:'100%', height:'auto', display:'block'}} />
-              <div style={{padding:'10px 14px', fontSize:9.5, color:'var(--text-secondary)', lineHeight:1.5}}>
+              <img src={import.meta.env.BASE_URL + 'figures/mask_western_extended_season.png'} alt="Western Ethiopia Extended Annual Wet Season Domain" style={{width:'100%', height:'auto', display:'block'}} />
+              <div style={{padding:'10px 14px', fontSize:15, color:'var(--text-secondary)', lineHeight:1.5}}>
                 <strong>Single Prolonged Season:</strong> Gambella, Benishangul-Gumuz (Assosa), Jimma, Bedele, Gondar/Bahir Dar western slopes. Rains begin in Feb/Mar, intensify continuously through summer without a June dry break, and end in Oct/Nov.
               </div>
             </div>
@@ -2320,12 +2347,12 @@ function AboutTab() {
       )}
 
       {/* SUB-TAB 2: ONSET DETECTION ALGORITHM */}
-      {subTab === 'algorithm' && (
+      {section === 'methods' && (
         <div className="w-full max-w-4xl">
           <S title="Dunning Cumulative Anomaly Algorithm (8 Operational Steps)">
-            <Step n="1" title="Climatological Daily Mean  Q_d(i,j)" eq={"Q_d(i,j) = (1/N_cal) x sum_{y in CAL} R_{d,y}(i,j)"} desc="Mean daily precipitation for each calendar DOY d over the 33-year calibration period (1993–2025)." table={[['Q_d(i,j)','Mean daily precip for DOY d at pixel (i,j)'],['R_{d,y}','Observed daily CHIRPS precip (mm/day) at pixel (i,j), DOY d, year y'],['N_cal','33 calibration years (1993–2025 paired with ECMWF SEAS5 hindcasts)'],['d','DOY restricted to seasonal search window']]}/>
+            <Step n="1" title="Climatological Daily Mean  Q_d(i,j)" eq={"Q_d(i,j) = (1/N_cal) x sum_{y in CAL} R_{d,y}(i,j)"} desc="Mean daily precipitation for each calendar DOY d over the calibration years (CAL: 1993–2016 for the Short Rains and Ethiopia seasons, 1981–2016 for the Long Rains)." table={[['Q_d(i,j)','Mean daily precip for DOY d at pixel (i,j)'],['R_{d,y}','Observed daily CHIRPS precip (mm/day) at pixel (i,j), DOY d, year y'],['N_cal','Number of calibration years (24 for 1993–2016)'],['d','DOY restricted to seasonal search window']]}/>
             <Step n="2" title="Window Mean  Q_bar(i,j)  --  the Dunning accumulation baseline" eq={"Q_bar(i,j) = (1/N_win) x sum_{d in Window} Q_d(i,j)"} desc="A single scalar value per pixel -- the long-term average daily rainfall rate across the entire seasonal forecast window. Subtracting it produces anomalies that accumulate positively during wet periods and negatively during dry ones." table={[['Q_bar(i,j)','Scalar window mean -- single value per pixel, not DOY-varying'],['N_win','Length of forecast window in days (e.g., 183 days for JJAS, 135 days for FMAM)']]}/>
-            <Step n="3" title="Climatological Accumulated Anomaly  C(d)" eq={"C(d) = sum_{k=d_start}^{d} [ Q_k(i,j) - Q_bar(i,j) ]"} desc="Cumulative sum of daily climatological anomalies from window start to day d. Computed once per pixel over the 33-year calibration period." table={[['C(d)','Cumulative daily anomaly up to day d -- the climatological water season curve'],['Q_k(i,j)','Climatological daily mean at DOY k'],['Q_bar(i,j)','Scalar window mean (never re-computed per year)']]}/>
+            <Step n="3" title="Climatological Accumulated Anomaly  C(d)" eq={"C(d) = sum_{k=d_start}^{d} [ Q_k(i,j) - Q_bar(i,j) ]"} desc="Cumulative sum of daily climatological anomalies from window start to day d. Computed once per pixel over the calibration years." table={[['C(d)','Cumulative daily anomaly up to day d -- the climatological water season curve'],['Q_k(i,j)','Climatological daily mean at DOY k'],['Q_bar(i,j)','Scalar window mean (never re-computed per year)']]}/>
             <Step n="4" title="Climatological Season Bounds  d_s  and  d_e" eq={"d_s = argmin C(d)      d_e = argmax C(d)  [d > d_s]"} desc="Pixel-specific constants from calibration period defining the search window for individual-year event detection." table={[['d_s(i,j)','Climatological season start -- DOY where C(d) reaches its minimum'],['d_e(i,j)','Climatological season end -- DOY where C(d) reaches its maximum after d_s']]}/>
             <Step n="5" title="Individual-Year Accumulated Anomaly  A(D)" eq={"A(D) = sum_{j=d_acc,start}^{D} [ R_{j,y}(i,j) - Q_bar(i,j) ]"} desc="Same accumulation applied to each year or ensemble member individually. Search window clamped around d_s and d_e with +/- delta = 45-50 day buffer." table={[['A(D)','Accumulated precip anomaly for year y from window start to day D'],['R_{j,y}','Observed daily precip at pixel (i,j), DOY j, year y'],['Q_bar(i,j)','Same scalar window mean from Step 2']]}/>
             <Step n="6" title="Onset Detection" eq={"onset_y(i,j) = argmin A(D) + 1"} desc="Onset is the day after A(D) reaches its absolute minimum -- the first day precipitation exceeds Q_bar on a sustained basis. NaN if argmin falls at window boundary." table={[['argmin A(D)','Day of deepest pre-season dry deficit'],['+1','Dunning definition: onset is the day after the minimum']]}/>
@@ -2336,11 +2363,11 @@ function AboutTab() {
       )}
 
       {/* SUB-TAB 3: 20-SITE AUDITED DIAGNOSTIC AGREEMENT */}
-      {subTab === 'stations' && (
+      {section === 'regimes' && (
         <div className="w-full flex flex-col gap-4">
           <S title="Audited 20-Site Representative Diagnostic Consistency Check">
-            <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:10, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:12}}>
-              <strong>Sampling Protocol:</strong> To rigorously audit against template or regional curve reuse, every station coordinate was sampled directly from the nearest CHIRPS 0.25° grid cell (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>latitude, longitude</span> &rarr; grid index <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>i, j</span>). The table below reports genuine, distinct annual rainfall totals, Fourier harmonic amplitudes (C_1, C_2), harmonic ratios (r_H = C_2/C_1), and resulting regime diagnoses. <strong>20/20 representative sites show diagnostic agreement with documented EMI regional climate regimes.</strong>
+            <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:16, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:12}}>
+              <strong>Sampling Protocol:</strong> To rigorously audit against template or regional curve reuse, every station coordinate was sampled directly from the nearest CHIRPS 0.25° grid cell (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>latitude, longitude</span> &rarr; grid index <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>i, j</span>). The table below reports genuine, distinct annual rainfall totals, Fourier harmonic amplitudes (C_1, C_2), harmonic ratios (r_H = C_2/C_1), and resulting regime diagnoses. <strong>20/20 representative sites show diagnostic agreement with documented EMI regional climate regimes.</strong>
             </div>
 
             {/* Filter and Control Bar */}
@@ -2352,15 +2379,15 @@ function AboutTab() {
                   style={{
                     padding: '5px 12px',
                     borderRadius: 6,
-                    fontSize: 10,
+                    fontSize: 16,
                     fontWeight: 700,
                     cursor: 'pointer',
                     background: expandedStations['gambella'] ? 'rgba(56, 189, 248, 0.2)' : 'var(--bg-elevated)',
-                    color: expandedStations['gambella'] ? '#38bdf8' : 'var(--text-secondary)',
-                    border: '1px solid ' + (expandedStations['gambella'] ? '#38bdf8' : 'var(--border-primary)')
+                    color: expandedStations['gambella'] ? 'var(--r1-text)' : 'var(--text-secondary)',
+                    border: '1px solid ' + (expandedStations['gambella'] ? 'var(--r1-text)' : 'var(--border-primary)')
                   }}
                 >
-                  {expandedStations['gambella'] ? '✨ Hide Example (Gambella)' : '✨ Show Example Graph (Gambella)'}
+                  {expandedStations['gambella'] ? 'Hide Example (Gambella)' : 'Show Example Graph (Gambella)'}
                 </button>
                 <button
                   type="button"
@@ -2369,24 +2396,24 @@ function AboutTab() {
                     AUDITED_STATIONS.forEach(s => { all[s.id] = true })
                     setExpandedStations(all)
                   }}
-                  style={{padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)'}}
+                  style={{padding: '5px 10px', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)'}}
                 >
-                  📂 Expand All 20 Graphs
+                  Expand All 20 Graphs
                 </button>
                 <button
                   type="button"
                   onClick={() => setExpandedStations({})}
-                  style={{padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)'}}
+                  style={{padding: '5px 10px', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)'}}
                 >
-                  📁 Collapse All
+                  Collapse All
                 </button>
               </div>
 
-              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+              <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', minWidth:0, maxWidth:'100%'}}>
                 <select
                   value={stationFilter}
                   onChange={e => setStationFilter(e.target.value)}
-                  style={{padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', outline: 'none'}}
+                  style={{maxWidth: '100%', padding: '4px 10px', borderRadius: 6, fontSize: 16, fontWeight: 600, background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', outline: 'none'}}
                 >
                   <option value="all">All Regimes (20 Sites)</option>
                   <option value="1">Regime 1: Western Unimodal (6)</option>
@@ -2399,7 +2426,7 @@ function AboutTab() {
                   placeholder="Search station..."
                   value={stationSearch}
                   onChange={e => setStationSearch(e.target.value)}
-                  style={{padding: '4px 8px', borderRadius: 6, fontSize: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', outline: 'none', width: 140}}
+                  style={{padding: '4px 8px', borderRadius: 6, fontSize: 16, background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)', outline: 'none', width: 140}}
                 />
               </div>
             </div>
@@ -2419,7 +2446,7 @@ function AboutTab() {
 
               return (
                 <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%', borderCollapse:'collapse', fontSize:9}}>
+                  <table style={{width:'100%', borderCollapse:'collapse', fontSize:14}}>
                     <thead>
                       <tr style={{borderBottom:'1px solid var(--border-primary)', background:'var(--bg-surface)'}}>
                         {['Station','Req Coord','Grid Coord','(i, j)','P_ann (mm)','C1','C2','r_H','Assigned Regime','Agreement','Climatological Feature','Profile Graph'].map(h=>(
@@ -2450,13 +2477,13 @@ function AboutTab() {
                               </td>
                               <td style={{padding:'5px 8px', color:'var(--text-muted)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.req}</td>
                               <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.grid}</td>
-                              <td style={{padding:'5px 8px', color:'#60a5fa', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.idx}</td>
+                              <td style={{padding:'5px 8px', color:'var(--accent-text)', fontFamily:"'IBM Plex Mono',monospace", whiteSpace:'nowrap'}}>{st.idx}</td>
                               <td style={{padding:'5px 8px', color:'var(--text-primary)', fontFamily:"'IBM Plex Mono',monospace", fontWeight:600}}>{st.pann}</td>
                               <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace"}}>{st.c1}</td>
                               <td style={{padding:'5px 8px', color:'var(--text-secondary)', fontFamily:"'IBM Plex Mono',monospace"}}>{st.c2}</td>
-                              <td style={{padding:'5px 8px', color: Number(st.rh) >= 1.0 ? '#fbbf24' : '#38bdf8', fontFamily:"'IBM Plex Mono',monospace", fontWeight:700}}>{st.rh}</td>
-                              <td style={{padding:'5px 8px', whiteSpace:'nowrap', color: st.reg.includes('Regime 1') ? '#38bdf8' : (st.reg.includes('Regime 2') ? '#4ade80' : (st.reg.includes('Regime 3') ? '#fbbf24' : '#94a3b8')), fontWeight:600}}>{st.reg}</td>
-                              <td style={{padding:'5px 8px', color:'#34d399', fontWeight:700, whiteSpace:'nowrap'}}>✓ 20/20</td>
+                              <td style={{padding:'5px 8px', color: Number(st.rh) >= 1.0 ? 'var(--warn-text)' : 'var(--r1-text)', fontFamily:"'IBM Plex Mono',monospace", fontWeight:700}}>{st.rh}</td>
+                              <td style={{padding:'5px 8px', whiteSpace:'nowrap', color: st.reg.includes('Regime 1') ? 'var(--r1-text)' : (st.reg.includes('Regime 2') ? 'var(--r2-text)' : (st.reg.includes('Regime 3') ? 'var(--warn-text)' : 'var(--text-meta)')), fontWeight:600}}>{st.reg}</td>
+                              <td style={{padding:'5px 8px', color:'var(--ok-text)', fontWeight:700, whiteSpace:'nowrap'}}>✓ 20/20</td>
                               <td style={{padding:'5px 8px', color:'var(--text-muted)', minWidth:160}}>{st.desc}</td>
                               <td style={{padding:'5px 8px', whiteSpace:'nowrap'}}>
                                 <button
@@ -2468,7 +2495,7 @@ function AboutTab() {
                                   style={{
                                     padding: '3px 8px',
                                     borderRadius: 6,
-                                    fontSize: 9,
+                                    fontSize: 14,
                                     fontWeight: 700,
                                     cursor: 'pointer',
                                     background: isExpanded ? 'var(--accent-blue)' : 'var(--bg-elevated)',
@@ -2477,7 +2504,7 @@ function AboutTab() {
                                     whiteSpace: 'nowrap'
                                   }}
                                 >
-                                  {isExpanded ? '▼ Hide Graph' : '📈 View Graph'}
+                                  {isExpanded ? '▼ Hide Graph' : 'View Graph'}
                                 </button>
                               </td>
                             </tr>
@@ -2499,29 +2526,29 @@ function AboutTab() {
                                     {/* Header badge row */}
                                     <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8}}>
                                       <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                                        <span style={{fontSize: 16}}>📊</span>
+                                        <span style={{fontSize: 18}}></span>
                                         <div>
-                                          <span style={{fontSize: 12.5, fontWeight: 800, color: 'var(--text-primary)'}}>
+                                          <span style={{fontSize: 18, fontWeight: 800, color: 'var(--text-primary)'}}>
                                             {st.name} Climatological Rainfall Profile &amp; Harmonic Decomposition
                                           </span>
-                                          <span style={{fontSize: 9.5, color: 'var(--text-muted)', marginLeft: 8}}>
-                                            CHIRPS 1993–2025 Daily Climatology (33-Year Calibration Window)
+                                          <span style={{fontSize: 15, color: 'var(--text-muted)', marginLeft: 8}}>
+                                            CHIRPS 1993–2025 daily climatology
                                           </span>
                                         </div>
                                       </div>
                                       <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
                                         <span style={{
-                                          fontSize: 9.5,
+                                          fontSize: 15,
                                           fontWeight: 800,
                                           padding: '3px 8px',
                                           borderRadius: 6,
                                           background: st.reg.includes('Regime 1') ? 'rgba(56, 189, 248, 0.15)' : (st.reg.includes('Regime 2') ? 'rgba(74, 222, 128, 0.15)' : (st.reg.includes('Regime 3') ? 'rgba(251, 191, 36, 0.15)' : 'rgba(148, 163, 184, 0.15)')),
-                                          color: st.reg.includes('Regime 1') ? '#38bdf8' : (st.reg.includes('Regime 2') ? '#4ade80' : (st.reg.includes('Regime 3') ? '#fbbf24' : '#94a3b8')),
+                                          color: st.reg.includes('Regime 1') ? 'var(--r1-text)' : (st.reg.includes('Regime 2') ? 'var(--r2-text)' : (st.reg.includes('Regime 3') ? 'var(--warn-text)' : 'var(--text-meta)')),
                                           border: '1px solid ' + (st.reg.includes('Regime 1') ? 'rgba(56, 189, 248, 0.4)' : (st.reg.includes('Regime 2') ? 'rgba(74, 222, 128, 0.4)' : (st.reg.includes('Regime 3') ? 'rgba(251, 191, 36, 0.4)' : 'rgba(148, 163, 184, 0.4)'))),
                                         }}>
                                           {st.reg}
                                         </span>
-                                        <span style={{background: '#10b981', color: '#fff', fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 10}}>
+                                        <span style={{background: '#10b981', color: '#fff', fontSize: 14, fontWeight: 800, padding: '2px 7px', borderRadius: 10}}>
                                           ✓ 20/20 Verified
                                         </span>
                                       </div>
@@ -2532,14 +2559,14 @@ function AboutTab() {
                                       {/* Left: Plot Image */}
                                       <div style={{flex: '1 1 340px', maxWidth: 440, background: '#ffffff', padding: 8, borderRadius: 10, border: '1px solid var(--border-primary)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)'}}>
                                         <img
-                                          src={`./figures/stations/${st.id}.png`}
+                                          src={`${import.meta.env.BASE_URL}figures/stations/${st.id}.png`}
                                           alt={`${st.name} diagnostic plot`}
                                           style={{width: '100%', height: 'auto', display: 'block', borderRadius: 6}}
                                         />
-                                        <div style={{marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 9, color: '#475569'}}>
+                                        <div style={{marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, color: '#475569'}}>
                                           <span>Bars: Monthly CHIRPS | Lines: H1, H2, H1+H2 Fit</span>
-                                          <a href={`./figures/stations/${st.id}.png`} target="_blank" rel="noreferrer" style={{color: '#0284c7', fontWeight: 700, textDecoration: 'none'}}>
-                                            🔍 Open High-Res ↗
+                                          <a href={`${import.meta.env.BASE_URL}figures/stations/${st.id}.png`} target="_blank" rel="noreferrer" style={{color: '#0284c7', fontWeight: 700, textDecoration: 'none'}}>
+                                            Open High-Res ↗
                                           </a>
                                         </div>
                                       </div>
@@ -2549,47 +2576,47 @@ function AboutTab() {
                                         {/* Parameter Cards Grid */}
                                         <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8}}>
                                           <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
-                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Annual Rainfall (P_ann)</div>
-                                            <div style={{fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2}}>{st.pann} mm</div>
-                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>Elevation: {st.elev}</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Annual Rainfall (P_ann)</div>
+                                            <div style={{fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2}}>{st.pann} mm</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-faint)'}}>Elevation: {st.elev}</div>
                                           </div>
                                           <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
-                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Harmonic Ratio (r_H)</div>
-                                            <div style={{fontSize: 13, fontWeight: 800, color: Number(st.rh) >= 1.0 ? '#fbbf24' : '#38bdf8', marginTop: 2}}>{st.rh}</div>
-                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>C2 / C1 Ratio</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Harmonic Ratio (r_H)</div>
+                                            <div style={{fontSize: 20, fontWeight: 800, color: Number(st.rh) >= 1.0 ? 'var(--warn-text)' : 'var(--r1-text)', marginTop: 2}}>{st.rh}</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-faint)'}}>C2 / C1 Ratio</div>
                                           </div>
                                           <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
-                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Annual Fundamental (C1)</div>
-                                            <div style={{fontSize: 13, fontWeight: 800, color: '#60a5fa', marginTop: 2}}>{st.c1} mm</div>
-                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>365-Day Cycle</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Annual Fundamental (C1)</div>
+                                            <div style={{fontSize: 20, fontWeight: 800, color: 'var(--accent-text)', marginTop: 2}}>{st.c1} mm</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-faint)'}}>365-Day Cycle</div>
                                           </div>
                                           <div style={{padding: '8px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8}}>
-                                            <div style={{fontSize: 8.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Semi-Annual Cycle (C2)</div>
-                                            <div style={{fontSize: 13, fontWeight: 800, color: '#f87171', marginTop: 2}}>{st.c2} mm</div>
-                                            <div style={{fontSize: 8, color: 'var(--text-faint)'}}>182.5-Day Cycle</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Semi-Annual Cycle (C2)</div>
+                                            <div style={{fontSize: 20, fontWeight: 800, color: 'var(--bad-text)', marginTop: 2}}>{st.c2} mm</div>
+                                            <div style={{fontSize: 13, color: 'var(--text-faint)'}}>182.5-Day Cycle</div>
                                           </div>
                                         </div>
 
                                         {/* Meteorological Rationale */}
-                                        <div style={{padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 9.5, lineHeight: 1.6, color: 'var(--text-secondary)'}}>
+                                        <div style={{padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 15, lineHeight: 1.6, color: 'var(--text-secondary)'}}>
                                           <div style={{fontWeight: 700, color: 'var(--accent-blue)', marginBottom: 4}}>
-                                            🔬 Meteorological Harmonic Interpretation:
+                                            Meteorological Harmonic Interpretation:
                                           </div>
                                           <div>
                                             {st.rationale}
                                           </div>
-                                          <div style={{marginTop: 6, fontSize: 9, color: 'var(--text-muted)'}}>
+                                          <div style={{marginTop: 6, fontSize: 14, color: 'var(--text-muted)'}}>
                                             <strong>Climatological Feature:</strong> {st.desc}
                                           </div>
                                         </div>
 
                                         {/* Footnote bar */}
-                                        <div style={{padding: '6px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 8.5, color: 'var(--text-faint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                                          <span>Req Coord: <strong style={{color: 'var(--text-secondary)'}}>{st.req}</strong> &rarr; Grid Point: <strong style={{color: '#60a5fa'}}>{st.grid} {st.idx}</strong></span>
+                                        <div style={{padding: '6px 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 13, color: 'var(--text-faint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                          <span>Req Coord: <strong style={{color: 'var(--text-secondary)'}}>{st.req}</strong> &rarr; Grid Point: <strong style={{color: 'var(--accent-text)'}}>{st.grid} {st.idx}</strong></span>
                                           <button
                                             type="button"
                                             onClick={() => toggleStation(st.id)}
-                                            style={{background: 'transparent', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: 9, fontWeight: 700}}
+                                            style={{background: 'transparent', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: 14, fontWeight: 700}}
                                           >
                                             ▲ Collapse Graph
                                           </button>
@@ -2614,12 +2641,12 @@ function AboutTab() {
 
 
       {/* SUB-TAB 4: RISK GAUGES & MODELS */}
-      {subTab === 'gauges' && (
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="w-full lg:w-[50%] min-w-0">
+      {section === 'performance' && (
+        <div className="flex flex-col 2xl:flex-row gap-6">
+          <div className="w-full 2xl:w-[50%] min-w-0">
             <S title="Operational Risk Gauge Definitions">
-              <GaugeDef name="Late Onset Risk" thresh="DOY 89 ~29 March" derivation="Domain-median of CHIRPS CAL t67_onset (67th percentile, 1993–2025)" justification="Onset later than the upper tercile boundary -- historically the top third of years. Signals delayed planting risk." strength="Statistically grounded, data-derived"/>
-              <GaugeDef name="Early Onset Risk" thresh="DOY 78 ~18 March" derivation="Domain-median of CHIRPS CAL t33_onset (33rd percentile, 1993–2025)" justification="Onset earlier than the lower tercile boundary -- historically the bottom third of years. Signals premature planting risk." strength="Statistically grounded, data-derived"/>
+              <GaugeDef name="Late Onset Risk" thresh="DOY 89 ~29 March" derivation="Domain-median of CHIRPS CAL t67_onset (67th percentile, CAL years)" justification="Onset later than the upper tercile boundary -- historically the top third of years. Signals delayed planting risk." strength="Statistically grounded, data-derived"/>
+              <GaugeDef name="Early Onset Risk" thresh="DOY 78 ~18 March" derivation="Domain-median of CHIRPS CAL t33_onset (33rd percentile, CAL years)" justification="Onset earlier than the lower tercile boundary -- historically the bottom third of years. Signals premature planting risk." strength="Statistically grounded, data-derived"/>
               <GaugeDef name="Very Short Season (LGP &lt; 35d)" thresh="35 days ~5th-10th pctile" derivation="~5th-10th percentile of CHIRPS CAL LGP distribution." justification="Near-complete season failure. Even 60-day sorghum cannot complete grain fill." strength="Agronomic consensus"/>
               <GaugeDef name="Short Season Risk (LGP &lt; 45d)" thresh="45 days ~25th-30th pctile" derivation="~25th-30th percentile of CHIRPS CAL LGP distribution." justification="Lower bound for short-season maize. Below 45 days unlikely to support maize production." strength="Agronomic literature"/>
               <GaugeDef name="Below-Normal Season (LGP &lt; 60d)" thresh="60 days ~50th pctile" derivation="~50th percentile -- a below-median season." justification="Minimum for medium-season maize (60-75 days). Beans and cowpea also at risk." strength="Agronomic literature"/>
@@ -2628,12 +2655,12 @@ function AboutTab() {
             </S>
           </div>
 
-          <div className="w-full lg:w-[50%] min-w-0">
-            <S title="C3S Multi-Model Ensemble -- 8 Seasonal Forecast Models">
+          <div className="w-full 2xl:w-[50%] min-w-0">
+            <S title="C3S multi-model ensemble (Long Rains): seven seasonal models">
               <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%',borderCollapse:'collapse',fontSize:9}}>
-                  <thead><tr style={{borderBottom:'1px solid var(--border-primary)'}}>{['Model','Centre','Members','Resolution','HR Onset'].map(h=>(<th key={h} style={{padding:'5px 8px',textAlign:'left',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',fontSize:8,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead>
-                  <tbody>{[['ECMWF SEAS5','ECMWF','25','1°','0.34'],['Meteo-France Sys8','Meteo-France','31','1°','0.33'],['CMCC-SPS4','CMCC','30','1°','0.33'],['ECCC CanSIPS','ECCC','20','2.5°','0.34'],['DWD GCFS2.1','DWD','30','1°','0.31'],['UKMO GloSea6','Met Office','2','0.8°','0.31'],['NCEP CFSv2','NCEP','4','1°','0.31'],['BOM ACCESS-S2','BOM','3','0.5°','0.31']].map(([n,c,m,r,h],i)=>(<tr key={n} style={{borderBottom:'1px solid var(--border-primary)',background:i%2===0?'transparent':'var(--bg-elevated)'}}><td style={{padding:'5px 8px',color:'var(--text-primary)',fontWeight:600}}>{n}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)'}}>{c}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)',textAlign:'center'}}>{m}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)',textAlign:'center'}}>{r}</td><td style={{padding:'5px 8px',color:'#34d399',fontWeight:700}}>{h}</td></tr>))}</tbody>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
+                  <thead><tr style={{borderBottom:'1px solid var(--border-primary)'}}>{['Model','Centre','Members','Onset hit rate'].map(h=>(<th key={h} style={{padding:'5px 8px',textAlign:'left',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',fontSize:13,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead>
+                  <tbody>{[['ECMWF SEAS5','ECMWF','25','0.43'],['UKMO GloSea6','Met Office','25','0.41'],['Meteo-France Sys8','Meteo-France','25','0.42'],['DWD GCFS2.1','DWD','25','0.39'],['CMCC-SPS4','CMCC','25','0.38'],['NCEP CFSv2','NCEP','24','0.37'],['ECCC CanSIPS','ECCC','20','0.36']].map(([n,c,m,h],i)=>(<tr key={n} style={{borderBottom:'1px solid var(--border-primary)',background:i%2===0?'transparent':'var(--bg-elevated)'}}><td style={{padding:'5px 8px',color:'var(--text-primary)',fontWeight:600}}>{n}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)'}}>{c}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)',textAlign:'center'}}>{m}</td><td style={{padding:'5px 8px',color:'var(--text-primary)',fontWeight:600}}>{h}</td></tr>))}</tbody>
                 </table>
               </div>
             </S>
@@ -2641,61 +2668,94 @@ function AboutTab() {
         </div>
       )}
 
+      {section === 'performance' && (
+        <div>
+              <S title="FAO Water Balance Validation">
+                <Tbl head={['Check','Result']} rows={[
+                  ['Hindcast agricultural onset vs observed (VAL 2017–2024)', '68% within ±7 days, 81% within ±14 (Oct 01); 79% / 89% with latest obs'],
+                  ['Hindcast agricultural cessation vs observed', '40% within ±7 days, 66% within ±14 (Oct 01)'],
+                  ['Hindcast agricultural LGP vs observed', 'r = 0.83, 74% within ±14 days (Oct 01)'],
+                  ['RPSS (VAL 2017–2024), agricultural definition', 'Onset +0.43, cessation +0.10, LGP +0.34 (Oct 01); +0.60, +0.15, +0.40 with latest obs'],
+                  ['Onsets in the GIEWS maize planting window (Oct–Nov)', 'FAO agricultural 66%, FAO rainfall 64%, Agri rule 1 70% (observed 1993–2025)'],
+                  ['Bucket PAW/TAW vs ERA5-Land 0–100 cm wetness', 'r = 0.73 (daily, Aug–Feb)'],
+                  ['Dekadal ETa vs WaPOR v3 AETI (Oct–Dec 2018–2025)', 'Bias 0.0 mm/day, r = 0.65'],
+                ]}/>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  Full tables: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>outputs/fao_wb/validation/validation_report.md</span> (python scripts/fao_validate.py).
+                </div>
+              </S>
+
+          <S title="Limitations">
+            <div className="about-prose">
+              <ul>
+                <li><strong>Skill varies.</strong> Forecast skill depends on location, season, model, method and forecast start. Check the Validation tab for the place and method you use.</li>
+                <li><strong>Median dates are summaries.</strong> The median of the members is not a deterministic event date; read it with the range and the probabilities.</li>
+                <li><strong>Daily rainfall estimates.</strong> CHIRPS blends satellite and gauge data; CHIRPS v3 daily values are split from 5-day totals, so single days are approximate. The 5–10 day windows the methods use are less affected.</li>
+                <li><strong>Season length is not crop suitability.</strong> Only the FAO water balance models a crop (maize by default), with soil properties from a pedotransfer function, a fixed 1 m root zone, no runoff by default and climatological ET0 in the forecast period.</li>
+                <li><strong>Adapted rules.</strong> Agri rules 1–3 are adapted from ICPAC’s operational definitions; they are not ICPAC’s own products.</li>
+                <li><strong>Latest observations lag.</strong> Preliminary CHIRPS runs several days behind real time, so “+ latest obs” uses observations up to that day.</li>
+                <li><strong>Regional scope.</strong> The four rainfall regimes apply to Ethiopia only.</li>
+              </ul>
+            </div>
+          </S>
+        </div>
+      )}
+
       {/* SUB-TAB 5: ARCHITECTURE, WORKFLOW & API */}
-      {subTab === 'architecture' && (
+      {section === 'technical' && (
         <div className="flex flex-col gap-6">
           {/* General Workflow & Scientific Architecture Details */}
-          <div className="flex flex-col lg:flex-row gap-6">
-            <div className="w-full lg:w-[50%] min-w-0 flex flex-col gap-4">
+          <div className="flex flex-col 2xl:flex-row gap-6">
+            <div className="w-full 2xl:w-[50%] min-w-0 flex flex-col gap-4">
               <S title="End-to-End General Workflow">
-                <div style={{background:'var(--bg-elevated)', padding:'12px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:9.5, lineHeight:1.6, color:'var(--text-secondary)', display:'flex', flexDirection:'column', gap:8}}>
+                <div style={{background:'var(--bg-elevated)', padding:'12px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:15, lineHeight:1.6, color:'var(--text-secondary)', display:'flex', flexDirection:'column', gap:8}}>
                   <div>
                     <strong style={{color:'var(--accent-blue)'}}>1. Daily Climatology Ingestion:</strong>
                     <div>33-year daily CHIRPS rainfall records (1993–2025) sampled at 0.25° resolution across Ethiopia (1,485 sovereign land pixels) and Kenya (842 pixels).</div>
                   </div>
                   <div>
-                    <strong style={{color:'#60a5fa'}}>2. Fourier Harmonic Decomposition (Dunning et al. 2016):</strong>
+                    <strong style={{color:'var(--accent-text)'}}>2. Fourier Harmonic Decomposition (Dunning et al. 2016):</strong>
                     <div>Calculates annual fundamental C_1 (365d) and semi-annual harmonic C_2 (182d). Evaluates harmonic ratio <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>r_H = C_2 / C_1</span> (cutoff = 1.0).</div>
                   </div>
                   <div>
-                    <strong style={{color:'#34d399'}}>3. Climatological Regime Partition (ETHIOPIA ONLY):</strong>
+                    <strong style={{color:'var(--ok-text)'}}>3. Climatological Regime Partition (ETHIOPIA ONLY):</strong>
                     <div>Combines harmonic ratio with EMI peak-timing criteria (April vs August vs October) to assign every grid cell to one of the 4 disjoint Ethiopian regimes (Regimes 0, 1, 2, 3).</div>
                   </div>
                   <div>
-                    <strong style={{color:'#fbbf24'}}>4. Dynamic Operational Domain Masking:</strong>
+                    <strong style={{color:'var(--warn-text)'}}>4. Dynamic Operational Domain Masking:</strong>
                     <div>Applies agro-climatic thresholds (P_season &ge; 80–120 mm, Seasonality Ratio &ge; 20%) to create active masks. Ensures metrics are never displayed outside climatologically valid zones.</div>
                   </div>
                   <div>
-                    <strong style={{color:'#f472b6'}}>5. Anomalous Accumulation Calculation &amp; Products:</strong>
+                    <strong style={{color:'var(--pink-text)'}}>5. Anomalous Accumulation Calculation &amp; Products:</strong>
                     <div>Evaluates Dunning cumulative anomaly curve A(D) for individual years and ensemble hindcasts. Detects onset, cessation, and LGP. Outputs web rasters and GIS Shapefiles.</div>
                   </div>
                   <div>
-                    <strong style={{color:'#a78bfa'}}>6. Agricultural Rules &amp; FAO Water Balance (Kenya Short Rains):</strong>
+                    <strong style={{color:'var(--violet-text)'}}>6. Agricultural Rules &amp; FAO Water Balance (Kenya Short Rains):</strong>
                     <div>The same observed record and bias-corrected SEAS5 members also run Agri rules 1–3 (rain thresholds, dry-spell checks, Hargreaves PET) and the FAO-56 soil-water balance (CHIRPS v3, ERA5-Land ET0, SoilGrids). Each gives its own onset, cessation, LGP, tercile probabilities and skill. See <em>Onset, Cessation &amp; LGP Methods</em>.</div>
                   </div>
                 </div>
               </S>
 
-              <S title="Removal of 'All Ethiopia' Unmasked View">
-                <div style={{background:'rgba(239, 68, 68, 0.08)', padding:'10px 14px', borderRadius:8, border:'1px solid rgba(239, 68, 68, 0.3)', fontSize:9.5, lineHeight:1.6, color:'var(--text-secondary)'}}>
-                  <strong style={{color:'#f87171'}}>Scientific Rationale for Enforced Masking:</strong>
+              <S title="Why there is no unmasked Ethiopia view">
+                <div style={{background:'var(--info-bg)', padding:'14px 18px', borderRadius:10, border:'1px solid var(--info-border)', borderLeft:'4px solid var(--accent-blue)', fontSize:15, lineHeight:1.6, color:'var(--text-secondary)'}}>
+                  <strong style={{color:'var(--heading)'}}>Why every map is masked:</strong>
                   <div style={{marginTop:4}}>
-                    In previous prototypes, users could toggle an &quot;All Ethiopia&quot; unmasked raster view. However, peer review confirmed that running onset/cessation algorithms across regions where the season does not physically occur generates spurious artifacts:
+                    In previous prototypes, users could toggle an &quot;All Ethiopia&quot; unmasked raster view. However, testing showed that running onset/cessation algorithms across regions where the season does not physically occur generates spurious artifacts:
                   </div>
                   <ul style={{marginTop:4, paddingLeft:14, listStyleType:'disc'}}>
                     <li>Calculating <em>Belg</em> onset in Western Ethiopia detects the start of a prolonged 8-month season, not a discrete Belg agricultural window.</li>
                     <li>Calculating <em>Kiremt</em> in southern/southeastern pastoral lowlands searches for monsoon rain during their coldest, driest months, returning random noise.</li>
                   </ul>
                   <div style={{marginTop:4, fontWeight:600, color:'var(--text-primary)'}}>
-                    Therefore, the unmasked option was permanently eradicated from the dashboard. The system strictly and permanently restricts spatial rendering to validated climatological footprints.
+                    The unmasked option was therefore removed. Maps are shown only inside the climatological domain of each season.
                   </div>
                 </div>
               </S>
             </div>
 
-            <div className="w-full lg:w-[50%] min-w-0 flex flex-col gap-4">
+            <div className="w-full 2xl:w-[50%] min-w-0 flex flex-col gap-4">
               <S title="Technical Stack & Architecture">
-                <KV label="Frontend Engine" value="React 18 + Vite + Tailwind CSS + MapLibre GL JS"/>
+                <KV label="Frontend Engine" value="React 18 + Vite + Tailwind CSS + MapLibre GL JS; Inter (text) and IBM Plex Mono (formulas)"/>
                 <KV label="Data Visualization" value="Recharts custom SVG plume charts + Taylor diagrams"/>
                 <KV label="Backend Engine" value="FastAPI + Uvicorn + NumPy + Xarray + SciPy"/>
                 <KV label="Raster Delivery" value="Pre-computed GeoJSON Grid + Cached demo_data.npz (73.2 MB)"/>
@@ -2719,9 +2779,9 @@ function AboutTab() {
               </S>
 
               <S title="Recommended Citation">
-                <div style={{background:'var(--bg-elevated)', padding:'8px 12px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:9, lineHeight:1.5, color:'var(--text-secondary)'}}>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'#60a5fa'}}>
-                    Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v3.1.0). ILRI / ICPAC.
+                <div style={{background:'var(--bg-elevated)', padding:'8px 12px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:14, lineHeight:1.5, color:'var(--text-secondary)'}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>
+                    Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v{version}). ILRI / ICPAC.
                   </div>
                 </div>
               </S>
@@ -2729,19 +2789,22 @@ function AboutTab() {
           </div>
         </div>
       )}
+       </article>
+      </div>
+     </div>
     </div>
   )
 }
 
 // --- TABS + TopNav ------------------------------------------------------------
 const TABS = [
-  {id:'forecast',      label:'Forecasting',   icon:'📊'},
-  {id:'probabilistic', label:'Probabilistic', icon:'🎲'},
-  {id:'multimodel',    label:'Multi-Model',   icon:'🌐'},
-  {id:'validation',    label:'Validation',    icon:'🛡️'},
-  {id:'historical',    label:'Historical',    icon:'⏳'},
-  {id:'tracker',       label:'Short Rains Tracker', icon:'🛰️'},
-  {id:'about',         label:'About',         icon:'ℹ️'},
+  {id:'forecast',      label:'Forecasting',   icon:BarChart3},
+  {id:'probabilistic', label:'Probabilistic', icon:Percent},
+  {id:'multimodel',    label:'Multi-Model',   icon:Layers},
+  {id:'validation',    label:'Validation',    icon:ShieldCheck},
+  {id:'historical',    label:'Historical',    icon:HistoryIcon},
+  {id:'tracker',       label:'Short Rains Tracker', icon:Satellite},
+  {id:'about',         label:'About',         icon:Info},
 ]
 // Tabs that take the full width (no map panel beside them)
 const FULL_PAGE_TABS = ['about', 'tracker']
@@ -2784,7 +2847,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
           <div className="flex items-center gap-1.5">
             <div className={'w-1.5 h-1.5 rounded-full '+(health?.status==='ok'?'bg-emerald-400':'bg-red-400')}/>
             <span className="text-[9px] sm:text-[10px] hidden md:inline" style={{color:health?.status==='ok'?'var(--header-muted)':'#f87171'}}>
-              {health?.status==='ok' ? (isSingleModelSeason ? '1 model live' : health.models_loaded+' models live') : healthError ? 'offline' : 'connecting...'}
+              {health?.status==='ok' ? (isSingleModelSeason ? 'ECMWF SEAS5 online' : modelNames.length+' models online') : healthError ? 'offline' : 'connecting...'}
             </span>
           </div>
 
@@ -2847,7 +2910,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                   }
                   const methodLabel = d => {
                     const group = d.group ? avail.filter(x => x.group === d.group) : [d]
-                    return group.some(here) ? d.label : `${d.label} (${[...new Set(group.flatMap(runsWith))].map(i => i.initLabel).join(', ')})`
+                    return group.some(here) ? d.label : `${d.label} (${runsWith(group[0])[0]?.initLabel} runs)`
                   }
                   return avail.length > 1 ? (
                     <>
@@ -2888,20 +2951,11 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-semibold tracking-wide transition-all whitespace-nowrap shrink-0 ${
-                isActive
-                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
-              }`}
-              style={{
-                fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-              }}
+              className="nav-tab"
+              aria-current={isActive ? 'page' : undefined}
             >
-              <span className="text-xs sm:text-sm shrink-0">{t.icon}</span>
+              <t.icon size={16} aria-hidden="true" />
               <span>{t.label}</span>
-              {isActive && (
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse hidden sm:inline-block ml-0.5" />
-              )}
             </button>
           )
         })}
@@ -3038,13 +3092,13 @@ export default function App() {
     return (
       <LandingPage
         darkMode={darkMode} setDarkMode={setDarkMode} health={health}
-        onEnter={(tab)=>{ setActiveTab(tab); setShowLanding(false) }}
+        onEnter={(tab)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setActiveTab(tab); setShowLanding(false) }}
       />
     )
   }
 
   return (
-    <div className="flex flex-col min-h-screen lg:h-screen lg:overflow-hidden" style={{background:'var(--bg-base)',fontFamily:"'IBM Plex Mono','Fira Code',monospace"}}>
+    <div className="flex flex-col min-h-screen lg:h-screen lg:overflow-hidden" style={{background:'var(--bg-base)'}}>
       <TopNav activeTab={activeTab} setActiveTab={setActiveTab} onLogoClick={()=>setShowLanding(true)}
               health={health} healthLoading={healthLoading} healthError={healthError} modelsData={modelsData}
               country={country} setCountry={setCountry}

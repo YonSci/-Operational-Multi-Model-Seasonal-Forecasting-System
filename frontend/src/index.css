@@ -34,17 +34,39 @@
   --select-bg:      #0d1117;
 
   --map-style:      dark-v11;
+
+  /* Site typography and reading surfaces (landing, About) */
+  --heading:        #f1f5f9;
+  --text-body:      #cbd5e1;
+  --text-meta:      #94a3b8;
+  --accent-text:    #7db4e6;
+  --btn-primary:    #1a5fa8;
+  --btn-primary-hover: #2569b5;
+  --nav-active-bg:  rgba(74, 143, 196, 0.16);
+  --info-bg:        rgba(74, 143, 196, 0.14);
+  --info-border:    rgba(74, 143, 196, 0.45);
+  --caution-bg:     rgba(234, 179, 8, 0.14);
+  --caution-text:   #fde68a;
+  --focus:          #7db4e6;
+  /* Coloured text that stays readable in each theme (regimes, states) */
+  --r1-text:        #38bdf8;
+  --r2-text:        #4ade80;
+  --ok-text:        #34d399;
+  --warn-text:      #fbbf24;
+  --bad-text:       #fca5a5;
+  --violet-text:    #a78bfa;
+  --pink-text:      #f472b6;
 }
 
 /* ── LIGHT THEME ─────────────────────────────────────────────────────────── */
 html.light {
-  --bg-base:        #f0f4f8;
+  --bg-base:        #f5f8fc;
   --bg-surface:     #ffffff;
   --bg-elevated:    #f8fafc;
   --bg-sunken:      #e8edf3;
   --bg-header:      #ffffff;
 
-  --border-primary:   #cbd5e1;
+  --border-primary:   #d8e1eb;
   --border-secondary: #94a3b8;
 
   --text-primary:   #0f172a;
@@ -63,6 +85,26 @@ html.light {
 
   --gauge-track:    #e2e8f0;
   --select-bg:      #ffffff;
+
+  --heading:        #102a43;
+  --text-body:      #334155;
+  --text-meta:      #52637a;
+  --accent-text:    #1a5fa8;
+  --btn-primary:    #1a5fa8;
+  --btn-primary-hover: #154d89;
+  --nav-active-bg:  #ffffff;
+  --info-bg:        #eaf2fb;
+  --info-border:    #b9d3ee;
+  --caution-bg:     #fef9c3;
+  --caution-text:   #854d0e;
+  --focus:          #1a5fa8;
+  --r1-text:        #0369a1;
+  --r2-text:        #15803d;
+  --ok-text:        #0f766e;
+  --warn-text:      #92400e;
+  --bad-text:       #b42318;
+  --violet-text:    #5b21b6;
+  --pink-text:      #9d174d;
 }
 
 @layer base {
@@ -114,11 +156,17 @@ html.light {
   body {
     background: var(--bg-base);
     color: var(--text-primary);
-    font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
   }
   * { box-sizing: border-box; }
+  code, kbd, samp, pre { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  :where(button, a, select, input, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
 
 /* ── Utility classes using theme vars ────────────────────────────────────── */
@@ -176,6 +224,18 @@ html.light {
     outline: none;
   }
   .t-select:focus { border-color: var(--accent-blue); }
+
+  /* Dashboard tab bar */
+  .nav-tab {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid transparent;
+    font-size: 14px; font-weight: 500; color: var(--text-secondary); background: transparent;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .nav-tab:hover { color: var(--text-primary); background: var(--bg-elevated); }
+  .nav-tab[aria-current="page"] {
+    color: var(--accent-text); background: var(--nav-active-bg); border-color: var(--accent-blue); font-weight: 600;
+  }
 
   /* Hide scrollbar utility */
   .no-scrollbar::-webkit-scrollbar {
