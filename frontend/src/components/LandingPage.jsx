@@ -1,234 +1,153 @@
 import {
-  CloudRain, Percent, Layers, CheckCircle2, History as HistoryIcon,
-  ArrowRight, Sun, Moon, Sprout, MapPin, BookOpen, Satellite
+  CalendarRange, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite,
+  ArrowRight, Sun, Moon, BookOpen
 } from 'lucide-react'
+import { version } from '../../package.json'
 
 const FEATURES = [
-  {
-    id: 'forecast', icon: CloudRain, title: 'Forecasting',
-    desc: 'Onset, cessation and season-length outlooks for the chosen method: rainfall plume, the A(D) plume (Dunning), the dates of every member (Agri rules, FAO) and the soil-water outlook (FAO).'
-  },
-  {
-    id: 'probabilistic', icon: Percent, title: 'Probabilistic',
-    desc: 'Tercile probabilities (below / near / above normal) and failure risk drawn from the full ensemble spread.'
-  },
-  {
-    id: 'multimodel', icon: Layers, title: 'Multi-Model',
-    desc: 'Skill-weighted ensemble blending 8 C3S seasonal models by hit-rate or RPSS.'
-  },
-  {
-    id: 'validation', icon: CheckCircle2, title: 'Validation',
-    desc: 'Hindcast hit-rate and RPSS skill scores benchmarked against 36 years of CHIRPS observations.'
-  },
-  {
-    id: 'historical', icon: HistoryIcon, title: 'Historical',
-    desc: 'Observed CHIRPS onset, cessation and season-length time series with long-term trend.'
-  },
-  {
-    id: 'tracker', icon: Satellite, title: 'Short Rains Tracker',
-    desc: 'Satellite rainfall day by day, 10-16 day forecasts from six weather models and the season outlook at the monitored sites, updated daily.'
-  },
+  { id: 'forecast', icon: CalendarRange, title: 'Seasonal timing',
+    desc: 'When the rains may start and end, and how long the season may last, for the method you choose.' },
+  { id: 'probabilistic', icon: Percent, title: 'Forecast probabilities',
+    desc: 'The chance of an early, normal or late onset, and of a short or long season.' },
+  { id: 'multimodel', icon: Layers, title: 'Compare models',
+    desc: 'Long Rains outlooks from seven C3S seasonal models, combined according to their past skill.' },
+  { id: 'validation', icon: ShieldCheck, title: 'Forecast performance',
+    desc: 'How closely past forecasts matched the observed seasons, location by location.' },
+  { id: 'historical', icon: HistoryIcon, title: 'Historical rainfall',
+    desc: 'Observed onset, cessation and season length in past years, with the long-term trend.' },
+  { id: 'tracker', icon: Satellite, title: 'Short Rains Tracker',
+    desc: 'Satellite rainfall and 10–16 day weather forecasts at monitored sites, updated every day.' },
 ]
 
 // Onset / cessation methods offered for the Kenya Short Rains (Method selector in the dashboard)
 const METHODS = [
-  { name: 'Dunning', tag: 'Cumulative anomaly',
-    rule: 'Onset and cessation are the turning points of the accumulated rainfall anomaly, A(D), over 1 Sep - 31 Dec (Dunning et al. 2016).',
-    data: 'CHIRPS v2 · ECMWF SEAS5', chart: 'C(d) / A(D) plume' },
-  { name: 'Agri rule 1', tag: 'Agricultural (ICPAC)',
-    rule: 'Onset: a wet day starting more than 20 mm in 3 days, with no 7-day dry spell in the next 21. Cessation: after a 10-day rain deficit (< 0.5 PET), the day a 100 mm soil store runs dry.',
-    data: 'CHIRPS v2 · SEAS5 · Hargreaves PET', chart: 'Member onset and cessation dates' },
-  { name: 'Agri rule 2', tag: 'Agricultural (ICPAC)',
-    rule: 'Onset: at least 20 mm in 5 days with 3 or more rainy days, no dry spell longer than 7 days in the next 21. Cessation as rule 1.',
-    data: 'CHIRPS v2 · SEAS5 · Hargreaves PET', chart: 'Member onset and cessation dates' },
-  { name: 'Agri rule 3', tag: 'Agricultural (ICPAC)',
-    rule: 'Onset: more than 20 mm in 3 days, no dry spell longer than 10 days in the next 30. Cessation: the first 10-day period with rain below half the PET.',
-    data: 'CHIRPS v2 · SEAS5 · Hargreaves PET', chart: 'Member onset and cessation dates' },
-  { name: 'FAO water balance', tag: 'Soil water and crop need · new',
-    rule: 'Agricultural onset when rain meets half the atmospheric demand (FAO-56 ET0) and plant-available water holds at 20% or more of the root zone; agricultural cessation when soil water, crop water use and rain all fall short. Rainfall and crop-water definitions alongside, each with its own season length.',
-    data: 'CHIRPS v3 · ERA5-Land · SoilGrids · SEAS5', chart: 'Member dates · soil-water outlook · timing chances' },
+  { name: 'Dunning', tag: 'Rainfall pattern',
+    rule: 'Onset and cessation are the turning points of the accumulated rainfall anomaly over 1 Sep – 31 Dec (Dunning et al. 2016).',
+    data: 'CHIRPS v2 · ECMWF SEAS5' },
+  { name: 'Agri rules 1–3', tag: 'First planting rains',
+    rule: 'Onset is the first rain heavy enough to plant on (20 mm in 3 or 5 days) with no long dry spell after it; cessation comes when rain falls short of evaporation demand. Adapted from ICPAC definitions.',
+    data: 'CHIRPS v2 · ECMWF SEAS5 · Hargreaves PET' },
+  { name: 'FAO water balance', tag: 'Soil water for the crop',
+    rule: 'Onset when rain meets half the evaporation demand and the root zone holds enough water for maize; cessation when soil water, crop water use and rain all fall short.',
+    data: 'CHIRPS v3 · ERA5-Land · SoilGrids · ECMWF SEAS5' },
 ]
 
-const STATS = [
-  { label: 'Seasonal Models', value: '8' },
-  { label: 'Onset Methods', value: '5' },
-  { label: 'Countries', value: '2' },
-  { label: 'Calibration Years', value: '36' },
-  { label: 'Grid Resolution', value: '0.25 deg' },
+const FACTS = [
+  { value: '7', label: 'C3S seasonal models' },
+  { value: '5', label: 'onset methods for the Kenya Short Rains' },
+  { value: '7', label: 'rainy seasons covered' },
+  { value: '2', label: 'countries: Kenya and Ethiopia' },
+  { value: '0.25°', label: 'analysis grid (about 28 km)' },
+  { value: 'Daily', label: 'Short Rains updates' },
 ]
 
 export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) {
-  const modelsLive = health?.status === 'ok' ? health.models_loaded : null
+  const online = health?.status === 'ok' ? health.models_loaded : null
 
   return (
-    <div className="relative w-full min-h-screen overflow-x-hidden overflow-y-auto touch-scroll"
-         style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'IBM Plex Mono','Fira Code',monospace" }}>
-
-      {/* Ambient background accents */}
-      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-        <div style={{
-          position: 'absolute', top: '-12%', left: '-8%', width: 520, height: 520, borderRadius: '50%',
-          background: 'var(--accent-blue)', opacity: 0.14, filter: 'blur(120px)'
-        }} />
-        <div style={{
-          position: 'absolute', bottom: '-16%', right: '-10%', width: 600, height: 600, borderRadius: '50%',
-          background: 'var(--accent-blue-dk)', opacity: 0.16, filter: 'blur(140px)'
-        }} />
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: 'linear-gradient(var(--border-primary) 1px, transparent 1px), linear-gradient(90deg, var(--border-primary) 1px, transparent 1px)',
-          backgroundSize: '42px 42px', opacity: 0.35
-        }} />
-      </div>
-
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-
-        {/* Top bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-8 sm:py-5">
-          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-            <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--accent-blue)' }}>ILRI Climate Services</span>
-            <span style={{ fontSize: 9, letterSpacing: '0.1em', marginTop: 3, color: 'var(--header-muted)' }}>in collaboration with ICPAC</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {modelsLive != null && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--header-muted)' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} />
-                {modelsLive} models live
-              </div>
-            )}
-            <button onClick={() => setDarkMode(d => !d)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, fontSize: 10, fontWeight: 600, cursor: 'pointer',
-                background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', color: 'var(--accent-blue)'
-              }}>
-              {darkMode ? <Sun size={12} /> : <Moon size={12} />}
-              {darkMode ? 'Light mode' : 'Dark mode'}
-            </button>
-          </div>
+    <div className="site relative w-full min-h-screen overflow-x-hidden overflow-y-auto touch-scroll">
+      <header className="site-container site-topbar">
+        <div className="site-brand">
+          <span className="site-brand-name">Seasonal Climate Forecast Dashboard</span>
+          <span className="site-brand-sub">ILRI Climate Services, in collaboration with ICPAC</span>
         </div>
+        <div className="site-topbar-actions">
+          {online != null && (
+            <span className="site-status" title="Forecast configurations the server has loaded: models, seasons, start dates and methods">
+              <span className="site-status-dot" aria-hidden="true" />{online} forecast configurations online
+            </span>
+          )}
+          <button type="button" className="site-btn site-btn-quiet" onClick={() => setDarkMode(d => !d)}>
+            {darkMode ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            {darkMode ? 'Light mode' : 'Dark mode'}
+          </button>
+        </div>
+      </header>
 
-        {/* Hero */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '30px 16px sm:40px 20px' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, marginBottom: 22,
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)'
-          }}>
-            <Sprout size={13} color="var(--accent-blue)" />
-            Kenya &amp; Ethiopia  |  Seasonal Climate Forecasting
+      <main>
+        <section className="site-hero">
+          <div className="site-hero-grid" aria-hidden="true" />
+          <div className="site-container">
+            <div className="site-hero-inner">
+              <p className="site-eyebrow">Kenya &amp; Ethiopia · Seasonal climate outlooks</p>
+              <h1>Understand the timing of the rainy season</h1>
+              <p className="site-hero-lede">
+                Explore when rains may start and end, how long the season may last, and the uncertainty around these estimates.
+              </p>
+              <div className="site-hero-actions">
+                <button type="button" className="site-btn site-btn-primary" onClick={() => onEnter('forecast')}>
+                  Explore forecasts <ArrowRight size={18} aria-hidden="true" />
+                </button>
+                <button type="button" className="site-btn site-btn-secondary" onClick={() => onEnter('about')}>
+                  <BookOpen size={18} aria-hidden="true" /> How the forecasts work
+                </button>
+              </div>
+              <p className="site-hero-note">
+                Forecast dates describe possible outcomes. Use them alongside current rainfall observations and weather updates.
+              </p>
+            </div>
           </div>
+        </section>
 
-          <h1 style={{ fontSize: 'clamp(24px, 5vw, 50px)', fontWeight: 800, letterSpacing: '-0.02em', margin: 0, maxWidth: 880, lineHeight: 1.18 }}>
-            Onset, Cessation &amp; Season-Length<br />
-            <span style={{ color: 'var(--accent-blue)' }}>Seasonal Climate Forecast Dashboard</span>
-          </h1>
-
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 660, marginTop: 18, lineHeight: 1.7, padding: '0 8px' }}>
-            Operational seasonal climate forecasting for Kenya and Ethiopia -- multi-model C3S ensemble and single-model operational runs, calibrated against CHIRPS observations to deliver onset, cessation, and season-length outlooks. For the Kenya Short Rains, five onset methods: Dunning, Agri rules 1-3 and the FAO water balance.
-          </p>
-
-          <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: 440 }}>
-            <button onClick={() => onEnter('forecast')}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 22px', borderRadius: 10, fontSize: 12, fontWeight: 700,
-                letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer', border: 'none',
-                background: 'var(--accent-blue)', color: '#fff', flex: '1 1 180px'
-              }}>
-              Enter Dashboard <ArrowRight size={14} />
-            </button>
-            <button onClick={() => onEnter('about')}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 22px', borderRadius: 10, fontSize: 12, fontWeight: 700,
-                letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--border-primary)', color: 'var(--text-secondary)', flex: '1 1 180px'
-              }}>
-              <BookOpen size={14} /> Methodology
-            </button>
-          </div>
-
-          {/* Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 36, width: '100%', maxWidth: 640 }}>
-            {STATS.map(s => (
-              <div key={s.label} style={{
-                padding: '12px 14px', borderRadius: 10,
-                background: 'var(--bg-surface)', border: '1px solid var(--border-primary)'
-              }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-blue)' }}>{s.value}</div>
-                <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginTop: 4 }}>{s.label}</div>
+        <div className="site-container">
+          <div className="site-facts">
+            {FACTS.map(f => (
+              <div key={f.label} className="site-fact">
+                <div className="site-fact-value">{f.value}</div>
+                <div className="site-fact-label">{f.label}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Feature grid - Five Dashboards text removed */}
-        <div style={{ padding: '8px 16px 40px', maxWidth: 1180, margin: '0 auto', width: '100%' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        <section className="site-section site-container" aria-labelledby="explore-heading">
+          <div className="site-section-head">
+            <h2 id="explore-heading">What you can explore</h2>
+            <p className="site-section-intro">Each view opens the dashboard on that topic. You can switch between them at any time.</p>
+          </div>
+          <div className="site-grid-3">
             {FEATURES.map(f => {
               const Icon = f.icon
               return (
-                <button key={f.id} onClick={() => onEnter(f.id)}
-                  style={{
-                    textAlign: 'left', cursor: 'pointer', padding: '16px', borderRadius: 12,
-                    background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', color: 'inherit',
-                    display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-blue)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)' }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'var(--bg-elevated)'
-                  }}>
-                    <Icon size={16} color="var(--accent-blue)" />
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{f.title}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{f.desc}</div>
+                <button key={f.id} type="button" className="site-card" onClick={() => onEnter(f.id)}>
+                  <span className="site-card-icon"><Icon size={20} aria-hidden="true" /></span>
+                  <h3>{f.title}</h3>
+                  <p>{f.desc}</p>
+                  <span className="site-card-link">Open <ArrowRight size={15} aria-hidden="true" /></span>
                 </button>
               )
             })}
           </div>
-        </div>
+        </section>
 
-        {/* Onset and cessation methods */}
-        <div style={{ padding: '8px 16px 40px', maxWidth: 1180, margin: '0 auto', width: '100%' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
-            Onset and cessation methods (Kenya Short Rains)
+        <section className="site-section site-container" aria-labelledby="methods-heading">
+          <div className="site-section-head">
+            <h2 id="methods-heading">How the start and end of the season are defined</h2>
+            <p className="site-section-intro">
+              For the Kenya Short Rains you can choose the definition with the Method selector; the maps, probabilities, skill and bulletin follow it.
+              The definitions answer different questions, so their dates can differ.
+            </p>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.6 }}>
-            Pick one with the Method selector in the dashboard; maps, probabilities, skill, charts and the bulletin follow it. Agri rules 1-3 are adapted from the ICPAC operational definitions.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-            {METHODS.map(mt => (
-              <div key={mt.name} style={{
-                padding: '14px 16px', borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--border-primary)',
-                display: 'flex', flexDirection: 'column', gap: 8
-              }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{mt.name}</div>
-                  <div style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent-blue)', marginTop: 3 }}>{mt.tag}</div>
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, flex: 1 }}>{mt.rule}</div>
-                <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  <div><b>Data:</b> {mt.data}</div>
-                  <div><b>Chart:</b> {mt.chart}</div>
-                </div>
+          <div className="site-grid-3">
+            {METHODS.map(m => (
+              <div key={m.name} className="site-card">
+                <span className="site-card-tag">{m.tag}</span>
+                <h3>{m.name}</h3>
+                <p>{m.rule}</p>
+                <span className="site-card-meta">Data: {m.data}</span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+      </main>
 
-        {/* Footer */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left px-4 py-3 sm:px-8 sm:py-4"
-          style={{
-            borderTop: '1px solid var(--border-primary)', fontSize: 9, color: 'var(--text-faint)'
-          }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <MapPin size={11} /> Kenya &amp; Ethiopia -- 0.25 deg CHIRPS-native grid
-          </div>
-          <div>
-            Project Lead: Dr. Teferi Demissie (ILRI)  |  Technical Lead: Yonas Mersha (ILRI)
-          </div>
-          <div>Seasonal Climate Forecast Dashboard  v3.0.0</div>
+      <footer className="site-footer">
+        <div className="site-container site-footer-inner">
+          <span>Kenya &amp; Ethiopia · 0.25° analysis grid</span>
+          <span>Project lead: Dr. Teferi Demissie (ILRI) · Technical lead: Yonas Mersha (ILRI)</span>
+          <span>Seasonal Climate Forecast Dashboard v{version}</span>
         </div>
-      </div>
+      </footer>
     </div>
   )
 }

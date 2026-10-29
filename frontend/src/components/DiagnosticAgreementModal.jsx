@@ -197,7 +197,7 @@ export default function DiagnosticAgreementModal({ isOpen, onClose, onSelectSite
                 border: '1px solid var(--border-primary)'
               }}>
                 <img
-                  src="/figures/station_validation_profiles.png"
+                  src={import.meta.env.BASE_URL + 'figures/station_validation_profiles.png'}
                   alt="Diagnostic Consistency of Ethiopian Rainfall Regimes (20 Representative Sites)"
                   style={{
                     width: '100%', maxHeight: '60vh', objectFit: 'contain',
@@ -208,7 +208,7 @@ export default function DiagnosticAgreementModal({ isOpen, onClose, onSelectSite
               <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', fontSize: 10, color: 'var(--text-muted)'}}>
                 <span>Plot components: Bars = Monthly CHIRPS (1993–2025); Blue dash = 1st harmonic (annual); Red dot = 2nd harmonic (semi-annual); Black curve = Fitted regime harmonic.</span>
                 <a
-                  href="/figures/station_validation_profiles.png"
+                  href={import.meta.env.BASE_URL + 'figures/station_validation_profiles.png'}
                   target="_blank"
                   rel="noreferrer"
                   style={{color: 'var(--accent-blue)', fontWeight: 700, textDecoration: 'none'}}
