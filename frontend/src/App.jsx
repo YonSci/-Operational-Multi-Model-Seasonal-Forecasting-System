@@ -1994,7 +1994,7 @@ function AboutTab() {
               ['ECMWF SEAS5 and C3S seasonal models', 'Seasonal forecasts and hindcasts (25 members for SEAS5)', 'Regridded to 0.25°', 'SEAS5 hindcasts from 1981 (Long Rains) or 1993; other C3S models from 1993'],
               ['ERA5-Land', 'FAO-56 reference evapotranspiration (ET0) and starting soil moisture', '0.1°, averaged to 0.25°', '1993 on'],
               ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
-              ['Satellite rainfall and 10–16 day forecasts', 'Short Rains Tracker at monitored sites', 'Site', 'Current season'],
+              ['Satellite rainfall and 10–15 day forecasts', 'Short Rains Tracker at monitored sites', 'Site', 'Current season'],
             ]}/>
           </S>
           <S title="Reference periods and updates">
