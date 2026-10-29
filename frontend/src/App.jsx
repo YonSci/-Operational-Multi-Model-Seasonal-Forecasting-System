@@ -1822,6 +1822,7 @@ function AboutTab() {
   const [subTab, setSubTab] = useState('blueprint')
 
   const S = ({title,children})=>(<div style={{marginBottom:22}}><div style={{fontSize:11,fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--accent-blue)',marginBottom:10,paddingBottom:5,borderBottom:'1px solid var(--border-primary)'}}>{title}</div>{children}</div>)
+  const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:9}}><thead><tr style={{borderBottom:'1px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} style={{padding:'5px 8px',textAlign:'left',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',fontSize:8,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)',background:i%2===0?'transparent':'var(--bg-elevated)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'5px 8px',color:j===0?'var(--text-primary)':'var(--text-secondary)',fontWeight:j===0?600:400,lineHeight:1.5,verticalAlign:'top',whiteSpace:j===0?'nowrap':'normal'}}>{c}</td>))}</tr>))}</tbody></table></div>)
   const KV = ({label,value,mono=false,wide=false})=>(<div style={{display:'flex',gap:8,marginBottom:6,alignItems:'flex-start'}}><span style={{fontSize:9,color:'var(--text-muted)',minWidth:wide?220:170,flexShrink:0,textTransform:'uppercase',letterSpacing:'0.07em',paddingTop:1}}>{label}</span><span style={{fontSize:10,color:'var(--text-primary)',lineHeight:1.5,fontFamily:mono?"'IBM Plex Mono',monospace":'inherit'}}>{value}</span></div>)
   const Step = ({n,title,eq,desc,table})=>(
     <div style={{display:'flex',gap:10,marginBottom:14,alignItems:'flex-start'}}>
@@ -1882,8 +1883,9 @@ function AboutTab() {
 
   const SUB_TABS = [
     { id: 'blueprint',    label: '🏛️ Scientific Blueprint & Regimes' },
+    { id: 'methods',      label: '🌱 Onset, Cessation & LGP Methods' },
     { id: 'maps',         label: '🗺️ Regimes & Seasonal Maps (Images & GIS)' },
-    { id: 'algorithm',    label: '⚙️ Detection Algorithm (8 Steps)' },
+    { id: 'algorithm',    label: '⚙️ Dunning Algorithm (8 Steps)' },
     { id: 'stations',     label: '📍 20-Site Diagnostic Agreement' },
     { id: 'gauges',       label: '🛡️ Risk Gauges & Models' },
     { id: 'architecture', label: '💻 System Architecture & General Workflow' },
@@ -1905,7 +1907,7 @@ function AboutTab() {
           Scientific &amp; Operational Rainfall Regime Classification &amp; Seasonal Onset/Cessation System
         </div>
         <div style={{fontSize: 11, color: 'var(--accent-blue)', fontWeight: 600}}>
-          Dunning Harmonic Baseline with Ethiopia-Specific Climatological Regime Refinement (EMI Climatology)
+          Dunning Harmonic Baseline with Ethiopia-Specific Climatological Regime Refinement (EMI Climatology) · Five Onset Methods for the Kenya Short Rains
         </div>
         <div style={{fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.5}}>
           An objective, peer-reviewed meteorological framework unifying Fourier harmonic analysis (Dunning et al. 2016), local peak-timing physics, and Ethiopian Meteorological Institute (EMI) regional rainfall climatology across Kenya and Ethiopia.
@@ -1966,6 +1968,7 @@ function AboutTab() {
               <KV label="System" value="Operational Seasonal Climate Forecast Dashboard (Onset, Cessation & LGP)"/>
               <KV label="Version" value="v3.1.0 Operational (Peer-Reviewed Methodology)" mono/>
               <KV label="Methodology" value="Dunning Harmonic Baseline with Ethiopia-Specific Climatological Regime Refinement"/>
+              <KV label="Onset Methods (Kenya OND)" value="Dunning cumulative anomaly · Agri rules 1–3 (adapted from ICPAC) · FAO water balance (FAO-56; agricultural, rainfall and crop-water definitions)"/>
               <KV label="Developers" value="ILRI Climate Services in collaboration with ICPAC, EMI, and KMD"/>
               <KV label="Reference Normal" value="WMO Standard Normal (1991–2020) for climatological reference" mono/>
               <KV label="Calibration Window" value="1993–2025 (33-year CHIRPS & ECMWF SEAS5 paired hindcast window)" mono/>
@@ -2066,6 +2069,96 @@ function AboutTab() {
                 <div style={{marginTop:4}}>Belg (416 px), Gu/Ganna (578 px), and Deyr/Hagaya (578 px) 100% satisfy their core agro-climatic secondary thresholds.</div>
               </div>
             </S>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB: ONSET, CESSATION & LGP METHODS (Kenya Short Rains) */}
+      {subTab === 'methods' && (
+        <div className="flex flex-col gap-4">
+          <S title="Five Onset & Cessation Methods (Kenya Short Rains, OND)">
+            <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:10, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
+              Pick a method with the <strong>Method</strong> selector above the map (Short Rains season). The maps, probabilities, skill, charts and bulletin all follow it. The methods ask different questions, so their onset, cessation and season length are not interchangeable: Dunning finds the turning points of the season's rainfall, the Agri rules find the first rains a farmer could plant on, and the FAO water balance tracks whether the soil holds enough water for a maize crop.
+            </div>
+            <Tbl head={['Method','Onset','Cessation','Season length','Data','Runs']} rows={[
+              ['Dunning', 'Day after the accumulated rainfall anomaly A(D) reaches its minimum', 'Day A(D) reaches its maximum after onset', 'Cessation − onset', 'CHIRPS v2 · SEAS5 (bias-corrected to CHIRPS v2)', 'All four'],
+              ['Agri rule 1', 'Wet day (≥ 1 mm) starting > 20 mm in 3 days; no 7-day dry spell in the next 21 days', 'After a 10-day period with rain < 0.5 × PET, the day a 100 mm soil store is empty', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
+              ['Agri rule 2', '≥ 20 mm in 5 days with ≥ 3 rainy days; no dry spell longer than 7 days in the next 21', 'As rule 1', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
+              ['Agri rule 3', '> 20 mm in 3 days; no dry spell longer than 10 days in the next 30', 'First day of a 10-day period with rain < 0.5 × PET', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
+              ['FAO water balance', 'Agricultural: 10-day rain ≥ 0.5 × ET0 and PAW/TAW ≥ 0.20 for 5 days; no 7-day spell below 0.20 in the next 21', 'Agricultural: 7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit', 'Three LGPs, one per definition', 'CHIRPS v3 · ERA5-Land ET0 · SoilGrids · SEAS5 (bias-corrected to CHIRPS v3)', 'Oct 01, Oct 01 + latest obs'],
+            ]}/>
+            <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+              Agri rules 1–3 are adapted from the ICPAC operational definitions; onset is searched 15 Aug – 15 Jan and cessation to 28 Feb (Sep 01 run: to 31 Dec). Dunning searches 1 Sep – 31 Dec. Dry day: &lt; 1 mm.
+            </div>
+          </S>
+
+          <div className="flex flex-col lg:flex-row gap-6">
+            <div className="w-full lg:w-[48%] min-w-0 flex flex-col gap-4">
+              <S title="Forecast Runs (Init Selector)">
+                <Tbl head={['Run','Rainfall used','Methods']} rows={[
+                  ['Sep 01', 'ECMWF SEAS5 from 1 Sep, to 31 Dec', 'Dunning, Agri rules 1–3'],
+                  ['Oct 01', 'ECMWF SEAS5 from 1 Oct, to 28 Feb', 'Dunning, Agri rules 1–3, FAO water balance'],
+                  ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
+                  ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
+                ]}/>
+                <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.
+                </div>
+              </S>
+
+              <S title="Probabilities, Skill & Missing Dates">
+                <KV label="Terciles" value="Early / normal / late (short / normal / long for LGP) from the 33rd and 67th percentiles of the observed record at each cell (CAL 1993–2016): CHIRPS v2 for Dunning and the Agri rules, CHIRPS v3 for FAO."/>
+                <KV label="Probabilities" value="Share of members in each tercile, calibrated with the damping factor α fitted on the hindcasts (CAL 1993–2016)."/>
+                <KV label="Skill" value="RPSS and hit rate on the independent validation years (VAL 2017–2024). RPSS > 0 beats climatology."/>
+                <KV label="No onset / cessation" value="A member with none by the search end counts as later than any date, not as missing, so medians and terciles stay honest in failed seasons. Season length is 0 without onset."/>
+                <KV label="Flat terciles (FAO)" value="Where the observed record has no spread (33rd = 67th percentile), no tercile forecast is issued: probabilities and skill are left blank (western Kenya and the coast, where onset falls on the first search day)."/>
+              </S>
+
+              <S title="FAO Water Balance Validation">
+                <Tbl head={['Check','Result']} rows={[
+                  ['Hindcast agricultural onset vs observed (VAL 2017–2024)', '68% within ±7 days, 81% within ±14 (Oct 01); 79% / 89% with latest obs'],
+                  ['Hindcast agricultural cessation vs observed', '40% within ±7 days, 66% within ±14 (Oct 01)'],
+                  ['Hindcast agricultural LGP vs observed', 'r = 0.83, 74% within ±14 days (Oct 01)'],
+                  ['RPSS (VAL 2017–2024), agricultural definition', 'Onset +0.43, cessation +0.10, LGP +0.34 (Oct 01); +0.60, +0.15, +0.40 with latest obs'],
+                  ['Onsets in the GIEWS maize planting window (Oct–Nov)', 'FAO agricultural 66%, FAO rainfall 64%, Agri rule 1 70% (observed 1993–2025)'],
+                  ['Bucket PAW/TAW vs ERA5-Land 0–100 cm wetness', 'r = 0.73 (daily, Aug–Feb)'],
+                  ['Dekadal ETa vs WaPOR v3 AETI (Oct–Dec 2018–2025)', 'Bias 0.0 mm/day, r = 0.65'],
+                ]}/>
+                <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  Full tables: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>outputs/fao_wb/validation/validation_report.md</span> (python scripts/fao_validate.py).
+                </div>
+              </S>
+            </div>
+
+            <div className="w-full lg:w-[52%] min-w-0 flex flex-col gap-4">
+              <S title="FAO Water Balance: FAO-56 Daily Soil-Water Bucket">
+                <Step n="1" title="Reference evapotranspiration  ET0" eq={"ET0 = [0.408 Δ (Rn − G) + γ (900/(T+273)) u2 (es − ea)] / [Δ + γ (1 + 0.34 u2)]"} desc="FAO-56 Penman-Monteith (Eq. 6) from ERA5-Land daily Tmax, Tmin, dewpoint, 2 m wind, solar radiation and surface pressure; G = 0 for daily steps. Forecast days use the ERA5-Land ET0 climatology (1993–2016, ±7-day smoothed), the same for every member."/>
+                <Step n="2" title="Crop water need  ETc" eq={"ETc = Kc × ET0"} desc="Maize Kc 0.30 / 1.20 / 0.60 (initial / mid / end), stages 20 / 35 / 40 / 30 days from planting, which is the agricultural onset. Kc_ini applies before it."/>
+                <Step n="3" title="Root-zone water  TAW and RAW" eq={"TAW = 1000 (θFC − θWP) Zr        RAW = p × TAW"} desc="θFC and θWP from SoilGrids 2.0 texture and organic carbon via the Saxton & Rawls (2006) pedotransfer equations, Zr = 1.0 m; p = 0.55 adjusted for ETc (FAO-56 Table 22). Kenya mean available water ~100–108 mm per metre."/>
+                <Step n="4" title="Water stress  Ks  and actual ET" eq={"Ks = 1 if Dr ≤ RAW, else (TAW − Dr)/(TAW − RAW)        ETa = Ks × ETc"} desc="Dr = TAW − SW is the root-zone depletion (previous day). Ks < 1 means the crop is water-stressed."/>
+                <Step n="5" title="Daily bucket" eq={"SW_t = SW_t−1 + P − ETa − runoff − drainage,   0 ≤ SW ≤ TAW"} desc="Starts 1 Aug from ERA5-Land 0–100 cm soil moisture. Water above TAW drains; PAW = SW and PAW/TAW is the plant-available fraction. In a forecast, each member continues the observed bucket with its own rainfall."/>
+                <Step n="6" title="Five dates and three season lengths" table={[
+                  ['Rainfall onset', 'First wet day from which 10-day rain ≥ 0.5 × ET0'],
+                  ['Agricultural onset', 'As above, and PAW/TAW ≥ 0.20 that day and the next 4; rejected as a false start if 7 days fall below 0.20 within 21 days'],
+                  ['Rainfall cessation', 'From 1 Nov, rain < 0.5 × ET0 in two consecutive 10-day windows'],
+                  ['Agricultural cessation', '7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit'],
+                  ['Crop-water cessation', 'After the climatological rainfall peak, 21-day rain < 0.5 × ETc with PAW/TAW falling below 0.20'],
+                  ['Definition picker', 'Agricultural: agricultural onset → agricultural cessation. Rainfall: rainfall onset → rainfall cessation. Crop-water: agricultural onset → crop-water cessation. LGP = cessation − onset + 1 for each.'],
+                ]}/>
+                <div style={{fontSize:9, color:'var(--text-muted)', lineHeight:1.5}}>
+                  Rainfall cessation usually comes before agricultural cessation, because the soil keeps supplying water after the rains stop. The pixel panel shows the chance that onset or cessation has happened by today and within 7, 14 and 21 days, and the members' PAW/TAW outlook against the 0.20 critical level. Method notes: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>FAO_WATER_BALANCE_METHOD.md</span>.
+                </div>
+              </S>
+
+              <S title="FAO Quality Flags (Bitmask)">
+                <Tbl head={['Bit','Meaning']} rows={[
+                  ['1', 'No rainfall onset'], ['2', 'No agricultural onset'], ['4', 'At least one false onset rejected'],
+                  ['8', 'No rainfall cessation'], ['16', 'No agricultural cessation'], ['32', 'No crop-water cessation'],
+                  ['64', 'Insufficient input data (> 5% of days missing)'], ['128', 'Incomplete season (data end before 28 Feb)'],
+                  ['256', 'Soil parameters unavailable'], ['512', 'Onset on the first search day (15 Aug): the soil is already wet, a season already under way'],
+                ]}/>
+              </S>
+            </div>
           </div>
         </div>
       )}
@@ -2576,6 +2669,10 @@ function AboutTab() {
                     <strong style={{color:'#f472b6'}}>5. Anomalous Accumulation Calculation &amp; Products:</strong>
                     <div>Evaluates Dunning cumulative anomaly curve A(D) for individual years and ensemble hindcasts. Detects onset, cessation, and LGP. Outputs web rasters and GIS Shapefiles.</div>
                   </div>
+                  <div>
+                    <strong style={{color:'#a78bfa'}}>6. Agricultural Rules &amp; FAO Water Balance (Kenya Short Rains):</strong>
+                    <div>The same observed record and bias-corrected SEAS5 members also run Agri rules 1–3 (rain thresholds, dry-spell checks, Hargreaves PET) and the FAO-56 soil-water balance (CHIRPS v3, ERA5-Land ET0, SoilGrids). Each gives its own onset, cessation, LGP, tercile probabilities and skill. See <em>Onset, Cessation &amp; LGP Methods</em>.</div>
+                  </div>
                 </div>
               </S>
 
@@ -2732,16 +2829,32 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                     .map(i=><option key={i.init} value={i.init}>{i.initLabel}</option>)}
                 </select>
                 {setOnsetDef && (()=>{
-                  const avail = ONSET_DEFS.filter(d => d.id === 'dunning' || hasModel(modelsData, shortRainsModel(selectedInit, d.id)))
-                  const cur = avail.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]
+                  // Every method run for any init is listed; one the selected init lacks (FAO: Oct runs only) names the
+                  // runs that have it, and picking it switches to the latest of them
+                  const inits = SHORT_RAINS_INITS.filter(i => i.init === '0901' || hasModel(modelsData, i.model))
+                  const runsWith = d => d.id === 'dunning' ? inits : inits.filter(i => hasModel(modelsData, shortRainsModel(i.init, d.id)))
+                  const here = d => runsWith(d).some(i => i.init === selectedInit)
+                  const avail = ONSET_DEFS.filter(d => runsWith(d).length)
+                  const cur = avail.find(d => d.id === onsetDef && here(d)) ?? ONSET_DEFS[0]
                   const methods = avail.filter((d, i) => !d.group || avail.findIndex(x => x.group === d.group) === i)
-                  const defs = cur.group ? avail.filter(d => d.group === cur.group) : []
+                  const defs = cur.group ? avail.filter(d => d.group === cur.group && here(d)) : []
+                  const pick = id => {
+                    const d = ONSET_DEFS.find(x => x.id === id)
+                    const next = d?.group && cur.group === d.group ? cur.id : id
+                    const nd = ONSET_DEFS.find(x => x.id === next)
+                    if (!here(nd)) { const alt = runsWith(nd).at(-1); if (alt) setSelectedInit(alt.init) }
+                    setOnsetDef(next)
+                  }
+                  const methodLabel = d => {
+                    const group = d.group ? avail.filter(x => x.group === d.group) : [d]
+                    return group.some(here) ? d.label : `${d.label} (${[...new Set(group.flatMap(runsWith))].map(i => i.initLabel).join(', ')})`
+                  }
                   return avail.length > 1 ? (
                     <>
                       <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Method</label>
                       <select value={cur.group ? methods.find(d => d.group === cur.group).id : cur.id} style={selStyle} title={cur.title}
-                              onChange={e=>{ const d = ONSET_DEFS.find(x => x.id === e.target.value); setOnsetDef(d?.group && cur.group === d.group ? cur.id : e.target.value) }}>
-                        {methods.map(d=><option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
+                              onChange={e=>pick(e.target.value)}>
+                        {methods.map(d=><option key={d.id} value={d.id} title={d.title}>{methodLabel(d)}</option>)}
                       </select>
                       {defs.length > 1 && (<>
                         <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Definition</label>
