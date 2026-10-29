@@ -1249,6 +1249,23 @@ export default function MapPanel({
       setTooltip(null)
     }
 
+    // Self-heal: when the map settles, make sure the forecast image is the current raster. The image source starts
+    // as a 1×1 placeholder, and an update that lands while that placeholder is still loading can be lost, leaving
+    // the map without its grid (the legend still shows the data range).
+    map.on('idle', ()=>{
+      const r = rasterRef.current
+      if(!r || !mapReadyRef.current) return
+      const src = map.getSource('forecast-raster')
+      if(!src) return
+      const w = src.image?.width
+      if(src.url === r.dataUrl && (w === undefined || w > 1)) return
+      try{
+        src.updateImage({url:r.dataUrl, coordinates:r.coords})
+        map.setPaintProperty('forecast-img','raster-resampling','nearest')
+        console.log('[Map idle] forecast raster re-applied')
+      }catch(_){}
+    })
+
     map.on('click', handleMapClick)
     map.on('mousemove', handleMouseMove)
     map.on('mouseleave', handleMouseLeave)
@@ -1317,8 +1334,8 @@ export default function MapPanel({
     if(boundaryDataRef.current.country===prefix) return   // already cached
     let cancelled=false
     Promise.all([
-      fetch(`/boundaries/${prefix}_admin0.geojson`).then(r=>r.ok?r.json():null),
-      fetch(`/boundaries/${prefix}_admin1.geojson`).then(r=>r.ok?r.json():null),
+      fetch(`${import.meta.env.BASE_URL}boundaries/${prefix}_admin0.geojson`).then(r=>r.ok?r.json():null),
+      fetch(`${import.meta.env.BASE_URL}boundaries/${prefix}_admin1.geojson`).then(r=>r.ok?r.json():null),
     ]).then(([admin0,admin1])=>{
       if(cancelled) return
       boundaryDataRef.current = {country:prefix, admin0, admin1}

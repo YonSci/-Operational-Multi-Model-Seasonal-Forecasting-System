@@ -232,14 +232,19 @@ def get_validation():
                 probs_out[var] = {"bn": [], "nn": [], "an": [], "years": val_years}
                 continue
             bn_vals, nn_vals, an_vals = [], [], []
+            # each model's own land mask: the Kenya and Ethiopia grids differ in size
+            mm = md.get("lm")
+            if mm is None or np.shape(mm) != pd_arr.shape[-2:]:
+                mm = lm if np.shape(lm) == pd_arr.shape[-2:] else np.ones(pd_arr.shape[-2:], bool)
+            mm = np.asarray(mm, bool)
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)
                 for yi in val_idx:
                     if yi >= pd_arr.shape[1]:
                         continue
-                    bn_vals.append(round(float(np.nanmean(pd_arr[0, yi][lm])), 3))
-                    nn_vals.append(round(float(np.nanmean(pd_arr[1, yi][lm])), 3))
-                    an_vals.append(round(float(np.nanmean(pd_arr[2, yi][lm])), 3))
+                    bn_vals.append(round(float(np.nanmean(pd_arr[0, yi][mm])), 3))
+                    nn_vals.append(round(float(np.nanmean(pd_arr[1, yi][mm])), 3))
+                    an_vals.append(round(float(np.nanmean(pd_arr[2, yi][mm])), 3))
             probs_out[var] = {
                 "bn": bn_vals, "nn": nn_vals, "an": an_vals,
                 "years": val_years[:len(bn_vals)],
