@@ -32,13 +32,16 @@ const METHODS = [
     data: 'CHIRPS v3 · ERA5-Land · SoilGrids · ECMWF SEAS5' },
 ]
 
+// Facts strip: each card opens the dashboard tab, or the About section, that explains it
 const FACTS = [
-  { value: '7', label: 'C3S seasonal models' },
-  { value: '5', label: 'methods' },
-  { value: '5', label: 'seasons: 3 for Ethiopia and 2 for Kenya' },
-  { value: '2', label: 'countries: Kenya and Ethiopia' },
-  { value: '0.25°', label: 'analysis grid (about 28 km)' },
-  { value: '10–15', label: 'days of medium-range forecasts, with satellite and near real-time data to track rain conditions' },
+  { value: '7', label: 'C3S seasonal models', cta: 'About the models', tab: 'about', at: { section: 'data', anchor: 'about-models' },
+    items: ['ECMWF SEAS5', 'UKMO GloSea6', 'Meteo-France Sys8', 'DWD GCFS2.1', 'CMCC-SPS4', 'NCEP CFSv2', 'ECCC CanSIPS'] },
+  { value: '5', label: 'Methods', cta: 'How they work', tab: 'about', at: { section: 'methods' },
+    items: ['Dunning', 'Agri rule 1', 'Agri rule 2', 'Agri rule 3', 'FAO water balance'] },
+  { value: '5', label: 'Seasons', cta: 'Seasons covered', tab: 'about', at: { section: 'data', anchor: 'about-seasons' },
+    items: ['Ethiopia: JJAS, FMAM, ONDJ', 'Kenya: MAM, OND'] },
+  { value: '2', label: 'Countries: Kenya and Ethiopia', cta: 'Open the maps', tab: 'forecast' },
+  { value: '10–15 days', label: 'Satellite & medium-range rainfall forecasts', cta: 'Open the tracker', tab: 'tracker' },
 ]
 
 export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) {
@@ -92,10 +95,12 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
         <div className="site-container">
           <div className="site-facts">
             {FACTS.map(f => (
-              <div key={f.label} className="site-fact">
-                <div className="site-fact-value">{f.value}</div>
-                <div className="site-fact-label">{f.label}</div>
-              </div>
+              <button key={f.label} type="button" className="site-fact" onClick={() => onEnter(f.tab, f.at)}>
+                <span className="site-fact-value">{f.value}</span>
+                <span className="site-fact-label">{f.label}</span>
+                {f.items && <ul className="site-fact-list">{f.items.map(i => <li key={i}>{i}</li>)}</ul>}
+                <span className="site-card-link">{f.cta} <ArrowRight size={15} aria-hidden="true" /></span>
+              </button>
             ))}
           </div>
         </div>
