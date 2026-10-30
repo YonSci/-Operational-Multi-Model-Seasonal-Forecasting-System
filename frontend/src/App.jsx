@@ -10,6 +10,7 @@ import LandingPage from './components/LandingPage'
 import { version } from '../package.json'
 import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, Database, CalendarRange, Map as MapIcon, FileCode2 } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -3365,6 +3366,8 @@ export default function App() {
               : 'w-full h-[360px] sm:h-[440px] lg:h-full lg:w-[40%]'
           } lg:min-w-[320px] lg:max-w-[520px]`}>
             <div className="flex-1 min-h-0">
+              <ErrorBoundary name="Map" resetKey={country + selectedSeason} title="The map could not be shown"
+                message="The rest of the dashboard still works: choose a location from the list to see its forecast, charts and tables.">
               <MapPanel
                 darkMode={darkMode}
                 selectedModel={selectedModel}
@@ -3376,12 +3379,14 @@ export default function App() {
                 selectedYear={selectedYear}
                 onOpenBulletin={()=>setBulletinModalOpen(true)}
               />
+              </ErrorBoundary>
             </div>
           </div>
           )}
           <div className={`flex-1 min-w-0 ${
             !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:block' : ''
           } ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
+           <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
             {activeTab==='forecast'      && (mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile'
               ? <RainfallStatsPanel pixelData={pixelData} isLoading={pixelLoading} model={effectiveModel} gridData={mapGridData}/>
               : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>)}
@@ -3394,6 +3399,7 @@ export default function App() {
               <iframe title="Short Rains Tracker" src="tracker/index.html"
                       style={{width:'100%', height:'100%', minHeight:'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)'}}/>
             )}
+           </ErrorBoundary>
           </div>
         </div>
       )}

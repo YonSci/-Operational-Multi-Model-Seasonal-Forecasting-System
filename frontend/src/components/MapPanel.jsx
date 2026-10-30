@@ -1027,6 +1027,8 @@ export default function MapPanel({
     'onset_med'
   )
   const [showLayers, setShowLayers]  = useState(false)
+  const [mapFailure, setMapFailure] = useState(null)   // null | 'unsupported' | 'lost'
+  const [mapAttempt, setMapAttempt] = useState(0)      // bumped by "Try again" to rebuild the map
   const prevTabRef = useRef(activeTab)
   // Auto-switch layer list when tab changes -- fires on mount too
   useEffect(() => {
@@ -1116,18 +1118,38 @@ export default function MapPanel({
   },[gridData, effectiveScale, seasonalMaskOnly])
 
   // -- Map init ----------------------------------------------------------
+  // MapLibre needs WebGL 2. Without it (or when its setup fails) only the map area shows a notice and the rest
+  // of the app keeps working; a graphics context lost later gets the same treatment, with "Try again".
   useEffect(()=>{
     if(mapRef.current||!mapContainer.current) return
+    if(!document.createElement('canvas').getContext('webgl2')){
+      console.error('[Map init] WebGL 2 is not available; interactive map disabled')
+      setMapFailure('unsupported')
+      return
+    }
     const initialStyle = BASEMAPS[basemapRef.current].style
     currentStyleRef.current = initialStyle
-    const map=new mapboxgl.Map({
-      container:mapContainer.current,
-      style:initialStyle,
-      center:[37.9,0.0],zoom:5.4,minZoom:3,maxZoom:12
-    })
-    map.fitBounds(countryView.bounds,{padding:30,duration:0})
-    map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'top-right')
-    map.addControl(new mapboxgl.ScaleControl({unit:'metric'}),'bottom-right')
+    let map
+    try {
+      map=new mapboxgl.Map({
+        container:mapContainer.current,
+        style:initialStyle,
+        center:[37.9,0.0],zoom:5.4,minZoom:3,maxZoom:12
+      })
+      map.on('error', e => {
+        if (e?.error instanceof mapboxgl.GPUInitializationError) { console.error('[Map] graphics error:', e.error); setMapFailure('unsupported') }
+      })
+      map.on('webglcontextlost', () => { console.warn('[Map] graphics context lost'); setMapFailure('lost') })
+      map.on('webglcontextrestored', () => setMapFailure(null))
+      map.fitBounds(countryView.bounds,{padding:30,duration:0})
+      map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'top-right')
+      map.addControl(new mapboxgl.ScaleControl({unit:'metric'}),'bottom-right')
+    } catch (err) {
+      console.error('[Map init] interactive map unavailable:', err)
+      try { map?.remove() } catch { /* half-built map */ }
+      setMapFailure('unsupported')
+      return
+    }
     map.on('load',()=>{
       if(mapReadyRef.current) return   // guard double-fire
       setupLayers(map, darkRef.current, countryRef.current, ()=>{
@@ -1275,8 +1297,8 @@ export default function MapPanel({
     window.__map = map
     window.__boundaryDataRef = boundaryDataRef
     mapRef.current=map
-    return()=>{map.remove();mapRef.current=null;mapReadyRef.current=false;setMapReady(false)}
-  },[])
+    return()=>{try{map.remove()}catch(e){console.warn('[Map] remove failed:', e)};mapRef.current=null;mapReadyRef.current=false;setMapReady(false)}
+  },[mapAttempt])
 
   // -- Theme switch: only auto-follows the app theme while the user hasn't --
   // manually picked a non-theme basemap (osm/satellite/topo). Once they do,
@@ -1423,6 +1445,37 @@ export default function MapPanel({
   return (
     <div style={{position:'relative',display:'flex',flexDirection:'column',height:'100%',overflow:'visible',borderRadius:12,background:'var(--bg-surface)',border:brd}}>
       <div ref={mapContainer} style={{flex:1,width:'100%',borderRadius:12,overflow:'hidden',position:'relative'}}/>
+      {mapFailure && (
+        <div role="alert" style={{position:'absolute',inset:0,zIndex:10,display:'flex',alignItems:'center',justifyContent:'center',padding:'72px 24px 24px',
+                                  borderRadius:12,background:'var(--bg-surface)'}}>
+          <div style={{maxWidth:420,display:'flex',flexDirection:'column',gap:12,fontSize:15,lineHeight:1.6,color:'var(--text-body)'}}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/>
+            </svg>
+            <strong style={{fontSize:17,color:'var(--heading)'}}>
+              {mapFailure === 'lost' ? 'The interactive map stopped drawing' : 'The interactive map can’t be shown in this browser'}
+            </strong>
+            <span>
+              {mapFailure === 'lost'
+                ? 'The browser released the map’s graphics resources. Try again to redraw it.'
+                : 'The map needs WebGL 2 graphics, which this browser or device does not provide. Turning on hardware acceleration or using an up-to-date Chrome, Edge, Firefox or Safari usually fixes this.'}
+            </span>
+            <span>Everything else still works: choose a location from the list at the top of this panel to see its forecast, charts and tables, or download the bulletin.</span>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              <button type="button" onClick={()=>{ setMapFailure(null); setMapAttempt(a=>a+1) }}
+                style={{minHeight:40,padding:'0 16px',borderRadius:8,border:'1px solid var(--btn-primary)',background:'var(--btn-primary)',color:'#fff',fontWeight:600,fontSize:14,cursor:'pointer'}}>
+                Try again
+              </button>
+              {onOpenBulletin && (
+                <button type="button" onClick={onOpenBulletin}
+                  style={{minHeight:40,padding:'0 16px',borderRadius:8,border:'1px solid var(--border-primary)',background:'var(--bg-surface)',color:'var(--heading)',fontWeight:600,fontSize:14,cursor:'pointer'}}>
+                  Download bulletin
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
 
       {/* Layer switcher */}
