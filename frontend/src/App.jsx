@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useState, useMemo } from 'react'
+import React, { Fragment, useEffect, useState, useMemo, useRef } from 'react'
 import {
   ComposedChart, Line, Area, Scatter, Customized, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer
@@ -1976,6 +1976,67 @@ function MultiModelTab({ pixelData, activeModels, modelsData, selectedSeason='lo
 }
 
 
+// --- Run dates and data status, shown above the results ----------------------
+// Forecast start, observation cut-off and valid period come from /models; the last completed daily update from
+// /health (backend/data_status.json). Status follows each product's schedule: a seasonal run is current until a
+// newer start is available; the run with the latest observations is expected to update daily.
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const fmtDate = iso => { if (!iso) return null; const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${d} ${MONTHS[m-1]} ${y}` }
+const fmtSpan = (a, b) => {
+  if (!a || !b) return null
+  const [ya, ma, da] = a.split('-').map(Number), [yb, mb, db] = b.split('-').map(Number)
+  return ya === yb ? `${da} ${MONTHS[ma-1]} – ${db} ${MONTHS[mb-1]} ${yb}` : `${fmtDate(a)} – ${fmtDate(b)}`
+}
+// "2026-10-28T13:31+03:00" -> "28 Oct 2026, 13:31 EAT", kept in the time zone it was recorded in
+const fmtStamp = iso => {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2})?(Z|[+-]\d{2}:\d{2})?/.exec(iso ?? '')
+  if (!m) return null
+  const zone = { '+03:00': 'EAT', 'Z': 'UTC', '+00:00': 'UTC' }[m[3]] ?? (m[3] ? 'UTC' + m[3].replace(':00', '') : '')
+  return `${fmtDate(m[1])}, ${m[2]} ${zone}`.trim()
+}
+
+function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit }) {
+  const models = Object.entries(modelsData?.models ?? {})
+  const base = (model || '').split(' - ')[0]
+  // the selected run, or for the multi-model view any of its models (they share start and window)
+  const entry = (models.find(([k, m]) => k === base || m?.raw_name === base) ?? (base ? null : models[0]))?.[1]
+  if (!entry?.init_date) return null
+  const daily = !!entry.obs_end && /latest/.test(entry.raw_name ?? '')
+  const ds = health?.data_status
+  const hoursSince = ds?.last_update ? (Date.now() - Date.parse(ds.last_update)) / 3.6e6 : null
+  // newest Short Rains run on offer (the selector lists the same ones)
+  const latestInit = selectedSeason === 'short_rains'
+    ? SHORT_RAINS_INITS.filter(i => i.init === '0901' || hasModel(modelsData, i.model)).at(-1) : null
+  let status, tone
+  if (daily && hoursSince != null && hoursSince > 36) {
+    status = `Daily update overdue: last completed ${fmtStamp(ds.last_update)}`; tone = 'warn'
+  } else if (latestInit && latestInit.init !== selectedInit) {
+    status = `A newer run is available: ${latestInit.initLabel}`; tone = 'info'
+  } else {
+    status = daily ? 'Current: updated daily as observations arrive' : 'Current: latest forecast start for this season'; tone = 'ok'
+  }
+  const item = (label, value) => value && (
+    <div style={{display:'flex',flexDirection:'column',minWidth:0}}>
+      <span style={{fontSize:12,color:'var(--text-meta)'}}>{label}</span>
+      <span style={{fontSize:13.5,fontWeight:600,color:'var(--heading)',fontVariantNumeric:'tabular-nums'}}>{value}</span>
+    </div>
+  )
+  const toneColor = { ok: 'var(--ok-text)', info: 'var(--accent-text)', warn: 'var(--warn-text)' }[tone]
+  return (
+    <section aria-label="Forecast run and data status"
+             style={{display:'flex',flexWrap:'wrap',alignItems:'flex-end',gap:'8px 24px',padding:'10px 14px',marginBottom:8,
+                     borderRadius:10,border:'1px solid var(--border-primary)',background:'var(--bg-surface)'}}>
+      {item('Forecast initialised', `${fmtDate(entry.init_date)} · ${models.length > 1 && !base ? models.length + ' models' : 'ECMWF SEAS5'}`)}
+      {item('Observations through', entry.obs_end ? fmtDate(entry.obs_end) : 'None (forecast only)')}
+      {item('Valid period', fmtSpan(entry.valid_start, entry.valid_end))}
+      {daily && item('Last successful update', fmtStamp(ds?.last_update) ?? 'Not recorded')}
+      <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:600,color:toneColor,marginLeft:'auto'}}>
+        <span aria-hidden="true" style={{width:8,height:8,borderRadius:'50%',background:toneColor}}/>{status}
+      </div>
+    </section>
+  )
+}
+
 // --- TABS + TopNav ------------------------------------------------------------
 const TABS = [
   {id:'forecast',      label:'Seasonal timing',      icon:BarChart3},
@@ -2137,11 +2198,34 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
   )
 }
 
+// --- Shareable addresses -------------------------------------------------------
+// #/<tab>?country=&season=&run=&method=&site=lat,lon   and   #/about/<section>   (no hash: the start page).
+// Moving to another page, tab or About section adds a history entry (Back returns to it); changing a filter
+// or location only rewrites the address.
+const DEFAULT_SITES = {
+  kenya:    { site_name: 'KALRO Kiboko, Makueni Farm', lat: -2.21046, lon: 37.7190, country: 'kenya' },
+  ethiopia: { site_name: 'Holetta Agricultural Research Center', lat: 9.060, lon: 38.500, country: 'ethiopia' },
+}
+function readHash() {
+  const h = window.location.hash
+  if (!h.startsWith('#/')) return null
+  const [path, query = ''] = h.slice(2).split('?')
+  const [tab, sub] = path.split('/')
+  const q = new URLSearchParams(query)
+  const s = (q.get('site') ?? '').split(',')
+  const site = s.length >= 2 && s[0] !== '' && Number.isFinite(+s[0]) && Number.isFinite(+s[1])
+    ? { lat: +s[0], lon: +s[1], site_name: 'Selected location' } : null
+  return { tab, sub, country: q.get('country'), season: q.get('season'), run: q.get('run'), method: q.get('method'), site }
+}
+
 // --- App ----------------------------------------------------------------------
 export default function App() {
-  const [showLanding,   setShowLanding]   = useState(true)
-  const [country,       setCountry]       = useState('kenya')
-  const [activeTab,     setActiveTab]     = useState('forecast')
+  const urlRef = useRef(readHash())                    // address this visit opened with, applied once
+  const opened = urlRef.current
+  const [showLanding,   setShowLanding]   = useState(!opened)
+  const [country,       setCountry]       = useState(SEASONS[opened?.country] ? opened.country : 'kenya')
+  const [activeTab,     setActiveTab]     = useState(TABS.some(t => t.id === opened?.tab) ? opened.tab : 'forecast')
+  const [aboutSection,  setAboutSection]  = useState(opened?.tab === 'about' ? (opened.sub || 'overview') : null)
   const [darkMode,      setDarkMode]      = useState(false)
   const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
   const [mapLayer,      setMapLayer]      = useState({variable:'onset',layer:'median'})
@@ -2158,9 +2242,21 @@ export default function App() {
   // A landing card's About target applies to that one visit only
   useEffect(()=>{ if (activeTab !== 'about') setAboutInitial(null) },[activeTab])
 
-  // Country change -> reset to that country's primary season + init date
+  // Country change -> reset to that country's primary season + init date (or to what an opened address names)
   useEffect(()=>{
     const first = (SEASONS[country]??SEASONS.kenya)[0]
+    const u = urlRef.current
+    if (u && (u.country ?? 'kenya') === country) {
+      urlRef.current = null
+      const s = (SEASONS[country] ?? SEASONS.kenya).find(x => x.id === u.season) ?? first
+      setSelectedSeason(s.id)
+      setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? u.run : s.init)
+      if (ONSET_DEFS.some(d => d.id === u.method)) setOnsetDef(u.method)
+      setSelectedModel('ECMWF SEAS5')
+      useDashboardStore.getState().setSelectedSite(u.site ? { ...u.site, country } : DEFAULT_SITES[country] ?? DEFAULT_SITES.kenya)
+      return
+    }
+    urlRef.current = null
     setSelectedSeason(first.id)
     setSelectedInit(first.init)
     if (country === 'ethiopia') {
@@ -2194,6 +2290,57 @@ export default function App() {
       setSelectedYear(2026)
     }
   }
+
+  const selectedSiteForUrl = useDashboardStore(s=>s.selectedSite)
+  useEffect(()=>{
+    let h = ''
+    if (!showLanding) {
+      if (activeTab === 'about') h = `#/about/${aboutSection ?? 'overview'}`
+      else {
+        const q = new URLSearchParams({ country, season: selectedSeason, run: selectedInit })
+        if (selectedSeason === 'short_rains') q.set('method', onsetDef)
+        if (selectedSiteForUrl) q.set('site', `${(+selectedSiteForUrl.lat).toFixed(3)},${(+selectedSiteForUrl.lon).toFixed(3)}`)
+        h = `#/${activeTab}?${String(q).replace(/%2C/g, ',')}`
+      }
+    }
+    const cur = window.location.hash
+    if (h === cur || (!h && (cur === '' || cur === '#'))) return
+    const url = h || window.location.pathname + window.location.search
+    if (h.split('?')[0] !== cur.split('?')[0]) window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  },[showLanding, activeTab, aboutSection, country, selectedSeason, selectedInit, onsetDef, selectedSiteForUrl])
+  useEffect(()=>{
+    const onPop = () => {
+      const u = readHash()
+      if (!u) { setShowLanding(true); return }
+      setShowLanding(false)
+      if (TABS.some(t => t.id === u.tab)) setActiveTab(u.tab)
+      if (u.tab === 'about') { setAboutSection(u.sub || 'overview'); return }
+      urlRef.current = u
+      if (SEASONS[u.country] && u.country !== country) setCountry(u.country)
+      else {   // same country: apply season, run, method and site directly
+        urlRef.current = null
+        const s = (SEASONS[country] ?? SEASONS.kenya).find(x => x.id === u.season)
+        if (s) { setSelectedSeason(s.id); setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? u.run : s.init) }
+        if (ONSET_DEFS.some(d => d.id === u.method)) setOnsetDef(u.method)
+        if (u.site) useDashboardStore.getState().setSelectedSite({ ...u.site, country })
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  },[country])
+
+  // The tracker page reports its content height, so it shows at full length inside the app's single scroll area
+  const trackerRef = useRef(null)
+  const [trackerHeight, setTrackerHeight] = useState(null)
+  useEffect(()=>{
+    const onMsg = e => {
+      if (e.data?.type === 'tracker-height' && e.source === trackerRef.current?.contentWindow && e.data.height > 0)
+        setTrackerHeight(Math.ceil(e.data.height))
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  },[])
 
   const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
   const { data: modelsData, isLoading: modelsLoading } = useModels(selectedSeason)
@@ -2268,7 +2415,7 @@ export default function App() {
     return (
       <LandingPage
         darkMode={darkMode} setDarkMode={setDarkMode} health={health}
-        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setAboutInitial(aboutAt); setActiveTab(tab); setShowLanding(false) }}
+        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setAboutInitial(aboutAt); if (tab === 'about') setAboutSection(aboutAt?.section ?? 'overview'); setActiveTab(tab); setShowLanding(false) }}
       />
     )
   }
@@ -2346,8 +2493,12 @@ export default function App() {
           </div>
           )}
           <div className={`flex-1 min-w-0 ${
-            !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:block' : ''
-          } ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
+            !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:flex' : 'flex'
+          } flex-col ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
+           {!FULL_PAGE_TABS.includes(activeTab) && (
+             <div className="shrink-0"><RunStatusBar modelsData={modelsData} model={effectiveModel} health={health} selectedSeason={selectedSeason} selectedInit={selectedInit}/></div>
+           )}
+           <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
             {activeTab==='forecast'      && (mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile'
               ? <RainfallStatsPanel pixelData={pixelData} isLoading={pixelLoading} model={effectiveModel} gridData={mapGridData}/>
@@ -2356,12 +2507,13 @@ export default function App() {
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
-            {activeTab==='about'         && <AboutTab initial={aboutInitial}/>}
+            {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
             {activeTab==='tracker'       && (
-              <iframe title="Short Rains Tracker" src="tracker/index.html"
-                      style={{width:'100%', height:'100%', minHeight:'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)'}}/>
+              <iframe ref={trackerRef} title="Short Rains Tracker" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
+                      style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight:'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
             )}
            </ErrorBoundary>
+           </div>
           </div>
         </div>
       )}

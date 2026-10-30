@@ -13,7 +13,7 @@ Refresh the Kenya Short Rains forecast as new observations and medium-range fore
      rules and FAO definitions repacked for the hosted API
   4. Latest ECMWF ENS (open data) → 1–15 day outlook and composite planting-onset dates
   5. Satellite rainfall, multi-model 10–16 day forecasts, site reports, tracker data and page
-  6. Hot-reload the local backend if it is running
+  6. Hot-reload the local backend if it is running; record the completed update in backend/data_status.json
   7. With --publish: push the refreshed data to origin/main (publish_daily.py), which redeploys the live platform
 
 Usage:
@@ -252,6 +252,10 @@ def main():
         log(f"backend reload: {r.status_code}")
     except requests.RequestException:
         log("backend not running (no reload needed)")
+    # when this update completed and what it covers: the dashboard shows it next to the results
+    status = {"last_update": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "obs_end": obs_end,
+              "schedule": "daily"}
+    (BASE_DIR / "backend" / "data_status.json").write_text(json.dumps(status, indent=1) + "\n", encoding="utf-8")
     if a.publish:
         subprocess.run([PY, str(BASE_DIR / "scripts" / "publish_daily.py"), "--note", f"observations to {obs_end}"],
                        check=False, env=env)

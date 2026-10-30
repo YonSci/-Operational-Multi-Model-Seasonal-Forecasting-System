@@ -1209,12 +1209,35 @@ def get_state():
     return _state
 
 # ── Model info ─────────────────────────────────────────────────────────────
+def _run_dates(name, md, op_year):
+    """Forecast start, observation cut-off (runs that splice in observed rainfall) and valid period, as ISO dates."""
+    import datetime as _dt
+    import re as _re
+    season = md.get("season", "long_rains")
+    start = {"kiremt": (5, 1), "fmam": (1, 1), "bega": (9, 1)}.get(season)
+    if start is None:
+        start = (10, 1) if "(Oct" in name else ((9, 1) if season == "short_rains" else (2, 1))
+    obs = None
+    m = _re.search(r"obs to (\d{4}-\d{2}-\d{2})", str(md.get("init_label") or ""))
+    if m:
+        obs = m.group(1)
+    elif name.startswith("ECMWF SEAS5 (Oct+Obs)"):
+        obs = f"{op_year}-09-30"                     # observed September spliced in
+    jan1 = _dt.date(op_year, 1, 1)
+    w0 = md.get("win_doy_start", WIN_DOY_START)
+    w1 = md.get("win_doy_end", WIN_DOY_END)
+    return dict(init_date=_dt.date(op_year, *start).isoformat(), obs_end=obs,
+                valid_start=(jan1 + _dt.timedelta(days=int(w0) - 1)).isoformat(),
+                valid_end=(jan1 + _dt.timedelta(days=int(w1) - 1)).isoformat())
+
+
 def get_model_info(season=None):
     s = get_state()
     out = []
-    is_bega = (season in ["bega", "ondj"])
-    is_fmam = not is_bega and (season in ["fmam", "belg"])
-    is_kiremt = not is_bega and not is_fmam and (season in ["kiremt", "jjas"])
+    # same season -> run mapping as get_pixel_stats (Deyr uses the Bega run, Gu the FMAM run, Annual the Kiremt run)
+    is_bega = (season in ["bega", "ondj", "deyr"])
+    is_fmam = not is_bega and (season in ["fmam", "belg", "gu"])
+    is_kiremt = not is_bega and not is_fmam and (season in ["kiremt", "jjas", "annual"])
     is_short = not is_bega and not is_fmam and not is_kiremt and (season in ["short_rains", "ond"])
     for name, md in s["MODELS"].items():
         md_season = md.get("season", "long_rains")
@@ -1261,7 +1284,8 @@ def get_model_info(season=None):
                         year_end=int(md["model_years"][-1]),
                         season=md_season,
                         win_doy_start=md.get("win_doy_start", 244 if is_bega else (32 if is_fmam else (122 if is_kiremt else (244 if is_short else 32)))),
-                        win_doy_end=md.get("win_doy_end", 396 if is_bega else (166 if is_fmam else (304 if is_kiremt else (365 if is_short else 213))))))
+                        win_doy_end=md.get("win_doy_end", 396 if is_bega else (166 if is_fmam else (304 if is_kiremt else (365 if is_short else 213)))),
+                        **_run_dates(name, md, op_y)))
     return out
 
 # ── Pixel stats ────────────────────────────────────────────────────────────
