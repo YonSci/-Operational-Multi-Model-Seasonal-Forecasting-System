@@ -2414,7 +2414,8 @@ export default function App() {
   if (showLanding) {
     return (
       <LandingPage
-        darkMode={darkMode} setDarkMode={setDarkMode} health={health}
+        darkMode={darkMode} setDarkMode={setDarkMode}
+        onOpenAddress={addr => { window.history.pushState(null, '', addr); window.dispatchEvent(new PopStateEvent('popstate')) }}
         onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setAboutInitial(aboutAt); if (tab === 'about') setAboutSection(aboutAt?.section ?? 'overview'); setActiveTab(tab); setShowLanding(false) }}
       />
     )
@@ -2510,7 +2511,7 @@ export default function App() {
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
             {activeTab==='tracker'       && (
               <iframe ref={trackerRef} title="Short Rains Tracker" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
-                      style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight:'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
+                      style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
             )}
            </ErrorBoundary>
            </div>
