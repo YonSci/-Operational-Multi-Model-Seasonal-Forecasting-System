@@ -8,12 +8,17 @@ Run:    uvicorn main:app --reload --port 8000
 Docs:   http://localhost:8080/docs
 """
 
+import json
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import mam_loader as dl
 
 from kenya_api import models, pixel, grid, sites, bulletin, rain_stats
+
+# written by scripts/update_forecast.py when the daily update completes; published with the data
+DATA_STATUS = Path(__file__).resolve().parent / "data_status.json"
 
 
 @asynccontextmanager
@@ -89,6 +94,7 @@ def health():
         "chirps_onset_mean_doy": on_mean,
         "demo_mode"    : s.get("demo_mode", False),
         "version"      : "v1.0.8-bulletin-fix",
+        "data_status"  : json.loads(DATA_STATUS.read_text()) if DATA_STATUS.is_file() else None,
     }
 
 @app.get("/debug_bulletin", tags=["Health"])
