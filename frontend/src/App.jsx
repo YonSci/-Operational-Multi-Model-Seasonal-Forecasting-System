@@ -1830,6 +1830,27 @@ const C3S_MODEL_INFO = [
   { name: 'NCEP CFSv2', desc: 'The Climate Forecast System version 2 from the US National Centers for Environmental Prediction. Operational since 2011, it is a fully coupled ocean-land-atmosphere dynamical prediction system. While relying on an older architecture than some European counterparts, it is highly reliable, heavily used in operational meteorology globally, and serves as a foundational model for the North American Multi-Model Ensemble (NMME).' },
   { name: 'ECCC CanSIPS', desc: 'The Canadian Seasonal to Interannual Prediction System by Environment and Climate Change Canada. It operates as an internal multi-model ensemble system by combining forecasts from two distinct coupled global climate models (GEM-NEMO and CanCM4i). It provides comprehensive probabilistic seasonal forecasts and is a major contributor to the NMME.' },
 ]
+// Short Rains Tracker inputs (see public/tracker/data/products.csv for the live latency of each)
+const SATELLITE_INFO = [
+  { name: 'CHIRPS 2.0', meta: 'UC Santa Barbara Climate Hazards Center · 0.05°, used at 0.25° · preliminary ~2–5 days, final ~3 weeks after the month',
+    desc: 'Satellite infrared rainfall blended with rain-gauge reports, 1981 to present. CHIRPS is the reference for the whole platform: climatology, bias correction and verification all use it. Preliminary daily files fill the days after the last complete month.' },
+  { name: 'ARC2', meta: 'NOAA Climate Prediction Center (FEWS NET) · 0.1° · ~1–2 days',
+    desc: 'Africa Rainfall Climatology version 2: Meteosat infrared cloud-top temperatures merged with daily rain-gauge reports. Quick and with a long record; tends to miss light rain.' },
+  { name: 'TAMSAT v3.1', meta: 'University of Reading · 0.0375° · ~2–5 days',
+    desc: 'Africa-only rainfall from Meteosat thermal-infrared cold-cloud duration, calibrated against historical gauges. Good at telling rain from no rain; weaker for heavy amounts.' },
+  { name: 'PDIR-Now', meta: 'UC Irvine Center for Hydrometeorology and Remote Sensing · 0.04° · ~1 day',
+    desc: 'Rainfall estimated from infrared imagery by a neural network (PERSIANN family), near-global and quasi-real-time. The fastest product here; it has no gauge correction.' },
+  { name: 'IMERG Late and Early (V07)', meta: 'NASA Global Precipitation Measurement (GPM) · 0.1° · Early ~1 day, Late ~1–2 days',
+    desc: 'Passive-microwave rainfall from the GPM satellite constellation, with gaps filled from infrared. The Late run includes more microwave overpasses; the Early run is issued sooner for monitoring when speed matters.' },
+]
+const NWP_INFO = [
+  { name: 'ECMWF IFS (HRES)', meta: 'ECMWF · 0.25° · 15 days', desc: 'The European Centre’s deterministic global forecast, from its open data.' },
+  { name: 'ECMWF ensemble (ENS)', meta: 'ECMWF · 0.25° · 15 days', desc: 'A 51-member ensemble. The maps show the member median; the chances of planting rains use the 50 perturbed members.' },
+  { name: 'GFS', meta: 'NOAA National Centers for Environmental Prediction · 0.25° · 16 days', desc: 'The US Global Forecast System.' },
+  { name: 'GDPS (GEM)', meta: 'Environment and Climate Change Canada · 15 km · 10 days', desc: 'Canada’s Global Deterministic Prediction System, run with the GEM model.' },
+  { name: 'ICON', meta: 'Deutscher Wetterdienst (DWD) · 13 km · 7.5 days', desc: 'Germany’s ICOsahedral Nonhydrostatic global model, from the DWD open-data server.' },
+  { name: 'UKMO Global', meta: 'Met Office · 10 km · 7 days', desc: 'The Met Office Unified Model global deterministic forecast, from AWS open data.' },
+]
 
 function AboutTab({ initial }) {
   const [section, setSection] = useState(initial?.section ?? 'overview')
@@ -1839,6 +1860,7 @@ function AboutTab({ initial }) {
   useEffect(() => { if (initial?.anchor) document.getElementById(initial.anchor)?.scrollIntoView({ block: 'start' }) }, [])
 
   const S = ({title,children,id})=>(<section id={id} className="about-block"><h3>{title}</h3>{children}</section>)
+  const ModelList = ({items})=>(<dl className="about-models">{items.map(m => (<div key={m.name}><dt>{m.name}</dt>{m.meta && <dd className="about-models-meta">{m.meta}</dd>}<dd>{m.desc}</dd></div>))}</dl>)
   const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:15}}><thead><tr style={{borderBottom:'2px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} scope="col" style={{padding:'8px 10px',textAlign:'left',color:'var(--text-meta)',fontWeight:600,fontSize:14,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'10px',color:j===0?'var(--heading)':'var(--text-body)',fontWeight:j===0?600:400,lineHeight:1.6,verticalAlign:'top',minWidth:j===0?140:120}}>{c}</td>))}</tr>))}</tbody></table></div>)
   const KV = ({label,value,wide=false})=>(<div style={{display:'flex',flexWrap:'wrap',gap:'2px 16px',padding:'10px 0',borderBottom:'1px solid var(--border-primary)'}}><span style={{flex:`0 0 ${wide?240:200}px`,fontSize:14,fontWeight:600,color:'var(--text-meta)',lineHeight:1.6,fontFamily:label.startsWith('GET ')?"'IBM Plex Mono',monospace":'inherit'}}>{label}</span><span style={{flex:'1 1 320px',minWidth:0,fontSize:16,color:'var(--text-body)',lineHeight:1.65}}>{value}</span></div>)
   const Step = ({n,title,eq,desc,table})=>(
@@ -2015,9 +2037,21 @@ function AboutTab({ initial }) {
               The Kenya Long Rains outlooks use seven seasonal forecast systems from the Copernicus Climate Change Service (C3S), shown singly and
               combined according to their past skill. The other seasons use ECMWF SEAS5.
             </p>
-            <dl className="about-models">
-              {C3S_MODEL_INFO.map(m => (<div key={m.name}><dt>{m.name}</dt><dd>{m.desc}</dd></div>))}
-            </dl>
+            <ModelList items={C3S_MODEL_INFO}/>
+          </S>
+          <S title="Satellite rainfall products" id="about-satellite">
+            <p className="about-intro">
+              The Short Rains Tracker shows how much rain has fallen at each monitored site since 1 September, from five satellite products downloaded
+              every day and placed on the 0.25° grid. Each product is compared with CHIRPS for bias, correlation and rain detection.
+            </p>
+            <ModelList items={SATELLITE_INFO}/>
+          </S>
+          <S title="Medium-range weather forecasts" id="about-nwp">
+            <p className="about-intro">
+              The tracker’s outlook for the next one to two weeks comes from six global weather models, taken each day from the 00 UTC run published by
+              each centre. A model that cannot be reached is filled from Open-Meteo. Forecast range is 7 to 16 days depending on the model.
+            </p>
+            <ModelList items={NWP_INFO}/>
           </S>
           <S title="Reference periods and updates">
             <KV label="Calibration" value="Hindcast years up to 2016: 1981–2016 for the Long Rains (36 years), 1993–2016 for the Short Rains and the Ethiopia seasons (24 years). Terciles, bias correction and probability calibration use these years."/>
