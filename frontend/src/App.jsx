@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, Area, Scatter, Customized, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer
 } from 'recharts'
-import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation, API_BASE } from './api/queries'
+import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation, useRainStats, API_BASE } from './api/queries'
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
@@ -994,6 +994,160 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
         {one?.fao && <FaoPanel fao={one.fao} labels={one.var_labels} year={opYear}/>}
       </div>
       </div>
+    </div>
+  )
+}
+
+// --- Seasonal rainfall statistics (Rainfall Terciles layer) --------------------
+// GET /rain_stats (scripts/rainfall_stats.py): forecast median and 10-90% range of the members, CHIRPS 1993-2016
+// normal, and the share of members below / near / above normal. `wetter` says which side is wetter, so the
+// bar colours read drier = brown, wetter = green for every statistic.
+const RAIN_STATS = [
+  { key: 'total',      label: 'Total rainfall',      unit: 'mm',     dec: 0, wetter: 'an',
+    def: 'Total cumulative precipitation falling over the season.' },
+  { key: 'wet_days',   label: 'Number of wet days',  unit: 'days',   dec: 0, wetter: 'an',
+    def: m => `Days with at least ${m.wet_mm} mm of rain during the season.` },
+  { key: 'dry_days',   label: 'Number of dry days',  unit: 'days',   dec: 0, wetter: 'bn',
+    def: m => `Days with less than ${m.wet_mm} mm of rain during the season.` },
+  { key: 'intensity',  label: 'Rainfall intensity',  unit: 'mm/day', dec: 1, wetter: 'an',
+    def: 'Average daily precipitation over the season, counting wet days only.' },
+  { key: 'wet_spells', label: 'Number of wet spells', unit: 'spells', dec: 0, wetter: 'an',
+    def: m => `Runs of at least ${m.wet_spell} consecutive wet days during the season.` },
+  { key: 'dry_spells', label: 'Number of dry spells', unit: 'spells', dec: 0, wetter: 'bn',
+    def: m => `Runs of at least ${m.dry_spell} consecutive dry days during the season.` },
+]
+const RAIN_DRY = '#a16207', RAIN_NEAR = '#94a3b8', RAIN_WET = '#16a34a'
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function RainTercile({ s, wetter }) {
+  if (s.p_bn == null) return <p style={{fontSize:12,color:'var(--text-meta)',margin:0}}>No tercile forecast: the 1993–2016 record has too little spread here.</p>
+  const parts = [['Below', s.p_bn, wetter === 'bn' ? RAIN_WET : RAIN_DRY], ['Near', s.p_nn, RAIN_NEAR], ['Above', s.p_an, wetter === 'an' ? RAIN_WET : RAIN_DRY]]
+  const top = parts.reduce((a, b) => (b[1] > a[1] ? b : a))
+  return (
+    <div>
+      <div role="img" aria-label={parts.map(([l, p]) => `${l} normal ${Math.round(p * 100)}%`).join(', ')}
+           style={{display:'flex',height:22,borderRadius:5,overflow:'hidden',gap:2,background:'var(--bg-surface)'}}>
+        {parts.map(([l, p, c]) => p > 0 && (
+          <div key={l} style={{flex:p,background:c,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:700}}>
+            {p >= 0.12 ? Math.round(p * 100) + '%' : ''}
+          </div>
+        ))}
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-meta)',marginTop:3}}>
+        {parts.map(([l, p]) => <span key={l} style={{fontWeight: l === top[0] ? 700 : 400, color: l === top[0] ? 'var(--heading)' : undefined}}>{l} {Math.round(p * 100)}%</span>)}
+      </div>
+    </div>
+  )
+}
+
+function RainfallStatsPanel({ pixelData, isLoading, model, gridData }) {
+  const site = pixelData ? { lat: pixelData.glat, lon: pixelData.glon } : null
+  const { data, isLoading: statsLoading, isError } = useRainStats(site, model)
+  if (!pixelData) return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-2" style={{color:'var(--text-faint)'}}>
+      <span className="text-sm tracking-wide">{isLoading ? 'Loading…' : 'Click any pixel on the map to load the rainfall statistics'}</span>
+    </div>
+  )
+  const box = {background:'var(--bg-elevated)',border:'1px solid var(--border-primary)',borderRadius:8,padding:'10px 12px'}
+  if (statsLoading) return <div style={{...box,margin:4,fontSize:13,color:'var(--text-meta)'}}>Loading rainfall statistics…</div>
+  if (isError || !data?.available) return (
+    <div style={{...box,margin:4,fontSize:13,lineHeight:1.6,color:'var(--text-body)'}}>
+      <strong style={{color:'var(--heading)'}}>Rainfall statistics are not available here.</strong> They are computed for the Kenya Short Rains
+      and the Ethiopia seasons from the daily ECMWF SEAS5 forecast members{data && !data.available && data.lat == null ? ', not for this season or model' : ', and only inside the analysis grid'}.
+    </div>
+  )
+
+  const m = data.meta
+  const [sm, sd] = m.window[0].split('-').map(Number), [em, ed] = m.window[1].split('-').map(Number)
+  const span = em < sm ? `${sd} ${MON[sm-1]} ${m.year} – ${ed} ${MON[em-1]} ${m.year + 1}` : `${sd} ${MON[sm-1]} – ${ed} ${MON[em-1]} ${m.year}`
+  const fmtv = (v, dec) => (v == null ? '--' : Number(v).toFixed(dec))
+  // the map layer at this cell (its own calculation; 33/33/33 everywhere means the layer has no forecast for this run)
+  const cell = gridData?.features?.find(f => Math.abs(f.properties.lat - data.lat) < 0.01 && Math.abs(f.properties.lon - data.lon) < 0.01)?.properties
+  const mapHasForecast = cell && cell.dominant_cat !== 'climatology' && cell.p_bn != null
+
+  return (
+    <div className="flex flex-col h-full gap-2 overflow-y-auto touch-scroll p-0.5">
+      <Card title={`Seasonal rainfall statistics  -  ${data.model}  -  ${m.season} ${m.year}`}>
+        <div style={{padding:'10px 12px',fontSize:13,lineHeight:1.6,color:'var(--text-body)'}}>
+          <p style={{margin:0}}>
+            {Number(data.lat).toFixed(3)}°, {Number(data.lon).toFixed(3)}° · season {span} · {m.n_members} forecast members ·
+            normal = CHIRPS {m.cal_years[0]}–{m.cal_years[1]}
+          </p>
+          {!m.calibrated && (
+            <p style={{margin:'8px 0 0',padding:'8px 10px',borderRadius:6,background:'var(--caution-bg)',color:'var(--caution-text)'}}>
+              Only total rainfall is shown for this run. The other statistics need the run’s daily hindcasts to correct for the model
+              raining lightly on too many days, and those are not available yet.
+            </p>
+          )}
+        </div>
+      </Card>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',gap:8}}>
+        {RAIN_STATS.map(st => {
+          const s = data.stats[st.key]
+          const ok = m.available.includes(st.key) && s?.fc_med != null
+          return (
+            <div key={st.key} style={{...box,display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
+                <h3 style={{margin:0,fontSize:14,fontWeight:700,color:'var(--heading)'}}>{st.label}</h3>
+                <span style={{fontSize:11,color:'var(--text-meta)'}}>{st.unit}</span>
+              </div>
+              {ok ? (<>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <div>
+                    <div style={{fontSize:11,color:'var(--text-meta)'}}>Forecast (median)</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'var(--heading)',lineHeight:1.2}}>{fmtv(s.fc_med, st.dec)}</div>
+                    <div style={{fontSize:11,color:'var(--text-meta)'}}>range {fmtv(s.fc_p10, st.dec)}–{fmtv(s.fc_p90, st.dec)}</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:'var(--text-meta)'}}>Normal (median)</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'var(--text-body)',lineHeight:1.2}}>{fmtv(s.clim_med, st.dec)}</div>
+                    <div style={{fontSize:11,color:'var(--text-meta)'}}>near normal {fmtv(s.clim_t33, st.dec)}–{fmtv(s.clim_t67, st.dec)}</div>
+                  </div>
+                </div>
+                <RainTercile s={s} wetter={st.wetter}/>
+              </>) : (
+                <p style={{margin:0,fontSize:12,color:'var(--text-meta)'}}>Not available for this run.</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <Card title="Rainfall Terciles map at this location">
+        <div style={{padding:'10px 12px',fontSize:12.5,lineHeight:1.6,color:'var(--text-body)'}}>
+          {mapHasForecast ? (<>
+            <RainTercile s={{p_bn: cell.p_bn / 100, p_nn: cell.p_nn / 100, p_an: cell.p_an / 100}} wetter="an"/>
+            <p style={{margin:'6px 0 0',color:'var(--text-meta)'}}>
+              The map is a separate total-rainfall product: the raw forecast ensemble ranked against the model’s own hindcasts, with the
+              probabilities tempered by past skill. Its season window and members can differ from the figures above, so the percentages can differ too.
+            </p>
+          </>) : (
+            <p style={{margin:0,color:'var(--text-meta)'}}>The map layer has no rainfall tercile forecast for this run (every cell shows climatology). Use the total-rainfall card above.</p>
+          )}
+        </div>
+      </Card>
+
+      <Card title="What the statistics mean">
+        <dl style={{margin:0,padding:'10px 12px',display:'grid',gap:8,fontSize:12.5,lineHeight:1.55}}>
+          {RAIN_STATS.map(st => (
+            <div key={st.key}>
+              <dt style={{fontWeight:700,color:'var(--heading)'}}>{st.label}</dt>
+              <dd style={{margin:0,color:'var(--text-body)'}}>{typeof st.def === 'function' ? st.def(m) : st.def}</dd>
+            </div>
+          ))}
+          <div>
+            <dt style={{fontWeight:700,color:'var(--heading)'}}>Forecast, normal and chances</dt>
+            <dd style={{margin:0,color:'var(--text-body)'}}>
+              Forecast: median of the members, with the 10–90% range. Normal: CHIRPS median for {m.cal_years[0]}–{m.cal_years[1]}; the near-normal
+              band runs between its lower and upper terciles. Chances: share of members below, near and above normal.
+              {m.calibrated
+                ? ' Each member is first ranked against the model’s own hindcasts for the same years, which removes the model’s tendency to drizzle; the value shown is the CHIRPS value at the same rank.'
+                : ' Totals are compared with CHIRPS directly; the daily bias correction makes them comparable.'}
+            </dd>
+          </div>
+        </dl>
+      </Card>
     </div>
   )
 }
@@ -3194,7 +3348,9 @@ export default function App() {
           <div className={`flex-1 min-w-0 ${
             !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:block' : ''
           } ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
-            {activeTab==='forecast'      && <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>}
+            {activeTab==='forecast'      && (mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile'
+              ? <RainfallStatsPanel pixelData={pixelData} isLoading={pixelLoading} model={effectiveModel} gridData={mapGridData}/>
+              : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>)}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}

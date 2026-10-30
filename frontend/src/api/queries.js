@@ -88,6 +88,18 @@ export function usePixelStats(site, season = 'long_rains', model = '') {
 }
 
 /**
+ * GET /rain_stats?lat=&lon=&model=  -- seasonal rainfall statistics (total, wet / dry days, intensity, spells)
+ */
+export function useRainStats(site, model, enabled = true) {
+  return useQuery({
+    queryKey: ['rain_stats', site?.lat, site?.lon, model],
+    queryFn: () => fetchJSON(`/rain_stats?${new URLSearchParams({ lat: String(site.lat), lon: String(site.lon), model })}`),
+    enabled: enabled && !!site && !!model,
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
  * GET /grid?variable=&layer=&season=&model=  -- GeoJSON for Mapbox fill layer
  * Cached for the session -- expensive to recompute.
  */

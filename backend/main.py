@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import mam_loader as dl
 
-from kenya_api import models, pixel, grid, sites, bulletin
+from kenya_api import models, pixel, grid, sites, bulletin, rain_stats
 
 
 @asynccontextmanager
@@ -60,6 +60,7 @@ app.include_router(pixel.router,    prefix="",         tags=["Pixel"])
 app.include_router(grid.router,     prefix="/grid",    tags=["Grid"])
 app.include_router(sites.router,    prefix="/sites",   tags=["Sites"])
 app.include_router(bulletin.router, prefix="",         tags=["Bulletin"])
+app.include_router(rain_stats.router, prefix="",       tags=["Rainfall statistics"])
 
 
 @app.get("/", tags=["Health"])

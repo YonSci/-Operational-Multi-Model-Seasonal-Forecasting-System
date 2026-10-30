@@ -193,6 +193,9 @@ def main():
     # the hosted API reads the October runs (incl. this one) from backend/demo_short_rains_extra.npz
     if changed or not (BASE_DIR / "backend" / "demo_short_rains_extra.npz").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_short_rains_demo.py")], check=True, env=env)
+    # seasonal rainfall statistics (Rainfall Terciles view): total, wet / dry days, intensity, spells
+    if changed or not (BASE_DIR / "backend" / "rain_stats.npz").exists():
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "rainfall_stats.py")], check=False, env=env)
     # Agri onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once) and the
     # FAO water balance, packed for the backend, then every site's comparison across initializations and methods
     rules_missing = not all((OUT_DIR / f"icpac_rule{k}" / "rule.json").exists() for k in (1, 2, 3))
