@@ -11,12 +11,13 @@
 #
 # The following metadata can be overridden by the calling notebook:
 if "MM_INIT_DATE" not in globals():
-    MM_INIT_DATE = "01 February 2026"
+    MM_INIT_DATE = "1 Feb 2026"
 if "MM_VALID_STR" not in globals():
     MM_VALID_STR = "March – April – May 2026"
 if "MM_ISSUED_STR" not in globals():
     import datetime as _dt_mm
-    MM_ISSUED_STR = _dt_mm.date.today().strftime("%d %B %Y")
+    from bulletin_meta import fmt_date as _fmt_mm
+    MM_ISSUED_STR = _fmt_mm(_dt_mm.date.today())
 if "MM_RULESET" not in globals():
     MM_RULESET = "Dunning et al. (2016) daily  |  CHIRPS 0.25 deg  |  CAL 1981-2016"
 
@@ -62,6 +63,7 @@ if "MM_RULESET" not in globals():
 # =============================================================================
 
 import os, datetime
+from bulletin_meta import platform_label
 import numpy             as np
 import matplotlib        as mpl
 import matplotlib.pyplot as plt
@@ -327,7 +329,7 @@ def _draw_mm_header(fig, site_name, glat, glon, dkm,
     for k, txt in enumerate([
         f"Lat: {glat:.4f} N   Lon: {glon:.4f} E   Grid delta: {dkm:.1f} km",
         f"Init: {MM_INIT_DATE}   Valid: {MM_VALID_STR}",
-        f"N models: {len(MODELS)}   Issued: {MM_ISSUED_STR}",
+        f"N models: {len(MODELS)}   Method: Dunning   Issued: {MM_ISSUED_STR}   |   {platform_label()}",
     ]):
         fig.text(0.01 + k * 0.33, hdr_bot + hdr_h * 0.10,
                  txt, ha="left", va="center",

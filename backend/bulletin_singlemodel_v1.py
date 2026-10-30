@@ -683,17 +683,22 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
              fontsize=14.5, fontweight="bold", color=COL_HDR_SITE,
              va="center", transform=fig.transFigure, zorder=11)
 
-    # Metadata right aligned
+    # Metadata right aligned: enough to read the bulletin on its own (run, observation cut-off, method, product)
+    from bulletin_meta import fmt_date, method_label, platform_label, split_run_label
+    run_start, obs_through = split_run_label(init_date_str)
+    if obs_through is None and model_name.startswith("ECMWF SEAS5 (Oct+Obs)"):
+        obs_through = fmt_date(datetime.date(f_year, 9, 30))            # observed September spliced in
+    system = model_name.split(" (")[0]
     meta_x = 0.58
-    fig.text(meta_x, HDR_TOP - 0.015, f"Init date  :  {init_date_str}",
-             fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
-    fig.text(meta_x, HDR_TOP - 0.025, f"Valid      :  {valid_date_str}",
-             fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
-    fig.text(meta_x, HDR_TOP - 0.035, f"Source     :  {model_name} Seasonal Forecast System (v5)",
-             fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
-    today_str = datetime.date.today().strftime("%d %B %Y")
-    fig.text(meta_x, HDR_TOP - 0.045, f"Issued     :  {today_str}",
-             fontsize=8.5, color=COL_HDR_TITLE, transform=fig.transFigure, zorder=11)
+    for k, line in enumerate([
+        f"Forecast initialised  :  {run_start}   ({system}, {md.get('n_members', '?')} members)",
+        f"Observations through  :  {obs_through or 'none (forecast only)'}",
+        f"Valid                 :  {valid_date_str}",
+        f"Method                :  {method_label(md.get('onset_definition'))}",
+        f"Issued                :  {fmt_date(datetime.date.today())}   |   {platform_label()}",
+    ]):
+        fig.text(meta_x, HDR_TOP - 0.011 - 0.0085 * k, line, fontsize=8.5, color=COL_HDR_TITLE,
+                 family="monospace", transform=fig.transFigure, zorder=11)
 
     # ILRI Logo
     logo_path = os.path.join(os.path.dirname(__file__), "..", "ilri_logo.png")
@@ -719,7 +724,7 @@ def generate_single_model_bulletin(site_name, lat_q, lon_q, model_name="ECMWF SE
     ))
     country_name = "Ethiopia" if (is_kiremt or is_fmam or is_bega) else "Kenya"
     fig.text(0.04, SUB_TOP - 0.009,
-             f"{country_name} {season_name} {f_year}   |   Site: {lat_q:+.4f}, {lon_q:+.4f}   |   Nearest 0.25° pixel: ({pi},{pj}) [{glat:.2f}, {glon:.2f}]  D={dkm:.1f} km   |   Detection Ruleset v2.3   |   CHIRPS 0.25   |   CAL {cal_label}",
+             f"{country_name} {season_name} {f_year}   |   Site: {lat_q:+.4f}, {lon_q:+.4f}   |   Nearest 0.25° pixel: ({pi},{pj}) [{glat:.2f}, {glon:.2f}]  D={dkm:.1f} km   |   {method_label(md.get('onset_definition'))}   |   CHIRPS 0.25°   |   CAL {cal_label}",
              fontsize=9.2, color="#FFFFFF", va="center", transform=fig.transFigure, zorder=11)
     fig.text(0.04, SUB_TOP - 0.023,
              f"{sub_window_str}   |   {cal_detail}",
