@@ -1820,12 +1820,25 @@ function MultiModelTab({ pixelData, activeModels, modelsData, selectedSeason='lo
 }
 
 
-function AboutTab() {
-  const [section, setSection] = useState('overview')
+// Seasonal forecast systems combined for the Kenya Long Rains (About > Data & coverage)
+const C3S_MODEL_INFO = [
+  { name: 'ECMWF SEAS5', desc: 'The 5th generation seasonal forecasting system from the European Centre for Medium-Range Weather Forecasts. It features high horizontal atmospheric resolution (~36 km) coupled with the NEMO ocean model. It is widely considered the global benchmark for operational seasonal prediction and serves as a core component of the Copernicus Climate Change Service (C3S) multi-model ensemble.' },
+  { name: 'Met Office UKMO GloSea6', desc: 'The UK Met Office’s Global Seasonal prediction system version 6. Built on the HadGEM3-GC3.1 coupled physical model, it is recognized for its high-resolution ocean component and strong representation of stratospheric dynamics, which significantly improves the forecasting of wintertime phenomena like the North Atlantic Oscillation (NAO).' },
+  { name: 'Meteo-France Sys8', desc: 'Meteo-France’s 8th generation seasonal forecasting system. Relying on the CNRM-CM6-1 coupled global climate model, System 8 features updated initialization techniques and improved physics, leading to better representations of tropical convection, the El Niño-Southern Oscillation (ENSO), and ocean-atmosphere coupling.' },
+  { name: 'DWD GCFS2.1', desc: 'The German Climate Forecast System version 2.1 by Deutscher Wetterdienst. It is based on the high-resolution Max Planck Institute Earth System Model (MPI-ESM-HR). It utilizes an advanced assimilation scheme for ocean and sea ice initialization, providing robust global seasonal outlooks with a strong focus on European climate variability.' },
+  { name: 'CMCC CMCC-SPS4', desc: 'The Centro Euro-Mediterraneo sui Cambiamenti Climatici Seasonal Prediction System 4 (Italy). This coupled system utilizes the Community Earth System Model (CESM) framework with specific CMCC modifications. It features high-resolution ocean and atmospheric components optimized to capture both mid-latitude teleconnections and tropical climate variability.' },
+  { name: 'NCEP CFSv2', desc: 'The Climate Forecast System version 2 from the US National Centers for Environmental Prediction. Operational since 2011, it is a fully coupled ocean-land-atmosphere dynamical prediction system. While relying on an older architecture than some European counterparts, it is highly reliable, heavily used in operational meteorology globally, and serves as a foundational model for the North American Multi-Model Ensemble (NMME).' },
+  { name: 'ECCC CanSIPS', desc: 'The Canadian Seasonal to Interannual Prediction System by Environment and Climate Change Canada. It operates as an internal multi-model ensemble system by combining forecasts from two distinct coupled global climate models (GEM-NEMO and CanCM4i). It provides comprehensive probabilistic seasonal forecasts and is a major contributor to the NMME.' },
+]
+
+function AboutTab({ initial }) {
+  const [section, setSection] = useState(initial?.section ?? 'overview')
   const scrollRef = React.useRef(null)
   const go = id => { setSection(id); scrollRef.current?.scrollTo({ top: 0 }) }
+  // Opened from a landing-page card: jump to the block it points at
+  useEffect(() => { if (initial?.anchor) document.getElementById(initial.anchor)?.scrollIntoView({ block: 'start' }) }, [])
 
-  const S = ({title,children})=>(<section className="about-block"><h3>{title}</h3>{children}</section>)
+  const S = ({title,children,id})=>(<section id={id} className="about-block"><h3>{title}</h3>{children}</section>)
   const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:15}}><thead><tr style={{borderBottom:'2px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} scope="col" style={{padding:'8px 10px',textAlign:'left',color:'var(--text-meta)',fontWeight:600,fontSize:14,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'10px',color:j===0?'var(--heading)':'var(--text-body)',fontWeight:j===0?600:400,lineHeight:1.6,verticalAlign:'top',minWidth:j===0?140:120}}>{c}</td>))}</tr>))}</tbody></table></div>)
   const KV = ({label,value,wide=false})=>(<div style={{display:'flex',flexWrap:'wrap',gap:'2px 16px',padding:'10px 0',borderBottom:'1px solid var(--border-primary)'}}><span style={{flex:`0 0 ${wide?240:200}px`,fontSize:14,fontWeight:600,color:'var(--text-meta)',lineHeight:1.6,fontFamily:label.startsWith('GET ')?"'IBM Plex Mono',monospace":'inherit'}}>{label}</span><span style={{flex:'1 1 320px',minWidth:0,fontSize:16,color:'var(--text-body)',lineHeight:1.65}}>{value}</span></div>)
   const Step = ({n,title,eq,desc,table})=>(
@@ -1976,7 +1989,7 @@ function AboutTab() {
             Every product is computed on the same 0.25° analysis grid (about 28 km) from daily rainfall. Observed rainfall comes from CHIRPS; forecasts are
             bias-corrected against it, so forecast and observed dates are directly comparable.
           </p>
-          <S title="Countries and seasons">
+          <S title="Countries and seasons" id="about-seasons">
             <Tbl head={['Country','Season','Forecast start','Models']} rows={[
               ['Kenya', 'Short Rains (OND)', '1 Sep; 1 Oct, also with observed rainfall to 30 Sep or to the latest day', 'ECMWF SEAS5'],
               ['Kenya', 'Long Rains (MAM)', '1 Feb', 'Seven C3S models, single and combined'],
@@ -1996,6 +2009,15 @@ function AboutTab() {
               ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
               ['Satellite rainfall and 10–15 day forecasts', 'Short Rains Tracker at monitored sites', 'Site', 'Current season'],
             ]}/>
+          </S>
+          <S title="Seasonal forecast models" id="about-models">
+            <p className="about-intro">
+              The Kenya Long Rains outlooks use seven seasonal forecast systems from the Copernicus Climate Change Service (C3S), shown singly and
+              combined according to their past skill. The other seasons use ECMWF SEAS5.
+            </p>
+            <dl className="about-models">
+              {C3S_MODEL_INFO.map(m => (<div key={m.name}><dt>{m.name}</dt><dd>{m.desc}</dd></div>))}
+            </dl>
           </S>
           <S title="Reference periods and updates">
             <KV label="Calibration" value="Hindcast years up to 2016: 1981–2016 for the Long Rains (36 years), 1993–2016 for the Short Rains and the Ethiopia seasons (24 years). Terciles, bias correction and probability calibration use these years."/>
@@ -2979,8 +3001,11 @@ export default function App() {
   const [selectedSeason,setSelectedSeason]= useState('short_rains')
   const [bulletinModalOpen, setBulletinModalOpen] = useState(false)
   const [mobileViewMode, setMobileViewMode]       = useState('split') // 'split' | 'map' | 'charts'
+  const [aboutInitial,   setAboutInitial]         = useState(null)    // { section, anchor } when a landing card opens About
 
   useEffect(()=>{document.documentElement.classList.toggle('light',!darkMode)},[darkMode])
+  // A landing card's About target applies to that one visit only
+  useEffect(()=>{ if (activeTab !== 'about') setAboutInitial(null) },[activeTab])
 
   // Country change -> reset to that country's primary season + init date
   useEffect(()=>{
@@ -3092,7 +3117,7 @@ export default function App() {
     return (
       <LandingPage
         darkMode={darkMode} setDarkMode={setDarkMode} health={health}
-        onEnter={(tab)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setActiveTab(tab); setShowLanding(false) }}
+        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setAboutInitial(aboutAt); setActiveTab(tab); setShowLanding(false) }}
       />
     )
   }
@@ -3174,7 +3199,7 @@ export default function App() {
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
-            {activeTab==='about'         && <AboutTab/>}
+            {activeTab==='about'         && <AboutTab initial={aboutInitial}/>}
             {activeTab==='tracker'       && (
               <iframe title="Short Rains Tracker" src="tracker/index.html"
                       style={{width:'100%', height:'100%', minHeight:'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)'}}/>
