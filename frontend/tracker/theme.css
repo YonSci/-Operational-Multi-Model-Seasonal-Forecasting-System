@@ -1,31 +1,57 @@
-/* Theme tokens for the tracker page when it runs inside the platform (the online dashboard supplies its own). */
+/* Theme tokens for the tracker page when it runs inside the platform (the online dashboard supplies its own).
+   Same palette and type as the React app (frontend/src/index.css: light = html.light, dark = :root).
+   Theme choice: dash-shim.js sets data-theme="light|dark" on <html> from the app's own toggle when the page is
+   embedded; standalone, the page follows the system setting (prefers-color-scheme). */
 :root {
-  --color-bg: #f6f7f5; --color-panel: #ffffff; --color-fg: #1c2420; --color-fg-muted: #5c6862;
-  --color-border-line: #dde2de; --color-ok: #2e7d4f; --color-warn: #9a6a08; --color-bad: #b4472a;
-  --series-1: #2f6db5; --series-2: #c2582b; --series-3: #2e8b6a; --series-4: #8a5cb8;
-  --series-5: #b08a1c; --series-6: #3d9bb5; --series-7: #b54a7a; --series-8: #6b7a3a;
-  --cds-chart-grid: #e7ebe8; --cds-chart-axis: #b9c2bc; --cds-chart-reference: #7d8a83; --cds-chart-muted: #9aa69f;
-  --cds-surface-popover: #ffffff; --cds-border: #d5dbd7; --cds-shadow-popover: 0 4px 16px rgba(20, 30, 25, .12);
-  --cds-text-secondary: #5c6862;
-  --cds-radius: 8px; --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 16px;
+  --font-anthropic-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-anthropic-serif: var(--font-anthropic-sans);        /* Inter everywhere in the platform */
+  --kt-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --kt-title-weight: 700; --kt-heading-weight: 700; --kt-card-radius: 12px;
+  --cds-radius: 8px; --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 20px;
   --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 16px; --cds-gap-xl: 32px;
-  --cds-font-size-caption: 12px; --cds-font-size-body: 14px; --cds-font-size-heading: 17px; --cds-font-size-title: 28px;
+  --cds-font-size-caption: 14px; --cds-font-size-body: 16px; --cds-font-size-heading: 22px; --cds-font-size-title: 30px;
   --cds-font-weight-medium: 600; --cds-dur-slow: 300ms;
-  --font-anthropic-sans: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-anthropic-serif: Georgia, "Times New Roman", serif;
+
+  /* light */
+  --color-bg: #f5f8fc; --color-panel: #ffffff; --color-fg: #334155; --color-fg-muted: #52637a;
+  --kt-heading: #102a43; --kt-accent: #1a5fa8; --kt-accent-text: #1a5fa8; --kt-focus: #1a5fa8;
+  --kt-info-bg: #eaf2fb; --kt-info-border: #b9d3ee; --kt-missing: #e8edf3;
+  --color-border-line: #d8e1eb; --color-ok: #0f766e; --color-warn: #92400e; --color-bad: #b42318;
+  --series-1: #1a5fa8; --series-2: #c2582b; --series-3: #2e8b6a; --series-4: #8a5cb8;
+  --series-5: #9a7a12; --series-6: #2f8fab; --series-7: #b54a7a; --series-8: #6b7a3a;
+  --cds-chart-grid: #e2e8f0; --cds-chart-axis: #94a3b8; --cds-chart-reference: #52637a; --cds-chart-muted: #94a3b8;
+  --cds-surface-popover: #ffffff; --cds-border: #d8e1eb; --cds-shadow-popover: 0 4px 16px rgba(16, 42, 67, .10);
+  --cds-text-secondary: #52637a;
   color-scheme: light;
 }
+:root[data-theme="dark"] {
+  --color-bg: #060a0f; --color-panel: #0d1117; --color-fg: #cbd5e1; --color-fg-muted: #94a3b8;
+  --kt-heading: #f1f5f9; --kt-accent: #4a8fc4; --kt-accent-text: #7db4e6; --kt-focus: #7db4e6;
+  --kt-info-bg: rgba(74, 143, 196, .14); --kt-info-border: rgba(74, 143, 196, .45); --kt-missing: #111827;
+  --color-border-line: #1e2d3d; --color-ok: #34d399; --color-warn: #fbbf24; --color-bad: #fca5a5;
+  --series-1: #4a8fc4; --series-2: #f08a5d; --series-3: #5cc49c; --series-4: #b58ce6;
+  --series-5: #e0c060; --series-6: #6cc8e0; --series-7: #e07aa8; --series-8: #a7b86a;
+  --cds-chart-grid: #1e2d3d; --cds-chart-axis: #2d4a6a; --cds-chart-reference: #94a3b8; --cds-chart-muted: #4a6fa5;
+  --cds-surface-popover: #111827; --cds-border: #2d4a6a; --cds-shadow-popover: 0 4px 16px rgba(0, 0, 0, .45);
+  --cds-text-secondary: #94a3b8;
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #121614; --color-panel: #1a201d; --color-fg: #e6ebe8; --color-fg-muted: #9eaaa3;
-    --color-border-line: #2c3430; --color-ok: #6cc293; --color-warn: #e0b34d; --color-bad: #ee7a5a;
-    --series-1: #6fa4e6; --series-2: #f08a5d; --series-3: #5cc49c; --series-4: #b58ce6;
+  :root:not([data-theme="light"]) {
+    --color-bg: #060a0f; --color-panel: #0d1117; --color-fg: #cbd5e1; --color-fg-muted: #94a3b8;
+    --kt-heading: #f1f5f9; --kt-accent: #4a8fc4; --kt-accent-text: #7db4e6; --kt-focus: #7db4e6;
+    --kt-info-bg: rgba(74, 143, 196, .14); --kt-info-border: rgba(74, 143, 196, .45); --kt-missing: #111827;
+    --color-border-line: #1e2d3d; --color-ok: #34d399; --color-warn: #fbbf24; --color-bad: #fca5a5;
+    --series-1: #4a8fc4; --series-2: #f08a5d; --series-3: #5cc49c; --series-4: #b58ce6;
     --series-5: #e0c060; --series-6: #6cc8e0; --series-7: #e07aa8; --series-8: #a7b86a;
-    --cds-chart-grid: #26302b; --cds-chart-axis: #46524b; --cds-chart-reference: #8a968f; --cds-chart-muted: #6d7972;
-    --cds-surface-popover: #1f2622; --cds-border: #34403a; --cds-text-secondary: #9eaaa3;
+    --cds-chart-grid: #1e2d3d; --cds-chart-axis: #2d4a6a; --cds-chart-reference: #94a3b8; --cds-chart-muted: #4a6fa5;
+    --cds-surface-popover: #111827; --cds-border: #2d4a6a; --cds-shadow-popover: 0 4px 16px rgba(0, 0, 0, .45);
+    --cds-text-secondary: #94a3b8;
     color-scheme: dark;
   }
 }
-html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: 14px/1.5 var(--font-anthropic-sans); }
-#dash-root { padding: 20px max(16px, 3vw) 40px; }
+html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); }
+body { font: 16px/1.55 var(--font-anthropic-sans); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+code, .mono { font-family: var(--kt-mono); }
+#dash-root { padding: 24px max(16px, 2.5vw) 40px; max-width: 1440px; margin: 0 auto; box-sizing: border-box; }
 .dash-skeleton:empty { min-height: 1em; background: linear-gradient(90deg, var(--color-border-line), transparent); border-radius: var(--cds-radius); }

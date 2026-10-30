@@ -1,221 +1,343 @@
 <style>
-/* Layout: one column of sections; site detail as a card grid driven by a site picker */
-.kt { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans);
-      --cds-font-size-caption: 14px; --cds-font-size-body: 16px; --cds-font-size-heading: 20px; font-size: var(--cds-font-size-body); }
-.kt svg { font-size: 14px; }                                  /* chart axes keep their size */
-.kt h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
-.kt h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
-.kt h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); margin: 0; }
-.kt b { font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
-.kt-sec { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+/* Short Rains Tracker. Colours, type and spacing come from the host's theme tokens: the online dashboard supplies
+   --color-*, --cds-* and --font-anthropic-*; inside the platform theme.css supplies the same names plus optional
+   --kt-* tokens (heading colour, accent, info panel, title weight), each with a fallback to the shared tokens. */
+.kt { --kt-h: var(--kt-heading, var(--color-fg)); --kt-acc: var(--kt-accent, var(--series-1, var(--color-fg)));
+      --kt-acc-text: var(--kt-accent-text, var(--color-fg)); --kt-ctl: 40px; --kt-r: var(--kt-card-radius, var(--cds-radius));
+      --cds-font-size-caption: 14px; --cds-font-size-body: 16px;
+      display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans);
+      font-size: var(--cds-font-size-body); line-height: 1.55; color: var(--color-fg); font-variant-numeric: tabular-nums; }
+.kt *, .kt *::before, .kt *::after { box-sizing: border-box; }
+.kt [hidden] { display: none !important; }
+.kt svg { font-size: 13px; }
+.kt h1 { font-family: var(--font-anthropic-serif); font-weight: var(--kt-title-weight, 400); font-size: var(--cds-font-size-title); line-height: 1.2; letter-spacing: -0.01em; color: var(--kt-h); margin: 0; text-wrap: balance; }
+.kt h2 { font-size: var(--cds-font-size-heading); font-weight: var(--kt-heading-weight, var(--cds-font-weight-medium)); line-height: 1.3; color: var(--kt-h); margin: 0; }
+.kt h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); line-height: 1.4; color: var(--kt-h); margin: 0; }
+.kt b, .kt strong { font-weight: var(--cds-font-weight-medium); color: var(--kt-h); }
+.kt a { color: var(--kt-acc-text); text-underline-offset: 2px; }
+.kt-vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.kt-ic { flex: none; width: 16px; height: 16px; vertical-align: -3px; }
+.kt-sub { margin: 6px 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); max-width: 62rem; }
+.kt-sec { display: flex; flex-direction: column; gap: var(--cds-gap-md); min-width: 0; scroll-margin-top: 96px; }
 .kt-note { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
-.kt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
-.kt-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
-.kt-chart { position: relative; min-height: 15rem; }
-.kt-maps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--cds-gap-md); }
-.kt-map { position: relative; min-height: 14rem; }
-.kt-scroll { overflow-x: auto; }
-.kt table { border-collapse: collapse; width: 100%; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
-.kt th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
-.kt td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+.kt-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--kt-r); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-md); min-width: 0; }
+.kt-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); }
+
+/* Controls: 40 px high, 8 px radius, like the app's buttons */
+.kt-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--cds-gap-sm) var(--cds-gap-md); }
+.kt-field { display: inline-flex; flex-direction: column; gap: 4px; min-width: 0; font-size: var(--cds-font-size-caption); font-weight: 500; color: var(--color-fg-muted); }
+.kt select, .kt-btn { font: inherit; font-size: var(--cds-font-size-caption); min-height: var(--kt-ctl); padding: 0 var(--cds-pad-md); border-radius: var(--cds-radius);
+  border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--kt-h); max-width: 100%; }
+.kt select { cursor: pointer; }
+.kt-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: border-color .15s, background .15s; }
+.kt-btn:hover:not(:disabled), .kt select:hover:not(:disabled) { border-color: var(--kt-acc); }
+.kt-btn:disabled, .kt select:disabled { opacity: .55; cursor: not-allowed; }
+.kt-btn[aria-pressed=true] { border-color: var(--kt-acc); background: color-mix(in srgb, var(--kt-acc) 14%, var(--color-panel)); }
+.kt-btn-icon { width: var(--kt-ctl); padding: 0; }
+.kt-btn-sm { min-height: 36px; padding: 0 10px; }
+.kt :focus-visible { outline: 2px solid var(--kt-focus, var(--color-fg)); outline-offset: 2px; }
+.kt-player { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); }
+.kt-player input[type=range] { flex: 1 1 10rem; min-width: 8rem; min-height: var(--kt-ctl); accent-color: var(--kt-acc); }
+@media (max-width: 30rem) {
+  .kt-controls > .kt-field, .kt-controls > .kt-btn { flex: 1 1 100%; }
+  .kt-controls select { width: 100%; }
+}
+
+/* Header, sticky context bar, station summary and data status */
+.kt-head { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+.kt-station-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-md); }
+.kt-station-bar label { font-weight: 600; color: var(--kt-h); }
+.kt-station-bar select { font-size: var(--cds-font-size-body); min-width: min(100%, 22rem); }
+.kt-context { position: sticky; top: calc(var(--kt-sticky-top, 0px) + 8px); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--cds-gap-md);
+  margin-top: calc(var(--cds-gap-md) - var(--cds-gap-xl)); padding: 8px var(--cds-pad-md); font-size: var(--cds-font-size-caption); line-height: 1.45;
+  background: color-mix(in srgb, var(--color-panel) 94%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover, none); }
+.kt-ctx-i { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.kt-ctx-i .k { color: var(--color-fg-muted); }
+.kt-ctx-i .v { color: var(--kt-h); font-weight: 600; }
+.kt-ctx-site .v { font-size: var(--cds-font-size-body); }
+.kt-ctx-i .short { display: none; }
+@media (max-width: 40rem) { .kt-context { gap: 0 var(--cds-gap-md); } .kt-ctx-opt { display: none; } .kt-ctx-i .full { display: none; } .kt-ctx-i .short { display: inline; } .kt-ctx-site { flex: 1 1 100%; } }
+.kt-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr)); gap: var(--cds-gap-md); }
+.kt-sum .kt-card { gap: 6px; padding: var(--cds-pad-md) var(--cds-pad-lg) var(--cds-pad-lg); }
+.kt-sum-k { display: flex; align-items: center; gap: 8px; font-size: var(--cds-font-size-caption); font-weight: 600; color: var(--kt-acc-text); }
+.kt-sum-v { font-size: 26px; font-weight: 700; line-height: 1.2; color: var(--kt-h); }
+.kt-sum-v small { font-size: var(--cds-font-size-caption); font-weight: 500; color: var(--color-fg-muted); margin-left: 6px; }
+.kt-sum p { margin: 0; font-size: var(--cds-font-size-caption); }
+.kt-sum .kt-meta { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--color-border-line); color: var(--color-fg-muted); }
+.kt-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr)); gap: 12px 20px; margin: 0; padding: var(--cds-pad-md) var(--cds-pad-lg);
+  background: var(--kt-info-bg, var(--color-panel)); border: 1px solid var(--kt-info-border, var(--color-border-line)); border-radius: var(--kt-r); font-size: var(--cds-font-size-caption); }
+.kt-status > div { min-width: 0; }
+.kt-status dt { display: flex; align-items: center; gap: 6px; color: var(--color-fg-muted); font-weight: 600; }
+.kt-status dd { margin: 2px 0 0; color: var(--kt-h); }
+.kt-status dd + dd { color: var(--color-fg); }
+.kt-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: 13px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.kt-badge.ok { color: var(--color-ok); } .kt-badge.warn { color: var(--color-warn); } .kt-badge.bad { color: var(--color-bad); } .kt-badge.off { color: var(--color-fg-muted); }
+.kt-toc { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); font-size: var(--cds-font-size-caption); }
+.kt-toc a { color: var(--color-fg-muted); text-decoration: none; padding: 4px 0; }
+.kt-toc a:hover { color: var(--kt-acc-text); text-decoration: underline; }
+
+/* Focused view: one map beside the station chart; "Compare" switches to all maps above the chart */
+.kt-focus { display: grid; gap: var(--cds-gap-md); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 52rem) { .kt-focus:not(.is-compare) { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); } }
+.kt-maps { display: grid; gap: var(--cds-gap-md); grid-template-columns: minmax(0, 1fr); }
+.kt-focus.is-compare .kt-maps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 52rem) { .kt-focus.is-compare .kt-maps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 30rem) { .kt-focus.is-compare .kt-maps { grid-template-columns: minmax(0, 1fr); } }
+.kt-map-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kt-map-card h3 { font-size: var(--cds-font-size-caption); }
+.kt-map-card .kt-note { font-size: 13px; }
+.kt-map { position: relative; }
+.kt-map svg { display: block; }
+.kt-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; pointer-events: none; }
+.kt-map-empty > div { max-width: 92%; padding: 8px 12px; border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel);
+  box-shadow: var(--cds-shadow-popover, none); font-size: 13px; line-height: 1.45; color: var(--color-fg); text-align: center; }
+.kt-map-empty b { display: block; }
+.kt-date { margin: 0; font-size: var(--cds-font-size-body); font-weight: 600; color: var(--kt-h); }
+.kt-date span { font-weight: 400; color: var(--color-fg-muted); }
+.kt-chart { position: relative; min-height: 12rem; }
+.kt-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.kt-sw { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; margin-right: .35rem; vertical-align: middle; flex: none; }
+.kt-hatch { display: inline-block; width: 1.1rem; height: .9rem; margin-right: .35rem; vertical-align: middle; border: 1px solid var(--color-border-line); border-radius: 2px;
+  background: repeating-linear-gradient(45deg, var(--cds-chart-muted) 0 1.5px, transparent 1.5px 5px), var(--kt-missing, var(--color-bg)); }
+.kt-gap { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: var(--cds-radius); border: 1px dashed var(--color-border-line); font-size: var(--cds-font-size-caption); color: var(--color-fg); }
+.kt-gap .kt-ic { margin-top: 3px; color: var(--color-fg-muted); }
+.kt-models { display: flex; flex-wrap: wrap; gap: 4px var(--cds-gap-md); font-size: var(--cds-font-size-caption); }
+.kt-models label { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; cursor: pointer; }
+.kt-models input { width: 18px; height: 18px; margin: 0; accent-color: var(--kt-acc); }
+
+/* Tables: right-aligned numbers, tabular numerals, sticky first column, scroll cue, CSV download */
+.kt-tablewrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kt-tabletools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 36px; }
+.kt-tabletools .kt-btn { margin-left: auto; }
+.kt-scroll-hint { display: none; align-items: center; gap: 4px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.kt-tablewrap[data-overflow] .kt-scroll-hint { display: inline-flex; }
+.kt-scrollbox { position: relative; min-width: 0; }
+.kt-scrollbox::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none; opacity: 0; transition: opacity .15s;
+  background: linear-gradient(to left, color-mix(in srgb, var(--color-fg) 16%, transparent), transparent); }
+.kt-scrollbox[data-more-right]::after { opacity: 1; }
+.kt-scroll { overflow-x: auto; min-width: 0; overscroll-behavior-x: contain; }
+.kt table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.kt th { text-align: left; vertical-align: bottom; font-weight: 600; color: var(--color-fg-muted); padding: 8px 10px; border-bottom: 1px solid var(--color-border-line); white-space: nowrap; background: var(--color-panel); }
+.kt td { padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--color-border-line) 65%, transparent); white-space: nowrap; background: var(--color-panel); }
+.kt tbody tr:last-child td { border-bottom: 0; }
 .kt td.num, .kt th.num { text-align: right; }
-.kt tr.kt-pick td { background: color-mix(in srgb, var(--color-fg) 6%, transparent); }
-.kt tbody tr[data-key] { cursor: pointer; }
+.kt td.wrap { white-space: normal; min-width: 14rem; }
+.kt th:first-child, .kt td:first-child { position: sticky; left: 0; z-index: 1; }
+.kt td:first-child { color: var(--kt-h); font-weight: 500; }
+.kt-scrollbox[data-more-left] th:first-child, .kt-scrollbox[data-more-left] td:first-child { box-shadow: 1px 0 0 var(--color-border-line); }
+.kt tbody tr:hover td { background: color-mix(in srgb, var(--color-fg) 4%, var(--color-panel)); }
+.kt tr.kt-pick td { background: color-mix(in srgb, var(--kt-acc) 10%, var(--color-panel)); }
+.kt td.kt-missing { color: var(--color-fg-muted); font-style: italic; white-space: normal; }
 .kt-pill { display: inline-block; padding: 0 var(--cds-pad-sm); border-radius: 999px; border: 1px solid var(--color-border-line); }
 .kt-pill.useful { color: var(--color-ok); } .kt-pill.limited { color: var(--color-warn); } .kt-pill.no { color: var(--color-bad); }
-.kt-dry { color: var(--color-bad); }
-.kt-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); }
-.kt select { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-sm); border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); }
-.kt-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; z-index: 2; }
+.kt th[data-sort] { cursor: pointer; user-select: none; }
+.kt th[data-sort]:hover { color: var(--kt-h); }
+.kt th[data-sort]:focus-visible { outline: 2px solid var(--kt-focus, var(--color-fg)); outline-offset: -2px; }
+.kt th[aria-sort=ascending]::after { content: " ▲"; font-size: .7em; }
+.kt th[aria-sort=descending]::after { content: " ▼"; font-size: .7em; }
+
+/* Charts, tooltips, legends */
+.kt-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: 13px; white-space: nowrap; z-index: 3; color: var(--color-fg); }
 .kt-tip .d { color: var(--cds-text-secondary); }
-.kt-sw { display: inline-block; width: .6rem; height: .6rem; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
-.kt-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
 .kt-fail { display: flex; align-items: center; justify-content: center; gap: .4rem; min-height: inherit; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
 .kt-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
 [data-dash-source-state=empty] { color: transparent; }
 [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
-.kt-btn { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-md); border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-panel); color: var(--color-fg); cursor: pointer; }
-.kt-btn:focus-visible, .kt select:focus-visible, #anim-day:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
-#anim-day, #fc-day { flex: 1 1 10rem; min-width: 8rem; }
-.kt-station-panel { margin-top: var(--cds-gap-md); grid-template-columns: 1fr; }   /* table above its chart so all columns fit */
-.kt-anim-date { margin: 0; font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-heading); font-variant-numeric: tabular-nums; }
-.kt-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
-.kt-methods { columns: 2 22rem; column-gap: var(--cds-gap-xl); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
-.kt-methods p { margin: 0 0 var(--cds-gap-sm); break-inside: avoid; }
-/* Animated maps: three per row (two rows for six products or models); one per row on phones */
-#fc-maps, #anim-maps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 40rem) { #fc-maps, #anim-maps { grid-template-columns: 1fr; } }
-.kt-src { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-gap-md); }
-.kt-src .kt-card { gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
-.kt-src h3 { color: var(--color-fg); }
-.kt-src a { color: inherit; overflow-wrap: anywhere; }
-.kt-late { color: var(--color-warn); }
-.kt-station-bar { margin-top: var(--cds-gap-md); }
-.kt-toc { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); margin-top: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); }
-.kt-toc a { color: var(--color-fg-muted); }
-.kt-toc a:hover { color: var(--color-fg); }
-.kt-station-panel { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
-/* Sortable tables */
-.kt th[data-sort] { cursor: pointer; user-select: none; }
-.kt th[data-sort]:hover { color: var(--color-fg); }
-.kt th[data-sort]:focus-visible { outline: 2px solid var(--color-fg); outline-offset: -2px; }
-.kt th[aria-sort=ascending]::after { content: " ▲"; font-size: .7em; }
-.kt th[aria-sort=descending]::after { content: " ▼"; font-size: .7em; }
-/* Colorbar legend */
 .kt-cbar { display: flex; flex-direction: column; gap: 2px; width: 100%; max-width: 20rem; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
 .kt-cbar svg { display: block; overflow: visible; }
-/* Clickable chart legend: click a series to hide or show it */
-.kt-lg-item { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; display: inline-flex; align-items: center; }
-.kt-lg-item[aria-pressed=false] { opacity: .45; text-decoration: line-through; }
-.kt-lg-item:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.kt-lg-item { font: inherit; color: inherit; background: none; border: 0; padding: 4px 0; min-height: 32px; cursor: pointer; display: inline-flex; align-items: center; text-align: left; }
+.kt-lg-item[aria-pressed=false] { opacity: .5; text-decoration: line-through; }
+.kt-methods { columns: 2 22rem; column-gap: var(--cds-gap-xl); font-size: var(--cds-font-size-caption); color: var(--color-fg); }
+.kt-methods p { margin: 0 0 var(--cds-gap-sm); break-inside: avoid; }
+.kt-src { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-gap-md); }
+.kt-src .kt-card { gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg); }
+.kt-src .kt-card > div { color: var(--color-fg-muted); }
+.kt-src a { display: inline-flex; align-items: center; gap: 4px; overflow-wrap: anywhere; min-height: 32px; }
+.kt-verif { display: flex; flex-direction: column; gap: var(--cds-gap-sm); padding-top: var(--cds-gap-sm); border-top: 1px solid var(--color-border-line); }
 </style>
 
 <div class="kt">
-  <header id="top">
-    <h1>Kenya Short Rains 2026 Tracker</h1>
-    <div class="kt-row kt-station-bar">
-      <label for="site-pick"><b>Station</b></label>
+  <header id="top" class="kt-head">
+    <div>
+      <h1>Kenya Short Rains 2026 Tracker</h1>
+      <p class="kt-sub">Rain observed so far, the weather-model outlook for the next one to two weeks and the seasonal outlook for onset and cessation at monitored stations. Kenya, Short Rains (October–December) 2026.</p>
+    </div>
+    <div class="kt-station-bar">
+      <label for="site-pick">Station</label>
       <select id="site-pick" data-source="sites"></select>
     </div>
+  </header>
+
+  <div class="kt-context" id="kt-context" role="region" aria-label="Current selection" data-source="sites inits" hidden></div>
+
+  <section class="kt-sec" id="summary" aria-labelledby="summary-h">
+    <div>
+      <h2 id="summary-h">Station summary</h2>
+      <p class="kt-note">Four separate pieces of evidence, each with its own period and source. They are not combined into one score.</p>
+    </div>
+    <div class="kt-sum" id="kt-sum" data-source="sites forecast_events inits"></div>
+    <dl class="kt-status" id="kt-status" data-source="products sites" aria-label="Data dates and status"></dl>
     <nav class="kt-toc" aria-label="On this page">
-      <a href="#observed">1. Rain so far</a><a href="#next">2. Next two weeks</a><a href="#season">3. Season outlook</a>
+      <a href="#observed">1. Rain so far</a><a href="#next">2. Next one to two weeks</a><a href="#season">3. Season outlook</a>
       <a href="#verify">4. How reliable the satellite data are</a><a href="#methods">5. Methods</a><a href="#sources">6. Data sources</a>
     </nav>
-  </header>
+  </section>
 
   <section class="kt-sec" id="observed">
     <h2>1. Rain so far: what the satellites observed</h2>
-    <p class="kt-note">How much rain has fallen at the station and across Kenya since 1 October, from six satellite rainfall products.</p>
+    <p class="kt-note">How much rain has fallen at the station and across Kenya since 1 October, from six satellite rainfall products. CHIRPS (gauge-blended) is the reference product.</p>
     <div class="kt-card" id="anim-card">
-      <div class="kt-row">
-        <h3>Rainfall maps by satellite product, day by day since 1 October</h3>
-        <select id="anim-metric" aria-label="Measure">
-          <option value="pct_of_normal">% of normal</option>
-          <option value="anomaly_mm">Anomaly (mm)</option>
-          <option value="rain_since_oct1_mm">Total since 1 Oct (mm)</option>
-          <option value="rain_10d_mm">Total, last 10 days (mm)</option>
-          <option value="rain_5d_mm">Total, last 5 days (mm)</option>
-          <option value="rain_mm">Daily rain (mm)</option>
-        </select>
+      <div class="kt-controls">
+        <label class="kt-field">Measure
+          <select id="anim-metric">
+            <option value="pct_of_normal">% of normal since 1 Oct</option>
+            <option value="anomaly_mm">Anomaly since 1 Oct (mm)</option>
+            <option value="rain_since_oct1_mm">Total since 1 Oct (mm)</option>
+            <option value="rain_10d_mm">Total, last 10 days (mm)</option>
+            <option value="rain_5d_mm">Total, last 5 days (mm)</option>
+            <option value="rain_mm">Daily rain (mm)</option>
+          </select>
+        </label>
+        <label class="kt-field">Satellite product
+          <select id="anim-product" data-source="anim products"></select>
+        </label>
+        <button type="button" class="kt-btn" id="anim-compare" aria-pressed="false" data-icon="layout-grid">Compare products</button>
       </div>
-      <div class="kt-row">
-        <button type="button" id="anim-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
-        <button type="button" id="anim-play" class="kt-btn">Play</button>
-        <button type="button" id="anim-next" class="kt-btn" aria-label="Next day">Next ▶</button>
-        <input type="range" id="anim-day" min="0" max="0" value="0" step="1" aria-label="Day">
+      <div class="kt-player">
+        <button type="button" id="anim-prev" class="kt-btn kt-btn-icon" aria-label="Previous day" title="Previous day" data-icon="chevron-left"></button>
+        <button type="button" id="anim-play" class="kt-btn" data-icon="play">Play</button>
+        <button type="button" id="anim-next" class="kt-btn kt-btn-icon" aria-label="Next day" title="Next day" data-icon="chevron-right"></button>
+        <input type="range" id="anim-day" min="0" max="0" value="0" step="1" aria-label="Map date">
       </div>
-      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. 5- and 10-day totals end on the day shown. A product stops on its last available day. Click a table header to sort; hover the chart for values and click its legend to hide a product.</p>
-      <div data-source="anim boundaries stations">
-        <p class="kt-anim-date" id="anim-date">—</p>
-        <div class="kt-maps dash-skeleton" id="anim-maps" style="min-height: 16rem"></div>
-        <div class="kt-legend" id="anim-legend"></div>
-        <div class="kt-grid kt-station-panel">
-          <div class="kt-scroll">
-            <h3 id="anim-st-title">Station</h3>
-            <table id="anim-st-table">
-              <thead><tr>
-                <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Last 5 days (mm)</th><th class="num">Last 10 days (mm)</th>
-                <th class="num">Since 1 Oct (mm)</th><th class="num">Normal (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <div>
-            <h3 id="anim-st-chart-title">Over time</h3>
-            <div class="kt-chart" id="anim-st-chart" style="min-height: 12rem"></div>
-          </div>
+      <p class="kt-date" id="anim-date" aria-live="polite">—</p>
+      <div class="kt-focus" id="anim-focus" data-source="anim boundaries stations">
+        <div>
+          <div class="kt-maps dash-skeleton" id="anim-maps" style="min-height: 16rem"></div>
+        </div>
+        <div class="kt-map-side">
+          <h3 id="anim-st-chart-title">Over time</h3>
+          <p class="kt-note">One line per product at the station's grid cell. The vertical line marks the map date.</p>
+          <div class="kt-chart" id="anim-st-chart" style="min-height: 12rem"></div>
         </div>
       </div>
+      <div class="kt-legend" id="anim-legend"></div>
+      <div class="kt-gap" id="anim-missing" data-source="products" hidden></div>
+      <p class="kt-note">Each map is one satellite product on the same 0.25° grid. Normal = CHIRPS 1993–2016 average for the same days. 5- and 10-day totals end on the map date. A product stops on its last available day; days and cells without data are hatched, never shown as zero rain. Click a table header to sort; click the chart legend to hide a product.</p>
+      <h3 id="anim-st-title">Station values</h3>
+      <table id="anim-st-table" data-name="observed_rain">
+        <thead><tr>
+          <th>Product</th><th class="num">Daily rain (mm)</th><th class="num">Last 5 days (mm)</th><th class="num">Last 10 days (mm)</th>
+          <th class="num">Since 1 Oct (mm)</th><th class="num">Normal since 1 Oct (mm)</th><th class="num">Anomaly (mm)</th><th class="num">% of normal (%)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
   </section>
 
   <section class="kt-sec" id="next">
-    <h2>2. Next two weeks: weather forecasts</h2>
-    <p class="kt-note">Will planting rains come soon? Rainfall forecasts from six global weather models.</p>
+    <h2>2. Next one to two weeks: weather forecasts</h2>
+    <p class="kt-note">Will planting rains come soon? Rainfall forecasts from six global weather models (forecast lengths 7–16 days).</p>
     <div class="kt-card" id="fc-card">
-      <div class="kt-row">
-        <h3>Rainfall forecast by model, next 10–16 days</h3>
-        <select id="fc-metric" aria-label="Measure">
-          <option value="rain_mm">Daily rain (mm)</option>
-          <option value="cum_mm">Rain from today to the day shown (mm)</option>
-          <option value="total_5d_mm">Total, next 5 days (mm)</option>
-          <option value="total_10d_mm">Total, next 10 days (mm)</option>
-          <option value="total_all_mm">Total, whole range (mm)</option>
-        </select>
+      <div class="kt-controls">
+        <label class="kt-field">Measure
+          <select id="fc-metric">
+            <option value="rain_mm">Daily rain (mm)</option>
+            <option value="cum_mm">Accumulated from day 1 to the day shown (mm)</option>
+            <option value="total_5d_mm">Total, first 5 days (mm)</option>
+            <option value="total_10d_mm">Total, first 10 days (mm)</option>
+            <option value="total_all_mm">Total, whole forecast (mm)</option>
+          </select>
+        </label>
+        <label class="kt-field">Weather model
+          <select id="fc-model" data-source="forecast"></select>
+        </label>
+        <button type="button" class="kt-btn" id="fc-compare" aria-pressed="false" data-icon="layout-grid">Compare models</button>
       </div>
-      <div class="kt-row" id="fc-models" data-source="forecast_events" aria-label="Models shown"></div>
-      <div class="kt-row">
-        <button type="button" id="fc-prev" class="kt-btn" aria-label="Previous day">◀ Previous</button>
-        <button type="button" id="fc-play" class="kt-btn">Play</button>
-        <button type="button" id="fc-next" class="kt-btn" aria-label="Next day">Next ▶</button>
+      <div class="kt-models" id="fc-models" data-source="forecast_events" role="group" aria-label="Models shown" hidden></div>
+      <div class="kt-player">
+        <button type="button" id="fc-prev" class="kt-btn kt-btn-icon" aria-label="Previous day" title="Previous day" data-icon="chevron-left"></button>
+        <button type="button" id="fc-play" class="kt-btn" data-icon="play">Play</button>
+        <button type="button" id="fc-next" class="kt-btn kt-btn-icon" aria-label="Next day" title="Next day" data-icon="chevron-right"></button>
         <input type="range" id="fc-day" min="0" max="0" value="0" step="1" aria-label="Forecast day">
       </div>
-      <p class="kt-note">Each model's own forecast, not bias-corrected: ECMWF IFS 15 days, ECMWF ensemble median 15, GFS 16, GDPS 10, ICON and UKMO about 7–8. A model stops at the end of its range; its totals cover only the days it has. Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
-      <div data-source="forecast boundaries stations">
-        <p class="kt-anim-date" id="fc-date">—</p>
-        <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
-        <div class="kt-legend" id="fc-legend"></div>
-      </div>
-      <div class="kt-station-panel">
-        <div class="kt-scroll">
-          <h3 id="fc-st-title">Station</h3>
-          <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
-          <table id="fc-st-table" data-source="forecast_events forecast_sites">
-            <thead><tr>
-              <th>Model</th><th class="num">Range (days)</th><th class="num" id="fc-day-col">Rain on the day (mm)</th><th class="num">Next 5 days (mm)</th>
-              <th class="num">Next 10 days (mm)</th><th class="num">Whole range (mm)</th><th>First planting rains</th><th>Source</th>
-            </tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
+      <p class="kt-date" id="fc-date" aria-live="polite">—</p>
+      <div class="kt-focus" id="fc-focus" data-source="forecast boundaries stations">
         <div>
-            <h3 id="fc-st-chart-title">Daily rain by model</h3>
-            <p class="kt-note">One bar per model per day. The shaded day is the one shown on the maps.</p>
-            <div class="kt-chart" id="fc-st-chart" data-source="forecast_sites" style="min-height: 12rem"></div>
-          </div>
-          <div>
-            <h3 id="fc-tot-chart-title">Forecast totals by model</h3>
-            <p class="kt-note">Faded bar: the model's range is shorter than the period, so its total covers fewer days.</p>
-            <div class="kt-chart" id="fc-tot-chart" data-source="forecast_events" style="min-height: 12rem"></div>
-          </div>
+          <div class="kt-maps dash-skeleton" id="fc-maps" style="min-height: 16rem"></div>
+        </div>
+        <div class="kt-map-side">
+          <h3 id="fc-st-chart-title">Daily rain by model</h3>
+          <p class="kt-note">Daily forecast rain at the station. The shaded day is the one on the map.</p>
+          <div class="kt-chart" id="fc-st-chart" data-source="forecast_sites" style="min-height: 12rem"></div>
+        </div>
+      </div>
+      <div class="kt-legend" id="fc-legend"></div>
+      <p class="kt-note">Each model's own forecast, not bias-corrected. A model stops at the end of its range; days beyond it are hatched and its totals cover only the days it has (shown as “(7 days)”). Planting rains = at least 20 mm within 3 days. Downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office where their servers could be reached, otherwise through Open-Meteo; the table shows the source for each model.</p>
+      <h3 id="fc-st-title">Station forecast by model</h3>
+      <p class="kt-note" id="fc-consensus" data-source="forecast_events">—</p>
+      <table id="fc-st-table" data-name="weather_forecast" data-source="forecast_events forecast_sites">
+        <thead><tr>
+          <th>Model</th><th class="num">Forecast length (days)</th><th class="num" id="fc-day-col">Rain on the day (mm)</th><th class="num">First 5 days (mm)</th>
+          <th class="num">First 10 days (mm)</th><th class="num">Whole forecast (mm)</th><th>First planting rains</th><th>Source</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div>
+        <h3 id="fc-tot-chart-title">Forecast totals by model</h3>
+        <p class="kt-note">Faded bar: the model's range is shorter than the period, so its total covers fewer days.</p>
+        <div class="kt-chart" id="fc-tot-chart" data-source="forecast_events" style="min-height: 12rem"></div>
       </div>
     </div>
   </section>
 
   <section class="kt-sec" id="season">
     <h2>3. Season outlook: onset, cessation and season length</h2>
-    <p class="kt-note">When the season is likely to start and end at the station, from the ECMWF seasonal forecast (25 members).</p>
+    <p class="kt-note">When the season is likely to start and end at the station, from the ECMWF SEAS5 seasonal forecast (25 members), bias-corrected against CHIRPS.</p>
     <div class="kt-card" id="season-card">
-      <div class="kt-row">
-        <h3>Outlook for one forecast run</h3>
-        <select id="season-run" aria-label="Forecast run" data-source="inits"></select>
-        <select id="season-method" aria-label="Onset and cessation method" data-source="inits">
-          <option value="">All methods</option>
-          <option value="Dunning">Dunning</option>
-          <option value="Agri rule 1">Agri rule 1</option>
-          <option value="Agri rule 2">Agri rule 2</option>
-          <option value="Agri rule 3">Agri rule 3</option>
-          <option value="FAO agricultural">FAO water balance: agricultural</option>
-          <option value="FAO rainfall">FAO water balance: rainfall</option>
-          <option value="FAO crop-water">FAO water balance: crop-water</option>
-        </select>
+      <div class="kt-controls">
+        <label class="kt-field">Forecast run
+          <select id="season-run" data-source="inits"></select>
+        </label>
+        <label class="kt-field">Onset and cessation method
+          <select id="season-method" data-source="inits"></select>
+        </label>
+        <label class="kt-field">Variable
+          <select id="season-var">
+            <option value="onset">Onset</option>
+            <option value="cessation">Cessation</option>
+            <option value="lgp">Season length</option>
+          </select>
+        </label>
+        <button type="button" class="kt-btn" id="season-compare" aria-pressed="false" data-icon="layout-grid">Compare methods</button>
+        <button type="button" class="kt-btn" id="season-members" aria-pressed="false" data-icon="dots">Show ensemble members</button>
       </div>
-      <p class="kt-note" id="season-cond" data-source="sites">—</p>
-      <div class="kt-chart dash-skeleton" id="season-chart" data-source="inits inits_members" style="min-height: 13rem"></div>
-      <div class="kt-scroll">
-        <table id="season-table" data-source="inits" data-row-key="site,init,variable,definition">
+      <p class="kt-note" id="season-cond" data-source="sites inits">—</p>
+      <div class="kt-chart dash-skeleton" id="season-chart" data-source="inits inits_members" style="min-height: 9rem"></div>
+      <h3 id="season-table-title">Main results</h3>
+      <table id="season-table" data-name="seasonal_outlook" data-source="inits">
+        <thead><tr>
+          <th>Method · variable</th>
+          <th>Median estimate</th>
+          <th>Middle 50% of members</th>
+          <th>Middle 80% of members</th>
+          <th class="num" id="season-c-lo">Early (%)</th>
+          <th class="num" id="season-c-mid">Normal (%)</th>
+          <th class="num" id="season-c-hi">Late (%)</th>
+          <th>Long-term average (reference)</th>
+          <th class="num">No event by search end (members)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="kt-row">
+        <button type="button" class="kt-btn" id="season-verif" aria-pressed="false" aria-controls="season-ver" data-icon="info">Show verification details</button>
+      </div>
+      <div class="kt-verif" id="season-ver" hidden>
+        <h3>Verification: how these forecasts did in past seasons</h3>
+        <p class="kt-note">RPSS compares the early / normal / late probabilities with always forecasting one-third each (above 0 = better than that baseline). Hit rate = share of past seasons in which the most likely category happened (baseline 0.33). Scores come from hindcasts at the station's grid cell for the same run and method; a small sample, so treat them as rough.</p>
+        <table id="season-ver-table" data-name="seasonal_verification" data-source="inits">
           <thead><tr>
-            <th>Method · variable</th>
-            <th>Most likely</th>
-            <th>Likely (half the members)</th>
-            <th>Wide (8 in 10)</th>
-            <th class="num">Early / short</th>
-            <th class="num">Normal</th>
-            <th class="num">Late / long</th>
-            <th>Long-term average</th>
-            <th class="num">None by search end</th>
-            <th class="num">RPSS</th>
-            <th class="num">Hit rate</th>
+            <th>Method · variable</th><th>Verification period</th><th class="num">RPSS</th><th class="num">Hit rate</th><th>Baseline (climatology)</th><th>Sample</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -225,25 +347,25 @@
         <b>Rule 2</b>: at least 20 mm in 5 days with 3 or more rainy days, no dry spell longer than 7 days in the next 21.
         <b>Rule 3</b>: more than 20 mm in 3 days, no dry spell longer than 10 days in the next 30.
         Cessation (rules 1–2): after a 10-day period with rain below half the potential evapotranspiration (modified Hargreaves), the day a 100 mm soil store runs dry; rule 3: the first day of that 10-day period.
-        <b>FAO water balance</b> (CHIRPS v3 rainfall, FAO-56 Penman-Monteith ET0 from ERA5-Land, maize water need, SoilGrids soil water):
+        <b>FAO water balance</b> (where available; CHIRPS v3 rainfall, FAO-56 Penman-Monteith ET0 from ERA5-Land, maize water need, SoilGrids soil water):
         <i>agricultural</i> onset when 10-day rain reaches half the atmospheric demand (ET0) and plant-available water stays at ≥20% of what the root zone holds for 5 days with no 7-day fall below it in the next 21; agricultural cessation after 7 days of critically low soil water (&lt;20%), crop water use below half its need and a 10-day rain deficit.
         <i>Rainfall</i> onset and cessation use rain against ET0 only; <i>crop-water</i> cessation is when 21 days of rain fall short of half the crop's water need after the seasonal peak. Each definition has its own season length.
-        Agri rules 1–3 follow ICPAC's operational onset/cessation definitions. They search onset from 15 Aug to 15 Jan and cessation to 28 Feb (the 1 Oct runs carry the forecast to 28 Feb; the Sep 01 run stops at 31 Dec); members with none by then count as late. RPSS above 0 and hit rate above 0.33 mean the forecast beat climatology here in past years; empty = not available (the Sep 01 run has no hindcast data on disk).</p>
+        Agri rules 1–3 follow ICPAC's operational onset/cessation definitions. They search onset from 15 Aug to 15 Jan and cessation to 28 Feb (the 1 Oct runs carry the forecast to 28 Feb; the 1 Sep run stops at 31 Dec); members with none by then count as late.</p>
     </div>
-    <div class="kt-card kt-scroll" id="inits">
+    <div class="kt-card" id="inits">
       <h3 id="init-title">How the outlook changed between forecast runs</h3>
-      <p class="kt-note">The same season seen by each seasonal forecast run: 1 Sep, 1 Oct, 1 Oct with observed September, and 1 Oct with the latest observations.</p>
-      <table id="init-table" data-source="inits" data-row-key="site,init,variable,definition">
+      <p class="kt-note">The same season seen by each seasonal forecast run: 1 Sep, 1 Oct, 1 Oct with observed September, and 1 Oct with the latest observations. Same method and variable as above; the selected run is highlighted.</p>
+      <table id="init-table" data-name="outlook_by_run" data-source="inits">
         <thead><tr>
-          <th data-field="init">Run</th>
-          <th data-field="variable">Method · variable</th>
-          <th data-field="median_date">Most likely</th>
-          <th data-field="p25">Likely (half the members)</th>
-          <th class="num" data-field="anomaly">vs normal (days)</th>
-          <th class="num" data-field="p_bn">Early / short</th>
-          <th class="num" data-field="p_nn">Normal</th>
-          <th class="num" data-field="p_an">Late / long</th>
-          <th class="num" data-field="no_onset">None by search end</th>
+          <th>Run</th>
+          <th>Method · variable</th>
+          <th>Median estimate</th>
+          <th>Middle 50% of members</th>
+          <th class="num">Median vs long-term average (days)</th>
+          <th class="num" id="init-c-lo">Early (%)</th>
+          <th class="num" id="init-c-mid">Normal (%)</th>
+          <th class="num" id="init-c-hi">Late (%)</th>
+          <th class="num">No event by search end (members)</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -253,20 +375,20 @@
   <section class="kt-sec" id="verify">
     <h2>4. How reliable the satellite data are: comparison with CHIRPS</h2>
     <p class="kt-note">Daily rainfall over the short-rains zone against CHIRPS (gauge-blended). Oct–Dec 2025 is the main test; 2026 is the current season so far. POD = share of CHIRPS rain days the product also caught; FAR = share of the product's rain days CHIRPS did not have.</p>
-    <div class="kt-card kt-scroll">
-      <table id="ver-table" data-source="verification" data-row-key="product,period">
+    <div class="kt-card">
+      <table id="ver-table" data-name="satellite_vs_chirps" data-source="verification">
         <thead><tr>
-          <th data-field="product">Product</th>
-          <th data-field="period">Period</th>
-          <th class="num" data-field="days">Days</th>
-          <th class="num" data-field="bias_pct">Total bias</th>
-          <th class="num" data-field="corr_daily">r daily</th>
-          <th class="num" data-field="corr_pentad">r 5-day</th>
-          <th class="num" data-field="pod_1mm">POD ≥1 mm</th>
-          <th class="num" data-field="far_1mm">FAR ≥1 mm</th>
-          <th class="num" data-field="pod_10mm">POD ≥10 mm</th>
-          <th class="num" data-field="far_10mm">FAR ≥10 mm</th>
-          <th class="num" data-field="onset_mad_days">Onset difference (days)</th>
+          <th>Product</th>
+          <th>Period</th>
+          <th class="num">Days</th>
+          <th class="num">Total bias (%)</th>
+          <th class="num">r daily</th>
+          <th class="num">r 5-day</th>
+          <th class="num">POD ≥1 mm</th>
+          <th class="num">FAR ≥1 mm</th>
+          <th class="num">POD ≥10 mm</th>
+          <th class="num">FAR ≥10 mm</th>
+          <th class="num">Onset difference (days)</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -277,8 +399,9 @@
     <h2>5. How these numbers are made</h2>
     <div class="kt-methods">
       <p><b>Seasonal forecast.</b> ECMWF SEAS5 started 1 October 2026, 25 members, bias-corrected day by day against CHIRPS 1993–2016 by quantile mapping. Observed CHIRPS rainfall replaces the forecast up to the latest observed day in every year, so skill is measured the same way it is used.</p>
+      <p><b>Statistics shown.</b> The median estimate is the middle value of the ensemble members (members with no event by the end of the search count as later than any date). The middle 50% of members runs from the 25th to the 75th percentile, the middle 80% from the 10th to the 90th.</p>
       <p><b>Onset and cessation methods.</b> Dunning onset and cessation are the turning points of accumulated rainfall anomaly over 1 Sep – 31 Dec. The seasonal outlook also gives three agricultural rules, Agri rules 1–3, adapted from ICPAC's operational definitions (onset from 15 Aug; cessation from 10-day rain against half the modified-Hargreaves potential evapotranspiration, with a 100 mm soil store for rules 1 and 2), described under Season outlook. In the weather forecasts, planting rains are at least 20 mm within 3 days.</p>
-      <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Local skill compares past forecasts at the site's cell with CHIRPS: useful, limited or no skill.</p>
+      <p><b>Probabilities and skill.</b> Early, normal and late are the thirds of the 1993–2016 CHIRPS record at each cell, calibrated toward one-third each where past forecasts were weak. Skill compares past forecasts at the site's cell with CHIRPS (RPSS and hit rate; see “Show verification details” under Season outlook).</p>
       <p><b>Satellite products.</b> CHIRPS (preliminary after September), ARC2, TAMSAT v3.1, PDIR-Now and NASA IMERG Late and Early, averaged onto the same 0.25° grid. GSMaP is not included yet (needs an Earth Engine project or a JAXA account). Each product is described under Data sources below.</p>
       <p><b>Seasonal conditioning.</b> Where no product shows an onset, members with an onset before the ensemble start date are dropped and the probabilities recomputed.</p>
     </div>
@@ -286,12 +409,12 @@
 
   <section class="kt-sec" id="sources">
     <h2>6. Data sources</h2>
-    <p class="kt-note">Every update checks each provider for anything newer than the copy here and downloads only what is missing. Days behind = days between the latest data and the check (for forecasts: age of the run). Typical delay is what the provider usually needs to publish.</p>
-    <div class="kt-card kt-scroll">
-      <table id="src-table" data-source="products" data-row-key="id">
+    <p class="kt-note">Every update checks each provider for anything newer than the copy here and downloads only what is missing. Days behind = days between the latest data and the check (for forecasts: age of the run). Status compares that with the provider's usual delay.</p>
+    <div class="kt-card">
+      <table id="src-table" data-name="data_sources" data-source="products">
         <thead><tr>
           <th>Product</th><th>Type</th><th>Provider</th><th>Resolution</th><th>Typical delay</th>
-          <th>Latest data</th><th class="num">Days behind</th><th>Forecast to</th><th>Note</th>
+          <th>Latest data</th><th class="num">Days behind (days)</th><th>Status</th><th>Forecast to</th><th>Note</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -303,6 +426,45 @@
 
 <script>
 const KT = (window.KT = {});
+KT.$ = (id) => document.getElementById(id);
+KT.YEAR = 2026;
+// Seasonal hindcast years behind rpss_val / hitrate_val (validation split of the 1993–2024 hindcasts; see
+// scripts/download_seasonal_forecasts_daily_c3s.py "val_years" and scripts/agro_onset.py VAL_YEARS)
+KT.VAL_YEARS = '2017–2024'; KT.VAL_N = 8;
+// Small DOM builder: KT.h('div', { class: 'x', title: 'y' }, child, 'text', …)
+KT.h = (tag, props, ...kids) => {
+  const e = document.createElement(tag);
+  Object.entries(props || {}).forEach(([k, v]) => {
+    if (v == null || v === false) return;
+    if (k === 'class') e.className = v; else if (k === 'html') e.innerHTML = v; else e.setAttribute(k, v === true ? '' : v);
+  });
+  kids.flat().forEach((c) => { if (c != null && c !== false && c !== '') e.append(c instanceof Node ? c : String(c)); });
+  return e;
+};
+// Line icons (lucide shapes, 16 px, stroke = text colour)
+KT.ICONS = {
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>', 'chevron-right': '<path d="m9 18 6-6-6-6"/>', 'chevrons-right': '<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>', pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  slash: '<circle cx="12" cy="12" r="10"/><path d="M9 15 15 9"/>',
+  'layout-grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  dots: '<circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="8" r="1.5"/><circle cx="12" cy="16" r="1.5"/><circle cx="18" cy="12" r="1.5"/>',
+  rain: '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/>',
+  cloud: '<path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>',
+  calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+  target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  pin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+};
+KT.icon = (n) => `<svg class="kt-ic" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${KT.ICONS[n] || ''}</svg>`;
+KT.ico = (n) => { const t = document.createElement('template'); t.innerHTML = KT.icon(n); return t.content.firstChild; };
+document.querySelectorAll('.kt [data-icon]').forEach((el) => el.insertAdjacentHTML('afterbegin', KT.icon(el.dataset.icon)));
+KT.setPlay = (btn, playing) => { btn.innerHTML = KT.icon(playing ? 'pause' : 'play') + (playing ? 'Pause' : 'Play'); };
+
 // Resolve any CSS colour (var(--token), dash.colors entries, light-dark(), …) to rgb() so d3 can interpolate it
 KT.color = (c) => {
   const el = document.createElement('span');
@@ -313,6 +475,28 @@ KT.color = (c) => {
   return v;
 };
 KT.css = (name) => KT.color(`var(${name})`);
+
+// Numbers and dates: one date style everywhere ("28 Oct 2026"); ranges in one year drop the first year
+KT.pct = d3.format('.0%');
+KT.num = d3.format(',.1f');
+KT.int = d3.format(',.0f');
+KT.n = (v) => (v === '' || v == null || !isFinite(+v) ? NaN : +v);
+KT.fD = d3.utcFormat('%-d %b %Y'); KT.fDs = d3.utcFormat('%-d %b'); KT.fDw = d3.utcFormat('%a %-d %b %Y');
+KT.iso = (s) => (s ? new Date(String(s).slice(0, 10) + 'T00:00:00Z') : null);
+KT.okD = (d) => d instanceof Date && isFinite(d);
+KT.d = (s) => { const t = s instanceof Date ? s : KT.iso(s); return KT.okD(t) ? KT.fD(t) : ''; };
+KT.range = (a, b) => {
+  if (!KT.okD(a) || !KT.okD(b)) return KT.d(a) || KT.d(b);
+  if (+a === +b) return KT.fD(a);
+  return a.getUTCFullYear() === b.getUTCFullYear() ? `${KT.fDs(a)} – ${KT.fD(b)}` : `${KT.fD(a)} – ${KT.fD(b)}`;
+};
+KT.stamp = (s) => { const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(s || ''); return m ? `${KT.d(m[1])}, ${m[2]}` : (s || ''); };
+KT.niceDates = (s) => String(s || '').replace(/\b\d{4}-\d{2}-\d{2}\b/g, (m) => KT.d(m));
+KT.doyToDate = (doy) => new Date(Date.UTC(KT.YEAR, 0, 1) + (doy - 1) * 864e5);
+KT.doyDate = (doy, short) => (short ? KT.fDs : KT.fD)(KT.doyToDate(doy));
+KT.dateDoy = (d) => Math.round((d - Date.UTC(KT.YEAR, 0, 1)) / 864e5) + 1;
+KT.addDays = (d, k) => new Date(+d + k * 864e5);
+
 // Map overlay: county lines, Kenya outline and monitored stations, drawn with the map's own x/y scales
 KT.ringPath = (geom, x, y) => {
   const g = typeof geom === 'string' ? JSON.parse(geom) : geom;
@@ -326,7 +510,7 @@ KT.overlay = (svg, x, y, W, labels = true, picked = null) => {
     svg.append('g').selectAll('path').data(rows.filter((r) => r.level === 'county')).join('path')
       .attr('d', (r) => KT.ringPath(r.geometry, x, y)).attr('fill', 'none').attr('stroke', 'var(--color-fg-muted)').attr('stroke-width', 0.6).attr('stroke-opacity', 0.55);
     svg.append('g').selectAll('path').data(rows.filter((r) => r.level === 'country')).join('path')
-      .attr('d', (r) => KT.ringPath(r.geometry, x, y)).attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.4);
+      .attr('d', (r) => KT.ringPath(r.geometry, x, y)).attr('fill', 'none').attr('stroke', 'var(--kt-heading, var(--color-fg))').attr('stroke-width', 1.4);
   }
   const s = dash.data('stations');
   if (s.status === 'ok') {
@@ -339,32 +523,144 @@ KT.overlay = (svg, x, y, W, labels = true, picked = null) => {
     const g = svg.append('g');
     const isPicked = (q) => picked && q.sites.includes(picked);
     g.selectAll('circle.ring').data(groups.filter(isPicked)).join('circle').attr('cx', (q) => x(q.lon)).attr('cy', (q) => y(q.lat)).attr('r', 9)
-      .attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+      .attr('fill', 'none').attr('stroke', 'var(--kt-heading, var(--color-fg))').attr('stroke-width', 2);
     g.selectAll('circle.dot').data(groups).join('circle').attr('cx', (q) => x(q.lon)).attr('cy', (q) => y(q.lat)).attr('r', (q) => (isPicked(q) ? 5 : 3.5))
-      .attr('fill', 'var(--color-fg)').attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+      .attr('fill', 'var(--kt-heading, var(--color-fg))').attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
     if (labels && W >= 220) {
-      g.selectAll('text').data(groups).join('text').attr('x', (q) => x(q.lon) + 6).attr('y', (q) => y(q.lat)).attr('dy', '0.35em')
-        .attr('font-size', 10).attr('fill', 'var(--color-fg)').attr('paint-order', 'stroke').attr('stroke', 'var(--color-panel)').attr('stroke-width', 3)
-        .attr('text-anchor', (q) => (x(q.lon) > W * 0.7 ? 'end' : 'start')).attr('dx', (q) => (x(q.lon) > W * 0.7 ? -12 : 0))
+      // only the picked station is labelled on small maps
+      const lab = W >= 380 ? groups : groups.filter(isPicked);
+      g.selectAll('text').data(lab).join('text').attr('x', (q) => x(q.lon) + 6).attr('y', (q) => y(q.lat)).attr('dy', '0.35em')
+        .attr('font-size', 12).attr('fill', 'var(--kt-heading, var(--color-fg))').attr('paint-order', 'stroke').attr('stroke', 'var(--color-panel)').attr('stroke-width', 3)
+        .attr('text-anchor', (q) => (x(q.lon) > W * 0.6 ? 'end' : 'start')).attr('dx', (q) => (x(q.lon) > W * 0.6 ? -12 : 4))
         .text((q) => q.names.join(' / '));
     }
   }
 };
-KT.pct = d3.format('.0%');
-KT.num = d3.format(',.1f');
-KT.int = d3.format(',.0f');
-KT.doyDate = (doy) => d3.utcFormat('%-d %b')(new Date(Date.UTC(2026, 0, 1) + (doy - 1) * 864e5));
-// Onset / cessation methods in display order (Dunning, Agri rules 1–3); rows without a definition are Dunning
+// Hatch pattern for "no data" (never drawn as zero rain); returns the fill url
+KT.hatch = (svg) => {
+  const id = 'kt-hatch-' + (KT.hN = (KT.hN || 0) + 1);
+  const p = svg.append('defs').append('pattern').attr('id', id).attr('patternUnits', 'userSpaceOnUse').attr('width', 6).attr('height', 6).attr('patternTransform', 'rotate(45)');
+  p.append('rect').attr('width', 6).attr('height', 6).attr('fill', 'var(--kt-missing, var(--color-bg))');
+  p.append('line').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 6).attr('stroke', 'var(--cds-chart-muted)').attr('stroke-width', 2);
+  return `url(#${id})`;
+};
+KT.hatchLegend = (text) => KT.h('span', {}, KT.h('span', { class: 'kt-hatch', 'aria-hidden': 'true' }), text);
+KT.mapNote = (lines) => KT.h('div', { class: 'kt-map-empty' }, KT.h('div', {}, KT.h('b', {}, lines[0]), ...lines.slice(1).map((l) => KT.h('span', {}, l, KT.h('br')))));
+
+// Onset / cessation methods in display order (Dunning, Agri rules 1–3, FAO); rows without a definition are Dunning
 KT.methods = ['Dunning', 'Agri rule 1', 'Agri rule 2', 'Agri rule 3', 'FAO agricultural', 'FAO rainfall', 'FAO crop-water'];
 KT.methodRank = (r) => Math.max(0, KT.methods.indexOf(r.definition || 'Dunning'));
 KT.site = () => (dash.params().site || 'Kapiti Research Station Farm');
 KT.products = ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early', 'imerg_gee', 'gsmap_gee'];
 KT.prodLabel = { chirps: 'CHIRPS', arc2: 'ARC2', tamsat: 'TAMSAT', pdirnow: 'PDIR-Now', imerg: 'IMERG Late', imerg_early: 'IMERG Early', imerg_gee: 'IMERG (GEE)', gsmap_gee: 'GSMaP (GEE)' };
 KT.models = ['ecmwf_ifs025', 'ecmwf_ens_median', 'gfs_global', 'gem_global', 'icon_global', 'ukmo_global_deterministic_10km'];
+
+// Shared selections (seasonal run, method, variable and view toggles); the summary, context bar and season
+// section all follow them
+KT.state = { run: null, method: 'Dunning', variable: 'onset', compareMethods: false, members: false, verif: false };
+KT.subs = [];
+KT.onState = (fn) => KT.subs.push(fn);
+KT.setState = (p) => { Object.assign(KT.state, p); KT.subs.forEach((fn) => { try { fn(); } catch (e) { console.error('[tracker]', e); } }); };
+
+// Data helpers (each returns null / [] when a dataset is missing, so every block degrades on its own)
+KT.rows = (id) => { const d = dash.data(id); return d && d.status === 'ok' ? d.data : null; };
+KT.prod = (id) => (KT.rows('products') || []).find((r) => r.id === id) || null;
+KT.siteRow = () => (KT.rows('sites') || []).find((r) => r.site === KT.site()) || null;
+KT.shortName = () => { const st = (KT.rows('stations') || []).find((r) => r.site === KT.site()); return st ? st.short_name : KT.site(); };
+KT.checked = () => { const p = (KT.rows('products') || []).find((r) => r.checked); return p ? p.checked : ''; };
+KT.RUNS = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
+// observation cut-off of the "latest obs" run: the SEAS5 note says up to which day observations were spliced in
+KT.seasCut = () => {
+  const p = KT.prod('seas5'), m = p && /(\d{4}-\d{2}-\d{2})/.exec(p.note || '');
+  if (m) return KT.iso(m[1]);
+  const s = KT.siteRow();
+  return s ? KT.iso(s.obs_through) : null;
+};
+KT.runStart = (init) => {
+  const m = /^([A-Z][a-z]{2}) (\d{2})/.exec(init || ''), mo = m ? 'JanFebMarAprMayJunJulAugSepOctNovDec'.indexOf(m[1]) / 3 : -1;
+  return mo >= 0 ? new Date(Date.UTC(KT.YEAR, mo, +m[2])) : null;
+};
+KT.runCut = (init) => (/latest obs/.test(init) ? KT.seasCut() : /Sep obs/.test(init) ? new Date(Date.UTC(KT.YEAR, 8, 30)) : null);
+KT.runLabel = (init) => {
+  const s = KT.runStart(init);
+  if (!s) return init || '';
+  const base = `${KT.fD(s)} run`, cut = KT.runCut(init);
+  if (/latest obs/.test(init)) return cut ? `${base} + observations to ${KT.fD(cut)}` : `${base} + latest observations`;
+  if (/Sep obs/.test(init)) return `${base} + observed September`;
+  return base;
+};
+KT.runShort = (init) => {
+  const s = KT.runStart(init), cut = KT.runCut(init);
+  if (!s) return init || '';
+  return `${KT.fDs(s)} run` + (/latest obs/.test(init) ? (cut ? ` + obs. to ${KT.fDs(cut)}` : ' + latest obs.') : /Sep obs/.test(init) ? ' + Sep obs.' : '');
+};
+KT.runsFor = (site) => { const r = KT.rows('inits'); return r ? KT.RUNS.filter((k) => r.some((q) => q.site === site && q.init === k)) : []; };
+KT.curRun = (site) => { const runs = KT.runsFor(site); return runs.includes(KT.state.run) ? KT.state.run : runs[runs.length - 1] || null; };
+KT.methodsFor = (site) => {
+  const r = KT.rows('inits');
+  if (!r) return [];
+  const have = new Set(r.filter((q) => q.site === site).map((q) => q.definition || 'Dunning'));
+  return [...KT.methods.filter((m) => have.has(m)), ...[...have].filter((m) => !KT.methods.includes(m))];
+};
+KT.curMethod = (site) => { const ms = KT.methodsFor(site); return ms.includes(KT.state.method) ? KT.state.method : ms[0] || 'Dunning'; };
+
+// Seasonal values: day-of-year (dates) or days (season length); "none by the search end" shown as "after <date>"
+KT.sv = {
+  defOf: (r) => r.definition || 'Dunning',
+  isL: (r) => r.variable === 'lgp',
+  byOf: (r) => r.none_by || '31 Dec',
+  endOf: (r) => ({ '31 Dec': 366, '15 Jan': 381 })[r.none_by || '31 Dec'] ?? 425,
+  byDate: (r) => KT.doyDate(KT.sv.endOf(r) - 1),
+  none: (r) => (r.variable === 'onset' ? +r.no_onset || 0 : r.variable === 'cessation' ? +r.no_cessation || 0 : 0),
+  varName: (v) => ({ onset: 'onset', cessation: 'cessation', lgp: 'season length' })[v] || v,
+  cats: (v) => (v === 'lgp' ? ['Short', 'Normal', 'Long'] : v === 'cessation' ? ['Early end', 'Normal', 'Late end'] : ['Early', 'Normal', 'Late']),
+  one: (r, v) => {
+    if (KT.sv.isL(r)) return isFinite(v) ? `${KT.int(v)} days` : '—';
+    return isFinite(v) && v < KT.sv.endOf(r) ? KT.doyDate(v) : `after ${KT.sv.byDate(r)}`;
+  },
+  rng: (r, a, b) => {
+    if (KT.sv.isL(r)) return isFinite(a) && isFinite(b) ? `${KT.int(a)}–${KT.int(b)} days` : isFinite(a) ? `${KT.int(a)} days or longer` : '—';
+    const ok = (v) => isFinite(v) && v < KT.sv.endOf(r);
+    return ok(a) && ok(b) ? KT.range(KT.doyToDate(a), KT.doyToDate(b)) : `${KT.sv.one(r, a)} – ${KT.sv.one(r, b)}`;
+  },
+};
+
+// Data status: days behind (from the last check) against the provider's usual delay
+KT.latencyDays = (s) => {
+  const ms = [...String(s || '').matchAll(/(\d+)(?:\s*[–-]\s*(\d+))?\s*days?/g)];
+  if (!ms.length) return null;
+  const m = ms[ms.length - 1];
+  return +(m[2] || m[1]);
+};
+KT.prodStatus = (r) => {
+  if (!r || !r.latest_data) return { k: 'off', text: 'Not available', detail: KT.niceDates(r && r.note) || 'no data downloaded' };
+  const db = KT.n(r.days_behind);
+  if (r.kind === 'seasonal') {
+    const run = KT.iso(r.run_date), chk = KT.iso((r.checked || '').slice(0, 10)), m = /published on the (\d+)/.exec(r.typical_latency || '');
+    if (!KT.okD(run) || !KT.okD(chk)) return { k: 'off', text: 'Unknown', detail: '' };
+    const due = new Date(Date.UTC(run.getUTCFullYear(), run.getUTCMonth() + 1, m ? +m[1] : 5));
+    return chk <= due ? { k: 'ok', text: 'Current', detail: `next start due ${KT.fD(due)}` } : { k: 'warn', text: 'Behind schedule', detail: `next start was due ${KT.fD(due)}` };
+  }
+  const exp = r.kind === 'nwp' ? 1 : (KT.latencyDays(r.typical_latency) ?? 3);
+  if (!isFinite(db)) return { k: 'off', text: 'Unknown', detail: '' };
+  return db <= exp ? { k: 'ok', text: 'Current', detail: `${KT.int(db)} days behind; usually up to ${exp}` }
+    : { k: 'warn', text: 'Behind schedule', detail: `${KT.int(db)} days behind; usually up to ${exp}` };
+};
+KT.badge = (st) => KT.h('span', { class: `kt-badge ${st.k}`, title: st.detail || null }, KT.ico(st.k === 'ok' ? 'check' : st.k === 'off' ? 'slash' : 'alert'), st.text);
+// Where a product has no data on a date: which product, its latest date, whether the date is beyond it, last check
+KT.gapLines = (label, day, latest, checked, extra) => {
+  const lines = [`No ${label} data for ${KT.d(day)}`];
+  if (latest) lines.push(`Latest available: ${KT.d(latest)}${KT.iso(day) > KT.iso(latest) ? ' (the selected date is after its coverage)' : ''}`);
+  else lines.push('No data downloaded');
+  if (extra) lines.push(extra);
+  if (checked) lines.push(`Source last checked ${KT.stamp(checked)}`);
+  return lines;
+};
+
 KT.fail = (el, d) => {
   if (d.status === 'error' || d.status === 'connect' || d.status === 'declined' || d.status === 'missing') {
     el.classList.remove('dash-skeleton');
-    el.replaceChildren(Object.assign(document.createElement('div'), { className: 'kt-fail', textContent: 'Failed to load' }));
+    el.replaceChildren(Object.assign(document.createElement('div'), { className: 'kt-fail', textContent: d.status === 'missing' ? 'Data not available' : 'Failed to load' }));
     return true;
   }
   return false;
@@ -374,14 +670,16 @@ KT.tip = (box) => {
   if (!t) { t = document.createElement('div'); t.className = 'kt-tip'; t.hidden = true; box.appendChild(t); }
   return t;
 };
+// cols: [field, format(v, row), class, raw] — raw = call format even when the field is blank
 KT.fillTable = (table, rows, cols) => {
   const tb = table.querySelector('tbody');
   tb.replaceChildren(...rows.map((r) => {
     const tr = document.createElement('tr');
-    cols.forEach(([field, fmt, cls]) => {
+    cols.forEach(([field, fmt, cls, raw]) => {
       const td = document.createElement('td');
       const v = r[field];
-      td.textContent = v === null || v === undefined || v === '' ? '—' : (fmt ? fmt(v, r) : String(v));
+      const blank = v === null || v === undefined || v === '';
+      td.textContent = blank && !raw ? '—' : (fmt ? fmt(v, r) : String(v)) || '—';
       if (cls) td.className = typeof cls === 'function' ? cls(v, r) : cls;
       tr.appendChild(td);
     });
@@ -391,15 +689,15 @@ KT.fillTable = (table, rows, cols) => {
 };
 // Sortable tables: click a header to sort by that column (again to reverse). The choice is kept when the
 // table is refilled (a MutationObserver re-sorts new rows). Cells sort by data-v when set, otherwise by
-// their text read as a date ("26 Oct", ISO), a number ("12.5 mm", "+3%", "45%") or plain text; blanks last.
+// their text read as a date ("26 Oct 2026", ISO), a number ("12.5 (7 days)", "+3", "45%") or plain text; blanks last.
 KT.sortVal = (td) => {
   if (!td) return null;
   if (td.dataset.v !== undefined) return td.dataset.v === '' ? null : +td.dataset.v;
   const s = td.textContent.trim();
-  if (!s || s === '—' || s === 'no data' || s === 'none in range') return null;
+  if (!s || s === '—' || /^no data|^none in range|^beyond/i.test(s)) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return Date.parse(s.slice(0, 10));
-  const dm = s.match(/^\d{1,2} [A-Z][a-z]{2}\b/);
-  if (dm && isFinite(Date.parse(dm[0] + ' 2026'))) return Date.parse(dm[0] + ' 2026');
+  const dm = s.match(/^(\d{1,2} [A-Z][a-z]{2})(?: (\d{4}))?\b/);
+  if (dm && isFinite(Date.parse(`${dm[1]} ${dm[2] || KT.YEAR}`))) return Date.parse(`${dm[1]} ${dm[2] || KT.YEAR}`);
   if (/^[+−-]?\d/.test(s)) { const n = parseFloat(s.replace('−', '-').replace(/[,+%]/g, '')); if (isFinite(n)) return n; }
   return s.toLowerCase();
 };
@@ -437,9 +735,44 @@ KT.sortable = (table) => {
   obs.observe(tb, { childList: true });
   apply();
 };
+// Table chrome: own horizontal scroll with a visible cue (edge shadow + "scroll sideways" hint) and a
+// "Download CSV" button that saves the rows as shown. A table's file name comes from table.ktName() or data-name.
+KT.slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+KT.tableCSV = (table) => {
+  const q = (s) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  return [...table.querySelectorAll('tr')].filter((tr) => !tr.hidden)
+    .map((tr) => [...tr.cells].map((c) => q(c.textContent.replace(/\s+/g, ' ').trim())).join(',')).join('\r\n');
+};
+KT.download = (name, text) => {
+  try {
+    const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+    const a = KT.h('a', { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) { console.error('[tracker] download failed', e); }
+};
+KT.enhanceTable = (table) => {
+  if (table.closest('.kt-tablewrap')) return;
+  const sc = KT.h('div', { class: 'kt-scroll', tabindex: '0', role: 'region', 'aria-label': (table.dataset.name || 'table').replace(/_/g, ' ') + ' (scrolls sideways)' });
+  const box = KT.h('div', { class: 'kt-scrollbox' }, sc);
+  const btn = KT.h('button', { type: 'button', class: 'kt-btn kt-btn-sm' }, KT.ico('download'), 'Download CSV');
+  const wrap = KT.h('div', { class: 'kt-tablewrap' }, KT.h('div', { class: 'kt-tabletools' },
+    KT.h('span', { class: 'kt-scroll-hint' }, 'Scroll sideways for more columns', KT.ico('chevrons-right')), btn), box);
+  table.replaceWith(wrap); sc.append(table);
+  btn.addEventListener('click', () => KT.download(KT.slug(table.ktName ? table.ktName() : table.dataset.name || table.id) + '.csv', KT.tableCSV(table)));
+  const upd = () => {
+    const over = sc.scrollWidth > sc.clientWidth + 2;
+    wrap.toggleAttribute('data-overflow', over);
+    box.toggleAttribute('data-more-right', over && sc.scrollWidth - sc.clientWidth - sc.scrollLeft > 2);
+    box.toggleAttribute('data-more-left', sc.scrollLeft > 2);
+  };
+  sc.addEventListener('scroll', upd, { passive: true });
+  if ('ResizeObserver' in window) { const ro = new ResizeObserver(upd); ro.observe(sc); ro.observe(table); }
+  upd();
+};
 // Colorbar legend for a d3 colour scale over dom (2 or 3 stops); ticks at the stops
 KT.colorbar = (color, dom, fmt, title) => {
-  const W = 280, H = 32, pad = 14, lo = dom[0], hi = dom[dom.length - 1];
+  const W = 280, H = 34, pad = 16, lo = dom[0], hi = dom[dom.length - 1];
   const id = 'kt-cb-' + (KT.cbN = (KT.cbN || 0) + 1);
   const x = d3.scaleLinear([lo, hi], [pad, W - pad]);
   const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', `${title || 'Scale'}: ${fmt(lo)} to ${fmt(hi)}`);
@@ -447,10 +780,10 @@ KT.colorbar = (color, dom, fmt, title) => {
   d3.range(0, 1.0001, 0.05).forEach((f) => grad.append('stop').attr('offset', f).attr('stop-color', color(lo + f * (hi - lo))));
   svg.append('rect').attr('x', pad).attr('y', 2).attr('width', W - 2 * pad).attr('height', 10).attr('rx', 2).attr('fill', `url(#${id})`)
     .attr('stroke', 'var(--color-border-line)');
-  const tk = d3.range(0, 1.0001, 0.25).map((f) => lo + f * (hi - lo));
+  const tk = d3.range(0, 1.0001, 0.5).map((f) => lo + f * (hi - lo));
   const ticks = [...new Set([...dom, ...(dom.length === 2 ? tk : [])])];
   svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', x).attr('x2', x).attr('y1', 12).attr('y2', 16).attr('stroke', 'var(--color-fg-muted)');
-  svg.append('g').selectAll('text').data(ticks).join('text').attr('x', x).attr('y', 27).attr('text-anchor', 'middle').attr('font-size', 10)
+  svg.append('g').selectAll('text').data(ticks).join('text').attr('x', x).attr('y', 29).attr('text-anchor', 'middle').attr('font-size', 12)
     .attr('fill', 'var(--color-fg-muted)').text((v, i) => fmt(v) + (i === ticks.length - 1 && v === hi ? '+' : ''));
   const wrap = document.createElement('div'); wrap.className = 'kt-cbar';
   if (title) wrap.append(Object.assign(document.createElement('span'), { textContent: title }));
@@ -476,9 +809,9 @@ KT.lineChart = (box, o) => {
     .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
   (o.refY || []).forEach((v) => svg.append('line').attr('x1', mg.l).attr('x2', W - mg.r).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3'));
   (o.refX || []).forEach((t) => svg.append('line').attr('x1', x(t)).attr('x2', x(t)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3'));
-  vis.forEach((s) => svg.append('path').datum(s.pts).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2)
+  vis.forEach((s) => svg.append('path').datum(s.pts).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', s.strong ? 3 : 2).attr('opacity', o.focus && !s.strong ? 0.55 : 1)
     .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((p) => x(p.t)).y((p) => y(p.v))));
-  if (o.marker) svg.append('line').attr('x1', x(o.marker)).attr('x2', x(o.marker)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--color-fg)').attr('stroke-width', 1.5);
+  if (o.marker) svg.append('line').attr('x1', x(o.marker)).attr('x2', x(o.marker)).attr('y1', mg.t).attr('y2', H - mg.b).attr('stroke', 'var(--kt-heading, var(--color-fg))').attr('stroke-width', 1.5);
   // hover: snap to the nearest day that has data, show a dot per series and a tooltip with every value
   const lookup = vis.map((s) => new Map(s.pts.map((p) => [+p.t, p.v])));
   const times = [...new Set(vis.flatMap((s) => s.pts.map((p) => +p.t)))].sort((a, b) => a - b);
@@ -493,7 +826,7 @@ KT.lineChart = (box, o) => {
     dots.attr('cx', cx).attr('cy', (s, i) => (lookup[i].has(tt) ? y(lookup[i].get(tt)) : -99)).attr('display', (s, i) => (lookup[i].has(tt) ? null : 'none'));
     const items = vis.map((s, i) => [s, lookup[i].get(tt)]).filter(([, v]) => v !== undefined).sort((a, b) => b[1] - a[1]);
     tip.hidden = false;
-    tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: d3.utcFormat('%a %-d %b %Y')(new Date(tt)) }),
+    tip.replaceChildren(Object.assign(document.createElement('div'), { className: 'd', textContent: KT.fDw(new Date(tt)) }),
       ...items.map(([s, v]) => { const div = document.createElement('div'); div.innerHTML = '<span class="kt-sw"></span>'; div.firstChild.style.background = s.color; div.append(`${s.label}: ${fmt(v)}`); return div; }));
     const left = (cx / W) * box.clientWidth;
     tip.style.top = '4px';
@@ -529,7 +862,7 @@ KT.barChart = (box, o) => {
   const lab = new Map(o.groups.map((g) => [g.key, g.label]));
   if (o.mark != null && x0(o.mark) !== undefined) {
     svg.append('rect').attr('x', x0(o.mark) - (x0.step() - x0.bandwidth()) / 2).attr('width', x0.step()).attr('y', mg.t).attr('height', H - mg.t - mg.b)
-      .attr('fill', 'var(--color-fg)').attr('opacity', 0.06);
+      .attr('fill', 'var(--color-fg)').attr('opacity', 0.08);
   }
   svg.append('g').attr('transform', `translate(0,${H - mg.b})`).call(d3.axisBottom(x0).tickValues(o.groups.map((g) => g.key).filter((_, i) => i % every === 0)).tickFormat((k) => lab.get(k)))
     .attr('font-size', null).attr('font-family', null).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)')).call((g) => g.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
@@ -567,143 +900,309 @@ KT.barChart = (box, o) => {
   box.replaceChildren(svg.node(), tip, lg);
 };
 
-document.querySelectorAll('.kt table').forEach(KT.sortable);
-
+document.querySelectorAll('.kt table').forEach((t) => { KT.sortable(t); KT.enhanceTable(t); });
+// In-page links scroll the section into view (this also scrolls the app when the page is embedded)
+document.querySelectorAll('.kt-toc a').forEach((a) => a.addEventListener('click', (e) => {
+  const t = document.querySelector(a.getAttribute('href'));
+  if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+}));
 </script>
 
 <script>
-// Station picker at the top of the page; every station chart and table follows it
-const pick = document.getElementById('site-pick');
-pick.addEventListener('change', () => dash.setParams({ site: pick.value }));
-dash.onData(() => {
-  const d = dash.data('sites');
-  if (d.status !== 'ok') return;
-  const rows = d.data;
-  pick.replaceChildren(...rows.map((r) => new Option(r.site, r.site)));
-  pick.value = KT.site();
-  const me = rows.find((r) => r.site === KT.site());
-  const cond = document.getElementById('season-cond');
-  // the outlook shows every member; say what observations already rule out
-  cond.textContent = !me ? 'All 25 members shown.'
-    : +me.products_with_onset > 0
-      ? `All 25 members shown. ${me.products_with_onset} of ${me.products} satellite products already show a planting onset here.`
-      : `All 25 members shown. No satellite product shows a planting onset here so far, so members left of “today” have already been ruled out.`;
-});
-</script>
-
-<script>
-// Season outlook for the picked site, run and method: onset and cessation rows for Dunning and the Agri rules 1–3
-// (or one method). Hover a row for its numbers (a cursor shows the date under the pointer); the legend
-// switches layers on and off; the table below follows the same run and method.
+// Station picker, sticky context bar, the four-part station summary and the data dates / status strip
 (() => {
-  const box = document.getElementById('season-chart');
-  const table = document.getElementById('season-table');
-  const runSel = document.getElementById('season-run');
-  const methodSel = document.getElementById('season-method');
-  const RUNS = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
-  const LAYERS = [['members', 'Members'], ['wide', 'Wide range (8 in 10)'], ['likely', 'Likely range (half)'],
-                  ['normal', 'Normal third'], ['avg', 'Long-term average'], ['today', 'Today']];
-  let END = 366;                                             // right edge: after the last searched day (31 Dec, or 28 Feb for the Agri rules)
-  const byOf = (r) => r.none_by || '31 Dec';                 // "none by" date of the row's search
-  const endOf = (r) => ({ '31 Dec': 366, '15 Jan': 381 })[byOf(r)] ?? 425;
+  const pick = KT.$('site-pick'), ctx = KT.$('kt-context'), sum = KT.$('kt-sum'), status = KT.$('kt-status');
+  pick.addEventListener('change', () => dash.setParams({ site: pick.value }));
+  const { h } = KT;
+  const card = (icon, title, value, lines, meta) => h('div', { class: 'kt-card' },
+    h('h3', { class: 'kt-sum-k' }, KT.ico(icon), title), value, ...lines.filter(Boolean).map((l) => (l instanceof Node ? l : h('p', {}, l))), meta && h('p', { class: 'kt-meta' }, meta));
+  const big = (v, small) => h('div', { class: 'kt-sum-v' }, v, small && h('small', {}, small));
+  // k / v may be [full, short] pairs; the short forms show on phones
+  const both = (x) => (Array.isArray(x) ? [h('span', { class: 'full' }, x[0]), h('span', { class: 'short' }, x[1])] : x);
+  const ctxItem = (k, v, cls) => h('span', { class: 'kt-ctx-i' + (cls ? ' ' + cls : '') }, k && h('span', { class: 'k' }, both(k)), h('span', { class: 'v' }, both(v)));
+  const pc = (v) => (isFinite(KT.n(v)) ? KT.int(KT.n(v) * 100) + '%' : '—');
+
+  const render = () => {
+    const sites = KT.rows('sites');
+    if (sites) {
+      const sig = sites.map((r) => r.site).join('|');
+      if (pick.dataset.sig !== sig) { pick.replaceChildren(...sites.map((r) => new Option(r.site, r.site))); pick.dataset.sig = sig; }
+      pick.value = KT.site();
+    }
+    const site = KT.site(), me = KT.siteRow();
+    if (me && me.issued) KT.YEAR = KT.iso(me.issued).getUTCFullYear() || KT.YEAR;
+    const run = KT.curRun(site), method = KT.curMethod(site);
+    const products = KT.rows('products') || [];
+    const checked = KT.checked();
+
+    // ── context bar
+    ctx.hidden = false;
+    ctx.replaceChildren(
+      ctxItem(null, h('span', {}, KT.ico('pin'), ' ', site), 'kt-ctx-site'),
+      ctxItem('Country & season', `Kenya · Short Rains (OND) ${KT.YEAR}`, 'kt-ctx-opt'),
+      ctxItem('Method', method),
+      ctxItem(['Forecast run', 'Run'], run ? [KT.runLabel(run), KT.runShort(run)] : 'not available'),
+      ctxItem(['Observations to', 'Obs. to'], me ? KT.d(me.obs_through) : 'not available'));
+
+    // ── 1. rainfall so far (CHIRPS at the station; other products as a range)
+    let rain;
+    if (!me) rain = card('rain', 'Rainfall so far', big('Not available'), ['No observed rainfall summary for this station in the data.']);
+    else {
+      const tot = KT.n(me.rain_since_oct1_chirps_mm), nor = KT.n(me.normal_same_days_mm), pn = KT.n(me.pct_of_normal);
+      const thr = me.through_chirps || me.obs_through;
+      const others = KT.products.filter((p) => p !== 'chirps' && isFinite(KT.n(me[`rain_since_oct1_${p}_mm`])))
+        .map((p) => ({ p, v: +me[`rain_since_oct1_${p}_mm`], t: KT.iso(me[`through_${p}`]) }));
+      const ts = others.map((o) => o.t).filter(KT.okD);
+      const ch = KT.prod('chirps');
+      rain = card('rain', 'Rainfall so far', big(isFinite(tot) ? `${KT.num(tot)} mm` : 'Not available', isFinite(tot) ? 'observed' : ''), [
+        isFinite(pn) ? h('p', {}, h('b', {}, `${KT.int(pn)}% of normal`), isFinite(nor) ? ` (normal for these days: ${KT.num(nor)} mm)` : '') : '% of normal: not available',
+        `Period: ${KT.range(new Date(Date.UTC(KT.YEAR, 9, 1)), KT.iso(thr))}`,
+        others.length ? `${others.length} other satellite products: ${KT.num(d3.min(others, (o) => o.v))}–${KT.num(d3.max(others, (o) => o.v))} mm${ts.length ? `, to ${KT.range(d3.min(ts), d3.max(ts))}` : ''}` : '',
+        isFinite(KT.n(me.products_with_onset)) ? `${me.products_with_onset} of ${me.products} satellite products show a planting onset so far` : '',
+      ], `Source: ${ch ? ch.name : 'CHIRPS'}${ch && ch.note ? ` (${KT.niceDates(ch.note)})` : ''}. Normal = CHIRPS 1993–2016 average for the same days.`);
+    }
+
+    // ── 2. near-term outlook (weather models; the period every model covers)
+    let near;
+    const ev = (KT.rows('forecast_events') || []).filter((r) => r.site === site);
+    if (!ev.length) near = card('cloud', 'Near-term outlook', big('Not available'), ['No weather-model forecast for this station in the data.']);
+    else {
+      const minH = d3.min(ev, (r) => +r.horizon_days);
+      const N = minH >= 7 ? 7 : 5, col = `total_${N}d_mm`;
+      const vals = ev.map((r) => KT.n(r[col])).filter(isFinite);
+      const fdates = [...new Set((KT.rows('forecast_sites') || []).filter((r) => r.site === site).map((r) => r.date))].sort();
+      const runs = [...new Set(products.filter((p) => p.kind === 'nwp' && p.run_date).map((p) => p.run_date))].sort();
+      const start = fdates.length ? KT.iso(fdates[0]) : runs.length ? KT.iso(runs[0]) : null;
+      const within = ev.filter((r) => +r.planting_rain_within_7d === 1).length;
+      const p7 = me ? KT.n(me.p_event_7d) : NaN;
+      near = card('cloud', 'Near-term outlook', big(vals.length ? `${KT.num(d3.median(vals))} mm` : '—', `median of ${vals.length} models`), [
+        h('p', {}, h('b', {}, `Range ${KT.num(d3.min(vals))}–${KT.num(d3.max(vals))} mm`), ` over the next ${N} days`),
+        start ? `Period: ${KT.range(start, KT.addDays(start, N - 1))} (all models cover it)` : '',
+        `Planting rains (≥20 mm in 3 days) within 7 days: ${within} of ${ev.length} models`,
+        isFinite(p7) ? `ECMWF ensemble: ${KT.int(p7 * 100)}% of members give planting rains within 7 days` : '',
+      ], `${runs.length ? `Runs of ${runs.map((r) => KT.d(r)).join(', ')}, 00 UTC` : 'Model runs'}; forecast lengths ${d3.min(ev, (r) => +r.horizon_days)}–${d3.max(ev, (r) => +r.horizon_days)} days; raw model output, not bias-corrected.`);
+    }
+
+    // ── 3. seasonal timing and 4. past performance (selected run and method, onset)
+    const row = (KT.rows('inits') || []).find((r) => r.site === site && r.init === run && KT.sv.defOf(r) === method && r.variable === 'onset');
+    let timing, perf;
+    if (!row) {
+      timing = card('calendar', 'Seasonal timing', big('Not available'), ['No seasonal onset outlook for this station, run and method in the data.']);
+      perf = card('target', 'Past forecast performance', big('Not available'), ['No verification for this station, run and method in the data.']);
+    } else {
+      const v = (k) => KT.n(row[k]), none = KT.sv.none(row);
+      timing = card('calendar', 'Seasonal timing: onset', big(KT.sv.one(row, v('median')), 'median estimate'), [
+        h('p', {}, h('b', {}, `Middle 50% of members: ${KT.sv.rng(row, v('p25'), v('p75'))}`)),
+        `Middle 80% of members: ${KT.sv.rng(row, v('p10'), v('p90'))}`,
+        `Long-term average: ${KT.sv.one(row, v('chirps_clim'))}`,
+        `Chance early / normal / late: ${pc(row.p_bn)} / ${pc(row.p_nn)} / ${pc(row.p_an)}`,
+        none ? `${none} of ${row.n_members} members: no onset by ${KT.sv.byDate(row)}` : '',
+      ], `ECMWF SEAS5, ${row.n_members} members, ${KT.runLabel(run)}; method: ${method}.`);
+      const rp = v('rpss_val'), hr = v('hitrate_val');
+      if (!isFinite(rp) && !isFinite(hr)) perf = card('target', 'Past forecast performance', big('Not available'), [`No hindcast verification for onset with the ${method} method and this run in the data.`],
+        'Satellite products are compared with CHIRPS in section 4.');
+      else {
+        const better = [isFinite(rp) && rp > 0, isFinite(hr) && hr > 1 / 3].filter(Boolean).length;
+        perf = card('target', 'Past forecast performance: onset', big(isFinite(rp) ? `RPSS ${d3.format('+.2f')(rp)}` : 'RPSS —'), [
+          h('p', {}, h('b', {}, `Hit rate ${isFinite(hr) ? d3.format('.2f')(hr) : '—'}`), ' for the early / normal / late forecast (baselines: RPSS 0, hit rate 0.33)'),
+          better === 2 ? 'Both scores above the climatology baseline here.' : better === 1 ? 'Mixed: above the climatology baseline on one score only.' : 'Not better than climatology here on either score.',
+          `Verification: hindcasts ${KT.VAL_YEARS} (${KT.VAL_N} seasons) at the station's grid cell, same run and method.`,
+        ], `Limitations: ${KT.VAL_N} seasons is a small sample and single grid cells are noisy. The weather-model outlook is not verified here; satellite products are compared with CHIRPS in section 4.`);
+      }
+    }
+    sum.replaceChildren(rain, near, timing, perf);
+    KT.$('summary-h').textContent = `Station summary: ${site}`;
+
+    // ── data dates and status
+    const nwp = products.filter((p) => p.kind === 'nwp' && p.run_date), seas = KT.prod('seas5'), obs = products.filter((p) => p.kind === 'obs');
+    const nwpRuns = [...new Set(nwp.map((p) => p.run_date))].sort();
+    const nwpTo = d3.max(nwp, (p) => p.forecast_to);
+    const otherT = me ? KT.products.filter((p) => p !== 'chirps').map((p) => KT.iso(me[`through_${p}`])).filter(KT.okD) : [];
+    const st = products.map((p) => [p, KT.prodStatus(p)]);
+    const behind = st.filter(([, s]) => s.k === 'warn'), off = st.filter(([, s]) => s.k === 'off');
+    const item = (icon, k, ...vals) => { const vs = vals.filter(Boolean); return h('div', {}, h('dt', {}, KT.ico(icon), k), ...(vs.length ? vs : ['not available']).map((x) => h('dd', {}, x))); };
+    status.replaceChildren(
+      item('clock', 'Forecast initialised',
+        nwpRuns.length ? `Weather models: ${nwpRuns.map((r) => KT.d(r)).join(', ')}, 00 UTC` : '',
+        seas && seas.run_date ? `Seasonal (SEAS5): ${KT.d(seas.run_date)}` : ''),
+      item('rain', 'Observations through',
+        me ? `${KT.d(me.obs_through)} (CHIRPS at this station)` : (KT.prod('chirps') ? `${KT.d(KT.prod('chirps').latest_data)} (CHIRPS)` : 'not available'),
+        otherT.length ? `Other products: to ${KT.range(d3.min(otherT), d3.max(otherT))}` : ''),
+      item('calendar', 'Valid period',
+        nwpRuns.length && nwpTo ? `Weather models: ${KT.range(KT.iso(nwpRuns[0]), KT.iso(nwpTo))}` : '',
+        seas && seas.run_date ? `Seasonal: ${KT.range(KT.iso(seas.run_date), KT.iso(seas.forecast_to))}` : ''),
+      item('check', 'Last successful update',
+        checked ? `${KT.stamp(checked)} (update server's local time; time zone not recorded)` : 'not recorded',
+        me && me.issued ? `Analysis date ${KT.d(me.issued)}` : ''),
+      item('info', 'Data status',
+        products.length ? h('span', {}, KT.badge(behind.length ? { k: 'warn', text: `${behind.length} behind schedule` } : { k: 'ok', text: 'All current' }),
+          ' ', `as of the last check: ${st.length - off.length} sources with data`) : 'not available',
+        behind.length ? `Behind: ${behind.map(([p, s]) => `${p.name} (${s.detail})`).join('; ')}` : '',
+        off.length ? `Not available: ${off.map(([p]) => p.name).join(', ')}` : ''));
+  };
+  dash.onData(render);
+  KT.onState(render);
+})();
+</script>
+
+<script>
+// Season outlook for the picked site, run, method and variable. Default: one method, onset; "Compare methods"
+// adds the other methods; "Show ensemble members" adds the members. Hover a row for its numbers; the legend
+// switches layers on and off; the tables below follow the same selection.
+(() => {
+  const box = KT.$('season-chart'), table = KT.$('season-table'), vtable = KT.$('season-ver-table'), ntable = KT.$('init-table');
+  const runSel = KT.$('season-run'), methodSel = KT.$('season-method'), varSel = KT.$('season-var');
+  const cmpBtn = KT.$('season-compare'), memBtn = KT.$('season-members'), verBtn = KT.$('season-verif'), verBox = KT.$('season-ver');
+  const LAYERS = [['wide', 'Middle 80% of members'], ['likely', 'Middle 50% of members'], ['normal', 'Normal third (1993–2016)'],
+                  ['avg', 'Long-term average'], ['dates', 'Analysis date and observation cut-off']];
   const off = new Set();
-  let run = null;
-  const num = (v) => (v === '' || v == null || !isFinite(+v) ? NaN : +v);
-  const defOf = (r) => r.definition || 'Dunning';
-  const rowLabel = (r) => `${defOf(r)} · ${r.variable === 'onset' ? 'onset' : r.variable === 'cessation' ? 'cessation' : 'season length'}`;
-  const order = (r) => KT.methodRank(r) * 3 + ['onset', 'cessation', 'lgp'].indexOf(r.variable);
-  const none = (r) => (r.variable === 'onset' ? +r.no_onset || 0 : r.variable === 'cessation' ? +r.no_cessation || 0 : 0);
-  const fd = (v, r) => (isFinite(v) && v < endOf(r) ? KT.doyDate(v) : `after ${byOf(r)}`);
-  runSel.addEventListener('change', () => { run = runSel.value; draw(); });
-  methodSel.addEventListener('change', () => draw());
+  const { defOf, isL, endOf, byDate, none, one, rng, varName, cats } = KT.sv;
+  const num = KT.n;
+  runSel.addEventListener('change', () => KT.setState({ run: runSel.value }));
+  methodSel.addEventListener('change', () => KT.setState({ method: methodSel.value }));
+  varSel.addEventListener('change', () => KT.setState({ variable: varSel.value }));
+  cmpBtn.addEventListener('click', () => KT.setState({ compareMethods: !KT.state.compareMethods }));
+  memBtn.addEventListener('click', () => KT.setState({ members: !KT.state.members }));
+  verBtn.addEventListener('click', () => KT.setState({ verif: !KT.state.verif }));
+  table.ktName = () => `seasonal_outlook_${KT.shortName()}_${KT.state.variable}`;
+  vtable.ktName = () => `seasonal_verification_${KT.shortName()}_${KT.state.variable}`;
+  ntable.ktName = () => `outlook_by_run_${KT.shortName()}_${KT.state.variable}`;
 
   const draw = () => {
     const d = dash.data('inits');
     if (KT.fail(box, d)) return;
-    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); table.querySelector('tbody').replaceChildren(); return; }
+    if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); [table, vtable, ntable].forEach((t) => t.querySelector('tbody').replaceChildren()); return; }
     box.classList.remove('dash-skeleton');
-    const all = d.data.filter((r) => r.site === KT.site());
-    const runs = RUNS.filter((k) => all.some((r) => r.init === k));
-    if (!runs.length) { box.replaceChildren(); return; }
-    if (!run || !runs.includes(run)) run = runs[runs.length - 1];
-    runSel.replaceChildren(...runs.map((k) => new Option(k === 'Oct 01 + latest obs' ? `Run: ${k} (newest)` : `Run: ${k}`, k)));
+    const site = KT.site(), S = KT.state;
+    const all = d.data.filter((r) => r.site === site);
+    const runs = KT.runsFor(site);
+    if (!runs.length) {
+      box.replaceChildren(KT.h('p', { class: 'kt-note' }, 'No seasonal outlook for this station in the data.'));
+      [table, vtable, ntable].forEach((t) => t.querySelector('tbody').replaceChildren());
+      return;
+    }
+    const run = KT.curRun(site), methods = KT.methodsFor(site), method = KT.curMethod(site), v = S.variable;
+    const runSig = runs.join('|') + KT.runLabel(runs[runs.length - 1]);
+    if (runSel.dataset.sig !== runSig) {
+      runSel.replaceChildren(...runs.map((k, i) => new Option(KT.runLabel(k) + (i === runs.length - 1 ? ' (newest)' : ''), k)));
+      runSel.dataset.sig = runSig;
+    }
     runSel.value = run;
-    const rows = all.filter((r) => r.init === run && (!methodSel.value || defOf(r) === methodSel.value)).sort((a, b) => order(a) - order(b));
-    const dates = rows.filter((r) => r.variable !== 'lgp').map((r) => ({ ...r, key: `${r.variable}|${defOf(r)}`, label: rowLabel(r),
+    if (methodSel.dataset.sig !== methods.join('|')) { methodSel.replaceChildren(...methods.map((m) => new Option(m, m))); methodSel.dataset.sig = methods.join('|'); }
+    methodSel.value = method; methodSel.disabled = S.compareMethods;
+    varSel.value = v;
+    cmpBtn.setAttribute('aria-pressed', String(S.compareMethods)); memBtn.setAttribute('aria-pressed', String(S.members));
+    verBtn.setAttribute('aria-pressed', String(S.verif)); verBtn.setAttribute('aria-expanded', String(S.verif)); verBox.hidden = !S.verif;
+    verBtn.lastChild.textContent = S.verif ? 'Hide verification details' : 'Show verification details';
+    const order = (r) => KT.methodRank(r);
+    const rows = all.filter((r) => r.init === run && r.variable === v && (S.compareMethods || defOf(r) === method)).sort((a, b) => order(a) - order(b));
+    const label = (r) => `${defOf(r)} · ${varName(r.variable)}`;
+    const me = KT.siteRow();
+    const asOf = me && me.issued ? KT.iso(me.issued) : null, cut = KT.runCut(run);
+    const n0 = rows[0] ? rows[0].n_members : '';
+    const cond = KT.$('season-cond');
+    cond.replaceChildren(KT.h('b', {}, KT.runLabel(run)), ` · ECMWF SEAS5, ${n0} members`,
+      cut ? ` · observation cut-off ${KT.fD(cut)}` : ' · no observations spliced in',
+      asOf ? ` · analysis date ${KT.fD(asOf)}` : '',
+      me ? (+me.products_with_onset > 0
+        ? `. ${me.products_with_onset} of ${me.products} satellite products already show a planting onset here.`
+        : `. No satellite product shows a planting onset here so far, so members with an onset before the analysis date have already been ruled out.`) : '.');
+
+    // ── chart
+    const L = v === 'lgp';
+    const dates = rows.map((r) => ({ ...r, key: defOf(r), label: S.compareMethods ? defOf(r) : label(r),
       ...Object.fromEntries(['p10', 'p25', 'median', 'p75', 'p90', 'chirps_clim', 't33', 't67'].map((k) => [k, num(r[k])])) }));
     const mem = dash.data('inits_members');
     const memOf = (r) => (mem.status === 'ok' ? mem.data.filter((q) => q.site === r.site && q.init === r.init && q.variable === r.variable
       && (q.definition || 'Dunning') === defOf(r)).map((q) => +q.value) : []);
-
-    END = d3.max(dates, endOf) ?? 366;
-    const lo = d3.min(dates, (r) => d3.min([r.p10, r.t33, r.chirps_clim].filter(isFinite))) ?? 274;
-    const x0 = lo < 244 ? 227 : lo < 274 ? 244 : 274;
-    const W = box.clientWidth || 600, rowH = 50, m = { t: 22, r: 18, b: 28, l: Math.min(240, W * 0.36) };
-    const H = m.t + m.b + rowH * dates.length;
-    const x = d3.scaleLinear([x0, END], [m.l, W - m.r]).clamp(true);
-    const xv = (v) => x(isFinite(v) ? v : END);
+    const W = box.clientWidth || 600, narrow = W < 480;
+    const rowH = narrow ? 64 : 50, m = { t: narrow ? 44 : 26, r: 18, b: 28, l: narrow ? 8 : Math.min(200, W * 0.3) };
+    const H = m.t + m.b + rowH * Math.max(1, dates.length);
+    let x, END = 366, ticks, tf;
+    if (L) {
+      const mx = d3.max(dates, (r) => d3.max([r.p90, r.p75, r.median, r.t67, r.chirps_clim, ...(S.members ? memOf(r) : [])].filter(isFinite))) || 60;
+      x = d3.scaleLinear([0, mx * 1.05], [m.l, W - m.r]).nice().clamp(true);
+      ticks = x.ticks(narrow ? 4 : 8); tf = (t) => `${t} d`;
+    } else {
+      END = d3.max(dates, endOf) ?? 366;
+      const lo = d3.min(dates, (r) => d3.min([r.p10, r.t33, r.chirps_clim].filter(isFinite))) ?? 274;
+      const x0 = lo < 244 ? 227 : lo < 274 ? 244 : 274;
+      x = d3.scaleLinear([x0, END], [m.l, W - m.r]).clamp(true);
+      ticks = (END > 366 ? (narrow ? [274, 335, 397, END] : [227, 244, 274, 305, 335, 366, 397, END])
+        : (narrow ? [274, 305, 335, END] : [227, 244, 259, 274, 288, 305, 319, 335, 349, END])).filter((t) => t >= x0);
+      tf = (t) => (t === END ? (END > 366 ? '28 Feb+' : '31 Dec+') : KT.doyDate(t, true));
+    }
+    const xv = (val) => x(isFinite(val) ? val : (L ? 0 : END));
     const xr = (r) => x(endOf(r)) - 4;                     // a row's "none by" position (hollow dots)
-    const y = d3.scaleBand(dates.map((r) => r.key), [m.t, H - m.b]).padding(0.28);
+    const y = d3.scaleBand(dates.map((r) => r.key), [m.t, H - m.b]).padding(narrow ? 0.36 : 0.28).paddingOuter(narrow ? 0.5 : 0.28);
     const bh = y.bandwidth();
-    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-    const ticks = (END > 366 ? (W < 520 ? [227, 274, 335, 397, END] : [227, 244, 274, 305, 335, 366, 397, END])
-      : (W < 520 ? [227, 244, 274, 305, 335, END] : [227, 244, 259, 274, 288, 305, 319, 335, 349, END])).filter((t) => t >= x0);
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
+      .attr('aria-label', `Seasonal ${varName(v)} outlook, ${KT.runLabel(run)}: ` + dates.map((r) => `${r.label} median ${one(r, r.median)}`).join('; '));
     svg.append('g').attr('transform', `translate(0,${H - m.b})`)
-      .call(d3.axisBottom(x).tickValues(ticks).tickFormat((t) => (t === END ? (END > 366 ? '28 Feb+' : '31 Dec+') : KT.doyDate(t))).tickSize(-(H - m.t - m.b)))
+      .call(d3.axisBottom(x).tickValues(ticks).tickFormat(tf).tickSize(-(H - m.t - m.b)))
       .attr('font-size', null).attr('font-family', null).call((g) => g.select('.domain').remove())
       .call((g) => g.selectAll('line').attr('stroke', 'var(--cds-chart-grid)')).call((g) => g.selectAll('text').attr('fill', 'var(--color-fg-muted)'));
-    const today = d3.utcDay.count(d3.utcYear(new Date()), new Date()) + 1;
-    if (!off.has('today') && today >= x0 && today <= END) {
-      svg.append('line').attr('x1', x(today)).attr('x2', x(today)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
-      svg.append('text').attr('x', x(today)).attr('y', m.t - 8).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--color-fg-muted)').text('today');
+    // analysis date and observation cut-off (date variables only)
+    if (!L && !off.has('dates')) {
+      // on narrow charts the two labels stack (obs. cut-off above), both to the right of their lines
+      [[cut, `obs. to ${cut ? KT.fDs(cut) : ''}`, narrow ? 'start' : 'end', narrow ? 4 : -4, narrow ? m.t - 26 : m.t - 10, '2 3'],
+       [asOf, `analysis ${asOf ? KT.fDs(asOf) : ''}`, 'start', 4, m.t - 10, '5 3']].forEach(([dt, txt, anchor, dx, ty, dash]) => {
+        if (!KT.okD(dt)) return;
+        const dv = KT.dateDoy(dt);
+        if (dv < x.domain()[0] || dv > END) return;
+        svg.append('line').attr('x1', x(dv)).attr('x2', x(dv)).attr('y1', ty - 2).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', dash);
+        svg.append('text').attr('x', x(dv) + dx).attr('y', ty).attr('text-anchor', anchor).attr('font-size', 12).attr('fill', 'var(--color-fg-muted)').text(txt);
+      });
     }
     const g = svg.append('g').selectAll('g').data(dates).join('g').attr('transform', (r) => `translate(0,${y(r.key)})`);
     const bg = g.append('rect').attr('x', 0).attr('y', -bh * 0.15).attr('width', W).attr('height', bh * 1.3).attr('rx', 4).attr('fill', 'var(--color-fg)').attr('opacity', 0);
-    g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').attr('font-size', 12).text((r) => r.label);
+    if (narrow) g.append('text').attr('x', m.l).attr('y', -6).attr('fill', 'var(--kt-heading, var(--color-fg))').attr('font-size', 12).attr('font-weight', 600)
+      .attr('paint-order', 'stroke').attr('stroke', 'var(--color-panel)').attr('stroke-width', 4).text((r) => r.label);
+    else g.append('text').attr('x', m.l - 10).attr('y', bh / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--kt-heading, var(--color-fg))').attr('font-size', 13).text((r) => r.label);
     const col = (r) => dash.colors[KT.methodRank(r)];
-    const xw = (r, v) => Math.min(xv(v), x(endOf(r)));     // clip "after" values to the row's own search end
+    const xw = (r, val) => (L ? xv(val) : Math.min(xv(val), x(endOf(r))));     // clip "after" values to the row's own search end
     if (!off.has('normal')) g.append('rect').attr('x', (r) => xw(r, r.t33)).attr('width', (r) => Math.max(0, xw(r, r.t67) - xw(r, r.t33))).attr('y', 0).attr('height', bh).attr('rx', 4).attr('fill', 'var(--cds-chart-muted)').attr('opacity', 0.25);
     if (!off.has('wide')) g.append('line').attr('x1', (r) => xw(r, r.p10)).attr('x2', (r) => xw(r, r.p90)).attr('y1', bh / 2).attr('y2', bh / 2).attr('stroke', col).attr('stroke-width', 2).attr('stroke-linecap', 'round');
     if (!off.has('likely')) g.append('rect').attr('x', (r) => xw(r, r.p25)).attr('width', (r) => Math.max(3, xw(r, r.p75) - xw(r, r.p25))).attr('y', bh * 0.22).attr('height', bh * 0.56).attr('rx', 4).attr('fill', col).attr('opacity', 0.85);
-    if (!off.has('members')) {
+    if (S.members) {
       g.each(function (r) {
-        const vals = memOf(r), rng = d3.randomLcg(r.key.length * 97 + 7);
+        const vals = memOf(r), rnd = d3.randomLcg(r.key.length * 97 + 7);
         const gg = d3.select(this);
-        gg.selectAll('circle.m').data(vals).join('circle').attr('class', 'm').attr('cx', (v) => x(v)).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
-          .attr('fill', 'var(--color-fg)').attr('opacity', 0.55);
-        const n = none(r);                   // members with no onset / cessation by the search end, drawn hollow there
-        gg.selectAll('circle.n').data(d3.range(n)).join('circle').attr('class', 'n').attr('cx', xr(r)).attr('cy', () => bh * (0.15 + 0.7 * rng())).attr('r', 2.6)
-          .attr('fill', 'none').attr('stroke', 'var(--color-fg)').attr('opacity', 0.7);
+        gg.selectAll('circle.m').data(vals).join('circle').attr('class', 'm').attr('cx', (val) => x(val)).attr('cy', () => bh * (0.15 + 0.7 * rnd())).attr('r', 2.6)
+          .attr('fill', 'var(--kt-heading, var(--color-fg))').attr('opacity', 0.6);
+        if (!L) {
+          gg.selectAll('circle.n').data(d3.range(none(r))).join('circle').attr('class', 'n').attr('cx', xr(r)).attr('cy', () => bh * (0.15 + 0.7 * rnd())).attr('r', 2.6)
+            .attr('fill', 'none').attr('stroke', 'var(--kt-heading, var(--color-fg))').attr('opacity', 0.75);
+        }
       });
     }
-    g.append('circle').attr('cx', (r) => xw(r, r.median)).attr('cy', bh / 2).attr('r', 5.5).attr('fill', 'var(--color-panel)').attr('stroke', col).attr('stroke-width', 2.5);
-    if (!off.has('avg')) g.append('line').attr('x1', (r) => xv(r.chirps_clim)).attr('x2', (r) => xv(r.chirps_clim)).attr('y1', -2).attr('y2', bh + 2).attr('stroke', 'var(--color-fg)').attr('stroke-width', 2);
+    g.filter((r) => isFinite(r.median) || !L).append('circle').attr('cx', (r) => xw(r, r.median)).attr('cy', bh / 2).attr('r', 6).attr('fill', 'var(--color-panel)').attr('stroke', col).attr('stroke-width', 2.5);
+    if (!off.has('avg')) g.append('line').attr('x1', (r) => xv(r.chirps_clim)).attr('x2', (r) => xv(r.chirps_clim)).attr('y1', -2).attr('y2', bh + 2).attr('stroke', 'var(--kt-heading, var(--color-fg))').attr('stroke-width', 2.5);
 
-    // hover: row highlight, date cursor and a tooltip with the row's numbers
+    // hover: row highlight, value cursor and a tooltip with the row's numbers (the tables carry the same values)
     const cursor = svg.append('g').attr('display', 'none').attr('pointer-events', 'none');
     const cl = cursor.append('line').attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--color-fg-muted)');
-    const ct = cursor.append('text').attr('y', m.t - 8).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--color-fg)');
+    const ct = cursor.append('text').attr('y', H - m.b - 4).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', 'var(--kt-heading, var(--color-fg))')
+      .attr('paint-order', 'stroke').attr('stroke', 'var(--color-panel)').attr('stroke-width', 3);
     const tip = KT.tip(box);
-    const pct = (v) => (isFinite(num(v)) ? KT.pct(num(v)) : '—');
-    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+    const C = cats(v);
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', Math.max(0, W - m.l - m.r)).attr('height', H - m.t - m.b).attr('fill', 'transparent')
       .on('pointermove', (ev) => {
         const [px, py] = d3.pointer(ev);
         const i = Math.max(0, Math.min(dates.length - 1, Math.floor((py - m.t) / ((H - m.t - m.b) / dates.length))));
         const r = dates[i];
         bg.attr('opacity', (q) => (q === r ? 0.06 : 0));
         const dv = Math.round(x.invert(px));
-        cursor.attr('display', null); cl.attr('x1', px).attr('x2', px); ct.attr('x', px).text(fd(dv, r));
+        cursor.attr('display', null); cl.attr('x1', px).attr('x2', px); ct.attr('x', px).text(L ? `${dv} d` : one(r, dv));
         const lines = [
-          ['Most likely', fd(r.median, r)], ['Likely (half the members)', `${fd(r.p25, r)} – ${fd(r.p75, r)}`], ['Wide (8 in 10)', `${fd(r.p10, r)} – ${fd(r.p90, r)}`],
-          ['Long-term average', fd(r.chirps_clim, r)], ['Normal third', `${fd(r.t33, r)} – ${fd(r.t67, r)}`],
-          [r.variable === 'onset' ? 'Early / normal / late' : 'Early / normal / late end', `${pct(r.p_bn)} / ${pct(r.p_nn)} / ${pct(r.p_an)}`],
+          ['Median estimate', one(r, r.median)], ['Middle 50% of members', rng(r, r.p25, r.p75)], ['Middle 80% of members', rng(r, r.p10, r.p90)],
+          ['Long-term average', one(r, r.chirps_clim)], ['Normal third', rng(r, r.t33, r.t67)],
+          [C.join(' / '), [r.p_bn, r.p_nn, r.p_an].map((q) => (isFinite(num(q)) ? KT.int(num(q) * 100) + '%' : '—')).join(' / ')],
         ];
-        if (none(r)) lines.push([`${r.variable === 'onset' ? 'No onset' : 'No cessation'} by ${byOf(r)}`, `${none(r)} of ${r.n_members} members`]);
-        if (isFinite(num(r.rpss_val))) lines.push(['Past skill here', `RPSS ${d3.format('+.2f')(num(r.rpss_val))}, hit rate ${pct(r.hitrate_val)}`]);
-        else lines.push(['Past skill here', 'not available for this run']);
+        if (none(r)) lines.push([`${r.variable === 'onset' ? 'No onset' : 'No cessation'} by ${byDate(r)}`, `${none(r)} of ${r.n_members} members`]);
         tip.hidden = false;
-        tip.replaceChildren(Object.assign(document.createElement('div'), { textContent: `${r.label} · ${r.init}` }),
-          ...lines.map(([k, v]) => { const div = document.createElement('div'); div.append(Object.assign(document.createElement('span'), { className: 'd', textContent: k + ': ' }), v); return div; }));
+        tip.replaceChildren(Object.assign(document.createElement('div'), { textContent: `${label(r)} · ${KT.runLabel(r.init)}` }),
+          ...lines.map(([k, val]) => { const div = document.createElement('div'); div.append(Object.assign(document.createElement('span'), { className: 'd', textContent: k + ': ' }), val); return div; }));
         tip.style.top = ((y(r.key) + bh + 4) / H * box.clientHeight) + 'px';
         tip.style.left = (px / W * box.clientWidth) + 'px';
         tip.style.transform = px > W * 0.55 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)';
@@ -711,104 +1210,112 @@ dash.onData(() => {
       .on('pointerleave', () => { cursor.attr('display', 'none'); bg.attr('opacity', 0); tip.hidden = true; });
 
     const lg = document.createElement('div'); lg.className = 'kt-legend';
-    lg.append(...LAYERS.map(([k, name]) => {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'kt-lg-item';
-      b.setAttribute('aria-pressed', String(!off.has(k))); b.title = 'Click to hide or show'; b.textContent = name;
-      b.addEventListener('click', () => { if (off.has(k)) off.delete(k); else off.add(k); draw(); });
-      return b;
-    }), ...[...new Set(dates.map(defOf))].map((t) => {
-      const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[KT.methodRank({ definition: t })]; sp.append(t); return sp;
-    }), Object.assign(document.createElement('span'), { textContent: 'Circle: most likely · hollow dots at the right: none by the search end (Dunning 31 Dec; Agri rules and FAO water balance: onset 15 Jan, cessation 28 Feb)' }));
+    lg.append(KT.h('span', { html: '<svg class="kt-ic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>&nbsp;Median estimate' }),
+      ...LAYERS.filter(([k]) => !(L && k === 'dates')).map(([k, name]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'kt-lg-item';
+        b.setAttribute('aria-pressed', String(!off.has(k))); b.title = 'Click to hide or show';
+        const sw = KT.h('span', { class: 'kt-sw', 'aria-hidden': 'true' }), c0 = dash.colors[KT.methodRank({ definition: method })];
+        Object.assign(sw.style, { wide: { height: '2px', background: c0 }, likely: { background: c0 }, normal: { background: 'color-mix(in srgb, var(--cds-chart-muted) 40%, transparent)' },
+          avg: { width: '3px', height: '.9rem', background: 'var(--kt-heading, var(--color-fg))' }, dates: { width: '0', height: '.9rem', borderLeft: '2px dashed var(--cds-chart-reference)' } }[k]);
+        b.append(sw, name);
+        b.addEventListener('click', () => { if (off.has(k)) off.delete(k); else off.add(k); draw(); });
+        return b;
+      }), ...(S.compareMethods ? [...new Set(dates.map(defOf))].map((t) => {
+        const sp = document.createElement('span'); sp.innerHTML = '<span class="kt-sw"></span>'; sp.firstChild.style.background = dash.colors[KT.methodRank({ definition: t })]; sp.append(t); return sp;
+      }) : []),
+      S.members && !L ? KT.h('span', {}, `Dots: ensemble members; hollow dots at the right: no ${varName(v)} by the end of the search (${S.compareMethods ? 'Dunning 31 Dec; Agri rules: onset 15 Jan, cessation 28 Feb' : byDate(rows[0] || {})})`) : '');
     box.style.minHeight = H + 'px';
     box.replaceChildren(svg.node(), tip, lg);
 
-    // table: every variable of the chosen run, including season length (days)
-    const isL = (r) => r.variable === 'lgp';
-    const dv = (r, k) => (isL(r) ? (isFinite(num(r[k])) ? KT.int(num(r[k])) + ' d' : '—') : fd(num(r[k]), r));
+    // ── main table, verification table, runs table
+    const pctc = (q) => (isFinite(num(q)) ? KT.int(num(q) * 100) : '—');
+    ['season-c-lo', 'season-c-mid', 'season-c-hi'].forEach((id, i) => { KT.$(id).textContent = `${C[i]} (%)`; });
+    ['init-c-lo', 'init-c-mid', 'init-c-hi'].forEach((id, i) => { KT.$(id).textContent = `${C[i]} (%)`; });
+    const noneTxt = (r) => (isL(r) || defOf(r) === 'Dunning' ? '—' : `${none(r)} of ${r.n_members}`);
     KT.fillTable(table, rows, [
-      ['variable', (v, r) => rowLabel(r)],
-      ['median', (v, r) => dv(r, 'median')],
-      ['p25', (v, r) => `${dv(r, 'p25')} – ${dv(r, 'p75')}`],
-      ['p10', (v, r) => `${dv(r, 'p10')} – ${dv(r, 'p90')}`],
-      ['p_bn', (v) => KT.pct(+v), 'num'], ['p_nn', (v) => KT.pct(+v), 'num'], ['p_an', (v) => KT.pct(+v), 'num'],
-      ['chirps_clim', (v, r) => dv(r, 'chirps_clim')],
-      ['no_onset', (v, r) => (r.variable === 'lgp' || defOf(r) === 'Dunning' ? '' : `${none(r)} of ${r.n_members}`), 'num'],
-      ['rpss_val', (v) => d3.format('+.2f')(+v), 'num'], ['hitrate_val', (v) => d3.format('.2f')(+v), 'num'],
+      ['variable', (x0, r) => label(r)],
+      ['median', (x0, r) => one(r, num(r.median)), null, true],
+      ['p25', (x0, r) => rng(r, num(r.p25), num(r.p75)), null, true],
+      ['p10', (x0, r) => rng(r, num(r.p10), num(r.p90)), null, true],
+      ['p_bn', pctc, 'num'], ['p_nn', pctc, 'num'], ['p_an', pctc, 'num'],
+      ['chirps_clim', (x0, r) => one(r, num(r.chirps_clim))],
+      ['no_onset', (x0, r) => noneTxt(r), 'num', true],
     ]);
-    [...table.querySelectorAll('tbody tr')].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable, rows[i].definition || ''].map(encodeURIComponent).join(','); });
+    KT.fillTable(vtable, rows, [
+      ['variable', (x0, r) => label(r)],
+      ['rpss_val', (x0, r) => (isFinite(num(r.rpss_val)) || isFinite(num(r.hitrate_val)) ? `Hindcasts ${KT.VAL_YEARS}` : 'Not available for this run'), null, true],
+      ['rpss_val', (x0) => d3.format('+.2f')(+x0), 'num'], ['hitrate_val', (x0) => d3.format('.2f')(+x0), 'num'],
+      ['variable', () => 'RPSS 0; hit rate 0.33'],
+      ['variable', () => `${KT.VAL_N} seasons, station grid cell`],
+    ]);
+    const runRows = all.filter((r) => r.variable === v && (S.compareMethods || defOf(r) === method))
+      .sort((a, b) => KT.RUNS.indexOf(a.init) - KT.RUNS.indexOf(b.init) || order(a) - order(b));
+    KT.$('init-title').textContent = `How the outlook changed between forecast runs: ${KT.shortName()}`;
+    const tb = KT.fillTable(ntable, runRows, [
+      ['init', (x0) => KT.runLabel(x0)], ['variable', (x0, r) => label(r)],
+      ['median', (x0, r) => one(r, num(r.median)), null, true],
+      ['p25', (x0, r) => rng(r, num(r.p25), num(r.p75)), null, true],
+      ['anomaly', (x0) => d3.format('+.0f')(+x0), 'num'], ['p_bn', pctc, 'num'], ['p_nn', pctc, 'num'], ['p_an', pctc, 'num'],
+      ['no_onset', (x0, r) => noneTxt(r), 'num', true],
+    ]);
+    [...tb.children].forEach((tr, i) => { if (runRows[i].init === run) tr.classList.add('kt-pick'); });
   };
   dash.onData(draw);
+  KT.onState(draw);
 })();
 </script>
 
 <script>
-// Verification, initialization and data-source tables
+// Satellite verification and data-source tables
 dash.onData(() => {
   const v = dash.data('verification');
-  const vt = document.getElementById('ver-table');
+  const vt = KT.$('ver-table');
   if (v.status === 'ok') {
     const f2 = (x) => (x === '' || x == null ? '—' : d3.format('.2f')(+x));
-    const tb = KT.fillTable(vt, v.data, [['product', (x) => KT.prodLabel[x] || x], ['period', (x) => x.replace(':', ' – ')], ['days', null, 'num'],
-      ['bias_pct', (x) => d3.format('+.0f')(+x) + '%', 'num'], ['corr_daily', f2, 'num'], ['corr_pentad', f2, 'num'], ['pod_1mm', f2, 'num'], ['far_1mm', f2, 'num'],
+    const per = (x) => { const [a, b] = String(x).split(':'); return KT.range(KT.iso(a), KT.iso(b)) || x; };
+    KT.fillTable(vt, v.data, [['product', (x) => KT.prodLabel[x] || x], ['period', per], ['days', null, 'num'],
+      ['bias_pct', (x) => d3.format('+.0f')(+x), 'num'], ['corr_daily', f2, 'num'], ['corr_pentad', f2, 'num'], ['pod_1mm', f2, 'num'], ['far_1mm', f2, 'num'],
       ['pod_10mm', f2, 'num'], ['far_10mm', f2, 'num'], ['onset_mad_days', (x) => (x === '' || x == null ? '—' : KT.int(+x)), 'num']]);
-    [...tb.children].forEach((tr, i) => { tr.dataset.key = `${encodeURIComponent(v.data[i].product)},${encodeURIComponent(v.data[i].period)}`; });
   } else vt.querySelector('tbody').replaceChildren();
 
-  const n = dash.data('inits');
-  const nt = document.getElementById('init-table');
-  if (n.status === 'ok') {
-    const label = (r) => `${r.definition || 'Dunning'} · ${r.variable === 'onset' ? 'onset' : r.variable === 'cessation' ? 'cessation' : 'season length'}`;
-    const rank = (r) => KT.methodRank(r) * 3 + ['onset', 'cessation', 'lgp'].indexOf(r.variable);
-    const runs = ['Sep 01', 'Oct 01', 'Oct 01 + Sep obs', 'Oct 01 + latest obs'];
-    const rows = n.data.filter((r) => r.site === KT.site()).sort((a, b) => runs.indexOf(a.init) - runs.indexOf(b.init) || rank(a) - rank(b));
-    document.getElementById('init-title').textContent = `How the outlook changed between forecast runs: ${KT.site()}`;
-    const dd = (v, r) => (v === '' || v == null || !isFinite(+v) ? (r.variable === 'lgp' ? '—' : `after ${r.none_by || '31 Dec'}`) : r.variable === 'lgp' ? `${KT.int(+v)} d` : KT.doyDate(+v));
-    const tb = KT.fillTable(nt, rows, [['init'], ['variable', (x, r) => label(r)], ['median_date', (x, r) => x || (isFinite(+r.median) && r.median !== '' ? `${KT.int(+r.median)} d` : '—')],
-      ['init', (x, r) => (r.p25 === undefined ? '—' : `${dd(r.p25, r)} – ${dd(r.p75, r)}`)],
-      ['anomaly', (x) => (x === '' || x == null || !isFinite(+x) ? '—' : d3.format('+.0f')(+x)), 'num'], ['p_bn', (x) => KT.pct(+x), 'num'], ['p_nn', (x) => KT.pct(+x), 'num'], ['p_an', (x) => KT.pct(+x), 'num'],
-      ['no_onset', (x, r) => (r.variable === 'lgp' || !r.definition || r.definition === 'Dunning' ? ''
-        : `${r.variable === 'onset' ? x : r.no_cessation || 0} of ${r.n_members}`), 'num']]);
-    [...tb.children].forEach((tr, i) => { tr.dataset.key = [rows[i].site, rows[i].init, rows[i].variable, rows[i].definition || ''].map(encodeURIComponent).join(','); });
-  } else nt.querySelector('tbody').replaceChildren();
-
-  // Data sources: latency table + one description card per product
+  // Data sources: latency table with a status per source + one description card per product
   const pr = dash.data('products');
-  const st = document.getElementById('src-table');
-  const cards = document.getElementById('src-cards');
+  const st = KT.$('src-table');
+  const cards = KT.$('src-cards');
   if (pr.status === 'ok') {
     const kind = { obs: 'Observed (satellite)', nwp: 'Forecast, 1–16 days', seasonal: 'Seasonal forecast' };
-    const day = (v) => (v ? d3.utcFormat('%-d %b')(new Date(v)) : '');
     const tb = KT.fillTable(st, pr.data, [
-      ['name'], ['kind', (v) => kind[v] || v], ['provider'], ['resolution'], ['typical_latency'],
-      ['latest_data', (v, r) => (r.kind === 'obs' ? day(v) : r.kind === 'nwp' ? `${day(r.run_date)} 00 UTC run` : `${day(r.run_date)} start`)],
-      ['days_behind', (v) => KT.int(+v), (v, r) => 'num' + (r.kind !== 'seasonal' && +v > (r.kind === 'obs' ? 3 : 1) ? ' kt-late' : '')],
-      ['forecast_to', day], ['note'],
+      ['name'], ['kind', (x) => kind[x] || x], ['provider'], ['resolution'], ['typical_latency'],
+      ['latest_data', (x, r) => (r.kind === 'obs' ? KT.d(x) : r.kind === 'nwp' ? `${KT.d(r.run_date)} 00 UTC run` : `${KT.d(r.run_date)} start`)],
+      ['days_behind', (x) => KT.int(+x), 'num'], ['id', () => ''],
+      ['forecast_to', (x) => KT.d(x)], ['note', (x) => KT.niceDates(x), 'wrap'],
     ]);
-    [...tb.children].forEach((tr, i) => { tr.dataset.key = pr.data[i].id; tr.cells[0].replaceChildren(Object.assign(document.createElement('b'), { textContent: pr.data[i].name })); });
-    const chk = pr.data[0] && pr.data[0].checked;
-    document.getElementById('src-checked').textContent = chk ? `Last checked ${chk} (local time).` : '';
+    [...tb.children].forEach((tr, i) => {
+      const r = pr.data[i];
+      tr.cells[0].replaceChildren(Object.assign(document.createElement('b'), { textContent: r.name }));
+      tr.cells[7].replaceChildren(KT.badge(KT.prodStatus(r)));
+    });
+    const chk = KT.checked();
+    KT.$('src-checked').textContent = chk ? `Last checked ${KT.stamp(chk)} (update server's local time; the data do not record the time zone). Forecast runs are in UTC.` : '';
     cards.replaceChildren(...pr.data.map((r) => {
-      const c = document.createElement('div'); c.className = 'kt-card';
-      const h = document.createElement('h3'); h.textContent = r.name;
-      const who = Object.assign(document.createElement('div'), { textContent: `${r.provider} · ${r.resolution} · typical delay ${r.typical_latency}` });
-      const about = Object.assign(document.createElement('p'), { textContent: r.about }); about.style.margin = '0';
-      const a = Object.assign(document.createElement('a'), { href: r.link, textContent: r.link.replace(/^https?:\/\//, '').replace(/\/$/, ''), target: '_blank', rel: 'noopener' });
-      c.append(h, who, about, a);
-      return c;
+      const s = KT.prodStatus(r);
+      return KT.h('div', { class: 'kt-card' },
+        KT.h('div', { class: 'kt-row' }, KT.h('h3', {}, r.name), KT.badge(s)),
+        KT.h('div', {}, `${r.provider} · ${r.resolution} · typical delay ${r.typical_latency}`),
+        KT.h('p', { style: 'margin:0' }, r.about),
+        r.link ? KT.h('a', { href: r.link, target: '_blank', rel: 'noopener' }, r.link.replace(/^https?:\/\//, '').replace(/\/$/, ''), KT.ico('external'), KT.h('span', { class: 'kt-vh' }, '(opens in a new tab)')) : '');
     }));
   } else { st.querySelector('tbody').replaceChildren(); cards.replaceChildren(); }
 });
 </script>
 
 <script>
-// Day-by-day animated maps per product (rain, rain so far, anomaly, % of normal)
+// Day-by-day maps of the satellite products (rain, rain so far, anomaly, % of normal). Default: one product
+// (CHIRPS) beside the station chart; "Compare products" shows every product.
 (() => {
-  const metricSel = document.getElementById('anim-metric');
-  const playBtn = document.getElementById('anim-play');
-  const slider = document.getElementById('anim-day');
-  const box = document.getElementById('anim-maps');
-  const dateEl = document.getElementById('anim-date');
-  const legend = document.getElementById('anim-legend');
+  const metricSel = KT.$('anim-metric'), prodSel = KT.$('anim-product'), cmpBtn = KT.$('anim-compare'), focus = KT.$('anim-focus');
+  const playBtn = KT.$('anim-play'), slider = KT.$('anim-day'), box = KT.$('anim-maps'), dateEl = KT.$('anim-date');
+  const legend = KT.$('anim-legend'), missingEl = KT.$('anim-missing');
   const SCALES = {
     pct_of_normal: { dom: [0, 100, 200], toks: ['--color-bad', '--color-panel', '--color-ok'], fmt: (v) => KT.int(v) + '%' },
     anomaly_mm: { dom: [-80, 0, 80], toks: ['--color-bad', '--color-panel', '--color-ok'], fmt: (v) => d3.format('+.0f')(v) + ' mm' },
@@ -817,58 +1324,64 @@ dash.onData(() => {
     rain_5d_mm: { dom: [0, 15, 50], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
     rain_mm: { dom: [0, 10, 30], toks: ['--color-panel', null, null], fmt: (v) => KT.int(v) + ' mm' },
   };
-  let cache = null, cacheSrc = null, idx = null, timer = null;
+  let cache = null, cacheSrc = null, idx = null, timer = null, compare = false, product = 'chirps';
 
-  const stTable = document.getElementById('anim-st-table');
-  const stTitle = document.getElementById('anim-st-title');
-  const stChart = document.getElementById('anim-st-chart');
-  const stChartTitle = document.getElementById('anim-st-chart-title');
+  const stTable = KT.$('anim-st-table'), stTitle = KT.$('anim-st-title'), stChart = KT.$('anim-st-chart'), stChartTitle = KT.$('anim-st-chart-title');
+  stTable.ktName = () => `observed_rain_${KT.shortName()}_${cache ? cache.dates[idx] : ''}`;
   const cellKey = (p, date, lat, lon) => `${p}|${date}|${(+lat).toFixed(3)}|${(+lon).toFixed(3)}`;
   // centre of the 0.25° cell holding a point (grid edges at -5.0 lat and 33.5 lon)
   const cellOf = (lat, lon) => [Math.floor((lat + 5.0) / 0.25) * 0.25 - 5.0 + 0.125, Math.floor((lon - 33.5) / 0.25) * 0.25 + 33.5 + 0.125];
 
   const prep = (rows) => {
-    const byKey = new Map(), byCell = new Map();
+    const byKey = new Map(), byCell = new Map(), cells = new Map(), last = {};
     rows.forEach((r) => {
       const k = r.product + '|' + r.date;
       if (!byKey.has(k)) byKey.set(k, []);
       byKey.get(k).push({ lat: +r.lat, lon: +r.lon, v: r });
       byCell.set(cellKey(r.product, r.date, r.lat, r.lon), r);
+      const ck = `${(+r.lat).toFixed(3)}|${(+r.lon).toFixed(3)}`;
+      if (!cells.has(ck)) cells.set(ck, { lat: +r.lat, lon: +r.lon, ck });
+      if (!last[r.product] || r.date > last[r.product]) last[r.product] = r.date;
     });
     const dates = [...new Set(rows.map((r) => r.date))].sort();
-    const prods = KT.products.filter((p) => rows.some((r) => r.product === p));
-    // open on the newest day that at least half the products have (products arrive 1–5 days apart, so the
-    // newest day often has only one or two, and the day all share can be several days old)
+    const prods = KT.products.filter((p) => last[p]);
+    // compare view opens on the newest day at least half the products have (products arrive 1–5 days apart)
     const count = (dd) => prods.filter((p) => byKey.has(p + '|' + dd)).length;
     const need = Math.ceil(prods.length / 2);
-    const last = d3.maxIndex(dates, (dd, i) => (count(dd) >= need ? i : -1));
-    const startIdx = count(dates[last]) >= need ? last : dates.length - 1;
-    return { byKey, byCell, dates, prods, startIdx };
+    const li = d3.maxIndex(dates, (dd, i) => (count(dd) >= need ? i : -1));
+    const startIdx = count(dates[li]) >= need ? li : dates.length - 1;
+    return { byKey, byCell, cells: [...cells.values()], last, dates, prods, startIdx };
   };
+  const latestOf = (p) => { const r = KT.prod(p); return (r && r.latest_data) || (cache && cache.last[p]) || ''; };
 
   const drawStation = (m, S, day) => {
     const st = dash.data('stations');
     if (st.status !== 'ok' || !cache) return;
     const s = st.data.find((r) => r.site === KT.site()) || st.data[0];
     const [clat, clon] = cellOf(+s.lat, +s.lon);
-    stTitle.textContent = `${s.short_name} on ${d3.utcFormat('%-d %b')(new Date(day))}`;
+    stTitle.textContent = `Station values at ${s.short_name} on ${KT.fDw(new Date(day))}`;
     const f1 = (v) => (v === '' || v == null || !isFinite(+v) ? '—' : KT.num(+v));
-    const rows = cache.prods.map((p) => ({ p, r: cache.byCell.get(cellKey(p, day, clat, clon)) }));
-    stTable.querySelector('tbody').replaceChildren(...rows.map(({ p, r }) => {
-      const tr = document.createElement('tr');
-      const cells = [KT.prodLabel[p], ...(r ? [f1(r.rain_mm), f1(r.rain_5d_mm), f1(r.rain_10d_mm), f1(r.rain_since_oct1_mm), f1(r.normal_since_oct1_mm),
-        r.anomaly_mm === '' ? '—' : d3.format('+.1f')(+r.anomaly_mm), r.pct_of_normal === '' ? '—' : KT.int(+r.pct_of_normal) + '%'] : ['no data', '', '', '', '', '', ''])];
-      cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c; if (i) td.className = 'num'; tr.appendChild(td); });
+    stTable.querySelector('tbody').replaceChildren(...cache.prods.map((p) => {
+      const r = cache.byCell.get(cellKey(p, day, clat, clon));
+      const tr = KT.h('tr', { class: !compare && p === product ? 'kt-pick' : null }, KT.h('td', {}, KT.prodLabel[p]));
+      if (r) {
+        [f1(r.rain_mm), f1(r.rain_5d_mm), f1(r.rain_10d_mm), f1(r.rain_since_oct1_mm), f1(r.normal_since_oct1_mm),
+          r.anomaly_mm === '' ? '—' : d3.format('+.1f')(+r.anomaly_mm), r.pct_of_normal === '' ? '—' : KT.int(+r.pct_of_normal)]
+          .forEach((c) => tr.append(KT.h('td', { class: 'num' }, c)));
+      } else {
+        const lat = latestOf(p);
+        tr.append(KT.h('td', { class: 'kt-missing', colspan: 7 }, `No data for ${KT.d(day)}` + (lat ? ` · latest available ${KT.d(lat)}${day > lat ? ' (after its coverage)' : ''}` : '')));
+      }
       return tr;
     }));
-    // line chart of the selected measure at the station's cell, one line per product, marker at the current day
-    stChartTitle.textContent = `${s.short_name}: ${metricSel.options[metricSel.selectedIndex].text} since 1 Oct`;
+    // line chart of the selected measure at the station's cell, one line per product, marker at the map date
+    stChartTitle.textContent = `${s.short_name}: ${metricSel.options[metricSel.selectedIndex].text}`;
     const series = cache.prods.map((p) => ({ p, pts: cache.dates.map((dd) => ({ t: new Date(dd), r: cache.byCell.get(cellKey(p, dd, clat, clon)) }))
       .filter((q) => q.r && q.r[m] !== '' && isFinite(+q.r[m])).map((q) => ({ t: q.t, v: +q.r[m] })) }));
     KT.lineChart(stChart, {
-      H: 190, xDomain: d3.extent(cache.dates, (dd) => new Date(dd)), marker: new Date(day), fmt: S.fmt,
+      H: compare ? 200 : 260, xDomain: d3.extent(cache.dates, (dd) => new Date(dd)), marker: new Date(day), fmt: S.fmt, focus: !compare,
       yMax: m === 'pct_of_normal' ? 100 : 1, refY: m === 'pct_of_normal' ? [100] : m === 'anomaly_mm' ? [0] : [],
-      series: series.map(({ p, pts }, i) => ({ key: p, label: KT.prodLabel[p], color: dash.colors[i % dash.colors.length], pts })),
+      series: series.map(({ p, pts }) => ({ key: p, label: KT.prodLabel[p], color: dash.colors[KT.products.indexOf(p) % dash.colors.length], pts, strong: compare || p === product })),
     });
   };
 
@@ -879,19 +1392,31 @@ dash.onData(() => {
     box.classList.remove('dash-skeleton');
     if (cacheSrc !== d.data) { cache = prep(d.data); cacheSrc = d.data; }
     const { byKey, dates, prods } = cache;
+    if (!prods.includes(product)) product = prods[0];
+    // product picker: products with data, then the ones that are not available (disabled)
+    const unavailable = (KT.rows('products') || []).filter((r) => r.kind === 'obs' && !prods.includes(r.id));
+    const sig = prods.join('|') + '#' + unavailable.map((r) => r.id).join('|');
+    if (prodSel.dataset.sig !== sig) {
+      prodSel.replaceChildren(...prods.map((p) => new Option(KT.prodLabel[p] + (p === 'chirps' ? ' (reference)' : ''), p)),
+        ...unavailable.map((r) => Object.assign(new Option(`${r.name} (not available)`, r.id), { disabled: true })));
+      prodSel.dataset.sig = sig;
+    }
+    prodSel.value = product; prodSel.disabled = compare;
+    cmpBtn.setAttribute('aria-pressed', String(compare)); focus.classList.toggle('is-compare', compare);
     slider.max = String(dates.length - 1);
-    if (idx === null || idx > dates.length - 1) idx = cache.startIdx;
+    if (idx === null || idx > dates.length - 1) idx = Math.max(0, dates.indexOf(cache.last[product]));
     slider.value = String(idx);
     const day = dates[idx];
-    dateEl.textContent = d3.utcFormat('%-d %B %Y')(new Date(day));
+    dateEl.replaceChildren(`Map date: ${KT.fDw(new Date(day))}`, KT.h('span', {}, ` · day ${idx + 1} of ${dates.length} since ${KT.d(dates[0])}`));
     const m = metricSel.value, S = SCALES[m];
     const c1 = KT.color(dash.colors[0]);
     const cols = S.toks.map((t, i) => (t ? KT.css(t) : (i === 1 ? d3.interpolateRgb(KT.css('--color-panel'), c1)(0.5) : c1)));
     const color = d3.scaleLinear(S.dom, cols).interpolate(d3.interpolateRgb).clamp(true);
-    const cards = prods.map((p) => {
-      const wrap = document.createElement('div');
-      const h = document.createElement('h3'); h.textContent = KT.prodLabel[p]; wrap.appendChild(h);
-      const mapBox = document.createElement('div'); mapBox.className = 'kt-map'; wrap.appendChild(mapBox);
+    const checked = KT.checked();
+    const list = compare ? prods : [product];
+    const cards = list.map((p) => {
+      const mapBox = KT.h('div', { class: 'kt-map' });
+      const wrap = KT.h('div', { class: 'kt-map-card' }, KT.h('h3', {}, KT.prodLabel[p]), KT.h('p', { class: 'kt-note' }, `Data to ${KT.d(latestOf(p))}`), mapBox);
       return [p, wrap, mapBox];
     });
     box.replaceChildren(...cards.map((c) => c[1]));
@@ -899,25 +1424,38 @@ dash.onData(() => {
       const W = mapBox.clientWidth || 260, H = Math.round(W * 10.5 / 8.5);
       const x = d3.scaleLinear([33.5, 42.0], [0, W]), y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
       const cw = x(33.75) - x(33.5), ch = y(-5.0) - y(-4.75);
-      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
-      const cells = (byKey.get(p + '|' + day) || []).filter((c) => c.v[m] !== '' && c.v[m] != null && isFinite(+c.v[m]));
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', `${KT.prodLabel[p]} map, ${KT.d(day)}`);
+      const fillH = KT.hatch(svg);
+      const all = byKey.get(p + '|' + day) || [];
+      const cells = all.filter((c) => c.v[m] !== '' && c.v[m] != null && isFinite(+c.v[m]));
+      const have = new Set(cells.map((c) => `${c.lat.toFixed(3)}|${c.lon.toFixed(3)}`));
+      // cells without a value (no data, or % of normal undefined where the normal is ~0) are hatched
+      svg.append('g').selectAll('rect').data(cache.cells.filter((c) => !have.has(c.ck))).join('rect')
+        .attr('x', (c) => x(c.lon - 0.125)).attr('y', (c) => y(c.lat + 0.125)).attr('width', cw + 0.5).attr('height', ch + 0.5).attr('fill', fillH);
       svg.append('g').selectAll('rect').data(cells).join('rect')
         .attr('x', (c) => x(c.lon - 0.125)).attr('y', (c) => y(c.lat + 0.125)).attr('width', cw + 0.5).attr('height', ch + 0.5)
         .attr('fill', (c) => color(+c.v[m]));
       KT.overlay(svg, x, y, W, true, KT.site());
       mapBox.replaceChildren(svg.node());
-      if (!cells.length) mapBox.appendChild(Object.assign(document.createElement('div'), { className: 'kt-map-empty', textContent: 'No data for this day yet' }));
+      if (!all.length) mapBox.appendChild(KT.mapNote(KT.gapLines(KT.prodLabel[p], day, latestOf(p), checked)));
     });
-    legend.replaceChildren(KT.colorbar(color, S.dom, S.fmt, metricSel.options[metricSel.selectedIndex].text));
+    legend.replaceChildren(KT.colorbar(color, S.dom, S.fmt, metricSel.options[metricSel.selectedIndex].text),
+      KT.hatchLegend(m === 'pct_of_normal' ? 'No data, or % of normal undefined (normal near zero)' : 'No data for this day'));
+    if (unavailable.length) {
+      missingEl.hidden = false;
+      missingEl.replaceChildren(KT.ico('slash'), KT.h('span', {}, KT.h('b', {}, 'Not available: '),
+        unavailable.map((r) => `${r.name}, ${KT.niceDates(r.note) || 'no data downloaded'}`).join('; '),
+        checked ? `. Last checked ${KT.stamp(checked)}.` : '.'));
+    } else missingEl.hidden = true;
     drawStation(m, S, day);
   };
 
-  const stop = () => { clearInterval(timer); timer = null; playBtn.textContent = 'Play'; };
+  const stop = () => { clearInterval(timer); timer = null; KT.setPlay(playBtn, false); };
   playBtn.addEventListener('click', () => {
     if (timer) { stop(); return; }
     if (!cache) return;
     if (idx >= cache.dates.length - 1) idx = 0;
-    playBtn.textContent = 'Pause';
+    KT.setPlay(playBtn, true);
     timer = setInterval(() => {
       if (idx >= cache.dates.length - 1) { stop(); return; }
       idx += 1; draw();
@@ -926,64 +1464,62 @@ dash.onData(() => {
   });
   slider.addEventListener('input', () => { stop(); idx = +slider.value; draw(); });
   const step = (k) => { stop(); if (!cache) return; idx = Math.max(0, Math.min(cache.dates.length - 1, idx + k)); draw(); };
-  document.getElementById('anim-prev').addEventListener('click', () => step(-1));
-  document.getElementById('anim-next').addEventListener('click', () => step(1));
+  KT.$('anim-prev').addEventListener('click', () => step(-1));
+  KT.$('anim-next').addEventListener('click', () => step(1));
   metricSel.addEventListener('change', draw);
+  prodSel.addEventListener('change', () => { product = prodSel.value; draw(); });
+  cmpBtn.addEventListener('click', () => { compare = !compare; draw(); });
   dash.onData(draw);
 })();
 </script>
 
 <script>
-// Multi-model 10–16 day forecast panel: model toggles, day animation, maps, station table and chart
+// Weather-model 7–16 day forecasts: one model by default ("Compare models" shows every ticked model), day
+// animation, maps, station table and charts
 (() => {
-  const metricSel = document.getElementById('fc-metric');
-  const modelsBox = document.getElementById('fc-models');
-  const playBtn = document.getElementById('fc-play');
-  const slider = document.getElementById('fc-day');
-  const box = document.getElementById('fc-maps');
-  const dateEl = document.getElementById('fc-date');
-  const legend = document.getElementById('fc-legend');
-  const stTitle = document.getElementById('fc-st-title');
-  const consensus = document.getElementById('fc-consensus');
-  const stTable = document.getElementById('fc-st-table');
-  const stChart = document.getElementById('fc-st-chart');
-  const totChart = document.getElementById('fc-tot-chart');
+  const metricSel = KT.$('fc-metric'), modelSel = KT.$('fc-model'), cmpBtn = KT.$('fc-compare'), focus = KT.$('fc-focus');
+  const modelsBox = KT.$('fc-models'), playBtn = KT.$('fc-play'), slider = KT.$('fc-day'), box = KT.$('fc-maps');
+  const dateEl = KT.$('fc-date'), legend = KT.$('fc-legend'), stTitle = KT.$('fc-st-title'), consensus = KT.$('fc-consensus');
+  const stTable = KT.$('fc-st-table'), stChart = KT.$('fc-st-chart'), totChart = KT.$('fc-tot-chart');
+  stTable.ktName = () => `weather_forecast_${KT.shortName()}`;
   const SCALES = { cum_mm: [0, 40, 120], rain_mm: [0, 10, 30], total_5d_mm: [0, 20, 60], total_10d_mm: [0, 40, 120], total_all_mm: [0, 40, 120] };
   const TOTAL_DAYS = { total_5d_mm: 5, total_10d_mm: 10, total_all_mm: Infinity };
-  const ctrls = ['fc-prev', 'fc-play', 'fc-next', 'fc-day'].map((id) => document.getElementById(id));
+  const ctrls = ['fc-prev', 'fc-play', 'fc-next', 'fc-day'].map((id) => KT.$(id));
   const label = {};
-  let cache = null, cacheSrc = null, idx = 0, timer = null, shown = null;
+  let cache = null, cacheSrc = null, idx = 0, timer = null, shown = null, compare = false, model = 'ecmwf_ens_median';
 
   const prep = (rows) => {
-    const byKey = new Map();
-    rows.forEach((r) => { const k = r.model + '|' + r.date; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); label[r.model] = r.model_label; });
+    const byKey = new Map(), last = {};
+    rows.forEach((r) => {
+      const k = r.model + '|' + r.date; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); label[r.model] = r.model_label;
+      if (!last[r.model] || r.date > last[r.model]) last[r.model] = r.date;
+    });
     const dates = [...new Set(rows.map((r) => r.date))].sort();
-    const models = KT.models.filter((m) => rows.some((r) => r.model === m));
+    const models = KT.models.filter((m) => last[m]);
     const totals = new Map(), horizon = {};
     d3.groups(rows, (r) => r.model, (r) => `${r.lat}|${r.lon}`).forEach(([md, cells]) => {
       const out = [];
       cells.forEach(([, rs]) => {
         rs.sort((a, b) => (a.date < b.date ? -1 : 1));
         let c = 0;
-        rs.forEach((r, i) => { c += +r.rain_mm || 0; r.cum_mm = c; });
+        rs.forEach((r) => { c += +r.rain_mm || 0; r.cum_mm = c; });
         out.push({ lat: rs[0].lat, lon: rs[0].lon, total_5d_mm: rs[Math.min(4, rs.length - 1)].cum_mm, total_10d_mm: rs[Math.min(9, rs.length - 1)].cum_mm, total_all_mm: c });
         horizon[md] = Math.max(horizon[md] || 0, rs.length);
       });
       totals.set(md, out);
     });
-    return { byKey, dates, models, totals, horizon };
+    return { byKey, dates, models, totals, horizon, last };
   };
   const colorOf = (m) => dash.colors[KT.models.indexOf(m) % dash.colors.length];
-  const fmtDay = (s) => d3.utcFormat('%-d %b')(new Date(s));
+  const fmtDay = (s) => KT.d(s);
 
   const drawToggles = () => {
     modelsBox.replaceChildren(...cache.models.map((m) => {
-      const lab = document.createElement('label'); lab.className = 'kt-legend';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'fc-m-' + m; cb.checked = shown.has(m);
+      const cb = KT.h('input', { type: 'checkbox', id: 'fc-m-' + m });
+      cb.checked = shown.has(m);
       cb.addEventListener('change', () => { if (cb.checked) shown.add(m); else shown.delete(m); draw(); });
-      const sw = document.createElement('span'); sw.className = 'kt-sw'; sw.style.background = colorOf(m);
-      lab.append(cb, sw, label[m] || m);
-      return lab;
+      const sw = KT.h('span', { class: 'kt-sw' }); sw.style.background = colorOf(m);
+      return KT.h('label', {}, cb, sw, label[m] || m);
     }));
   };
 
@@ -991,49 +1527,47 @@ dash.onData(() => {
     const ev = dash.data('forecast_events'), fs = dash.data('forecast_sites');
     if (ev.status !== 'ok' || fs.status !== 'ok') return;
     const site = KT.site();
-    const rows = ev.data.filter((r) => r.site === site && shown.has(r.model));
+    const vis = compare ? KT.models.filter((md) => shown.has(md)) : KT.models.filter((md) => cache.models.includes(md));
+    const rows = ev.data.filter((r) => r.site === site && vis.includes(r.model));
     const shortName = (ev.data.find((r) => r.site === site) || {}).short_name || site;
-    stTitle.textContent = `${shortName}: forecast by model`;
-    document.getElementById('fc-day-col').textContent = `Rain on ${d3.utcFormat('%a %-d %b')(new Date(day))} (mm)`;
-    document.getElementById('fc-st-chart-title').textContent = `Daily rain at ${shortName} by model (mm)`;
-    document.getElementById('fc-tot-chart-title').textContent = `Forecast totals at ${shortName} by model (mm)`;
+    stTitle.textContent = `Station forecast by model: ${shortName}`;
+    KT.$('fc-day-col').textContent = `Rain on ${KT.fDs(new Date(day))} (mm)`;
+    KT.$('fc-st-chart-title').textContent = compare ? `Daily rain at ${shortName} by model (mm)` : `Daily rain at ${shortName}: ${label[model] || model} (mm)`;
+    KT.$('fc-tot-chart-title').textContent = `Forecast totals at ${shortName} by model (mm)`;
     const within = rows.filter((r) => +r.planting_rain_within_7d === 1);
     consensus.textContent = rows.length
-      ? `${within.length} of ${rows.length} models shown give planting rains within 7 days` +
+      ? `${within.length} of ${rows.length} models give planting rains within 7 days` +
         (within.length ? ` (${within.map((r) => `${r.model_label} ${fmtDay(r.first_planting_rain)}`).join(', ')}).` : '.')
       : 'Tick at least one model.';
-    const series = fs.data.filter((r) => r.site === site && shown.has(r.model));
-    const trs = KT.models.filter((md) => shown.has(md)).map((md) => {
+    const series = fs.data.filter((r) => r.site === site && vis.includes(r.model));
+    const days = (h, n) => (+h < n ? ` (${h} days)` : '');
+    const trs = vis.map((md) => {
       const e = rows.find((r) => r.model === md);
       if (!e) return null;
       const that = series.find((r) => r.model === md && r.date === day);
-      const tr = document.createElement('tr');
       const t5 = e.total_5d_mm !== undefined && e.total_5d_mm !== '' ? +e.total_5d_mm : d3.sum(series.filter((r) => r.model === md).slice(0, 5), (r) => +r.rain_mm);
       const t10 = e.total_10d_mm !== undefined && e.total_10d_mm !== '' ? +e.total_10d_mm : d3.sum(series.filter((r) => r.model === md).slice(0, 10), (r) => +r.rain_mm);
-      const cells = [e.model_label, e.horizon_days, that ? KT.num(+that.rain_mm) : '—', KT.num(t5), KT.num(t10), KT.num(+e.total_all_mm),
+      const beyond = cache.last[md] && day > cache.last[md];
+      const cells = [e.horizon_days, that ? KT.num(+that.rain_mm) : beyond ? `beyond range (ends ${KT.fDs(new Date(cache.last[md]))})` : '—',
+        KT.num(t5) + days(e.horizon_days, 5), KT.num(t10) + days(e.horizon_days, 10), `${KT.num(+e.total_all_mm)} (${e.horizon_days} days)`,
         e.first_planting_rain ? fmtDay(e.first_planting_rain) : 'none in range', e.source || ''];
-      cells.forEach((c, i) => {
-        const td = document.createElement('td');
-        if (i === 0) { const sw = document.createElement('span'); sw.className = 'kt-sw'; sw.style.background = colorOf(md); td.append(sw); }
-        td.append(String(c));
-        if (i > 0 && i < 6) td.className = 'num';
-        tr.appendChild(td);
-      });
-      return tr;
+      const sw = KT.h('span', { class: 'kt-sw' }); sw.style.background = colorOf(md);
+      return KT.h('tr', { class: !compare && md === model ? 'kt-pick' : null }, KT.h('td', {}, sw, e.model_label),
+        ...cells.map((c, i) => KT.h('td', { class: i < 5 ? 'num' + (i === 1 && beyond ? ' kt-missing' : '') : null }, String(c))));
     }).filter(Boolean);
     stTable.querySelector('tbody').replaceChildren(...trs);
-    // daily rain at the station: one bar per visible model per forecast day, the map's day shaded
-    const vis = KT.models.filter((md) => shown.has(md));
-    const ser = vis.map((md) => ({ key: md, label: label[md] || md, color: colorOf(md) }));
+    // daily rain at the station: one bar per shown model per forecast day, the map's day shaded
     const daily = new Map(series.map((r) => [r.model + '|' + r.date, +r.rain_mm]));
+    const barSer = (compare ? vis : [model]).map((md) => ({ key: md, label: label[md] || md, color: colorOf(md) }));
     KT.barChart(stChart, {
-      H: 220, yMax: 5, fmt: (v) => KT.num(v) + ' mm', mark: TOTAL_DAYS[metricSel.value] ? null : day,
-      groups: cache.dates.map((dd) => ({ key: dd, label: fmtDay(dd) })), series: ser,
-      val: (g, q) => daily.get(q.key + '|' + g.key), title: (g) => d3.utcFormat('%a %-d %b')(new Date(g.key)),
+      H: compare ? 220 : 260, yMax: 5, fmt: (v) => KT.num(v) + ' mm', mark: TOTAL_DAYS[metricSel.value] ? null : day,
+      groups: cache.dates.map((dd) => ({ key: dd, label: KT.fDs(new Date(dd)) })), series: barSer,
+      val: (g, q) => daily.get(q.key + '|' + g.key), title: (g) => KT.fDw(new Date(g.key)),
     });
-    // totals: next 5 days, next 10 days and each model's whole range; faded where the range is shorter
+    // totals: first 5 days, first 10 days and each model's whole range; faded where the range is shorter
     const ev1 = new Map(rows.map((r) => [r.model, r]));
-    const PER = [{ key: 'total_5d_mm', label: 'Next 5 days', n: 5 }, { key: 'total_10d_mm', label: 'Next 10 days', n: 10 }, { key: 'total_all_mm', label: 'Whole range', n: 0 }];
+    const ser = vis.map((md) => ({ key: md, label: label[md] || md, color: colorOf(md) }));
+    const PER = [{ key: 'total_5d_mm', label: 'First 5 days', n: 5 }, { key: 'total_10d_mm', label: 'First 10 days', n: 10 }, { key: 'total_all_mm', label: 'Whole forecast', n: 0 }];
     KT.barChart(totChart, {
       H: 220, yMax: 10, fmt: (v) => KT.num(v) + ' mm', groups: PER, series: ser,
       val: (g, q) => { const e = ev1.get(q.key); return e && e[g.key] !== '' ? +e[g.key] : undefined; },
@@ -1047,25 +1581,36 @@ dash.onData(() => {
     if (KT.fail(box, d)) return;
     if (d.status !== 'ok') { box.replaceChildren(); box.classList.add('dash-skeleton'); return; }
     box.classList.remove('dash-skeleton');
-    if (cacheSrc !== d.data) { cache = prep(d.data); cacheSrc = d.data; if (!shown) shown = new Set(cache.models); drawToggles(); }
+    if (cacheSrc !== d.data) {
+      cache = prep(d.data); cacheSrc = d.data;
+      if (!shown) shown = new Set(cache.models);
+      if (!cache.models.includes(model)) model = cache.models[0];
+      modelSel.replaceChildren(...cache.models.map((md) => new Option(label[md] || md, md)));
+      drawToggles();
+    }
+    modelSel.value = model; modelSel.disabled = compare; modelsBox.hidden = !compare;
+    cmpBtn.setAttribute('aria-pressed', String(compare)); focus.classList.toggle('is-compare', compare);
     const { byKey, dates } = cache;
-    const vis = cache.models.filter((m) => shown.has(m));
+    const vis = compare ? cache.models.filter((m) => shown.has(m)) : [model];
     slider.max = String(dates.length - 1);
     idx = Math.min(idx, dates.length - 1);
     slider.value = String(idx);
     const day = dates[idx];
     const m = metricSel.value, dom = SCALES[m], nTot = TOTAL_DAYS[m];
     ctrls.forEach((c) => { c.disabled = !!nTot; });
-    if (nTot) { stop(); dateEl.textContent = `${nTot === Infinity ? 'Whole range' : `Next ${nTot} days`}: ${fmtDay(dates[0])} – ${fmtDay(dates[Math.min(dates.length, nTot) - 1])}`; }
-    else dateEl.textContent = `${d3.utcFormat('%a %-d %B')(new Date(day))} (day ${idx + 1})`;
+    const runs = [...new Set((KT.rows('products') || []).filter((p) => p.kind === 'nwp' && p.run_date).map((p) => p.run_date))];
+    const runTxt = runs.length ? ` · runs of ${runs.map((r) => KT.d(r)).join(', ')}, 00 UTC` : '';
+    if (nTot) { stop(); dateEl.replaceChildren(`${nTot === Infinity ? 'Whole forecast' : `First ${nTot} days`}: ${KT.range(new Date(dates[0]), new Date(dates[Math.min(dates.length, nTot) - 1]))}`, KT.h('span', {}, runTxt)); }
+    else dateEl.replaceChildren(`Forecast for ${KT.fDw(new Date(day))}`, KT.h('span', {}, ` · day ${idx + 1}${runTxt}`));
     const panel = KT.css('--color-panel'), c1 = KT.color(dash.colors[0]);
     const color = d3.scaleLinear(dom, [panel, d3.interpolateRgb(panel, c1)(0.5), c1]).interpolate(d3.interpolateRgb).clamp(true);
+    const checked = KT.checked();
     const cards = vis.map((md) => {
-      const wrap = document.createElement('div');
-      const h = document.createElement('h3'); h.textContent = label[md] || md;
-      if (nTot && cache.horizon[md] < Math.min(nTot, dates.length)) h.textContent += ` (${cache.horizon[md]} days only)`;
-      wrap.appendChild(h);
-      const mapBox = document.createElement('div'); mapBox.className = 'kt-map'; wrap.appendChild(mapBox);
+      const p = KT.prod(md);
+      const mapBox = KT.h('div', { class: 'kt-map' });
+      const short = nTot && cache.horizon[md] < Math.min(nTot, dates.length);
+      const wrap = KT.h('div', { class: 'kt-map-card' }, KT.h('h3', {}, (label[md] || md) + (short ? ` (${cache.horizon[md]} days only)` : '')),
+        KT.h('p', { class: 'kt-note' }, `${cache.horizon[md]}-day forecast to ${KT.d(cache.last[md])}${p && p.run_date ? `, run ${KT.d(p.run_date)} 00 UTC` : ''}`), mapBox);
       return [md, wrap, mapBox];
     });
     box.replaceChildren(...cards.map((c) => c[1]));
@@ -1073,34 +1618,46 @@ dash.onData(() => {
       const W = mapBox.clientWidth || 260, H = Math.round(W * 10.5 / 8.5);
       const x = d3.scaleLinear([33.5, 42.0], [0, W]), y = d3.scaleLinear([-5.0, 5.5], [H, 0]);
       const cw = x(34.0) - x(33.5), ch = y(-5.0) - y(-4.5);
-      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', `${label[md] || md} forecast map`);
       const cells = nTot ? (cache.totals.get(md) || []) : (byKey.get(md + '|' + day) || []);
+      if (!cells.length) {
+        // beyond the model's range: hatch its grid, never draw it as zero rain
+        const fillH = KT.hatch(svg);
+        svg.append('g').selectAll('rect').data(cache.totals.get(md) || []).join('rect')
+          .attr('x', (c) => x(+c.lon - 0.25)).attr('y', (c) => y(+c.lat + 0.25)).attr('width', cw + 0.5).attr('height', ch + 0.5).attr('fill', fillH);
+      }
       svg.append('g').selectAll('rect').data(cells).join('rect')
         .attr('x', (c) => x(+c.lon - 0.25)).attr('y', (c) => y(+c.lat + 0.25)).attr('width', cw + 0.5).attr('height', ch + 0.5)
         .attr('fill', (c) => color(+c[m]));
       KT.overlay(svg, x, y, W, true, KT.site());
       mapBox.replaceChildren(svg.node());
-      if (!cells.length) mapBox.appendChild(Object.assign(document.createElement('div'), { className: 'kt-map-empty', textContent: 'Beyond this model’s range' }));
+      if (!cells.length) {
+        const p = KT.prod(md);
+        mapBox.appendChild(KT.mapNote(KT.gapLines(label[md] || md, day, cache.last[md], checked,
+          `${cache.horizon[md]}-day forecast${p && p.run_date ? ` from the ${KT.d(p.run_date)} 00 UTC run` : ''}`)));
+      }
     });
-    if (!vis.length) box.replaceChildren(Object.assign(document.createElement('p'), { className: 'kt-note', textContent: 'Tick at least one model above.' }));
-    legend.replaceChildren(KT.colorbar(color, dom, (v) => KT.int(v) + ' mm', metricSel.options[metricSel.selectedIndex].text));
+    if (!vis.length) box.replaceChildren(KT.h('p', { class: 'kt-note' }, 'Tick at least one model above.'));
+    legend.replaceChildren(KT.colorbar(color, dom, (v) => KT.int(v) + ' mm', metricSel.options[metricSel.selectedIndex].text), KT.hatchLegend('Beyond the model’s forecast range'));
     drawStation(day);
   };
 
-  const stop = () => { clearInterval(timer); timer = null; playBtn.textContent = 'Play'; };
+  const stop = () => { clearInterval(timer); timer = null; KT.setPlay(playBtn, false); };
   playBtn.addEventListener('click', () => {
     if (timer) { stop(); return; }
     if (!cache) return;
     if (idx >= cache.dates.length - 1) idx = 0;
-    playBtn.textContent = 'Pause';
+    KT.setPlay(playBtn, true);
     timer = setInterval(() => { if (idx >= cache.dates.length - 1) { stop(); return; } idx += 1; draw(); }, 700);
     draw();
   });
   const step = (k) => { stop(); if (!cache) return; idx = Math.max(0, Math.min(cache.dates.length - 1, idx + k)); draw(); };
-  document.getElementById('fc-prev').addEventListener('click', () => step(-1));
-  document.getElementById('fc-next').addEventListener('click', () => step(1));
+  KT.$('fc-prev').addEventListener('click', () => step(-1));
+  KT.$('fc-next').addEventListener('click', () => step(1));
   slider.addEventListener('input', () => { stop(); idx = +slider.value; draw(); });
   metricSel.addEventListener('change', draw);
+  modelSel.addEventListener('change', () => { model = modelSel.value; draw(); });
+  cmpBtn.addEventListener('click', () => { compare = !compare; draw(); });
   dash.onData(draw);
 })();
 </script>
