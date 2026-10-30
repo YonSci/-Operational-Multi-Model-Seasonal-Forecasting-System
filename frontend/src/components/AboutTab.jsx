@@ -1,38 +1,170 @@
-import React, { Fragment, useEffect, useState } from 'react'
-import { Info, Database, CalendarRange, Map as MapIcon, ShieldCheck, FileCode2 } from 'lucide-react'
+import React, { Fragment, useEffect, useRef, useState } from 'react'
+import { Info, Database, CalendarRange, Map as MapIcon, ShieldCheck, FileCode2, ChevronRight, ExternalLink, Copy, Check } from 'lucide-react'
 import { version } from '../../package.json'
 
-// Seasonal forecast systems combined for the Kenya Long Rains (About > Data & coverage)
-const C3S_MODEL_INFO = [
-  { name: 'ECMWF SEAS5', desc: 'The 5th generation seasonal forecasting system from the European Centre for Medium-Range Weather Forecasts. It features high horizontal atmospheric resolution (~36 km) coupled with the NEMO ocean model. It is widely considered the global benchmark for operational seasonal prediction and serves as a core component of the Copernicus Climate Change Service (C3S) multi-model ensemble.' },
-  { name: 'Met Office UKMO GloSea6', desc: 'The UK Met Office’s Global Seasonal prediction system version 6. Built on the HadGEM3-GC3.1 coupled physical model, it is recognized for its high-resolution ocean component and strong representation of stratospheric dynamics, which significantly improves the forecasting of wintertime phenomena like the North Atlantic Oscillation (NAO).' },
-  { name: 'Meteo-France Sys8', desc: 'Meteo-France’s 8th generation seasonal forecasting system. Relying on the CNRM-CM6-1 coupled global climate model, System 8 features updated initialization techniques and improved physics, leading to better representations of tropical convection, the El Niño-Southern Oscillation (ENSO), and ocean-atmosphere coupling.' },
-  { name: 'DWD GCFS2.1', desc: 'The German Climate Forecast System version 2.1 by Deutscher Wetterdienst. It is based on the high-resolution Max Planck Institute Earth System Model (MPI-ESM-HR). It utilizes an advanced assimilation scheme for ocean and sea ice initialization, providing robust global seasonal outlooks with a strong focus on European climate variability.' },
-  { name: 'CMCC CMCC-SPS4', desc: 'The Centro Euro-Mediterraneo sui Cambiamenti Climatici Seasonal Prediction System 4 (Italy). This coupled system utilizes the Community Earth System Model (CESM) framework with specific CMCC modifications. It features high-resolution ocean and atmospheric components optimized to capture both mid-latitude teleconnections and tropical climate variability.' },
-  { name: 'NCEP CFSv2', desc: 'The Climate Forecast System version 2 from the US National Centers for Environmental Prediction. Operational since 2011, it is a fully coupled ocean-land-atmosphere dynamical prediction system. While relying on an older architecture than some European counterparts, it is highly reliable, heavily used in operational meteorology globally, and serves as a foundational model for the North American Multi-Model Ensemble (NMME).' },
-  { name: 'ECCC CanSIPS', desc: 'The Canadian Seasonal to Interannual Prediction System by Environment and Climate Change Canada. It operates as an internal multi-model ensemble system by combining forecasts from two distinct coupled global climate models (GEM-NEMO and CanCM4i). It provides comprehensive probabilistic seasonal forecasts and is a major contributor to the NMME.' },
+// Public method documents (main branch). `updated` is the date of the last commit to each file on main.
+const REPO_BLOB = 'https://github.com/YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System/blob/main/'
+const DOCS = {
+  fao:    { file: 'FAO_WATER_BALANCE_METHOD.md',         updated: '2026-10-29' },
+  readme: { file: 'README.md',                           updated: '2026-09-21' },
+  octRun: { file: 'ECMWF_SEAS5_OCTOBER_PIPELINE.md',     updated: '2026-10-28' },
+  kiremt: { file: 'ECMWF_SEAS5_ETHIOPIA_KIREMT_PIPELINE.md', updated: '2026-09-17' },
+}
+const docUrl = (doc, anchor) => REPO_BLOB + doc.file + (anchor ? '#' + anchor : '')
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmtDate = iso => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${MONTHS[m - 1]} ${y}` }
+const docMeta = doc => `${doc.file} · updated ${fmtDate(doc.updated)}`
+
+// Official dataset pages and the scientific reference
+const EXT = {
+  chirps:    'https://www.chc.ucsb.edu/data/chirps',
+  era5land:  'https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land',
+  soilgrids: 'https://soilgrids.org',
+  c3s:       'https://cds.climate.copernicus.eu/datasets/seasonal-original-single-levels',
+  dunning:   'https://doi.org/10.1002/2016JD025428',
+}
+const DUNNING_REF = 'Dunning, C. M., Black, E. C. L., & Allan, R. P. (2016). The onset and cessation of seasonal rainfall over Africa. Journal of Geophysical Research: Atmospheres, 121, 11,405–11,424.'
+const CITATION = `Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v${version}). ILRI / ICPAC.`
+
+// Seasonal forecast systems combined for the Kenya Long Rains (About > Data & coverage).
+// Names follow the platform's model labels (backend/mam_loader.py); members are those used on the platform.
+// `hr` is the Long Rains onset hit rate (About > Performance & limitations).
+const C3S_MODELS = [
+  { system: 'ECMWF SEAS5',           centre: 'European Centre for Medium-Range Weather Forecasts (ECMWF)',                  members: '25', hindcast: '1981–2016', hr: '0.43', vsChance: '+0.10' },
+  { system: 'UKMO GloSea6',          centre: 'Met Office, United Kingdom (UKMO)',                                          members: '25', hindcast: '1993–2016', hr: '0.41', vsChance: '+0.08' },
+  { system: 'Meteo-France System 8', centre: 'Météo-France',                                                               members: '25', hindcast: '1993–2016', hr: '0.42', vsChance: '+0.09' },
+  { system: 'DWD GCFS2.1',           centre: 'Deutscher Wetterdienst, Germany (DWD)',                                      members: '25', hindcast: '1993–2016', hr: '0.39', vsChance: '+0.06' },
+  { system: 'CMCC SPS4',             centre: 'Euro-Mediterranean Center on Climate Change, Italy (CMCC)',                  members: '25', hindcast: '1993–2016', hr: '0.38', vsChance: '+0.05' },
+  { system: 'NCEP CFSv2',            centre: 'NOAA National Centers for Environmental Prediction, United States (NCEP)',   members: '24', hindcast: '1993–2016', hr: '0.37', vsChance: '+0.04' },
+  { system: 'ECCC CanSIPS',          centre: 'Environment and Climate Change Canada (ECCC)',                               members: '20', hindcast: '1993–2016', hr: '0.36', vsChance: '+0.03' },
 ]
 // Short Rains Tracker inputs (see public/tracker/data/products.csv for the live latency of each)
+const TRACKER_ROLE = 'Rainfall since 1 September at monitored sites; compared with CHIRPS for bias, correlation and rain detection'
 const SATELLITE_INFO = [
-  { name: 'CHIRPS 2.0', meta: 'UC Santa Barbara Climate Hazards Center · 0.05°, used at 0.25° · preliminary ~2–5 days, final ~3 weeks after the month',
-    desc: 'Satellite infrared rainfall blended with rain-gauge reports, 1981 to present. CHIRPS is the reference for the whole platform: climatology, bias correction and verification all use it. Preliminary daily files fill the days after the last complete month.' },
-  { name: 'ARC2', meta: 'NOAA Climate Prediction Center (FEWS NET) · 0.1° · ~1–2 days',
-    desc: 'Africa Rainfall Climatology version 2: Meteosat infrared cloud-top temperatures merged with daily rain-gauge reports. Quick and with a long record; tends to miss light rain.' },
-  { name: 'TAMSAT v3.1', meta: 'University of Reading · 0.0375° · ~2–5 days',
-    desc: 'Africa-only rainfall from Meteosat thermal-infrared cold-cloud duration, calibrated against historical gauges. Good at telling rain from no rain; weaker for heavy amounts.' },
-  { name: 'PDIR-Now', meta: 'UC Irvine Center for Hydrometeorology and Remote Sensing · 0.04° · ~1 day',
-    desc: 'Rainfall estimated from infrared imagery by a neural network (PERSIANN family), near-global and quasi-real-time. The fastest product here; it has no gauge correction.' },
-  { name: 'IMERG Late and Early (V07)', meta: 'NASA Global Precipitation Measurement (GPM) · 0.1° · Early ~1 day, Late ~1–2 days',
-    desc: 'Passive-microwave rainfall from the GPM satellite constellation, with gaps filled from infrared. The Late run includes more microwave overpasses; the Early run is issued sooner for monitoring when speed matters.' },
+  { name: 'CHIRPS 2.0', provider: 'UC Santa Barbara Climate Hazards Center', resolution: '0.05°, used at 0.25°', latency: 'Preliminary ~2–5 days; final ~3 weeks after the month',
+    method: 'Satellite infrared rainfall blended with rain-gauge reports, 1981 to present',
+    use: 'Reference for the whole platform: climatology, bias correction and verification. Preliminary daily files fill the days after the last complete month' },
+  { name: 'ARC2', provider: 'NOAA Climate Prediction Center (FEWS NET)', resolution: '0.1°', latency: '~1–2 days',
+    method: 'Africa Rainfall Climatology version 2: Meteosat infrared cloud-top temperatures merged with daily rain-gauge reports', use: TRACKER_ROLE },
+  { name: 'TAMSAT v3.1', provider: 'University of Reading', resolution: '0.0375°', latency: '~2–5 days',
+    method: 'Meteosat thermal-infrared cold-cloud duration, calibrated against historical gauges; Africa only', use: TRACKER_ROLE },
+  { name: 'PDIR-Now', provider: 'UC Irvine Center for Hydrometeorology and Remote Sensing', resolution: '0.04°', latency: '~1 day',
+    method: 'Rainfall estimated from infrared imagery by a neural network (PERSIANN family); near-global; no gauge correction', use: TRACKER_ROLE },
+  { name: 'IMERG Late and Early (V07)', provider: 'NASA Global Precipitation Measurement (GPM)', resolution: '0.1°', latency: 'Early ~1 day; Late ~1–2 days',
+    method: 'Passive-microwave rainfall from the GPM satellite constellation, gaps filled from infrared. The Late run includes more microwave overpasses; the Early run is issued sooner', use: TRACKER_ROLE },
 ]
+const SATELLITE_FIELDS = [['provider', 'Provider'], ['resolution', 'Resolution'], ['latency', 'Latency'], ['method', 'Method'], ['use', 'Used for']]
 const NWP_INFO = [
-  { name: 'ECMWF IFS (HRES)', meta: 'ECMWF · 0.25° · 15 days', desc: 'The European Centre’s deterministic global forecast, from its open data.' },
-  { name: 'ECMWF ensemble (ENS)', meta: 'ECMWF · 0.25° · 15 days', desc: 'A 51-member ensemble. The maps show the member median; the chances of planting rains use the 50 perturbed members.' },
-  { name: 'GFS', meta: 'NOAA National Centers for Environmental Prediction · 0.25° · 16 days', desc: 'The US Global Forecast System.' },
-  { name: 'GDPS (GEM)', meta: 'Environment and Climate Change Canada · 15 km · 10 days', desc: 'Canada’s Global Deterministic Prediction System, run with the GEM model.' },
-  { name: 'ICON', meta: 'Deutscher Wetterdienst (DWD) · 13 km · 7.5 days', desc: 'Germany’s ICOsahedral Nonhydrostatic global model, from the DWD open-data server.' },
-  { name: 'UKMO Global', meta: 'Met Office · 10 km · 7 days', desc: 'The Met Office Unified Model global deterministic forecast, from AWS open data.' },
+  { name: 'ECMWF IFS (HRES)', provider: 'ECMWF', resolution: '0.25°', range: '15 days', source: 'ECMWF open data', notes: 'Deterministic global forecast' },
+  { name: 'ECMWF ensemble (ENS)', provider: 'ECMWF', resolution: '0.25°', range: '15 days', notes: '51 members. The maps show the member median; the chances of planting rains use the 50 perturbed members' },
+  { name: 'GFS', provider: 'NOAA National Centers for Environmental Prediction', resolution: '0.25°', range: '16 days', notes: 'US Global Forecast System' },
+  { name: 'GDPS (GEM)', provider: 'Environment and Climate Change Canada', resolution: '15 km', range: '10 days', notes: 'Global Deterministic Prediction System, run with the GEM model' },
+  { name: 'ICON', provider: 'Deutscher Wetterdienst (DWD)', resolution: '13 km', range: '7.5 days', source: 'DWD open-data server', notes: 'ICOsahedral Nonhydrostatic global model' },
+  { name: 'UKMO Global', provider: 'Met Office', resolution: '10 km', range: '7 days', source: 'AWS open data', notes: 'Unified Model global deterministic forecast' },
 ]
+const NWP_FIELDS = [['provider', 'Provider'], ['resolution', 'Resolution'], ['range', 'Forecast range'], ['source', 'Data source'], ['notes', 'Notes']]
+
+// ── Presentational helpers (module level so that re-renders keep <details> state) ──
+const Scope = ({ children }) => (<p className="about-scope"><span className="about-scope-key">Applies to</span><span>{children}</span></p>)
+const S = ({title,children,id,scope})=>(<section id={id} className="about-block"><h3>{title}</h3>{scope && <Scope>{scope}</Scope>}{children}</section>)
+const Disclosure = ({ title, scope, children }) => (
+  <details className="about-disclosure">
+    <summary><ChevronRight className="about-disclosure-chevron" size={18} aria-hidden="true" /><span>{title}</span></summary>
+    <div className="about-disclosure-body">{scope && <Scope>{scope}</Scope>}{children}</div>
+  </details>
+)
+const ExtLink = ({ href, children }) => (<a className="about-extlink" href={href} target="_blank" rel="noopener noreferrer">{children}<ExternalLink size={14} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></a>)
+const DocLinks = ({ children }) => (<ul className="about-doclinks">{children}</ul>)
+const DocLink = ({ action, title, href, meta }) => (
+  <li className="about-doclink">
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      <span className="about-doclink-action">{action}<ExternalLink size={15} aria-hidden="true" /></span>
+      <span className="about-doclink-title">{title}</span>
+      {meta && <span className="about-doclink-meta">{meta}</span>}
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  </li>
+)
+const SpecList = ({ items, fields }) => (
+  <div className="about-specs">{items.map(it => (
+    <div key={it.name} className="about-spec">
+      <h4>{it.name}</h4>
+      <dl>{fields.filter(([k]) => it[k]).map(([k, label]) => (<div key={k}><dt>{label}</dt><dd>{it[k]}</dd></div>))}</dl>
+    </div>))}
+  </div>
+)
+const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:15}}><thead><tr style={{borderBottom:'2px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} scope="col" style={{padding:'8px 10px',textAlign:'left',color:'var(--text-meta)',fontWeight:600,fontSize:14,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'10px',color:j===0?'var(--heading)':'var(--text-body)',fontWeight:j===0?600:400,lineHeight:1.6,verticalAlign:'top',minWidth:j===0?140:120}}>{c}</td>))}</tr>))}</tbody></table></div>)
+const KV = ({label,value,wide=false})=>(<div style={{display:'flex',flexWrap:'wrap',gap:'2px 16px',padding:'10px 0',borderBottom:'1px solid var(--border-primary)'}}><span style={{flex:`0 0 ${wide?240:200}px`,fontSize:14,fontWeight:600,color:'var(--text-meta)',lineHeight:1.6,fontFamily:label.startsWith('GET ')?"'IBM Plex Mono',monospace":'inherit'}}>{label}</span><span style={{flex:'1 1 320px',minWidth:0,fontSize:16,color:'var(--text-body)',lineHeight:1.65}}>{value}</span></div>)
+const Step = ({n,title,eq,desc,table})=>(
+  <div style={{display:'flex',gap:14,marginBottom:24,alignItems:'flex-start'}}>
+    <div style={{flexShrink:0,width:30,height:30,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,background:'var(--btn-primary)',color:'#fff',marginTop:1}}>{n}</div>
+    <div style={{flex:1,minWidth:0}}>
+      <h4 style={{fontSize:18,fontWeight:600,color:'var(--heading)',margin:'0 0 6px',lineHeight:1.4}}>{title}</h4>
+      {eq&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,color:'var(--heading)',background:'var(--bg-elevated)',border:'1px solid var(--border-primary)',borderRadius:8,padding:'10px 14px',marginBottom:8,overflowX:'auto',whiteSpace:'pre'}}>{eq}</div>}
+      {desc&&<p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:table?'0 0 8px':0}}>{desc}</p>}
+      {table&&(<div style={{overflowX:'auto',marginTop:4}}><table style={{borderCollapse:'collapse',fontSize:15,width:'100%'}}><tbody>{table.map(([sym,def],i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}><td style={{padding:'7px 10px',fontFamily:"'IBM Plex Mono',monospace",fontSize:14,color:'var(--accent-text)',whiteSpace:'nowrap',verticalAlign:'top'}}>{sym}</td><td style={{padding:'7px 10px',color:'var(--text-body)',lineHeight:1.6}}>{def}</td></tr>))}</tbody></table></div>)}
+    </div>
+  </div>
+)
+const GaugeDef = ({name,thresh,derivation,justification,strength})=>(
+  <div style={{marginBottom:8,padding:'8px 10px',background:'var(--bg-elevated)',borderRadius:8,border:'1px solid var(--border-primary)'}}>
+    <div style={{display:'flex',flexWrap:'wrap',justifyContent:'space-between',alignItems:'flex-start',gap:'2px 12px',marginBottom:4}}>
+      <span style={{fontSize:16,fontWeight:700,color:'var(--text-primary)'}}>{name}</span>
+      <span style={{fontSize:14,color:'var(--accent-text)',fontFamily:"'IBM Plex Mono',monospace"}}>{thresh}</span>
+    </div>
+    <div style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.5,marginBottom:3}}>{justification}</div>
+    <div style={{display:'flex',gap:12,fontSize:13,color:'var(--text-faint)',flexWrap:'wrap'}}>
+      <span><strong style={{color:'var(--text-muted)'}}>Derivation:</strong> {derivation}</span>
+      <span><strong style={{color:'var(--text-muted)'}}>Strength:</strong> {strength}</span>
+    </div>
+  </div>
+)
+
+// Recommended citation with a copy button: Clipboard API, then execCommand, then select the text for a manual copy
+function CopyCitation({ text }) {
+  const [status, setStatus] = useState('idle')
+  const textRef = useRef(null)
+  const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const legacyCopy = () => {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.opacity = '0'
+      document.body.appendChild(ta); ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch { return false }
+  }
+  const selectText = () => {
+    const el = textRef.current, sel = window.getSelection?.()
+    if (!el || !sel) return
+    const range = document.createRange(); range.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(range)
+  }
+  const copy = async () => {
+    let ok = false
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); ok = true } } catch { ok = false }
+    if (!ok) ok = legacyCopy()
+    if (!ok) selectText()
+    setStatus(ok ? 'copied' : 'failed')
+    clearTimeout(timer.current)
+    if (ok) timer.current = setTimeout(() => setStatus('idle'), 3000)
+  }
+  return (
+    <div className="about-cite">
+      <p ref={textRef} className="about-cite-text">{text}</p>
+      <div className="about-cite-actions">
+        <button type="button" className="about-btn" data-state={status} onClick={copy}>
+          {status === 'copied' ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+          {status === 'copied' ? 'Copied' : 'Copy citation'}
+        </button>
+        <span className="about-cite-status" role="status" aria-live="polite">
+          {status === 'copied' ? 'Citation copied to the clipboard.' : status === 'failed' ? 'Copying is not available here. The citation is selected; press Ctrl+C (⌘C on a Mac) to copy it.' : ''}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export default function AboutTab({ initial, section: sectionProp, onSectionChange }) {
   const [section, setSection] = useState(sectionProp ?? initial?.section ?? 'overview')
@@ -41,35 +173,6 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
   const go = id => { setSection(id); onSectionChange?.(id); scrollRef.current?.scrollTo({ top: 0 }) }
   // Opened from a landing-page card: jump to the block it points at
   useEffect(() => { if (initial?.anchor) document.getElementById(initial.anchor)?.scrollIntoView({ block: 'start' }) }, [])
-
-  const S = ({title,children,id})=>(<section id={id} className="about-block"><h3>{title}</h3>{children}</section>)
-  const ModelList = ({items})=>(<dl className="about-models">{items.map(m => (<div key={m.name}><dt>{m.name}</dt>{m.meta && <dd className="about-models-meta">{m.meta}</dd>}<dd>{m.desc}</dd></div>))}</dl>)
-  const Tbl = ({head,rows})=>(<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:15}}><thead><tr style={{borderBottom:'2px solid var(--border-primary)'}}>{head.map(h=>(<th key={h} scope="col" style={{padding:'8px 10px',textAlign:'left',color:'var(--text-meta)',fontWeight:600,fontSize:14,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead><tbody>{rows.map((r,i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}>{r.map((c,j)=>(<td key={j} style={{padding:'10px',color:j===0?'var(--heading)':'var(--text-body)',fontWeight:j===0?600:400,lineHeight:1.6,verticalAlign:'top',minWidth:j===0?140:120}}>{c}</td>))}</tr>))}</tbody></table></div>)
-  const KV = ({label,value,wide=false})=>(<div style={{display:'flex',flexWrap:'wrap',gap:'2px 16px',padding:'10px 0',borderBottom:'1px solid var(--border-primary)'}}><span style={{flex:`0 0 ${wide?240:200}px`,fontSize:14,fontWeight:600,color:'var(--text-meta)',lineHeight:1.6,fontFamily:label.startsWith('GET ')?"'IBM Plex Mono',monospace":'inherit'}}>{label}</span><span style={{flex:'1 1 320px',minWidth:0,fontSize:16,color:'var(--text-body)',lineHeight:1.65}}>{value}</span></div>)
-  const Step = ({n,title,eq,desc,table})=>(
-    <div style={{display:'flex',gap:14,marginBottom:24,alignItems:'flex-start'}}>
-      <div style={{flexShrink:0,width:30,height:30,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,background:'var(--btn-primary)',color:'#fff',marginTop:1}}>{n}</div>
-      <div style={{flex:1,minWidth:0}}>
-        <h4 style={{fontSize:18,fontWeight:600,color:'var(--heading)',margin:'0 0 6px',lineHeight:1.4}}>{title}</h4>
-        {eq&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,color:'var(--heading)',background:'var(--bg-elevated)',border:'1px solid var(--border-primary)',borderRadius:8,padding:'10px 14px',marginBottom:8,overflowX:'auto',whiteSpace:'pre'}}>{eq}</div>}
-        {desc&&<p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:table?'0 0 8px':0}}>{desc}</p>}
-        {table&&(<div style={{overflowX:'auto',marginTop:4}}><table style={{borderCollapse:'collapse',fontSize:15,width:'100%'}}><tbody>{table.map(([sym,def],i)=>(<tr key={i} style={{borderBottom:'1px solid var(--border-primary)'}}><td style={{padding:'7px 10px',fontFamily:"'IBM Plex Mono',monospace",fontSize:14,color:'var(--accent-text)',whiteSpace:'nowrap',verticalAlign:'top'}}>{sym}</td><td style={{padding:'7px 10px',color:'var(--text-body)',lineHeight:1.6}}>{def}</td></tr>))}</tbody></table></div>)}
-      </div>
-    </div>
-  )
-  const GaugeDef = ({name,thresh,derivation,justification,strength})=>(
-    <div style={{marginBottom:8,padding:'8px 10px',background:'var(--bg-elevated)',borderRadius:8,border:'1px solid var(--border-primary)'}}>
-      <div style={{display:'flex',flexWrap:'wrap',justifyContent:'space-between',alignItems:'flex-start',gap:'2px 12px',marginBottom:4}}>
-        <span style={{fontSize:16,fontWeight:700,color:'var(--text-primary)'}}>{name}</span>
-        <span style={{fontSize:14,color:'var(--accent-text)',fontFamily:"'IBM Plex Mono',monospace"}}>{thresh}</span>
-      </div>
-      <div style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.5,marginBottom:3}}>{justification}</div>
-      <div style={{display:'flex',gap:12,fontSize:13,color:'var(--text-faint)',flexWrap:'wrap'}}>
-        <span><strong style={{color:'var(--text-muted)'}}>Derivation:</strong> {derivation}</span>
-        <span><strong style={{color:'var(--text-muted)'}}>Strength:</strong> {strength}</span>
-      </div>
-    </div>
-  )
 
   const [expandedStations, setExpandedStations] = useState({ gambella: true })
   const [stationFilter, setStationFilter] = useState('all')
@@ -194,7 +297,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             Every product is computed on the same 0.25° analysis grid (about 28 km) from daily rainfall. Observed rainfall comes from CHIRPS; forecasts are
             bias-corrected against it, so forecast and observed dates are directly comparable.
           </p>
-          <S title="Countries and seasons" id="about-seasons">
+          <S title="Countries and seasons" id="about-seasons" scope="Kenya and Ethiopia · all seasons · 0.25° grid">
             <Tbl head={['Country','Season','Forecast start','Models']} rows={[
               ['Kenya', 'Short Rains (OND)', '1 Sep; 1 Oct, also with observed rainfall to 30 Sep or to the latest day', 'ECMWF SEAS5'],
               ['Kenya', 'Long Rains (MAM)', '1 Feb', 'Seven C3S models, single and combined'],
@@ -205,7 +308,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['Ethiopia', 'Deyr/Hagaya (SON–OND), autumn rains', '1 Sep', 'ECMWF SEAS5'],
             ]}/>
           </S>
-          <S title="Datasets">
+          <S title="Datasets" scope="Kenya and Ethiopia · all seasons · 0.25° grid">
             <Tbl head={['Dataset','Used for','Resolution','Period']} rows={[
               ['CHIRPS v2 daily rainfall', 'Observed onset, cessation and season length; terciles; bias correction of the forecasts', '0.25°', '1981 on (Long Rains), 1993 on (other seasons)'],
               ['CHIRPS v3 daily rainfall', 'FAO water balance: observations, terciles and its own bias correction', '0.05°, averaged to 0.25°', '1993 on'],
@@ -214,29 +317,46 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
               ['Satellite rainfall and 10–15 day forecasts', 'Short Rains Tracker at monitored sites', 'Site', 'Current season'],
             ]}/>
+            <h4 className="about-subhead">Open dataset documentation</h4>
+            <DocLinks>
+              <DocLink action="Open dataset documentation" title="CHIRPS daily rainfall (v2 and v3)" href={EXT.chirps} meta="UC Santa Barbara Climate Hazards Center" />
+              <DocLink action="Open dataset documentation" title="ERA5-Land reanalysis" href={EXT.era5land} meta="Copernicus Climate Data Store" />
+              <DocLink action="Open dataset documentation" title="SoilGrids 2.0" href={EXT.soilgrids} meta="soilgrids.org" />
+              <DocLink action="Open dataset documentation" title="C3S seasonal forecasts, single levels (incl. ECMWF SEAS5)" href={EXT.c3s} meta="Copernicus Climate Data Store" />
+            </DocLinks>
           </S>
-          <S title="Seasonal forecast models" id="about-models">
+          <S title="Seasonal forecast models" id="about-models" scope="Kenya · Long Rains · forecast start 1 Feb · seven C3S models">
             <p className="about-intro">
               The Kenya Long Rains outlooks use seven seasonal forecast systems from the Copernicus Climate Change Service (C3S), shown singly and
               combined according to their past skill. The other seasons use ECMWF SEAS5.
             </p>
-            <ModelList items={C3S_MODEL_INFO}/>
+            <dl className="about-facts">
+              <div><dt>Products used</dt><dd>Daily precipitation, bias-corrected to CHIRPS with empirical quantile mapping on the 0.25° grid</dd></div>
+              <div><dt>Forecast start</dt><dd>1 February (Kenya Long Rains)</dd></div>
+              <div><dt>Official source</dt><dd><ExtLink href={EXT.c3s}>C3S seasonal forecast data on single levels</ExtLink> (Copernicus Climate Data Store)</dd></div>
+            </dl>
+            <Tbl head={['System (as named on this platform)','Forecasting centre','Members used','Hindcast period']}
+              rows={C3S_MODELS.map(m => [m.system, m.centre, m.members, m.hindcast])}/>
+            <p className="about-note">
+              System names are the labels used in the dashboard’s model selector. The C3S dataset page lists the forecast systems that each centre
+              provides.
+            </p>
           </S>
-          <S title="Satellite rainfall products" id="about-satellite">
+          <S title="Satellite rainfall products" id="about-satellite" scope="Kenya · Short Rains Tracker · monitored sites · from 1 Sep">
             <p className="about-intro">
               The Short Rains Tracker shows how much rain has fallen at each monitored site since 1 September, from five satellite products downloaded
               every day and placed on the 0.25° grid. Each product is compared with CHIRPS for bias, correlation and rain detection.
             </p>
-            <ModelList items={SATELLITE_INFO}/>
+            <SpecList items={SATELLITE_INFO} fields={SATELLITE_FIELDS}/>
           </S>
-          <S title="Medium-range weather forecasts" id="about-nwp">
+          <S title="Medium-range weather forecasts" id="about-nwp" scope="Kenya · Short Rains Tracker · next 7–16 days">
             <p className="about-intro">
               The tracker’s outlook for the next one to two weeks comes from six global weather models, taken each day from the 00 UTC run published by
               each centre. A model that cannot be reached is filled from Open-Meteo. Forecast range is 7 to 16 days depending on the model.
             </p>
-            <ModelList items={NWP_INFO}/>
+            <SpecList items={NWP_INFO} fields={NWP_FIELDS}/>
           </S>
-          <S title="Reference periods and updates">
+          <S title="Reference periods and updates" scope="Kenya and Ethiopia · all seasons">
             <KV label="Calibration" value="Hindcast years up to 2016: 1981–2016 for the Long Rains (36 years), 1993–2016 for the Short Rains and the Ethiopia seasons (24 years). Terciles, bias correction and probability calibration use these years."/>
             <KV label="Validation" value="Independent years after calibration; 2017–2024 for the Short Rains methods."/>
             <KV label="Observed record" value="CHIRPS 1993–2025 for the Short Rains historical view and the Ethiopia regime diagnostics; 1981 on for the Long Rains."/>
@@ -257,7 +377,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
       {section === 'regimes' && (
         <div className="flex flex-col 2xl:flex-row gap-6">
           <div className="w-full 2xl:w-[54%] min-w-0 flex flex-col gap-4">
-            <S title="Two-Stage Classification Blueprint">
+            <S title="Two-Stage Classification Blueprint" scope="Ethiopia · rainfall regimes · CHIRPS 1993–2025 daily climatology">
               <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:16, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
                 <strong style={{color:'var(--accent-blue)'}}>Why strict r_H &ge; 1.0 under-detects Type-1 bimodality:</strong> Dunning et al. (2016) establish that annual regimes have <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_H = C_2 / C_1 &lt; 1.0</span> and biannual regimes have <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>r_H &ge; 1.0</span>. In the Ethiopian Highlands, Kiremt monsoon rainfall (~220–320 mm/mo) is 3 to 4 times larger than Belg early rains (~70–140 mm/mo). This massive amplitude disparity inflates the annual Fourier fundamental C_1, depressing r_H to 0.40–0.85. A strict r_H &ge; 1.0 threshold misclassifies the entire central/eastern agricultural highlands as unimodal, completely erasing the critical Belg early crop season.
               </div>
@@ -294,7 +414,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
           </div>
 
           <div className="w-full 2xl:w-[46%] min-w-0 flex flex-col gap-4">
-            <S title="The Four Objective Climate Regimes">
+            <S title="The Four Objective Climate Regimes" scope="Ethiopia · 0.25° grid · 1,485 land cells">
               <div style={{display:'grid', gridTemplateColumns:'1fr', gap:8}}>
                 <div style={{padding:'10px 12px', background:'rgba(2, 132, 199, 0.08)', borderRadius:8, border:'1px solid rgba(2, 132, 199, 0.3)', borderLeft:'4px solid #0284c7'}}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3}}>
@@ -338,7 +458,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               </div>
             </S>
 
-            <S title="Operational Mask Arithmetic vs Regime Eligibility">
+            <S title="Operational Mask Arithmetic vs Regime Eligibility" scope="Ethiopia · Kiremt (JJAS) monsoon domain">
               <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:14, lineHeight:1.6, color:'var(--text-secondary)'}}>
                 <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)', fontWeight:700, marginBottom:4}}>
                   Operational Mask = Regime_Valid &and; Rainfall_Significance &and; DR_Valid &and; Spatial_QC
@@ -352,83 +472,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
         </div>
       )}
 
-      {/* SUB-TAB: ONSET, CESSATION & LGP METHODS (Kenya Short Rains) */}
-      {section === 'methods' && (
-        <div className="flex flex-col gap-4">
-          <S title="Five Onset & Cessation Methods (Kenya Short Rains, OND)">
-            <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:16, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:10}}>
-              Pick a method with the <strong>Method</strong> selector above the map (Short Rains season). The maps, probabilities, skill, charts and bulletin all follow it. The methods ask different questions, so their onset, cessation and season length are not interchangeable: Dunning finds the turning points of the season's rainfall, the Agri rules find the first rains a farmer could plant on, and the FAO water balance tracks whether the soil holds enough water for a maize crop.
-            </div>
-            <Tbl head={['Method','Onset','Cessation','Season length','Data','Runs']} rows={[
-              ['Dunning', 'Day after the accumulated rainfall anomaly A(D) reaches its minimum', 'Day A(D) reaches its maximum after onset', 'Cessation − onset', 'CHIRPS v2 · SEAS5 (bias-corrected to CHIRPS v2)', 'All four'],
-              ['Agri rule 1', 'Wet day (≥ 1 mm) starting > 20 mm in 3 days; no 7-day dry spell in the next 21 days', 'After a 10-day period with rain < 0.5 × PET, the day a 100 mm soil store is empty', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
-              ['Agri rule 2', '≥ 20 mm in 5 days with ≥ 3 rainy days; no dry spell longer than 7 days in the next 21', 'As rule 1', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
-              ['Agri rule 3', '> 20 mm in 3 days; no dry spell longer than 10 days in the next 30', 'First day of a 10-day period with rain < 0.5 × PET', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
-              ['FAO water balance', 'Agricultural: 10-day rain ≥ 0.5 × ET0 and PAW/TAW ≥ 0.20 for 5 days; no 7-day spell below 0.20 in the next 21', 'Agricultural: 7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit', 'Three LGPs, one per definition', 'CHIRPS v3 · ERA5-Land ET0 · SoilGrids · SEAS5 (bias-corrected to CHIRPS v3)', 'Oct 01, Oct 01 + latest obs'],
-            ]}/>
-            <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
-              Agri rules 1–3 are adapted from the ICPAC operational definitions; onset is searched 15 Aug – 15 Jan and cessation to 28 Feb (Sep 01 run: to 31 Dec). Dunning searches 1 Sep – 31 Dec. Dry day: &lt; 1 mm.
-            </div>
-          </S>
-
-          <div className="flex flex-col 2xl:flex-row gap-6">
-            <div className="w-full 2xl:w-[48%] min-w-0 flex flex-col gap-4">
-              <S title="Forecast Runs (Init Selector)">
-                <Tbl head={['Run','Rainfall used','Methods']} rows={[
-                  ['Sep 01', 'ECMWF SEAS5 from 1 Sep, to 31 Dec', 'Dunning, Agri rules 1–3'],
-                  ['Oct 01', 'ECMWF SEAS5 from 1 Oct, to 28 Feb', 'Dunning, Agri rules 1–3, FAO water balance'],
-                  ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
-                  ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
-                ]}/>
-                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
-                  25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.
-                </div>
-              </S>
-
-              <S title="Probabilities, Skill & Missing Dates">
-                <KV label="Terciles" value="Early / normal / late (short / normal / long for LGP) from the 33rd and 67th percentiles of the observed record at each cell (CAL 1993–2016): CHIRPS v2 for Dunning and the Agri rules, CHIRPS v3 for FAO."/>
-                <KV label="Probabilities" value="Share of members in each tercile, calibrated with the damping factor α fitted on the hindcasts (CAL 1993–2016)."/>
-                <KV label="Skill" value="RPSS and hit rate on the independent validation years (VAL 2017–2024). RPSS > 0 beats climatology."/>
-                <KV label="No onset / cessation" value="A member with none by the search end counts as later than any date, not as missing, so medians and terciles stay honest in failed seasons. Season length is 0 without onset."/>
-                <KV label="Flat terciles (FAO)" value="Where the observed record has no spread (33rd = 67th percentile), no tercile forecast is issued: probabilities and skill are left blank (western Kenya and the coast, where onset falls on the first search day)."/>
-              </S>
-
-            </div>
-
-            <div className="w-full 2xl:w-[52%] min-w-0 flex flex-col gap-4">
-              <S title="FAO Water Balance: FAO-56 Daily Soil-Water Bucket">
-                <Step n="1" title="Reference evapotranspiration  ET0" eq={"ET0 = [0.408 Δ (Rn − G) + γ (900/(T+273)) u2 (es − ea)] / [Δ + γ (1 + 0.34 u2)]"} desc="FAO-56 Penman-Monteith (Eq. 6) from ERA5-Land daily Tmax, Tmin, dewpoint, 2 m wind, solar radiation and surface pressure; G = 0 for daily steps. Forecast days use the ERA5-Land ET0 climatology (1993–2016, ±7-day smoothed), the same for every member."/>
-                <Step n="2" title="Crop water need  ETc" eq={"ETc = Kc × ET0"} desc="Maize Kc 0.30 / 1.20 / 0.60 (initial / mid / end), stages 20 / 35 / 40 / 30 days from planting, which is the agricultural onset. Kc_ini applies before it."/>
-                <Step n="3" title="Root-zone water  TAW and RAW" eq={"TAW = 1000 (θFC − θWP) Zr        RAW = p × TAW"} desc="θFC and θWP from SoilGrids 2.0 texture and organic carbon via the Saxton & Rawls (2006) pedotransfer equations, Zr = 1.0 m; p = 0.55 adjusted for ETc (FAO-56 Table 22). Kenya mean available water ~100–108 mm per metre."/>
-                <Step n="4" title="Water stress  Ks  and actual ET" eq={"Ks = 1 if Dr ≤ RAW, else (TAW − Dr)/(TAW − RAW)        ETa = Ks × ETc"} desc="Dr = TAW − SW is the root-zone depletion (previous day). Ks < 1 means the crop is water-stressed."/>
-                <Step n="5" title="Daily bucket" eq={"SW_t = SW_t−1 + P − ETa − runoff − drainage,   0 ≤ SW ≤ TAW"} desc="Starts 1 Aug from ERA5-Land 0–100 cm soil moisture. Water above TAW drains; PAW = SW and PAW/TAW is the plant-available fraction. In a forecast, each member continues the observed bucket with its own rainfall."/>
-                <Step n="6" title="Five dates and three season lengths" table={[
-                  ['Rainfall onset', 'First wet day from which 10-day rain ≥ 0.5 × ET0'],
-                  ['Agricultural onset', 'As above, and PAW/TAW ≥ 0.20 that day and the next 4; rejected as a false start if 7 days fall below 0.20 within 21 days'],
-                  ['Rainfall cessation', 'From 1 Nov, rain < 0.5 × ET0 in two consecutive 10-day windows'],
-                  ['Agricultural cessation', '7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit'],
-                  ['Crop-water cessation', 'After the climatological rainfall peak, 21-day rain < 0.5 × ETc with PAW/TAW falling below 0.20'],
-                  ['Definition picker', 'Agricultural: agricultural onset → agricultural cessation. Rainfall: rainfall onset → rainfall cessation. Crop-water: agricultural onset → crop-water cessation. LGP = cessation − onset + 1 for each.'],
-                ]}/>
-                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5}}>
-                  Rainfall cessation usually comes before agricultural cessation, because the soil keeps supplying water after the rains stop. The pixel panel shows the chance that onset or cessation has happened by today and within 7, 14 and 21 days, and the members' PAW/TAW outlook against the 0.20 critical level. Method notes: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>FAO_WATER_BALANCE_METHOD.md</span>.
-                </div>
-              </S>
-
-              <S title="FAO Quality Flags (Bitmask)">
-                <Tbl head={['Bit','Meaning']} rows={[
-                  ['1', 'No rainfall onset'], ['2', 'No agricultural onset'], ['4', 'At least one false onset rejected'],
-                  ['8', 'No rainfall cessation'], ['16', 'No agricultural cessation'], ['32', 'No crop-water cessation'],
-                  ['64', 'Insufficient input data (> 5% of days missing)'], ['128', 'Incomplete season (data end before 28 Feb)'],
-                  ['256', 'Soil parameters unavailable'], ['512', 'Onset on the first search day (15 Aug): the soil is already wet, a season already under way'],
-                ]}/>
-              </S>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {section === 'regimes' && <h3 style={{margin:'8px 0 16px'}}>Regime and season maps, GIS files</h3>}
+      {section === 'regimes' && <><h3 style={{margin:'8px 0 16px'}}>Regime and season maps, GIS files</h3><Scope>Ethiopia · 0.25° grid · season domains</Scope></>}
       {/* SUB-TAB: MAPS & GIS SHAPEFILES */}
       {section === 'regimes' && (
         <div className="w-full flex flex-col gap-5">
@@ -585,26 +629,10 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
         </div>
       )}
 
-      {/* SUB-TAB 2: ONSET DETECTION ALGORITHM */}
-      {section === 'methods' && (
-        <div className="w-full max-w-4xl">
-          <S title="Dunning Cumulative Anomaly Algorithm (8 Operational Steps)">
-            <Step n="1" title="Climatological Daily Mean  Q_d(i,j)" eq={"Q_d(i,j) = (1/N_cal) x sum_{y in CAL} R_{d,y}(i,j)"} desc="Mean daily precipitation for each calendar DOY d over the calibration years (CAL: 1993–2016 for the Short Rains and Ethiopia seasons, 1981–2016 for the Long Rains)." table={[['Q_d(i,j)','Mean daily precip for DOY d at pixel (i,j)'],['R_{d,y}','Observed daily CHIRPS precip (mm/day) at pixel (i,j), DOY d, year y'],['N_cal','Number of calibration years (24 for 1993–2016)'],['d','DOY restricted to seasonal search window']]}/>
-            <Step n="2" title="Window Mean  Q_bar(i,j)  --  the Dunning accumulation baseline" eq={"Q_bar(i,j) = (1/N_win) x sum_{d in Window} Q_d(i,j)"} desc="A single scalar value per pixel -- the long-term average daily rainfall rate across the entire seasonal forecast window. Subtracting it produces anomalies that accumulate positively during wet periods and negatively during dry ones." table={[['Q_bar(i,j)','Scalar window mean -- single value per pixel, not DOY-varying'],['N_win','Length of forecast window in days (e.g., 183 days for JJAS, 135 days for FMAM)']]}/>
-            <Step n="3" title="Climatological Accumulated Anomaly  C(d)" eq={"C(d) = sum_{k=d_start}^{d} [ Q_k(i,j) - Q_bar(i,j) ]"} desc="Cumulative sum of daily climatological anomalies from window start to day d. Computed once per pixel over the calibration years." table={[['C(d)','Cumulative daily anomaly up to day d -- the climatological water season curve'],['Q_k(i,j)','Climatological daily mean at DOY k'],['Q_bar(i,j)','Scalar window mean (never re-computed per year)']]}/>
-            <Step n="4" title="Climatological Season Bounds  d_s  and  d_e" eq={"d_s = argmin C(d)      d_e = argmax C(d)  [d > d_s]"} desc="Pixel-specific constants from calibration period defining the search window for individual-year event detection." table={[['d_s(i,j)','Climatological season start -- DOY where C(d) reaches its minimum'],['d_e(i,j)','Climatological season end -- DOY where C(d) reaches its maximum after d_s']]}/>
-            <Step n="5" title="Individual-Year Accumulated Anomaly  A(D)" eq={"A(D) = sum_{j=d_acc,start}^{D} [ R_{j,y}(i,j) - Q_bar(i,j) ]"} desc="Same accumulation applied to each year or ensemble member individually. Search window clamped around d_s and d_e with +/- delta = 45-50 day buffer." table={[['A(D)','Accumulated precip anomaly for year y from window start to day D'],['R_{j,y}','Observed daily precip at pixel (i,j), DOY j, year y'],['Q_bar(i,j)','Same scalar window mean from Step 2']]}/>
-            <Step n="6" title="Onset Detection" eq={"onset_y(i,j) = argmin A(D) + 1"} desc="Onset is the day after A(D) reaches its absolute minimum -- the first day precipitation exceeds Q_bar on a sustained basis. NaN if argmin falls at window boundary." table={[['argmin A(D)','Day of deepest pre-season dry deficit'],['+1','Dunning definition: onset is the day after the minimum']]}/>
-            <Step n="7" title="Cessation Detection" eq={"cessation_y(i,j) = argmax A(D)  [D > onset_y]"} desc="The day A(D) reaches its peak after onset. No +1 offset; search restricted to days strictly after onset."/>
-            <Step n="8" title="Length of Growing Period (LGP)" eq={"LGP_y(i,j) = cessation_y(i,j) - onset_y(i,j)"} desc="Season length in days. Below 35 days = near-complete failure; below 60 days = below-median season."/>
-          </S>
-        </div>
-      )}
-
       {/* SUB-TAB 3: 20-SITE AUDITED DIAGNOSTIC AGREEMENT */}
       {section === 'regimes' && (
         <div className="w-full flex flex-col gap-4">
-          <S title="Audited 20-Site Representative Diagnostic Consistency Check">
+          <S title="Audited 20-Site Representative Diagnostic Consistency Check" scope="Ethiopia · 20 sites · CHIRPS 1993–2025 daily climatology">
             <div style={{background:'var(--bg-elevated)', padding:'10px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:16, lineHeight:1.6, color:'var(--text-secondary)', marginBottom:12}}>
               <strong>Sampling Protocol:</strong> To rigorously audit against template or regional curve reuse, every station coordinate was sampled directly from the nearest CHIRPS 0.25° grid cell (<span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>latitude, longitude</span> &rarr; grid index <span style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>i, j</span>). The table below reports genuine, distinct annual rainfall totals, Fourier harmonic amplitudes (C_1, C_2), harmonic ratios (r_H = C_2/C_1), and resulting regime diagnoses. <strong>20/20 representative sites show diagnostic agreement with documented EMI regional climate regimes.</strong>
             </div>
@@ -878,53 +906,202 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
         </div>
       )}
 
+      {section === 'methods' && (
+        <div>
+          <p className="about-intro">
+            The Kenya Short Rains can be estimated with five methods; the Long Rains and the Ethiopia seasons use the Dunning method. The methods ask
+            different questions, so their onset, cessation and season length are not interchangeable. For the Short Rains, pick a method with
+            the <strong>Method</strong> selector above the map: the maps, probabilities, skill, charts and bulletin all follow it.
+          </p>
 
-      {/* SUB-TAB 4: RISK GAUGES & MODELS */}
-      {section === 'performance' && (
-        <div className="flex flex-col 2xl:flex-row gap-6">
-          <div className="w-full 2xl:w-[50%] min-w-0">
-            <S title="Operational Risk Gauge Definitions">
-              <GaugeDef name="Late Onset Risk" thresh="DOY 89 ~29 March" derivation="Domain-median of CHIRPS CAL t67_onset (67th percentile, CAL years)" justification="Onset later than the upper tercile boundary -- historically the top third of years. Signals delayed planting risk." strength="Statistically grounded, data-derived"/>
-              <GaugeDef name="Early Onset Risk" thresh="DOY 78 ~18 March" derivation="Domain-median of CHIRPS CAL t33_onset (33rd percentile, CAL years)" justification="Onset earlier than the lower tercile boundary -- historically the bottom third of years. Signals premature planting risk." strength="Statistically grounded, data-derived"/>
-              <GaugeDef name="Very Short Season (LGP &lt; 35d)" thresh="35 days ~5th-10th pctile" derivation="~5th-10th percentile of CHIRPS CAL LGP distribution." justification="Near-complete season failure. Even 60-day sorghum cannot complete grain fill." strength="Agronomic consensus"/>
-              <GaugeDef name="Short Season Risk (LGP &lt; 45d)" thresh="45 days ~25th-30th pctile" derivation="~25th-30th percentile of CHIRPS CAL LGP distribution." justification="Lower bound for short-season maize. Below 45 days unlikely to support maize production." strength="Agronomic literature"/>
-              <GaugeDef name="Below-Normal Season (LGP &lt; 60d)" thresh="60 days ~50th pctile" derivation="~50th percentile -- a below-median season." justification="Minimum for medium-season maize (60-75 days). Beans and cowpea also at risk." strength="Agronomic literature"/>
-              <GaugeDef name="Season Failure" thresh="P(onset = NaN)" derivation="Fraction of ensemble members where A(D) finds no minimum. CHIRPS background failure ~11%." justification="Most unambiguous risk signal. Forecasts above 20-25% carry meaningful signal above climatological baseline." strength="Directly interpretable"/>
-              <GaugeDef name="Max Ensemble Agreement" thresh="max(P_BN, P_NN, P_AN)" derivation="Climatological baseline = 33%. Values above 50% indicate majority agreement." justification="Measures ensemble coherence independently of dominant category." strength="Standard probabilistic practice"/>
-            </S>
-          </div>
-
-          <div className="w-full 2xl:w-[50%] min-w-0">
-            <S title="C3S multi-model ensemble (Long Rains): seven seasonal models">
-              <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%',borderCollapse:'collapse',fontSize:14}}>
-                  <thead><tr style={{borderBottom:'1px solid var(--border-primary)'}}>{['Model','Centre','Members','Onset hit rate'].map(h=>(<th key={h} style={{padding:'5px 8px',textAlign:'left',color:'var(--text-muted)',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',fontSize:13,whiteSpace:'nowrap'}}>{h}</th>))}</tr></thead>
-                  <tbody>{[['ECMWF SEAS5','ECMWF','25','0.43'],['UKMO GloSea6','Met Office','25','0.41'],['Meteo-France Sys8','Meteo-France','25','0.42'],['DWD GCFS2.1','DWD','25','0.39'],['CMCC-SPS4','CMCC','25','0.38'],['NCEP CFSv2','NCEP','24','0.37'],['ECCC CanSIPS','ECCC','20','0.36']].map(([n,c,m,h],i)=>(<tr key={n} style={{borderBottom:'1px solid var(--border-primary)',background:i%2===0?'transparent':'var(--bg-elevated)'}}><td style={{padding:'5px 8px',color:'var(--text-primary)',fontWeight:600}}>{n}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)'}}>{c}</td><td style={{padding:'5px 8px',color:'var(--text-secondary)',textAlign:'center'}}>{m}</td><td style={{padding:'5px 8px',color:'var(--text-primary)',fontWeight:600}}>{h}</td></tr>))}</tbody>
-                </table>
+          <section className="about-block">
+            <h3>The three approaches in plain language</h3>
+            <div className="about-explain">
+              <div className="about-explain-card">
+                <span className="about-explain-kicker">Dunning</span>
+                <h4>Rainfall pattern</h4>
+                <p>
+                  Adds up, day by day, how far rainfall is above or below the usual daily amount for the season at that place. The season starts on the
+                  day after this running total stops falling and starts climbing, and ends when it stops climbing. It marks the turning points of the
+                  season’s rainfall, not the day a crop can be planted.
+                </p>
+                <p className="about-explain-meta">Used for every season in Kenya and Ethiopia.</p>
+                <div className="about-explain-links">
+                  <ExtLink href={docUrl(DOCS.readme, 'scientific-methodology')}>Read the method</ExtLink>
+                  <ExtLink href={EXT.dunning}>View the scientific reference</ExtLink>
+                </div>
               </div>
-            </S>
-          </div>
+              <div className="about-explain-card">
+                <span className="about-explain-kicker">Agri rules 1–3</span>
+                <h4>Planting-rain rules</h4>
+                <p>
+                  Look for the first rains heavy enough to plant on that are not followed by a long dry spell. The three rules differ in how much rain
+                  they need over how many days and in how long a dry spell they allow afterwards. The season ends when rain stays well below the
+                  evaporative demand.
+                </p>
+                <p className="about-explain-meta">Kenya Short Rains. Adapted from ICPAC’s operational definitions.</p>
+                <div className="about-explain-links">
+                  <ExtLink href={docUrl(DOCS.octRun)}>Read the method</ExtLink>
+                </div>
+              </div>
+              <div className="about-explain-card">
+                <span className="about-explain-kicker">FAO water balance</span>
+                <h4>Crop and soil water</h4>
+                <p>
+                  Keeps a daily account of the water in a maize crop’s root zone: rain fills it, the crop and the soil draw it down. The season starts
+                  when the rains are steady and the soil holds enough water for the crop, and ends when the crop runs short of water.
+                </p>
+                <p className="about-explain-meta">Kenya Short Rains, 1 October runs. Gives three season lengths, one per definition.</p>
+                <div className="about-explain-links">
+                  <ExtLink href={docUrl(DOCS.fao)}>Read the method</ExtLink>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="about-block">
+            <h3>Thresholds, equations and configurations</h3>
+            <p className="about-note" style={{marginTop:0, marginBottom:16}}>Select a heading to show or hide the details.</p>
+
+            <Disclosure title="Onset and cessation rules of the five methods" scope="Kenya · Short Rains (OND) · Dunning, Agri rules 1–3, FAO water balance">
+            <Tbl head={['Method','Onset','Cessation','Season length','Data','Runs']} rows={[
+              ['Dunning', 'Day after the accumulated rainfall anomaly A(D) reaches its minimum', 'Day A(D) reaches its maximum after onset', 'Cessation − onset', 'CHIRPS v2 · SEAS5 (bias-corrected to CHIRPS v2)', 'All four'],
+              ['Agri rule 1', 'Wet day (≥ 1 mm) starting > 20 mm in 3 days; no 7-day dry spell in the next 21 days', 'After a 10-day period with rain < 0.5 × PET, the day a 100 mm soil store is empty', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
+              ['Agri rule 2', '≥ 20 mm in 5 days with ≥ 3 rainy days; no dry spell longer than 7 days in the next 21', 'As rule 1', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
+              ['Agri rule 3', '> 20 mm in 3 days; no dry spell longer than 10 days in the next 30', 'First day of a 10-day period with rain < 0.5 × PET', 'Cessation − onset', 'CHIRPS v2 · SEAS5 · Hargreaves PET', 'All four'],
+              ['FAO water balance', 'Agricultural: 10-day rain ≥ 0.5 × ET0 and PAW/TAW ≥ 0.20 for 5 days; no 7-day spell below 0.20 in the next 21', 'Agricultural: 7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit', 'Three LGPs, one per definition', 'CHIRPS v3 · ERA5-Land ET0 · SoilGrids · SEAS5 (bias-corrected to CHIRPS v3)', 'Oct 01, Oct 01 + latest obs'],
+            ]}/>
+            <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+              Agri rules 1–3 are adapted from the ICPAC operational definitions; onset is searched 15 Aug – 15 Jan and cessation to 28 Feb (Sep 01 run: to 31 Dec). Dunning searches 1 Sep – 31 Dec. Dry day: &lt; 1 mm.
+            </div>
+            </Disclosure>
+
+            <Disclosure title="Forecast runs (Init selector)" scope="Kenya · Short Rains · ECMWF SEAS5, 25 members">
+                <Tbl head={['Run','Rainfall used','Methods']} rows={[
+                  ['Sep 01', 'ECMWF SEAS5 from 1 Sep, to 31 Dec', 'Dunning, Agri rules 1–3'],
+                  ['Oct 01', 'ECMWF SEAS5 from 1 Oct, to 28 Feb', 'Dunning, Agri rules 1–3, FAO water balance'],
+                  ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
+                  ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
+                ]}/>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.
+                </div>
+            </Disclosure>
+
+            <Disclosure title="Probabilities, skill and missing dates" scope="Kenya · Short Rains · CAL 1993–2016 · VAL 2017–2024">
+                <KV label="Terciles" value="Early / normal / late (short / normal / long for LGP) from the 33rd and 67th percentiles of the observed record at each cell (CAL 1993–2016): CHIRPS v2 for Dunning and the Agri rules, CHIRPS v3 for FAO."/>
+                <KV label="Probabilities" value="Share of members in each tercile, calibrated with the damping factor α fitted on the hindcasts (CAL 1993–2016)."/>
+                <KV label="Skill" value="RPSS and hit rate on the independent validation years (VAL 2017–2024). RPSS > 0 beats climatology."/>
+                <KV label="No onset / cessation" value="A member with none by the search end counts as later than any date, not as missing, so medians and terciles stay honest in failed seasons. Season length is 0 without onset."/>
+                <KV label="Flat terciles (FAO)" value="Where the observed record has no spread (33rd = 67th percentile), no tercile forecast is issued: probabilities and skill are left blank (western Kenya and the coast, where onset falls on the first search day)."/>
+            </Disclosure>
+
+            <Disclosure title="Dunning cumulative anomaly: the eight steps" scope="Kenya and Ethiopia · all seasons · Dunning · CAL 1981–2016 (Long Rains), 1993–2016 (other seasons)">
+            <Step n="1" title="Climatological Daily Mean  Q_d(i,j)" eq={"Q_d(i,j) = (1/N_cal) x sum_{y in CAL} R_{d,y}(i,j)"} desc="Mean daily precipitation for each calendar DOY d over the calibration years (CAL: 1993–2016 for the Short Rains and Ethiopia seasons, 1981–2016 for the Long Rains)." table={[['Q_d(i,j)','Mean daily precip for DOY d at pixel (i,j)'],['R_{d,y}','Observed daily CHIRPS precip (mm/day) at pixel (i,j), DOY d, year y'],['N_cal','Number of calibration years (24 for 1993–2016)'],['d','DOY restricted to seasonal search window']]}/>
+            <Step n="2" title="Window Mean  Q_bar(i,j)  --  the Dunning accumulation baseline" eq={"Q_bar(i,j) = (1/N_win) x sum_{d in Window} Q_d(i,j)"} desc="A single scalar value per pixel -- the long-term average daily rainfall rate across the entire seasonal forecast window. Subtracting it produces anomalies that accumulate positively during wet periods and negatively during dry ones." table={[['Q_bar(i,j)','Scalar window mean -- single value per pixel, not DOY-varying'],['N_win','Length of forecast window in days (e.g., 183 days for JJAS, 135 days for FMAM)']]}/>
+            <Step n="3" title="Climatological Accumulated Anomaly  C(d)" eq={"C(d) = sum_{k=d_start}^{d} [ Q_k(i,j) - Q_bar(i,j) ]"} desc="Cumulative sum of daily climatological anomalies from window start to day d. Computed once per pixel over the calibration years." table={[['C(d)','Cumulative daily anomaly up to day d -- the climatological water season curve'],['Q_k(i,j)','Climatological daily mean at DOY k'],['Q_bar(i,j)','Scalar window mean (never re-computed per year)']]}/>
+            <Step n="4" title="Climatological Season Bounds  d_s  and  d_e" eq={"d_s = argmin C(d)      d_e = argmax C(d)  [d > d_s]"} desc="Pixel-specific constants from calibration period defining the search window for individual-year event detection." table={[['d_s(i,j)','Climatological season start -- DOY where C(d) reaches its minimum'],['d_e(i,j)','Climatological season end -- DOY where C(d) reaches its maximum after d_s']]}/>
+            <Step n="5" title="Individual-Year Accumulated Anomaly  A(D)" eq={"A(D) = sum_{j=d_acc,start}^{D} [ R_{j,y}(i,j) - Q_bar(i,j) ]"} desc="Same accumulation applied to each year or ensemble member individually. Search window clamped around d_s and d_e with +/- delta = 45-50 day buffer." table={[['A(D)','Accumulated precip anomaly for year y from window start to day D'],['R_{j,y}','Observed daily precip at pixel (i,j), DOY j, year y'],['Q_bar(i,j)','Same scalar window mean from Step 2']]}/>
+            <Step n="6" title="Onset Detection" eq={"onset_y(i,j) = argmin A(D) + 1"} desc="Onset is the day after A(D) reaches its absolute minimum -- the first day precipitation exceeds Q_bar on a sustained basis. NaN if argmin falls at window boundary." table={[['argmin A(D)','Day of deepest pre-season dry deficit'],['+1','Dunning definition: onset is the day after the minimum']]}/>
+            <Step n="7" title="Cessation Detection" eq={"cessation_y(i,j) = argmax A(D)  [D > onset_y]"} desc="The day A(D) reaches its peak after onset. No +1 offset; search restricted to days strictly after onset."/>
+              <Step n="8" title="Length of Growing Period (LGP)" eq={"LGP_y(i,j) = cessation_y(i,j) - onset_y(i,j)"} desc="Season length in days. The Kenya Long Rains risk gauges treat below 35 days as near-complete failure and below 60 days as a below-median season."/>
+            </Disclosure>
+
+            <Disclosure title="FAO water balance: the FAO-56 daily soil-water bucket" scope="Kenya · Short Rains · FAO water balance · maize · ET0 climatology 1993–2016">
+                <Step n="1" title="Reference evapotranspiration  ET0" eq={"ET0 = [0.408 Δ (Rn − G) + γ (900/(T+273)) u2 (es − ea)] / [Δ + γ (1 + 0.34 u2)]"} desc="FAO-56 Penman-Monteith (Eq. 6) from ERA5-Land daily Tmax, Tmin, dewpoint, 2 m wind, solar radiation and surface pressure; G = 0 for daily steps. Forecast days use the ERA5-Land ET0 climatology (1993–2016, ±7-day smoothed), the same for every member."/>
+                <Step n="2" title="Crop water need  ETc" eq={"ETc = Kc × ET0"} desc="Maize Kc 0.30 / 1.20 / 0.60 (initial / mid / end), stages 20 / 35 / 40 / 30 days from planting, which is the agricultural onset. Kc_ini applies before it."/>
+                <Step n="3" title="Root-zone water  TAW and RAW" eq={"TAW = 1000 (θFC − θWP) Zr        RAW = p × TAW"} desc="θFC and θWP from SoilGrids 2.0 texture and organic carbon via the Saxton & Rawls (2006) pedotransfer equations, Zr = 1.0 m; p = 0.55 adjusted for ETc (FAO-56 Table 22). Kenya mean available water ~100–108 mm per metre."/>
+                <Step n="4" title="Water stress  Ks  and actual ET" eq={"Ks = 1 if Dr ≤ RAW, else (TAW − Dr)/(TAW − RAW)        ETa = Ks × ETc"} desc="Dr = TAW − SW is the root-zone depletion (previous day). Ks < 1 means the crop is water-stressed."/>
+                <Step n="5" title="Daily bucket" eq={"SW_t = SW_t−1 + P − ETa − runoff − drainage,   0 ≤ SW ≤ TAW"} desc="Starts 1 Aug from ERA5-Land 0–100 cm soil moisture. Water above TAW drains; PAW = SW and PAW/TAW is the plant-available fraction. In a forecast, each member continues the observed bucket with its own rainfall."/>
+                <Step n="6" title="Five dates and three season lengths" table={[
+                  ['Rainfall onset', 'First wet day from which 10-day rain ≥ 0.5 × ET0'],
+                  ['Agricultural onset', 'As above, and PAW/TAW ≥ 0.20 that day and the next 4; rejected as a false start if 7 days fall below 0.20 within 21 days'],
+                  ['Rainfall cessation', 'From 1 Nov, rain < 0.5 × ET0 in two consecutive 10-day windows'],
+                  ['Agricultural cessation', '7 days with PAW/TAW < 0.20, ETa/ETc < 0.5 and a 10-day rain deficit'],
+                  ['Crop-water cessation', 'After the climatological rainfall peak, 21-day rain < 0.5 × ETc with PAW/TAW falling below 0.20'],
+                  ['Definition picker', 'Agricultural: agricultural onset → agricultural cessation. Rainfall: rainfall onset → rainfall cessation. Crop-water: agricultural onset → crop-water cessation. LGP = cessation − onset + 1 for each.'],
+                ]}/>
+              <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginBottom:12}}>
+                Rainfall cessation usually comes before agricultural cessation, because the soil keeps supplying water after the rains stop. The pixel panel shows the chance that onset or cessation has happened by today and within 7, 14 and 21 days, and the members' PAW/TAW outlook against the 0.20 critical level.
+              </div>
+              <p className="about-explain-links" style={{margin:'0 0 12px'}}>
+                <ExtLink href={docUrl(DOCS.fao)}>Read the method</ExtLink>
+                <span className="about-doclink-meta">{docMeta(DOCS.fao)} · platform v{version}</span>
+              </p>
+            </Disclosure>
+
+            <Disclosure title="FAO quality flags (bitmask)" scope="Kenya · Short Rains · FAO water balance">
+                <Tbl head={['Bit','Meaning']} rows={[
+                  ['1', 'No rainfall onset'], ['2', 'No agricultural onset'], ['4', 'At least one false onset rejected'],
+                  ['8', 'No rainfall cessation'], ['16', 'No agricultural cessation'], ['32', 'No crop-water cessation'],
+                  ['64', 'Insufficient input data (> 5% of days missing)'], ['128', 'Incomplete season (data end before 28 Feb)'],
+                  ['256', 'Soil parameters unavailable'], ['512', 'Onset on the first search day (15 Aug): the soil is already wet, a season already under way'],
+                ]}/>
+            </Disclosure>
+          </section>
         </div>
       )}
 
       {section === 'performance' && (
         <div>
-              <S title="FAO Water Balance Validation">
-                <Tbl head={['Check','Result']} rows={[
-                  ['Hindcast agricultural onset vs observed (VAL 2017–2024)', '68% within ±7 days, 81% within ±14 (Oct 01); 79% / 89% with latest obs'],
-                  ['Hindcast agricultural cessation vs observed', '40% within ±7 days, 66% within ±14 (Oct 01)'],
-                  ['Hindcast agricultural LGP vs observed', 'r = 0.83, 74% within ±14 days (Oct 01)'],
-                  ['RPSS (VAL 2017–2024), agricultural definition', 'Onset +0.43, cessation +0.10, LGP +0.34 (Oct 01); +0.60, +0.15, +0.40 with latest obs'],
-                  ['Onsets in the GIEWS maize planting window (Oct–Nov)', 'FAO agricultural 66%, FAO rainfall 64%, Agri rule 1 70% (observed 1993–2025)'],
-                  ['Bucket PAW/TAW vs ERA5-Land 0–100 cm wetness', 'r = 0.73 (daily, Aug–Feb)'],
-                  ['Dekadal ETa vs WaPOR v3 AETI (Oct–Dec 2018–2025)', 'Bias 0.0 mm/day, r = 0.65'],
-                ]}/>
-                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
-                  Full tables: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>outputs/fao_wb/validation/validation_report.md</span> (python scripts/fao_validate.py).
-                </div>
-              </S>
+          <p className="about-intro">
+            How well the forecasts did on past seasons, compared with a simple baseline, and where the evidence comes from. Skill maps for every place,
+            season and method are in the Forecast performance tab.
+          </p>
 
-          <S title="Limitations">
+          <S title="What was evaluated">
+            <div className="about-prose">
+              <p>
+                <strong>Hindcasts</strong>: the forecast systems re-run for past years with the same bias correction and the same onset and cessation
+                method as the live forecast. Their results are compared with the same dates computed from observed CHIRPS rainfall.
+              </p>
+              <ul>
+                <li><strong>Tercile probabilities</strong> of early, normal or late onset and cessation, and of a short, normal or long season, scored with the ranked probability skill score (RPSS).</li>
+                <li><strong>Hit rate</strong>: how often the most likely tercile was the one observed.</li>
+                <li><strong>Dates and season lengths</strong> (FAO water balance): the share of hindcast dates within ±7 and ±14 days of the observed date, and their correlation.</li>
+                <li><strong>Independent cross-checks</strong> (FAO water balance): ERA5-Land soil wetness, WaPOR actual evapotranspiration and the GIEWS maize planting window.</li>
+              </ul>
+            </div>
+          </S>
+
+          <S title="Where, when and for which method">
+            <Tbl head={['Country and season','Methods','Forecast system and start','Calibration (CAL)','Validation (VAL)']} rows={[
+              ['Kenya, Long Rains (MAM)', 'Dunning', 'Seven C3S models, 1 Feb', '1981–2016 (SEAS5); 1993–2016 (other models)', 'Independent years after calibration'],
+              ['Kenya, Short Rains (OND)', 'Dunning, Agri rules 1–3, FAO water balance', 'ECMWF SEAS5, 1 Sep and 1 Oct (with and without observed rainfall)', '1993–2016', '2017–2024'],
+              ['Ethiopia: Kiremt, Belg, annual wet season, Gu/Ganna, Deyr/Hagaya', 'Dunning, inside each season’s regime domain', 'ECMWF SEAS5, 1 Jan, 1 May or 1 Sep', '1993–2016', '2017–2024'],
+            ]}/>
+          </S>
+
+          <S title="Performance compared with climatology">
+            <div className="about-baseline">
+              <div><strong>RPSS: skill against climatology</strong>Climatology always gives each tercile a one-in-three chance. RPSS above 0 means the forecast probabilities beat it; 0 means no better; below 0 means worse.</div>
+              <div><strong>Hit rate: against chance</strong>Picking a tercile at random is right about one time in three (0.33). A hit rate above 0.33 is better than chance.</div>
+            </div>
+
+            <h4 className="about-subhead">Long Rains onset: hit rate by model</h4>
+            <Scope>Kenya · Long Rains · Dunning · onset · CAL 1981–2016 (SEAS5), 1993–2016 (other models)</Scope>
+            <Tbl head={['System','Onset hit rate','Above chance (0.33) by']}
+              rows={C3S_MODELS.map(m => [m.system, m.hr, m.vsChance])}/>
+            <p className="about-note">All seven models are above the chance level, by small margins (0.03 to 0.10).</p>
+
+            <h4 className="about-subhead">Short Rains: FAO water balance</h4>
+            <Scope>Kenya · Short Rains · FAO water balance · Oct 01 start · VAL 2017–2024 (other periods as stated)</Scope>
+            <Tbl head={['Check','Result']} rows={[
+              ['RPSS (VAL 2017–2024), agricultural definition', 'Onset +0.43, cessation +0.10, LGP +0.34 (Oct 01); +0.60, +0.15, +0.40 with latest obs. All above 0: better than climatology'],
+              ['Hindcast agricultural onset vs observed (VAL 2017–2024)', '68% within ±7 days, 81% within ±14 (Oct 01); 79% / 89% with latest obs'],
+              ['Hindcast agricultural cessation vs observed', '40% within ±7 days, 66% within ±14 (Oct 01)'],
+              ['Hindcast agricultural LGP vs observed', 'r = 0.83, 74% within ±14 days (Oct 01)'],
+              ['Onsets in the GIEWS maize planting window (Oct–Nov)', 'FAO agricultural 66%, FAO rainfall 64%, Agri rule 1 70% (observed 1993–2025)'],
+              ['Bucket PAW/TAW vs ERA5-Land 0–100 cm wetness', 'r = 0.73 (daily, Aug–Feb)'],
+              ['Dekadal ETa vs WaPOR v3 AETI (Oct–Dec 2018–2025)', 'Bias 0.0 mm/day, r = 0.65'],
+            ]}/>
+            <p className="about-note">
+              For the Short Rains Dunning method, the Agri rules and the Ethiopia seasons, RPSS and hit-rate maps on the validation years are in the
+              Forecast performance tab.
+            </p>
+          </S>
+
+          <S title="Main limitations">
             <div className="about-prose">
               <ul>
                 <li><strong>Skill varies.</strong> Forecast skill depends on location, season, model, method and forecast start. Check the Forecast performance tab for the place and method you use.</li>
@@ -937,6 +1114,37 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               </ul>
             </div>
           </S>
+
+          <S title="Detailed validation and method documents">
+            <div className="about-prose" style={{marginBottom:16}}>
+              <p>
+                For a particular place, season and method, open the <strong>Forecast performance</strong> tab: it maps the hit rate, RPSS and
+                calibration factor for the validation period. The documents below are on the platform’s public GitHub repository (main branch).
+                Platform version v{version}.
+              </p>
+            </div>
+            <DocLinks>
+              <DocLink action="View the validation summary" title="FAO water balance: validation comparisons A–F" href={docUrl(DOCS.fao, 'validation')} meta={docMeta(DOCS.fao)} />
+              <DocLink action="Read the method" title="FAO water balance: onset, cessation and length of growing period" href={docUrl(DOCS.fao)} meta={docMeta(DOCS.fao)} />
+              <DocLink action="Read the method" title="Dunning detection, bias correction and tercile probabilities" href={docUrl(DOCS.readme, 'scientific-methodology')} meta={docMeta(DOCS.readme)} />
+              <DocLink action="Read the method" title="Kenya Short Rains, 1 October run and Agri rules 1–3" href={docUrl(DOCS.octRun)} meta={docMeta(DOCS.octRun)} />
+              <DocLink action="View the scientific reference" title="Dunning, Black & Allan (2016), J. Geophys. Res. Atmos., 121, 11,405–11,424" href={EXT.dunning} meta="doi.org/10.1002/2016JD025428" />
+            </DocLinks>
+          </S>
+
+          <S title="How to read the risk gauges" scope="Kenya · Long Rains · Dunning · CAL 1981–2016">
+            <p className="about-intro" style={{marginBottom:16}}>
+              The risk gauges appear when you select a location on the map. The thresholds below are those of the Kenya Long Rains; the other seasons
+              use their own thresholds, shown under each gauge.
+            </p>
+              <GaugeDef name="Late Onset Risk" thresh="DOY 89 ~29 March" derivation="Domain-median of CHIRPS CAL t67_onset (67th percentile, CAL years)" justification="Onset later than the upper tercile boundary -- historically the top third of years. Signals delayed planting risk." strength="Statistically grounded, data-derived"/>
+              <GaugeDef name="Early Onset Risk" thresh="DOY 78 ~18 March" derivation="Domain-median of CHIRPS CAL t33_onset (33rd percentile, CAL years)" justification="Onset earlier than the lower tercile boundary -- historically the bottom third of years. Signals premature planting risk." strength="Statistically grounded, data-derived"/>
+              <GaugeDef name="Very Short Season (LGP &lt; 35d)" thresh="35 days ~5th-10th pctile" derivation="~5th-10th percentile of CHIRPS CAL LGP distribution." justification="Near-complete season failure. Even 60-day sorghum cannot complete grain fill." strength="Agronomic consensus"/>
+              <GaugeDef name="Short Season Risk (LGP &lt; 45d)" thresh="45 days ~25th-30th pctile" derivation="~25th-30th percentile of CHIRPS CAL LGP distribution." justification="Lower bound for short-season maize. Below 45 days unlikely to support maize production." strength="Agronomic literature"/>
+              <GaugeDef name="Below-Normal Season (LGP &lt; 60d)" thresh="60 days ~50th pctile" derivation="~50th percentile -- a below-median season." justification="Minimum for medium-season maize (60-75 days). Beans and cowpea also at risk." strength="Agronomic literature"/>
+              <GaugeDef name="Season Failure" thresh="P(onset = NaN)" derivation="Fraction of ensemble members where A(D) finds no minimum. CHIRPS background failure ~11%." justification="Most unambiguous risk signal. Forecasts above 20-25% carry meaningful signal above climatological baseline." strength="Directly interpretable"/>
+              <GaugeDef name="Max Ensemble Agreement" thresh="max(P_BN, P_NN, P_AN)" derivation="Climatological baseline = 33%. Values above 50% indicate majority agreement." justification="Measures ensemble coherence independently of dominant category." strength="Standard probabilistic practice"/>
+          </S>
         </div>
       )}
 
@@ -946,7 +1154,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
           {/* General Workflow & Scientific Architecture Details */}
           <div className="flex flex-col 2xl:flex-row gap-6">
             <div className="w-full 2xl:w-[50%] min-w-0 flex flex-col gap-4">
-              <S title="End-to-End General Workflow">
+              <S title="End-to-End General Workflow" scope="Kenya and Ethiopia · CHIRPS 1993–2025 · 0.25° grid">
                 <div style={{background:'var(--bg-elevated)', padding:'12px 14px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:15, lineHeight:1.6, color:'var(--text-secondary)', display:'flex', flexDirection:'column', gap:8}}>
                   <div>
                     <strong style={{color:'var(--accent-blue)'}}>1. Daily Climatology Ingestion:</strong>
@@ -970,7 +1178,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                   </div>
                   <div>
                     <strong style={{color:'var(--violet-text)'}}>6. Agricultural Rules &amp; FAO Water Balance (Kenya Short Rains):</strong>
-                    <div>The same observed record and bias-corrected SEAS5 members also run Agri rules 1–3 (rain thresholds, dry-spell checks, Hargreaves PET) and the FAO-56 soil-water balance (CHIRPS v3, ERA5-Land ET0, SoilGrids). Each gives its own onset, cessation, LGP, tercile probabilities and skill. See <em>Onset, Cessation &amp; LGP Methods</em>.</div>
+                    <div>The same observed record and bias-corrected SEAS5 members also run Agri rules 1–3 (rain thresholds, dry-spell checks, Hargreaves PET) and the FAO-56 soil-water balance (CHIRPS v3, ERA5-Land ET0, SoilGrids). Each gives its own onset, cessation, LGP, tercile probabilities and skill. See <Link to="methods">Forecast methods</Link>.</div>
                   </div>
                 </div>
               </S>
@@ -1017,12 +1225,19 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                 <KV label="Partner Agencies" value="ICPAC, Ethiopian Meteorological Institute (EMI), Kenya Meteorological Department (KMD)"/>
               </S>
 
-              <S title="Recommended Citation">
-                <div style={{background:'var(--bg-elevated)', padding:'8px 12px', borderRadius:8, border:'1px solid var(--border-primary)', fontSize:14, lineHeight:1.5, color:'var(--text-secondary)'}}>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace", color:'var(--accent-text)'}}>
-                    Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v{version}). ILRI / ICPAC.
-                  </div>
-                </div>
+
+              <S title="Recommended citation">
+                <CopyCitation text={CITATION}/>
+              </S>
+
+              <S title="Method documents and references">
+                <p className="about-docmeta">Public GitHub repository, main branch · platform v{version}</p>
+                <DocLinks>
+                  <DocLink action="Read the method" title="Platform overview and scientific methodology" href={docUrl(DOCS.readme)} meta={docMeta(DOCS.readme)} />
+                  <DocLink action="Read the method" title="FAO water balance" href={docUrl(DOCS.fao)} meta={docMeta(DOCS.fao)} />
+                  <DocLink action="Read the method" title="Ethiopia Kiremt operational pipeline" href={docUrl(DOCS.kiremt)} meta={docMeta(DOCS.kiremt)} />
+                  <DocLink action="View the scientific reference" title={DUNNING_REF} href={EXT.dunning} meta="doi.org/10.1002/2016JD025428" />
+                </DocLinks>
               </S>
             </div>
           </div>
