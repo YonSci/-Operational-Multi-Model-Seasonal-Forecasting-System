@@ -21,8 +21,6 @@
 .site-brand-name { font-size: 17px; font-weight: 700; color: var(--heading); }
 .site-brand-sub { font-size: 14px; color: var(--text-meta); }
 .site-topbar-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.site-status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-meta); }
-.site-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok-text); }
 
 /* Buttons */
 .site-btn {
@@ -141,6 +139,7 @@ button.site-card:hover { border-color: var(--accent-blue); box-shadow: 0 4px 16p
 .about-models > div { padding: 16px 20px; border-radius: 10px; background: var(--bg-surface); border: 1px solid var(--border-primary); }
 .about-models dt { font-size: 18px; font-weight: 600; line-height: 1.4; color: var(--heading); }
 .about-models dd { margin: 6px 0 0; max-width: 80ch; font-size: 16.5px; line-height: 1.7; color: var(--text-body); }
+.about-models dd.about-models-meta { margin-top: 2px; font-size: 14px; line-height: 1.5; color: var(--text-meta); }
 .about-block > h3 { margin-bottom: 16px; }
 
 .about-callout {

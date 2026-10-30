@@ -40,13 +40,13 @@ const FACTS = [
     items: ['Dunning', 'Agri rule 1', 'Agri rule 2', 'Agri rule 3', 'FAO water balance'] },
   { value: '5', label: 'Seasons', cta: 'Seasons covered', tab: 'about', at: { section: 'data', anchor: 'about-seasons' },
     items: ['Ethiopia: JJAS, FMAM, ONDJ', 'Kenya: MAM, OND'] },
-  { value: '2', label: 'Countries: Kenya and Ethiopia', cta: 'Open the maps', tab: 'forecast' },
-  { value: '10–15 days', label: 'Satellite & medium-range rainfall forecasts', cta: 'Open the tracker', tab: 'tracker' },
+  { value: '2', label: 'Countries', cta: 'Open the maps', tab: 'forecast',
+    items: ['Kenya', 'Ethiopia'] },
+  { value: '10–15 days', label: 'Satellite & medium-range rainfall forecasts', cta: 'About the data', tab: 'about', at: { section: 'data', anchor: 'about-satellite' },
+    items: ['Satellite: CHIRPS, ARC2, TAMSAT, PDIR-Now, IMERG', 'Forecasts: ECMWF IFS & ENS, GFS, GDPS, ICON, UKMO Global'] },
 ]
 
-export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) {
-  const online = health?.status === 'ok' ? health.models_loaded : null
-
+export default function LandingPage({ onEnter, darkMode, setDarkMode }) {
   return (
     <div className="site relative w-full min-h-screen overflow-x-hidden overflow-y-auto touch-scroll">
       <header className="site-container site-topbar">
@@ -55,11 +55,6 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
           <span className="site-brand-sub">ILRI Climate Services, in collaboration with ICPAC</span>
         </div>
         <div className="site-topbar-actions">
-          {online != null && (
-            <span className="site-status" title="Forecast configurations the server has loaded: models, seasons, start dates and methods">
-              <span className="site-status-dot" aria-hidden="true" />{online} forecast configurations online
-            </span>
-          )}
           <button type="button" className="site-btn site-btn-quiet" onClick={() => setDarkMode(d => !d)}>
             {darkMode ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
             {darkMode ? 'Light mode' : 'Dark mode'}
@@ -148,7 +143,6 @@ export default function LandingPage({ onEnter, darkMode, setDarkMode, health }) 
 
       <footer className="site-footer">
         <div className="site-container site-footer-inner">
-          <span>Kenya &amp; Ethiopia · 0.25° analysis grid</span>
           <span>Project lead: Dr. Teferi Demissie (ILRI) · Technical lead: Yonas Mersha (ILRI)</span>
           <span>Seasonal Climate Forecast Dashboard v{version}</span>
         </div>
