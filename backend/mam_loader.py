@@ -97,6 +97,8 @@ _EXTRA_SHORT_RAINS = {
     "ECMWF SEAS5 (Oct+Obs)":        ("outputs/ecmwf_oct_obs",     244, 365, "01 October {y}"),   # + observed Sep CHIRPS
     # rolling run refreshed by scripts/update_forecast.py; {obs} comes from its run_meta.json
     "ECMWF SEAS5 (Oct+Obs latest)": ("outputs/ecmwf_oct_obs_latest", 244, 365, "01 October {y} + obs to {obs}"),
+    # experimental: + ECMWF ENS (days 1-15) and extended range (to day 46), blend_subseasonal.py
+    "ECMWF SEAS5 (Oct+Obs+S2S)":    ("outputs/ecmwf_oct_s2s", 244, 365, "01 October {y} + obs to {obs} + weather forecasts"),
 }
 
 
@@ -471,8 +473,11 @@ def _attach_extra_short_rains(MODELS):
         # Window-consistent CHIRPS history (bulletin historical panel) and init label
         entry["chirps_hist"] = {k: c[k] for k in ("onset_doy", "cessation_doy", "lgp_days", "chirps_years", "chirps_clim")}
         meta_p = os.path.join(out_dir, "run_meta.json")
-        obs_end = json.load(open(meta_p)).get("obs_end", "?") if os.path.isfile(meta_p) else "?"
+        run_meta = json.load(open(meta_p)) if os.path.isfile(meta_p) else {}
+        obs_end = run_meta.get("obs_end", "?")
         entry["init_label"] = init_label.replace("{obs}", obs_end)
+        if run_meta.get("weather"):                  # runs that join weather forecasts: their sources and dates
+            entry["weather"] = run_meta["weather"]
         # Keep daily traces only for the latest two years (pixel plumes) to limit RAM
         bc = entry.get("bc_daily")
         if isinstance(bc, np.ndarray) and bc.ndim == 5:
@@ -1285,6 +1290,7 @@ def get_model_info(season=None):
                         season=md_season,
                         win_doy_start=md.get("win_doy_start", 244 if is_bega else (32 if is_fmam else (122 if is_kiremt else (244 if is_short else 32)))),
                         win_doy_end=md.get("win_doy_end", 396 if is_bega else (166 if is_fmam else (304 if is_kiremt else (365 if is_short else 213)))),
+                        weather=md.get("weather"),
                         **_run_dates(name, md, op_y)))
     return out
 

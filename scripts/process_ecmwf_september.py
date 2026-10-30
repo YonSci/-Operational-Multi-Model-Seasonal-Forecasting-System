@@ -24,7 +24,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 # Add notebook/ to sys.path
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(os.environ.get("PIPELINE_BASE") or Path(__file__).resolve().parent.parent)   # data/ and outputs/ live here
 sys.path.insert(0, str(BASE_DIR / "notebook"))
 try:
     import dunning_lib as dl
@@ -63,6 +63,10 @@ OUT_DIR             = BASE_DIR / "outputs" / "ecmwf_sep"
 OBS_LEAD_DOY        = None
 OBS_END_DOY         = None
 CHIRPS_EXTRA        = None
+# Operational-year override (blend_subseasonal.py): the year's members are replaced by these daily traces
+# (observations + medium-range + sub-seasonal + seasonal) after bias correction; hindcast years are unchanged,
+# so terciles, calibration and skill stay those of the seasonal run.
+BC_OP_OVERRIDE      = None
 
 
 def _build_qm_transfer(c_pool, s_pool):
@@ -261,6 +265,13 @@ def run_pipeline():
             transfer_fn = _build_qm_transfer(c_pool, s_pool)
             ecmwf_bc[:, :, d, pi, pj] = transfer_fn(ecmwf_raw[:, :, d, pi, pj])
 
+    if BC_OP_OVERRIDE:
+        ov = xr.open_dataarray(BC_OP_OVERRIDE).values.astype(np.float32)
+        if ov.shape != ecmwf_bc[:, -1].shape:
+            raise RuntimeError(f"--bc-op-override shape {ov.shape} != operational year {ecmwf_bc[:, -1].shape}")
+        ecmwf_bc[:, -1] = ov
+        print(f"  Operational year {file_years[-1]} members replaced by {BC_OP_OVERRIDE}")
+
     # Save bias-corrected daily NetCDF
     bc_da = xr.DataArray(
         ecmwf_bc,
@@ -274,7 +285,8 @@ def run_pipeline():
         },
         attrs={"units": "mm/day", "long_name": "Bias-corrected daily precipitation (EQM)"}
     )
-    bc_da.to_netcdf(OUT_DIR / "ECMWF_bc_daily_all_years.nc")
+    # compressed: mostly dry days, about a quarter of the uncompressed size, read the same way
+    bc_da.to_netcdf(OUT_DIR / "ECMWF_bc_daily_all_years.nc", encoding={bc_da.name or "__xarray_dataarray_variable__": {"zlib": True, "complevel": 1}})
     print("  ✓ Saved ECMWF_bc_daily_all_years.nc")
 
     # 5. Dunning Season Detection & Probabilistic Calibration
@@ -421,8 +433,11 @@ if __name__ == "__main__":
                     help="Last observed DOY (default: --obs-lead-doy - 1); later days come from the forecast")
     ap.add_argument("--chirps-extra", type=Path, nargs="+", default=None,
                     help="Extra CHIRPS daily NetCDF(s) for years beyond CHIRPS_PATH (e.g. 2026 final + prelim)")
+    ap.add_argument("--bc-op-override", type=Path, default=None,
+                    help="Daily traces (member, day, lat, lon) that replace the operational year after bias correction")
     a = ap.parse_args()
     OBS_LEAD_DOY, OBS_END_DOY, CHIRPS_EXTRA = a.obs_lead_doy, a.obs_end_doy, a.chirps_extra
+    BC_OP_OVERRIDE = a.bc_op_override
     INIT_MONTH, WIN_DOY_START, WIN_DOY_END = a.init_month, a.win_doy_start, a.win_doy_end
     WIN_N_DAYS = WIN_DOY_END - WIN_DOY_START + 1
     ECMWF_DIR, OUT_DIR = a.ecmwf_dir.resolve(), a.out_dir.resolve()

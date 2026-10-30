@@ -60,6 +60,8 @@ const SHORT_RAINS_INITS = [
   { init:'1001',  initLabel:'Oct 01',           model:'ECMWF SEAS5 (Oct)' },
   { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
   { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
+  // latest obs, then ECMWF ENS (days 1-15) and extended range (to day 46), then SEAS5 (blend_subseasonal.py)
+  { init:'1001w',  initLabel:'Oct 01 + obs + weather forecasts (experimental)', model:'ECMWF SEAS5 (Oct+Obs+S2S)', experimental:true },
 ]
 // Onset / cessation method (Short Rains): Dunning cumulative anomaly, or the agricultural rules adapted from ICPAC's operational definitions
 // (scripts/onset_rules.py) served as "<init> - Agri rule <k>" models; each rule sets onset, cessation and season length
@@ -2001,16 +2003,19 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
   // the selected run, or for the multi-model view any of its models (they share start and window)
   const entry = (models.find(([k, m]) => k === base || m?.raw_name === base) ?? (base ? null : models[0]))?.[1]
   if (!entry?.init_date) return null
-  const daily = !!entry.obs_end && /latest/.test(entry.raw_name ?? '')
+  const weather = entry.weather                       // runs that join ECMWF ENS and extended-range forecasts
+  const daily = !!entry.obs_end && (/latest/.test(entry.raw_name ?? '') || !!weather)
   const ds = health?.data_status
   const hoursSince = ds?.last_update ? (Date.now() - Date.parse(ds.last_update)) / 3.6e6 : null
-  // newest Short Rains run on offer (the selector lists the same ones)
+  // newest Short Rains run on offer (the selector lists the same ones); the experimental run is an alternative to
+  // the latest-obs run, not its replacement
   const latestInit = selectedSeason === 'short_rains'
-    ? SHORT_RAINS_INITS.filter(i => i.init === '0901' || hasModel(modelsData, i.model)).at(-1) : null
+    ? SHORT_RAINS_INITS.filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model))).at(-1) : null
+  const runInfo = SHORT_RAINS_INITS.find(i => i.init === selectedInit)
   let status, tone
   if (daily && hoursSince != null && hoursSince > 36) {
     status = `Daily update overdue: last completed ${fmtStamp(ds.last_update)}`; tone = 'warn'
-  } else if (latestInit && latestInit.init !== selectedInit) {
+  } else if (latestInit && latestInit.init !== selectedInit && !runInfo?.experimental) {
     status = `A newer run is available: ${latestInit.initLabel}`; tone = 'info'
   } else {
     status = daily ? 'Current: updated daily as observations arrive' : 'Current: latest forecast start for this season'; tone = 'ok'
@@ -2029,10 +2034,17 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
       {item('Forecast initialised', `${fmtDate(entry.init_date)} · ${models.length > 1 && !base ? models.length + ' models' : 'ECMWF SEAS5'}`)}
       {item('Observations through', entry.obs_end ? fmtDate(entry.obs_end) : 'None (forecast only)')}
       {item('Valid period', fmtSpan(entry.valid_start, entry.valid_end))}
+      {weather && item('Weather forecasts', `ECMWF ENS ${fmtDate(weather.ens_run)} (to ${fmtDate(weather.ens_days.split('/')[1])}) · extended range ${fmtDate(weather.ext_run)} (to ${fmtDate(weather.ext_days.split('/')[1])}) · then SEAS5`)}
       {daily && item('Last successful update', fmtStamp(ds?.last_update) ?? 'Not recorded')}
       <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:600,color:toneColor,marginLeft:'auto'}}>
         <span aria-hidden="true" style={{width:8,height:8,borderRadius:'50%',background:toneColor}}/>{status}
       </div>
+      {weather?.experimental === 'yes' && (
+        <p style={{flexBasis:'100%',margin:0,padding:'6px 10px',borderRadius:6,fontSize:13,lineHeight:1.5,background:'var(--caution-bg)',color:'var(--caution-text)'}}>
+          <strong>Experimental run.</strong> The weather forecasts are bias-corrected provisionally (with the SEAS5 mapping for the same day) and
+          the run has not yet been tested on past seasons, so its chances can be overconfident. Compare it with “Oct 01 + latest obs”.
+        </p>
+      )}
     </section>
   )
 }

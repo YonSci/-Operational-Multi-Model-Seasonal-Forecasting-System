@@ -57,6 +57,7 @@ RUNS = {
     "ECMWF SEAS5 (Oct)":            ("kenya",    "OND",  274, "10-01", "12-31", ("nc", "outputs/ecmwf_oct/ECMWF_bc_daily_all_years.nc")),
     "ECMWF SEAS5 (Oct+Obs)":        ("kenya",    "OND",  244, "10-01", "12-31", ("nc", "outputs/ecmwf_oct_obs/ECMWF_bc_daily_all_years.nc")),
     "ECMWF SEAS5 (Oct+Obs latest)": ("kenya",    "OND",  244, "10-01", "12-31", ("nc", "outputs/ecmwf_oct_obs_latest/ECMWF_bc_daily_all_years.nc")),
+    "ECMWF SEAS5 (Oct+Obs+S2S)":    ("kenya",    "OND",  244, "10-01", "12-31", ("nc", "outputs/ecmwf_oct_s2s/ECMWF_bc_daily_all_years.nc")),
     "ECMWF SEAS5 (Kiremt)":         ("ethiopia", "JJAS", 122, "06-01", "09-30", ("npz", "kiremt_ecmwf_bc_daily_{y}")),
     "ECMWF SEAS5 (FMAM)":           ("ethiopia", "FMAM",  32, "02-01", "05-31", ("npz", "fmam_ecmwf_bc_daily_{y}")),
     "ECMWF SEAS5 (Bega)":           ("ethiopia", "ONDJ", 244, "10-01", "01-31", ("npz", "bega_ecmwf_bc_daily_{y}")),
