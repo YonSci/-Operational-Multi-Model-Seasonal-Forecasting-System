@@ -1073,6 +1073,9 @@ export default function MapPanel({
     LAYERS
   )
   const layerCfg = ALL_LAYERS.find(l => l.id === activeLayer) ?? ALL_LAYERS[0]
+  // The panel remounts (e.g. on a country change) and starts on its default layer: tell App, so the grid it
+  // fetches and the side panel it shows match the layer named here
+  useEffect(() => { if (onLayerChange) onLayerChange({variable: layerCfg.variable, layer: layerCfg.layer}) }, [])
 
   // Notify App when layer changes so App can refetch grid
   const handleLayerChange = (layerId) => {

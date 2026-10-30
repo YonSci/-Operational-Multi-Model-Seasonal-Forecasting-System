@@ -8,6 +8,7 @@ and push them to origin/main, which redeploys the dashboard (GitHub Pages) and t
   frontend/public/tracker/data/        Short Rains Tracker data (observations, 10–16 day forecasts, outlooks)
   backend/demo_short_rains_extra.npz   Oct 01 + latest obs seasonal run for the hosted API
   backend/demo_short_rains_rules.npz   Agri rules 1–3 for every Short Rains run
+  backend/rain_stats.npz               seasonal rainfall statistics (Rainfall Terciles view)
 
 Only data is published. The commit is made in a separate worktree (outputs/publish_worktree, detached at
 origin/main), so the branch checked out here is never touched. Nothing is published when this checkout's code
@@ -27,7 +28,8 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
 WT = BASE / "outputs" / "publish_worktree"
-DATA_PATHS = ["frontend/public/tracker/data", "backend/demo_short_rains_extra.npz", "backend/demo_short_rains_rules.npz"]
+DATA_PATHS = ["frontend/public/tracker/data", "backend/demo_short_rains_extra.npz", "backend/demo_short_rains_rules.npz",
+              "backend/rain_stats.npz"]
 CODE_PATHS = ["scripts", "backend/*.py", "frontend/src", "frontend/tracker"]     # code that writes or reads the data
 
 
