@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import * as mapboxgl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
+import { CloudRain, MapPin, FileDown } from 'lucide-react'
 import useDashboardStore from '../store/useDashboardStore'
 import DiagnosticAgreementModal, { AUDITED_20_SITES_ETHIOPIA } from './DiagnosticAgreementModal'
 
@@ -1596,7 +1597,7 @@ export default function MapPanel({
               <div style={{marginTop:8, paddingTop:8, borderTop:'1px solid var(--border-subtle)'}}>
                 <div style={{fontSize:8, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#10b981', marginBottom:5, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                   <span style={{display:'flex', alignItems:'center', gap:4}}>
-                    <span>🌦️</span>
+                    <CloudRain size={12} aria-hidden="true"/>
                     <span>Seasonal Tercile Forecast</span>
                   </span>
                 </div>
@@ -1612,7 +1613,7 @@ export default function MapPanel({
                       fontWeight:activeLayer==='tercile_rainfall'?700:500
                     }}
                   >
-                    🌧️ Rainfall Terciles
+                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><CloudRain size={12} aria-hidden="true"/>Rainfall Terciles</span>
                   </button>
                 </div>
               </div>
@@ -1808,7 +1809,7 @@ export default function MapPanel({
                   fontWeight: 700, flexShrink: 0
                 }}
               >
-                <span style={{fontSize: 9}}>📍</span>
+                <MapPin size={11} aria-hidden="true"/>
                 <span>{showStations ? 'ON' : 'OFF'}</span>
               </button>
               <select
@@ -1857,21 +1858,21 @@ export default function MapPanel({
                 title="Generate PDF/PNG Bulletin for this point"
                 style={{
                   marginLeft: 2,
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  fontSize: 8,
-                  fontWeight: 700,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
                   cursor: 'pointer',
-                  background: 'rgba(245, 158, 11, 0.2)',
-                  border: '1px solid rgba(245, 158, 11, 0.6)',
-                  color: '#fbbf24',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-primary)',
+                  color: 'var(--heading)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 3,
+                  gap: 4,
                 }}
               >
-                <span>📄</span>
-                <span>BULLETIN</span>
+                <FileDown size={12} aria-hidden="true"/>
+                <span>Download bulletin</span>
               </button>
             )}
           </div>
@@ -1977,7 +1978,7 @@ export default function MapPanel({
             {tooltip.isSite ? (
               <div>
                 <div style={{fontSize:11,fontWeight:800,color:'#10b981',marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
-                  <span>📍</span> {tooltip.site.site_name}
+                  <MapPin size={12} aria-hidden="true"/> {tooltip.site.site_name}
                 </div>
                 <div style={{fontSize:9,color:'var(--text-secondary)',marginBottom:2}}>
                   Region/Zone: <strong style={{color:'var(--text-primary)'}}>{tooltip.site.county}</strong> {tooltip.site.desc ? ` • ${tooltip.site.desc}` : ''}

@@ -8,7 +8,7 @@ import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
 import { version } from '../package.json'
-import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, Database, CalendarRange, Map as MapIcon, FileCode2 } from 'lucide-react'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, Database, CalendarRange, Map as MapIcon, FileCode2, FileDown, Sun, Moon } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -84,6 +84,10 @@ const INIT_LABELS = Object.fromEntries(
 )
 
 // --- UI Primitives --------------------------------------------------------
+// Filter controls: one look for the header toolbar and the filter rows inside the tabs
+const FILTER_SELECT = {background:'var(--bg-surface)',border:'1px solid var(--border-primary)',color:'var(--heading)',borderRadius:8,padding:'6px 10px',minHeight:36,fontSize:14,fontWeight:500,cursor:'pointer',maxWidth:'min(100%, 300px)'}
+const FILTER_LABEL = {fontSize:13,fontWeight:500,color:'var(--text-meta)'}
+
 function Card({title,children,className='',action,style={}}) {
   return (
     <div className={'card '+className} style={style}>
@@ -1292,17 +1296,17 @@ function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel
   const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
   const opYear = selectedYear ?? 2026
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
-  const selStyle={background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
+  const selStyle = FILTER_SELECT
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="shrink-0 px-3 py-2 bg-[var(--bg-elevated)] border-b border-[var(--border-primary)] flex items-center gap-2 sm:gap-3 flex-wrap text-xs">
-        <div className="flex items-center gap-1.5"><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Model</span>
+        <div className="flex items-center gap-1.5"><span style={FILTER_LABEL}>Model</span>
           <select value={isSingle ? 'ECMWF SEAS5' : selectedModel} onChange={e=>setSelectedModel(e.target.value)} style={selStyle}>{modelNames.map(n=><option key={n} value={n}>{n}</option>)}</select></div>
-        <div className="flex items-center gap-1.5"><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Season</span>
+        <div className="flex items-center gap-1.5"><span style={FILTER_LABEL}>Season</span>
           <select value={selectedSeason} onChange={e=>onSeasonChange(e.target.value)} style={selStyle}>
             {(SEASONS[country]??SEASONS.kenya).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
           </select></div>
-        <div className="flex items-center gap-1.5"><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Year</span>
+        <div className="flex items-center gap-1.5"><span style={FILTER_LABEL}>Year</span>
           <select value={opYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>{yearOptions.map(y=><option key={y} value={y}>{y}</option>)}</select></div>
         <div className="sm:ml-auto text-[9px] text-[var(--text-faint)] w-full sm:w-auto mt-1 sm:mt-0">{!pixelData?'Click a pixel to load data':displayModel+' - Init '+(INIT_LABELS[selectedInit]??selectedInit)+' - '+seasonCode+' '+opYear}</div>
       </div>
@@ -1341,11 +1345,7 @@ function ValidationTab({ pixelData, activeModels, validationData,
                           country, selectedSeason, onSeasonChange, selectedInit }) {
   const isSingle = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
-  const selStyle = {
-    background:'var(--bg-surface)', border:'1px solid var(--accent-blue)',
-    color:'var(--text-primary)', borderRadius:6, padding:'3px 10px',
-    fontSize:11, cursor:'pointer', outline:'none', fontWeight:600,
-  }
+  const selStyle = FILTER_SELECT
 
   const entries = pixelData ? Object.entries(pixelData.models ?? {}).filter(([n]) => activeModels.has(n)) : []
   // Use selectedModel from parent for consistency with map
@@ -1371,19 +1371,19 @@ function ValidationTab({ pixelData, activeModels, validationData,
       {/* -- Control bar -- */}
       <div className="shrink-0 p-2 sm:p-2.5 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl flex items-center gap-2 sm:gap-3 flex-wrap text-xs">
         <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Model</span>
+          <span style={FILTER_LABEL}>Model</span>
           <select value={selectedModel} onChange={e=>setSelectedModel(e.target.value)} style={selStyle}>
             {modelNames.map(n=><option key={n} value={n}>{n}</option>)}
           </select>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Season</span>
+          <span style={FILTER_LABEL}>Season</span>
           <select value={selectedSeason} onChange={e=>onSeasonChange(e.target.value)} style={selStyle}>
             {(SEASONS[country]??SEASONS.kenya).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Year</span>
+          <span style={FILTER_LABEL}>Year</span>
           <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>
             {[2026,2025,2024,2023].map(y=><option key={y} value={y}>{y}</option>)}
           </select>
@@ -1645,23 +1645,23 @@ function HistoricalTab({ pixelData, chirpsHist, selectedModel, setSelectedModel,
   const activeModelName = isSingle ? 'ECMWF SEAS5' : selectedModel
   const seasonCode = isBega ? 'Deyr (SON-OND)' : (isFmam ? 'Belg (FMAM)' : (isKiremt ? 'Kiremt' : (isShort ? 'OND' : 'MAM')))
   const calPeriodStr = (isShort || isKiremt || isFmam || isBega) ? '1993-2016' : '1981-2016'
-  const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',outline:'none',fontWeight:600}
+  const selStyle = FILTER_SELECT
   const vars = [{key:'onset',label:'Onset DOY',color:'#34d399',unit:'DOY'},{key:'cessation',label:'Cessation DOY',color:'#f97316',unit:'DOY'},{key:'lgp',label:'Season Length',color:'#4a8fc4',unit:'days'}]
   return (
     <div className="h-full flex flex-col gap-2 p-1.5 sm:p-2 overflow-y-auto touch-scroll">
       <div className="shrink-0 p-2 sm:p-2.5 bg-[var(--bg-elevated)] border border-[var(--border-primary)] rounded-xl flex items-center gap-2 sm:gap-3 flex-wrap text-xs">
         <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Model</span>
+          <span style={FILTER_LABEL}>Model</span>
           <select value={activeModelName} onChange={e=>setSelectedModel(e.target.value)} style={selStyle}>
             {modelNames.map(n=><option key={n} value={n}>{n}</option>)}
           </select>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Season</span>
+        <div style={{display:'flex',alignItems:'center',gap:6}}><span style={FILTER_LABEL}>Season</span>
           <select value={selectedSeason} onChange={e=>onSeasonChange(e.target.value)} style={selStyle}>
             {(SEASONS[country]??SEASONS.kenya).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)'}}>Year</span>
+        <div style={{display:'flex',alignItems:'center',gap:6}}><span style={FILTER_LABEL}>Year</span>
           <select value={selectedYear || opYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>
             {yearOptions.map(y=><option key={y} value={y}>{y}</option>)}
           </select>
@@ -1838,7 +1838,7 @@ function MultiModelTab({ pixelData, activeModels, modelsData, selectedSeason='lo
 
       {/* -- Weight mode selector -- */}
       <div style={{flexShrink:0,padding:'7px 12px',background:'var(--bg-elevated)',border:'1px solid var(--border-primary)',borderRadius:10,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-        <span style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--text-muted)',flexShrink:0}}>Weighting:</span>
+        <span style={{...FILTER_LABEL,flexShrink:0}}>Weighting:</span>
         {WEIGHT_MODES.map(m=>(
           <button key={m.id} onClick={()=>setWeightMode(m.id)} title={m.desc}
             style={{padding:'4px 12px',borderRadius:6,fontSize:10,cursor:'pointer',fontWeight:weightMode===m.id?700:400,
@@ -2155,7 +2155,7 @@ function AboutTab({ initial }) {
           </p>
           <p>
             Forecast skill, data availability and uncertainty vary by location, season, model and method. See <Link to="performance">Performance &amp;
-            limitations</Link> and the Validation tab when interpreting the results.
+            limitations</Link> and the Forecast performance tab when interpreting the results.
           </p>
         </div>
       )}
@@ -2899,7 +2899,7 @@ function AboutTab({ initial }) {
           <S title="Limitations">
             <div className="about-prose">
               <ul>
-                <li><strong>Skill varies.</strong> Forecast skill depends on location, season, model, method and forecast start. Check the Validation tab for the place and method you use.</li>
+                <li><strong>Skill varies.</strong> Forecast skill depends on location, season, model, method and forecast start. Check the Forecast performance tab for the place and method you use.</li>
                 <li><strong>Median dates are summaries.</strong> The median of the members is not a deterministic event date; read it with the range and the probabilities.</li>
                 <li><strong>Daily rainfall estimates.</strong> CHIRPS blends satellite and gauge data; CHIRPS v3 daily values are split from 5-day totals, so single days are approximate. The 5–10 day windows the methods use are less affected.</li>
                 <li><strong>Season length is not crop suitability.</strong> Only the FAO water balance models a crop (maize by default), with soil properties from a pedotransfer function, a fixed 1 m root zone, no runoff by default and climatological ET0 in the forecast period.</li>
@@ -3009,11 +3009,11 @@ function AboutTab({ initial }) {
 
 // --- TABS + TopNav ------------------------------------------------------------
 const TABS = [
-  {id:'forecast',      label:'Forecasting',   icon:BarChart3},
-  {id:'probabilistic', label:'Probabilistic', icon:Percent},
-  {id:'multimodel',    label:'Multi-Model',   icon:Layers},
-  {id:'validation',    label:'Validation',    icon:ShieldCheck},
-  {id:'historical',    label:'Historical',    icon:HistoryIcon},
+  {id:'forecast',      label:'Seasonal timing',      icon:BarChart3},
+  {id:'probabilistic', label:'Probabilities',        icon:Percent},
+  {id:'multimodel',    label:'Compare models',       icon:Layers},
+  {id:'validation',    label:'Forecast performance', icon:ShieldCheck},
+  {id:'historical',    label:'Historical rainfall',  icon:HistoryIcon},
   {id:'tracker',       label:'Short Rains Tracker', icon:Satellite},
   {id:'about',         label:'About',         icon:Info},
 ]
@@ -3026,52 +3026,41 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
     ? ['ECMWF SEAS5']
     : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const tabs = isSingleModelSeason ? TABS.filter(t => t.id !== 'multimodel') : TABS
-  const selStyle = {background:'var(--bg-surface)',border:'1px solid var(--accent-blue)',color:'var(--text-primary)',borderRadius:6,padding:'3px 8px',fontSize:11,fontWeight:600,cursor:'pointer',outline:'none'}
+  const selStyle = FILTER_SELECT
+  const lbl = FILTER_LABEL
+  const status = health?.status === 'ok' ? 'online' : healthError ? 'offline' : 'connecting'
 
   return (
     <header className="t-header shrink-0">
-      {/* Primary Brand & Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between px-3 py-2 sm:px-5 sm:py-2.5 gap-2">
-        <button onClick={onLogoClick} className="flex flex-col leading-none text-left" style={{background:'transparent',border:'none',cursor:'pointer',padding:0}}>
-          <span style={{fontSize:11,fontWeight:900,letterSpacing:'0.2em',textTransform:'uppercase',color:'var(--accent-blue)'}}>ILRI Climate Services</span>
-          <span style={{fontSize:9,letterSpacing:'0.06em',marginTop:2,color:'var(--header-muted)'}} className="hidden sm:inline">Seasonal Climate Forecast Dashboard (Onset, Cessation &amp; LGP)</span>
+      {/* Product identity and actions: same name, attribution and theme control as the landing page */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <button type="button" onClick={onLogoClick} className="flex flex-col text-left" title="Back to the start page"
+                style={{background:'transparent',border:'none',cursor:'pointer',padding:0,gap:2}}>
+          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>Seasonal Climate Forecast Dashboard</span>
+          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>ILRI Climate Services, in collaboration with ICPAC</span>
         </button>
-
-        {/* Action controls */}
-        <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
-          <button
-            type="button"
-            onClick={onOpenBulletin}
-            className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold tracking-wider uppercase transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-            style={{
-              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.45))',
-              border: '1px solid rgba(245, 158, 11, 0.75)',
-              color: '#fbbf24',
-              boxShadow: '0 0 14px -2px rgba(245, 158, 11, 0.25)'
-            }}
-            title="Generate publication seasonal forecast bulletin for selected point or custom coordinates (PDF / PNG)"
-          >
-            <span>📄</span>
-            <span className="hidden xs:inline">Bulletin</span>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
+          <span className="hidden md:inline-flex items-center gap-2" style={{fontSize:13.5,color:'var(--text-meta)'}}
+                title={status === 'online' ? 'The forecast data service is answering. Each view states its own forecast start and observation dates.'
+                       : status === 'offline' ? 'The forecast data service is not answering; views that need it cannot load.' : 'Contacting the forecast data service'}>
+            <span aria-hidden="true" style={{width:8,height:8,borderRadius:'50%',background:status==='online'?'var(--ok-text)':status==='offline'?'var(--bad-text)':'var(--text-meta)'}}/>
+            {status === 'online' ? 'Data service online' : status === 'offline' ? 'Data service offline' : 'Connecting…'}
+          </span>
+          <button type="button" onClick={onOpenBulletin} className="site-btn site-btn-secondary" style={{minHeight:40,padding:'0 14px',fontSize:14}}
+                  title="Download the forecast bulletin for the selected location (PDF or PNG)">
+            <FileDown size={16} aria-hidden="true"/> Download bulletin
           </button>
-
-          <div className="flex items-center gap-1.5">
-            <div className={'w-1.5 h-1.5 rounded-full '+(health?.status==='ok'?'bg-emerald-400':'bg-red-400')}/>
-            <span className="text-[9px] sm:text-[10px] hidden md:inline" style={{color:health?.status==='ok'?'var(--header-muted)':'#f87171'}}>
-              {health?.status==='ok' ? (isSingleModelSeason ? 'ECMWF SEAS5 online' : modelNames.length+' models online') : healthError ? 'offline' : 'connecting...'}
-            </span>
-          </div>
-
-          <button onClick={()=>setDarkMode(d=>!d)} className="px-2 py-1 rounded-md text-[9px] sm:text-[10px] border transition-colors" style={{background:'var(--bg-elevated)',borderColor:'var(--border-primary)',color:'var(--accent-blue)'}}>
-            {darkMode?'☀️ Light':'🌙 Dark'}
+          <button type="button" onClick={()=>setDarkMode(d=>!d)} className="site-btn site-btn-quiet">
+            {darkMode ? <Sun size={16} aria-hidden="true"/> : <Moon size={16} aria-hidden="true"/>}
+            {darkMode ? 'Light mode' : 'Dark mode'}
           </button>
         </div>
       </div>
 
       {/* Responsive Filter Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 sm:px-5 sm:py-2 overflow-x-auto no-scrollbar touch-scroll bg-[var(--bg-sunken)] border-t border-[var(--border-primary)] text-xs">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Country</label>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-6 bg-[var(--bg-sunken)] border-t border-[var(--border-primary)]">
+        <div className="flex items-center gap-2">
+          <label style={lbl}>Country</label>
           <select value={country} onChange={e=>setCountry(e.target.value)} style={selStyle}>
             <option value="kenya">Kenya</option>
             <option value="ethiopia">Ethiopia</option>
@@ -3079,29 +3068,31 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
         </div>
 
         {activeTab==='forecast'&&(
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5">
-              <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Model</label>
+          <div className="contents">
+            <div className="flex items-center gap-2">
+              <label style={lbl}>Model</label>
               <select value={selectedModel} onChange={e=>setSelectedModel(e.target.value)} style={selStyle}>{modelNames.map(n=><option key={n} value={n}>{n}</option>)}</select>
             </div>
-            <div className="flex items-center gap-1.5">
-              <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Season</label>
+            <div className="flex items-center gap-2">
+              <label style={lbl}>Season</label>
               <select value={selectedSeason} onChange={e=>onSeasonChange(e.target.value)} style={selStyle}>
                 {(SEASONS[country]??SEASONS.kenya).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
             </div>
-            <div className="flex items-center gap-1.5">
-              <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Year</label>
+            <div className="flex items-center gap-2">
+              <label style={lbl}>Year</label>
               <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={selStyle}>{[2026,2025,2024,2023].map(y=><option key={y} value={y}>{y}</option>)}</select>
             </div>
             {selectedSeason === 'short_rains' && setSelectedInit ? (
-              <div className="flex items-center gap-1.5">
-                <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)'}}>Init</label>
+              <div className="contents">
+               <div className="flex items-center gap-2">
+                <label style={lbl}>Forecast run</label>
                 <select value={selectedInit} onChange={e=>setSelectedInit(e.target.value)} style={selStyle}>
                   {SHORT_RAINS_INITS
                     .filter(i => i.init === '0901' || Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === i.model || m?.raw_name === i.model))
                     .map(i=><option key={i.init} value={i.init}>{i.initLabel}</option>)}
                 </select>
+               </div>
                 {setOnsetDef && (()=>{
                   // Every method run for any init is listed; one the selected init lacks (FAO: Oct runs only) names the
                   // runs that have it, and picking it switches to the latest of them
@@ -3125,23 +3116,25 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                   }
                   return avail.length > 1 ? (
                     <>
-                      <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Method</label>
+                     <div className="flex items-center gap-2">
+                      <label style={lbl} title={cur.title}>Method</label>
                       <select value={cur.group ? methods.find(d => d.group === cur.group).id : cur.id} style={selStyle} title={cur.title}
                               onChange={e=>pick(e.target.value)}>
                         {methods.map(d=><option key={d.id} value={d.id} title={d.title}>{methodLabel(d)}</option>)}
                       </select>
-                      {defs.length > 1 && (<>
-                        <label style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--header-muted)',marginLeft:6}} title={cur.title}>Definition</label>
+                     </div>
+                      {defs.length > 1 && (<div className="flex items-center gap-2">
+                        <label style={lbl} title={cur.title}>Definition</label>
                         <select value={cur.id} onChange={e=>setOnsetDef(e.target.value)} style={selStyle} title={cur.title}>
                           {defs.map(d=><option key={d.id} value={d.id} title={d.title}>{d.defLabel}</option>)}
                         </select>
-                      </>)}
+                      </div>)}
                     </>
                   ) : null
                 })()}
               </div>
             ) : (
-              <span style={{fontSize:9,color:'var(--header-muted)',whiteSpace:'nowrap'}}>Init {INIT_LABELS[selectedInit]??selectedInit}</span>
+              <span style={{...lbl,whiteSpace:'nowrap'}}>Forecast run: {INIT_LABELS[selectedInit]??selectedInit}</span>
             )}
           </div>
         )}

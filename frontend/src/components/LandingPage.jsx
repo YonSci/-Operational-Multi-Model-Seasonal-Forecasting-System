@@ -7,7 +7,7 @@ import { version } from '../../package.json'
 const FEATURES = [
   { id: 'forecast', icon: CalendarRange, title: 'Seasonal timing',
     desc: 'When the rains may start and end, and how long the season may last, for the method you choose.' },
-  { id: 'probabilistic', icon: Percent, title: 'Forecast probabilities',
+  { id: 'probabilistic', icon: Percent, title: 'Probabilities',
     desc: 'The chance of an early, normal or late onset, and of a short or long season.' },
   { id: 'multimodel', icon: Layers, title: 'Compare models',
     desc: 'Long Rains outlooks from seven C3S seasonal models, combined according to their past skill.' },

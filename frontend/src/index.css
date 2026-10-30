@@ -225,6 +225,10 @@ html.light {
   }
   .t-select:focus { border-color: var(--accent-blue); }
 
+  /* Header filters: a label and its select stay together and shrink on narrow screens */
+  .t-header .flex { max-width: 100%; }
+  .t-header .flex > select { min-width: 0; flex: 0 1 auto; }
+
   /* Dashboard tab bar */
   .nav-tab {
     display: flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap;
