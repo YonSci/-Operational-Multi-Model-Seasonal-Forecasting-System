@@ -6,4 +6,4 @@ pdirnow,PDIR-Now (UCI CHRS),2026-10-30,30,0,76.9,56.1,137.0,66.0
 imerg,IMERG Late (NASA),2026-10-29,29,0,71.7,53.6,134.0,54.0
 imerg_early,IMERG Early (NASA),2026-10-30,30,0,80.8,56.1,144.0,69.0
 imerg_gee,IMERG (Earth Engine),2026-10-27,26,1,54.2,44.0,123.0,48.0
-gsmap_gee,GSMaP Gauge (Earth Engine),2026-10-27,27,0,63.6,46.2,138.0,47.0
+gsmap_gee,GSMaP Gauge (Earth Engine),2026-10-29,29,0,73.0,53.6,136.0,56.0
