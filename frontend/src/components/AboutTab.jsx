@@ -982,6 +982,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                   ['Oct 01', 'ECMWF SEAS5 from 1 Oct, to 28 Feb', 'Dunning, Agri rules 1–3, FAO water balance'],
                   ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
                   ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
+                  ['Oct 01 + obs + weather forecasts (experimental)', 'Observed CHIRPS to the latest available day, then ECMWF ENS for days 1–15, the ECMWF extended-range forecast to day 46, then SEAS5. The weather forecasts are bias-corrected provisionally with the SEAS5 mapping for the same day, and the run has not yet been tested on past seasons; refreshed by the daily update', 'Dunning, Agri rules 1–3'],
                 ]}/>
                 <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
                   25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.

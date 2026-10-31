@@ -11,7 +11,8 @@ Refresh the Kenya Short Rains forecast as new observations and medium-range fore
   3. Agronomic (planting) onset: CHIRPS + members, terciles, calibration, skill; Agri onset/cessation rules 1–3
      (after ICPAC); FAO water balance (CHIRPS v3 + ERA5-Land, when new CHIRPS v3 days arrive); the seasonal runs,
      rules and FAO definitions repacked for the hosted API
-  4. Latest ECMWF ENS (open data) → 1–15 day outlook and composite planting-onset dates
+  4. Latest ECMWF ENS (open data) → 1–15 day outlook and composite planting-onset dates; experimental run joining
+     ENS and the ECMWF extended range (dynamical.org) to the latest-obs SEAS5 members (blend_subseasonal.py)
   5. Satellite rainfall, multi-model 10–16 day forecasts, site reports, tracker data and page
   6. Hot-reload the local backend if it is running; record the completed update in backend/data_status.json
   7. With --publish: push the refreshed data to origin/main (publish_daily.py), which redeploys the live platform
@@ -145,6 +146,40 @@ def run_seasonal(obs_end, force):
     return True
 
 
+def update_weather_run(env, obs_end):
+    """Experimental "+ weather forecasts" run: the latest-obs SEAS5 members with ECMWF ENS (days 1-15) and the ECMWF
+    extended range (to day 46) joined in (blend_subseasonal.py), then the same pipeline and Agri rules. Re-run when
+    the observations, the ENS run or the extended-range run changed. Returns True when re-run."""
+    if subprocess.run([PY, str(BASE_DIR / "scripts" / "fetch_ecmwf_extended.py")], env=env).returncode:
+        log("extended range: download failed, using the runs already on disk")
+    s2s = BASE_DIR / "outputs" / "ecmwf_oct_s2s"
+    latest = lambda d, pat: (sorted((BASE_DIR / "data" / d).glob(pat)) or [None])[-1]
+    ens, ext = latest("ecmwf_ens", "ens_tp_*_kenya.nc"), latest("ecmwf_ext", "ext_tp_*_kenya.nc")
+    if ens is None or ext is None:
+        log("weather-forecast run: no ENS or extended-range run on disk; skipped")
+        return False
+    key = {"obs_end": str(obs_end), "ens_file": ens.name, "ext_file": ext.name}
+    meta_p = s2s / "run_meta.json"
+    if meta_p.exists() and json.loads(meta_p.read_text()).get("inputs") == key:
+        log(f"weather-forecast run: already up to date ({ens.name}, {ext.name})")
+        return False
+    subprocess.run([PY, str(BASE_DIR / "scripts" / "blend_subseasonal.py")], check=True, env=env)
+    obs_end_doy, lead0_doy = obs_end.timetuple().tm_yday, dt.date(YEAR, INIT_MONTH, 1).timetuple().tm_yday
+    extra = [str(FINAL)] + ([str(PRELIM_NC)] if PRELIM_NC.exists() else [])
+    cmd = [PY, str(BASE_DIR / "scripts" / "process_ecmwf_september.py"), "--init-month", str(INIT_MONTH),
+           "--win-doy-start", str(WIN_START), "--win-doy-end", str(WIN_END), "--ecmwf-dir", str(ECMWF_DIR),
+           "--out-dir", str(s2s), "--chirps-extra", *extra, "--bc-op-override", str(s2s / f"blend_{YEAR}.nc")]
+    if obs_end_doy >= WIN_START:
+        cmd += ["--obs-lead-doy", str(lead0_doy), "--obs-end-doy", str(max(obs_end_doy, lead0_doy - 1))]
+    with open(s2s / "process.log", "w", encoding="utf-8") as f:
+        subprocess.run(cmd, check=True, stdout=f, stderr=subprocess.STDOUT, env=env)
+    subprocess.run([PY, str(BASE_DIR / "scripts" / "onset_rules.py"), str(s2s)], check=True, env=env)
+    meta = json.loads(meta_p.read_text())
+    meta_p.write_text(json.dumps({**meta, "inputs": key}, indent=1))
+    log(f"weather-forecast run: observations to {obs_end}, {ens.name}, {ext.name}")
+    return True
+
+
 def update_fao(env):
     """FAO water balance (fao_water_balance.py): fetch new CHIRPS v3 days (Earth Engine, then CHC preliminary) and
     the latest ERA5-Land ET0 (Earth Engine; at most 45 min — days ERA5-Land does not have yet use the ET0
@@ -219,6 +254,13 @@ def main():
             log("ENS: download failed, using the latest run already on disk")
         ens = sorted((BASE_DIR / "data" / "ecmwf_ens").glob("ens_tp_*_kenya.nc"))[-1]
         subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "ens", str(ens), str(OUT_DIR)], check=True, env=env)
+        # experimental run joining the weather forecasts; must not stop the daily update
+        try:
+            if update_weather_run(env, obs_end):
+                for s in ("pack_short_rains_demo.py", "pack_onset_rules.py", "rainfall_stats.py"):
+                    subprocess.run([PY, str(BASE_DIR / "scripts" / s)], check=False, env=env)
+        except Exception as exc:
+            log(f"weather-forecast run: failed ({str(exc)[:160]}); previous run kept")
 
     # Real-time satellite rainfall (ARC2, TAMSAT, PDIR-Now; IMERG when ~/.netrc has an Earthdata login):
     # fetch missing days since 1 Sep, monitor since 1 Oct, verify against CHIRPS (final Sep + prelim Oct)

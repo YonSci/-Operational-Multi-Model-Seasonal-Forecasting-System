@@ -25,7 +25,8 @@ import xarray as xr
 BASE = Path(__file__).resolve().parent.parent
 OUT = BASE / "backend" / "demo_short_rains_rules.npz"
 RUNS = {"ECMWF SEAS5 (Sep)": "outputs/ecmwf_sep_demo", "ECMWF SEAS5 (Oct)": "outputs/ecmwf_oct",
-        "ECMWF SEAS5 (Oct+Obs)": "outputs/ecmwf_oct_obs", "ECMWF SEAS5 (Oct+Obs latest)": "outputs/ecmwf_oct_obs_latest"}
+        "ECMWF SEAS5 (Oct+Obs)": "outputs/ecmwf_oct_obs", "ECMWF SEAS5 (Oct+Obs latest)": "outputs/ecmwf_oct_obs_latest",
+        "ECMWF SEAS5 (Oct+Obs+S2S)": "outputs/ecmwf_oct_s2s"}
 VARS = ("onset", "cessation", "lgp")
 CAL = (1993, 2016)
 KEEP_FROM = 2020       # members and probabilities are packed from this year on (the dashboard offers 2023 – latest;
