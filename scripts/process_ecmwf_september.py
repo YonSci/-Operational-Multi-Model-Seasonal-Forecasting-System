@@ -79,6 +79,7 @@ def _build_qm_transfer(c_pool, s_pool):
 
     f_c = len(c_wet) / max(len(c_pool), 1)
     f_s = len(s_wet) / max(len(s_pool), 1)
+    cutoff = 0.0                       # model days below this are dry after correction
     if f_s > f_c and len(s_wet) > 1:
         n_clip = int(round((f_s - f_c) * len(s_pool)))
         if n_clip > 0:
@@ -97,7 +98,8 @@ def _build_qm_transfer(c_pool, s_pool):
     def transfer(x_raw):
         x_arr = np.asarray(x_raw, dtype=np.float32)
         out = np.zeros_like(x_arr)
-        wet_mask = (x_arr > WET_DAY_THRESH) & (~np.isnan(x_arr))
+        # the model's surplus wet days (its smallest amounts) become dry, so the wet-day frequency matches CHIRPS
+        wet_mask = (x_arr > WET_DAY_THRESH) & (x_arr >= cutoff) & (~np.isnan(x_arr))
         if not np.any(wet_mask):
             return out
         x_t = x_arr[wet_mask] ** power
