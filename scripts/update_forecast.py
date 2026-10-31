@@ -295,7 +295,7 @@ def main():
     except requests.RequestException:
         log("backend not running (no reload needed)")
     # when this update completed and what it covers: the dashboard shows it next to the results
-    status = {"last_update": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "obs_end": obs_end,
+    status = {"last_update": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "obs_end": str(obs_end),
               "schedule": "daily"}
     (BASE_DIR / "backend" / "data_status.json").write_text(json.dumps(status, indent=1) + "\n", encoding="utf-8")
     if a.publish:
