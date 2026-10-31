@@ -2041,8 +2041,10 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
       </div>
       {weather?.experimental === 'yes' && (
         <p style={{flexBasis:'100%',margin:0,padding:'6px 10px',borderRadius:6,fontSize:13,lineHeight:1.5,background:'var(--caution-bg)',color:'var(--caution-text)'}}>
-          <strong>Experimental run.</strong> The weather forecasts are bias-corrected provisionally (with the SEAS5 mapping for the same day) and
-          the run has not yet been tested on past seasons, so its chances can be overconfident. Compare it with “Oct 01 + latest obs”.
+          <strong>Experimental run.</strong> {/reforecast/.test(weather.bias_correction ?? '')
+            ? 'The extended-range forecasts are bias-corrected with ECMWF’s reforecasts; ENS days 1–15 still use a provisional correction (the SEAS5 mapping for the same day).'
+            : 'The weather forecasts are bias-corrected provisionally (with the SEAS5 mapping for the same day).'} The
+          run has not yet been tested on past seasons, so its chances can be overconfident. Compare it with “Oct 01 + latest obs”.
         </p>
       )}
     </section>

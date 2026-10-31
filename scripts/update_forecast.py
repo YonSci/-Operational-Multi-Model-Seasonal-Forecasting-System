@@ -158,7 +158,9 @@ def update_weather_run(env, obs_end):
     if ens is None or ext is None:
         log("weather-forecast run: no ENS or extended-range run on disk; skipped")
         return False
-    key = {"obs_end": str(obs_end), "ens_file": ens.name, "ext_file": ext.name}
+    # re-run also when new reforecasts arrive (they replace the provisional bias correction)
+    refc = sorted(p.name for p in (BASE_DIR / "data" / "ecmwf_s2s_reforecast").glob("refc_tp_*_kenya.nc"))
+    key = {"obs_end": str(obs_end), "ens_file": ens.name, "ext_file": ext.name, "reforecasts": len(refc)}
     meta_p = s2s / "run_meta.json"
     if meta_p.exists() and json.loads(meta_p.read_text()).get("inputs") == key:
         log(f"weather-forecast run: already up to date ({ens.name}, {ext.name})")
