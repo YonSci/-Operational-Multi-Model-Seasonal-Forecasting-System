@@ -976,16 +976,19 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             </div>
             </Disclosure>
 
-            <Disclosure title="Forecast runs (Init selector)" scope="Kenya · Short Rains · ECMWF SEAS5, 25 members">
+            <Disclosure title="Forecast runs (Forecast run selector, Sub-seasonal tab)" scope="Kenya · Short Rains · ECMWF SEAS5, 25 members">
                 <Tbl head={['Run','Rainfall used','Methods']} rows={[
                   ['Sep 01', 'ECMWF SEAS5 from 1 Sep, to 31 Dec', 'Dunning, Agri rules 1–3'],
                   ['Oct 01', 'ECMWF SEAS5 from 1 Oct, to 28 Feb', 'Dunning, Agri rules 1–3, FAO water balance'],
                   ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
                   ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
-                  ['Oct 01 + obs + weather forecasts (experimental)', 'Observed CHIRPS to the latest available day, then ECMWF ENS for days 1–15, the ECMWF extended-range forecast to day 46, then SEAS5. The extended-range forecasts are bias-corrected against CHIRPS by lead with ECMWF’s extended-range reforecasts (20 past years), ENS days 1–15 provisionally with the SEAS5 mapping for the same day; the run has not yet been tested on past seasons; refreshed by the daily update', 'Dunning, Agri rules 1–3'],
+                  ['Oct 01 + obs + weather forecasts (experimental; Sub-seasonal & extended range tab)', 'Observed CHIRPS to the latest available day, then ECMWF ENS for days 1–15, the ECMWF extended-range forecast to day 46, then SEAS5. The extended-range forecasts are bias-corrected against CHIRPS by lead with ECMWF’s extended-range reforecasts (20 past years), ENS days 1–15 provisionally with the SEAS5 mapping for the same day; the run has not yet been tested on past seasons; refreshed by the daily update', 'Dunning, Agri rules 1–3'],
                 ]}/>
                 <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
                   25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.
+                </div>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  <strong>Issued runs keep their original correction.</strong> On 1 Nov 2026 the quantile mapping was fixed so that, where SEAS5 has more wet days than CHIRPS, the surplus days become dry: before, they kept a trace of rain (over land, 26 Oct – 31 Dec, the corrected members had rain on 70% of days against 26% in CHIRPS; now 26%). Rain above 1 mm, seasonal totals (−2%) and onset and cessation skill barely changed. The Sep 01, Oct 01 and Oct 01 + Sep obs runs (Dunning and Agri rules) are shown as issued, with the earlier correction. The runs refreshed daily (Oct 01 + latest obs, the weather-forecast run) and the FAO water balance use the fixed correction.
                 </div>
             </Disclosure>
 
