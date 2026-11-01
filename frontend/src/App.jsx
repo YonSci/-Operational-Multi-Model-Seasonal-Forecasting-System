@@ -8,7 +8,7 @@ import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
 import { version } from '../package.json'
-import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon } from 'lucide-react'
+import { BarChart3, Percent, CloudSun, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
@@ -2044,10 +2044,187 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
           <strong>Experimental run.</strong> {/reforecast/.test(weather.bias_correction ?? '')
             ? 'The extended-range forecasts are bias-corrected with ECMWF’s reforecasts; ENS days 1–15 still use a provisional correction (the SEAS5 mapping for the same day).'
             : 'The weather forecasts are bias-corrected provisionally (with the SEAS5 mapping for the same day).'} The
-          run has not yet been tested on past seasons, so its chances can be overconfident. Compare it with “Oct 01 + latest obs”.
+          run has not yet been tested on past seasons, so its chances can be overconfident. Read it beside the seasonal forecast alone (“Oct 01 + latest obs”).
         </p>
       )}
     </section>
+  )
+}
+
+// --- Sub-seasonal tab ------------------------------------------------------------
+// The experimental Short Rains run that joins ECMWF weather forecasts to SEAS5 (blend_subseasonal.py): where each
+// day's rainfall comes from, and its dates beside the run with the same observations and no weather forecasts
+const S2S_INIT = '1001w', S2S_BASE_INIT = '1001ol'
+const addDays = (iso, n) => { const t = new Date(iso.slice(0, 10) + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10) }
+const nDays = (a, b) => Math.round((Date.parse(b.slice(0, 10)) - Date.parse(a.slice(0, 10))) / 864e5) + 1
+const runEntry = (modelsData, model) => {
+  const base = (model || '').split(' - ')[0]
+  return Object.entries(modelsData?.models ?? {}).find(([k, m]) => k === base || m?.raw_name === base)?.[1]
+}
+
+function RainSources({ entry }) {
+  const w = entry?.weather
+  if (!w?.ens_days || !w?.ext_days || !entry.obs_end || !entry.valid_start || !entry.valid_end) return null
+  const [ensA, ensB] = w.ens_days.split('/'), [extA, extB] = w.ext_days.split('/')
+  const segs = [
+    { label: 'Observed rainfall (CHIRPS)', a: entry.valid_start, b: entry.obs_end, color: 'var(--src-obs)' },
+    // days after the last observation and before the ENS run: day 1 of the extended-range run started that day
+    { label: 'Weather forecast for the day (extended range, day 1)', a: addDays(entry.obs_end, 1), b: addDays(ensA, -1), color: 'var(--src-ext)' },
+    { label: `ECMWF ENS weather forecast, run ${fmtDate(w.ens_run)}`, a: ensA, b: ensB, color: 'var(--src-ens)' },
+    { label: `ECMWF extended-range forecast, run ${fmtDate(w.ext_run)}`, a: extA, b: extB, color: 'var(--src-ext)' },
+    { label: 'ECMWF SEAS5 seasonal forecast', a: w.seasonal_from, b: entry.valid_end, color: 'var(--src-seas)' },
+  ].filter(s => s.a && s.b && s.a <= s.b)
+  const total = nDays(entry.valid_start, entry.valid_end)
+  const now = new Date(), today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const todayAt = today >= entry.valid_start && today <= entry.valid_end ? (nDays(entry.valid_start, today) - 0.5) / total : null
+  return (
+    <div>
+      <div style={{position:'relative', paddingTop: todayAt != null ? 18 : 0}}>
+        {todayAt != null && (
+          <div aria-hidden="true" style={{position:'absolute', left:`${todayAt * 100}%`, top:0, bottom:-4, borderLeft:'2px solid var(--heading)'}}>
+            <span style={{position:'absolute', top:0, left:4, fontSize:12, fontWeight:600, color:'var(--heading)', whiteSpace:'nowrap'}}>Today</span>
+          </div>
+        )}
+        <div role="img" aria-label={segs.map(s => `${s.label}: ${fmtSpan(s.a, s.b)}`).join('; ')} style={{display:'flex', gap:2, height:16}}>
+          {segs.map((s, i) => (
+            <div key={i} title={`${s.label}: ${fmtSpan(s.a, s.b)} (${nDays(s.a, s.b)} days)`}
+                 style={{flex: nDays(s.a, s.b), minWidth:3, background:s.color,
+                         borderRadius: `${i === 0 ? 4 : 0}px ${i === segs.length - 1 ? 4 : 0}px ${i === segs.length - 1 ? 4 : 0}px ${i === 0 ? 4 : 0}px`}}/>
+          ))}
+        </div>
+      </div>
+      <ul style={{listStyle:'none', margin:'10px 0 0', padding:0, display:'grid', gap:4, fontSize:13.5, color:'var(--text-secondary)'}}>
+        {segs.map((s, i) => (
+          <li key={i} style={{display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap'}}>
+            <span aria-hidden="true" style={{width:10, height:10, borderRadius:2, background:s.color, flexShrink:0, alignSelf:'center'}}/>
+            <span style={{color:'var(--heading)', fontWeight:500}}>{s.label}</span>
+            <span style={{fontVariantNumeric:'tabular-nums'}}>{fmtSpan(s.a, s.b)} · {nDays(s.a, s.b)} days</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+const TIMING_ROWS = [
+  { key:'on', p:'p_on',  label:'Onset',         cats:['Early','Normal','Late'],  clim:'onset',     noneKey:'on_none', byKey:'onset_by', unit:'date' },
+  { key:'cs', p:'p_cs',  label:'End of rains',  cats:['Early','Normal','Late'],  clim:'cessation', noneKey:'cs_none', byKey:'none_by',  unit:'date' },
+  { key:'lg', p:'p_lgp', label:'Season length', cats:['Short','Normal','Long'], clim:'lgp',                                               unit:'days' },
+]
+const timingValue = (row, v, year) => row.unit === 'date' ? doy(v, year) : Math.round(v) + ' days'
+
+function TimingCell({ m, row, year, base }) {
+  if (!m) return <span style={{color:'var(--text-meta)'}}>Loading…</span>
+  const med = m[row.key + '_med'], p10 = m[row.key + '_p10'], p90 = m[row.key + '_p90']
+  const by = row.byKey && m[row.noneKey] > 0 ? m[row.byKey] : null      // members with none by the search end count as later
+  const range = p10 != null && (p90 != null || by)
+    ? `${timingValue(row, p10, year)} – ${p90 != null ? timingValue(row, p90, year) : 'after ' + by}` : null
+  const p = m[row.p]
+  const top = p ? p.indexOf(Math.max(...p)) : -1
+  const bmed = base?.[row.key + '_med']
+  const diff = med != null && bmed != null ? Math.round(med - bmed) : null
+  const word = row.unit === 'date' ? (diff > 0 ? 'later' : 'earlier') : (diff > 0 ? 'longer' : 'shorter')
+  return (
+    <div style={{display:'grid', gap:2}}>
+      <span style={{fontSize:15, fontWeight:600, color:'var(--heading)'}}>{med != null ? timingValue(row, med, year) : by ? 'After ' + by : '–'}</span>
+      {range && <span style={{fontSize:12.5, color:'var(--text-meta)'}}>8 in 10 members: {range}</span>}
+      {p && <span style={{fontSize:12.5, color:'var(--text-secondary)'}}>
+        {row.cats.map((c, i) => <Fragment key={c}>{i > 0 && ' · '}<span style={{fontWeight: i === top ? 700 : 400}}>{c} {Math.round(p[i] * 100)}%</span></Fragment>)}
+      </span>}
+      {base && diff != null && <span style={{fontSize:12.5, fontWeight:600, color:'var(--accent-text)'}}>
+        {diff === 0 ? 'Same as without weather forecasts' : `${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} ${word} than without weather forecasts`}
+      </span>}
+    </div>
+  )
+}
+
+function SubseasonalTab({ pixelData, baseData, isLoading, modelsData, model, baseModel, onsetDef, setOnsetDef, selectedYear, activeModels }) {
+  const year = selectedYear ?? 2026
+  const entry = runEntry(modelsData, model)
+  const avail = ONSET_DEFS.filter(d => d.id === 'dunning' || hasModel(modelsData, shortRainsModel(S2S_INIT, d.id)))
+  const cur = avail.find(d => d.id === onsetDef) ?? ONSET_DEFS[0]
+  const pick = (data, name) => data?.models?.[name] ?? data?.models?.['ECMWF SEAS5']
+  const one = pick(pixelData, model), base = pick(baseData, baseModel)
+  const clim = one?.chirps_clim ?? pixelData?.chirps_clim
+  const site = useDashboardStore(s => s.selectedSite)
+  const th = {textAlign:'left', fontSize:12.5, fontWeight:600, color:'var(--text-meta)', padding:'6px 10px', borderBottom:'1px solid var(--border-primary)', verticalAlign:'bottom'}
+  const td = {padding:'8px 10px', borderBottom:'1px solid var(--border-primary)', verticalAlign:'top'}
+  return (
+    <div className="flex flex-col gap-2 p-0.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 rounded-lg" style={{background:'var(--bg-elevated)', border:'1px solid var(--border-primary)'}}>
+        <div className="flex items-center gap-2">
+          <label style={FILTER_LABEL} title={cur.title}>Method</label>
+          <select value={cur.id} onChange={e => setOnsetDef(e.target.value)} style={FILTER_SELECT} title={cur.title}>
+            {avail.map(d => <option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
+          </select>
+        </div>
+        <span style={{fontSize:13, color:'var(--text-meta)'}}>Kenya · Short Rains {year} · ECMWF, 25 members</span>
+      </div>
+
+      <Card title="Where each day's rainfall comes from">
+        <div className="p-3">
+          <p style={{margin:'0 0 10px', fontSize:14, lineHeight:1.55, color:'var(--text-secondary)'}}>
+            Each of the 25 members is one full season: rainfall already observed, then ECMWF weather forecasts for the
+            next weeks, then the SEAS5 seasonal forecast for the rest. Onset, end of rains and season length are found
+            in that joined rainfall, with the same method as the seasonal runs.
+          </p>
+          {entry?.weather ? <RainSources entry={entry}/> : <p style={{margin:0, fontSize:13.5, color:'var(--text-meta)'}}>The run's sources are not available.</p>}
+        </div>
+      </Card>
+
+      <Card title={`Onset, end of rains and season length${site?.site_name ? ' · ' + site.site_name : ''}`}>
+        <div className="p-3">
+          {!pixelData ? (
+            <p style={{margin:0, fontSize:14, color:'var(--text-meta)'}}>{isLoading ? 'Loading the forecast for this location…' : 'Choose a location on the map to see its forecast.'}</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto touch-scroll">
+                <table style={{width:'100%', minWidth:520, borderCollapse:'collapse', fontVariantNumeric:'tabular-nums'}}>
+                  <thead><tr>
+                    <th style={th} scope="col"></th>
+                    <th style={th} scope="col">With weather forecasts<br/><span style={{fontWeight:400}}>experimental</span></th>
+                    <th style={th} scope="col">Seasonal forecast only<br/><span style={{fontWeight:400}}>Oct 01 + latest obs</span></th>
+                    <th style={th} scope="col">Normal<br/><span style={{fontWeight:400}}>1993–2016 average</span></th>
+                  </tr></thead>
+                  <tbody>
+                    {TIMING_ROWS.map(row => (
+                      <tr key={row.key}>
+                        <th style={{...td, fontSize:14, fontWeight:600, color:'var(--heading)', textAlign:'left'}} scope="row">{row.label}</th>
+                        <td style={td}><TimingCell m={one} row={row} year={year} base={base}/></td>
+                        <td style={td}><TimingCell m={base} row={row} year={year}/></td>
+                        <td style={{...td, fontSize:15, color:'var(--heading)'}}>{clim?.[row.clim] != null ? timingValue(row, clim[row.clim], year) : '–'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{margin:'8px 0 0', fontSize:13, lineHeight:1.5, color:'var(--text-meta)'}}>
+                Median of the 25 members, the range 8 in 10 of them fall in, and the chance of each third of the
+                1993–2016 record. {cur.label}{cur.id === 'dunning' ? ' method' : ''}. The skill figures elsewhere on this
+                dashboard are for the seasonal forecast; this run has not yet been tested on past seasons.
+              </p>
+            </>
+          )}
+        </div>
+      </Card>
+
+      {pixelData && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+          <Card title="Daily rainfall of the 25 members" className="min-h-[300px]">
+            <div className="w-full h-[280px] p-2">
+              <PrecipPlume pixelData={pixelData} selectedModel="ECMWF SEAS5" activeModels={activeModels} selectedSeason="short_rains"/>
+            </div>
+          </Card>
+          <Card title={one?.method === 'icpac' ? 'Member onset and end dates' : 'Accumulated rainfall anomaly of the members'} className="min-h-[300px]">
+            <div className="w-full h-[280px] p-2">
+              {one?.method === 'icpac'
+                ? <MemberDatesChart stats={one} year={year}/>
+                : <ADPlume pixelData={pixelData} selectedModel="ECMWF SEAS5" activeModels={activeModels} selectedSeason="short_rains" selectedYear={year}/>}
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -2055,6 +2232,7 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
 const TABS = [
   {id:'forecast',      label:'Seasonal timing',      icon:BarChart3},
   {id:'probabilistic', label:'Probabilities',        icon:Percent},
+  {id:'subseasonal',   label:'Sub-seasonal & extended range', icon:CloudSun},
   {id:'multimodel',    label:'Compare models',       icon:Layers},
   {id:'validation',    label:'Forecast performance', icon:ShieldCheck},
   {id:'historical',    label:'Historical rainfall',  icon:HistoryIcon},
@@ -2069,7 +2247,9 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
     : (modelsData?.models ? Object.keys(modelsData.models) : [])
-  const tabs = isSingleModelSeason ? TABS.filter(t => t.id !== 'multimodel') : TABS
+  // the Sub-seasonal tab: Kenya Short Rains, once the weather-forecast run is served
+  const hasS2S = country === 'kenya' && selectedSeason === 'short_rains' && hasModel(modelsData, shortRainsModel(S2S_INIT))
+  const tabs = TABS.filter(t => !(isSingleModelSeason && t.id === 'multimodel') && (t.id !== 'subseasonal' || hasS2S))
   const selStyle = FILTER_SELECT
   const lbl = FILTER_LABEL
   const status = health?.status === 'ok' ? 'online' : healthError ? 'offline' : 'connecting'
@@ -2133,14 +2313,14 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                 <label style={lbl}>Forecast run</label>
                 <select value={selectedInit} onChange={e=>setSelectedInit(e.target.value)} style={selStyle}>
                   {SHORT_RAINS_INITS
-                    .filter(i => i.init === '0901' || Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === i.model || m?.raw_name === i.model))
+                    .filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model)))
                     .map(i=><option key={i.init} value={i.init}>{i.initLabel}</option>)}
                 </select>
                </div>
                 {setOnsetDef && (()=>{
                   // Every method run for any init is listed; one the selected init lacks (FAO: Oct runs only) names the
                   // runs that have it, and picking it switches to the latest of them
-                  const inits = SHORT_RAINS_INITS.filter(i => i.init === '0901' || hasModel(modelsData, i.model))
+                  const inits = SHORT_RAINS_INITS.filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model)))
                   const runsWith = d => d.id === 'dunning' ? inits : inits.filter(i => hasModel(modelsData, shortRainsModel(i.init, d.id)))
                   const here = d => runsWith(d).some(i => i.init === selectedInit)
                   const avail = ONSET_DEFS.filter(d => runsWith(d).length)
@@ -2232,13 +2412,18 @@ function readHash() {
   return { tab, sub, country: q.get('country'), season: q.get('season'), run: q.get('run'), method: q.get('method'), site }
 }
 
+// Addresses from before the Sub-seasonal tab named the weather-forecast run in the Forecast run selector
+// (run=1001w): they open that tab, and the other tabs fall back to the run with the same observations
+const tabFromUrl = u => u?.run === S2S_INIT && !FULL_PAGE_TABS.includes(u.tab) ? 'subseasonal' : TABS.some(t => t.id === u?.tab) ? u.tab : null
+const runFromUrl = r => r === S2S_INIT ? S2S_BASE_INIT : r
+
 // --- App ----------------------------------------------------------------------
 export default function App() {
   const urlRef = useRef(readHash())                    // address this visit opened with, applied once
   const opened = urlRef.current
   const [showLanding,   setShowLanding]   = useState(!opened)
   const [country,       setCountry]       = useState(SEASONS[opened?.country] ? opened.country : 'kenya')
-  const [activeTab,     setActiveTab]     = useState(TABS.some(t => t.id === opened?.tab) ? opened.tab : 'forecast')
+  const [activeTab,     setActiveTab]     = useState(tabFromUrl(opened) ?? 'forecast')
   const [aboutSection,  setAboutSection]  = useState(opened?.tab === 'about' ? (opened.sub || 'overview') : null)
   const [darkMode,      setDarkMode]      = useState(false)
   const [selectedModel, setSelectedModel] = useState('ECMWF SEAS5')
@@ -2264,7 +2449,7 @@ export default function App() {
       urlRef.current = null
       const s = (SEASONS[country] ?? SEASONS.kenya).find(x => x.id === u.season) ?? first
       setSelectedSeason(s.id)
-      setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? u.run : s.init)
+      setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? runFromUrl(u.run) : s.init)
       if (ONSET_DEFS.some(d => d.id === u.method)) setOnsetDef(u.method)
       setSelectedModel('ECMWF SEAS5')
       useDashboardStore.getState().setSelectedSite(u.site ? { ...u.site, country } : DEFAULT_SITES[country] ?? DEFAULT_SITES.kenya)
@@ -2311,7 +2496,7 @@ export default function App() {
     if (!showLanding) {
       if (activeTab === 'about') h = `#/about/${aboutSection ?? 'overview'}`
       else {
-        const q = new URLSearchParams({ country, season: selectedSeason, run: selectedInit })
+        const q = new URLSearchParams({ country, season: selectedSeason, run: activeTab === 'subseasonal' ? S2S_INIT : selectedInit })
         if (selectedSeason === 'short_rains') q.set('method', onsetDef)
         if (selectedSiteForUrl) q.set('site', `${(+selectedSiteForUrl.lat).toFixed(3)},${(+selectedSiteForUrl.lon).toFixed(3)}`)
         h = `#/${activeTab}?${String(q).replace(/%2C/g, ',')}`
@@ -2328,14 +2513,14 @@ export default function App() {
       const u = readHash()
       if (!u) { setShowLanding(true); return }
       setShowLanding(false)
-      if (TABS.some(t => t.id === u.tab)) setActiveTab(u.tab)
+      const t = tabFromUrl(u); if (t) setActiveTab(t)
       if (u.tab === 'about') { setAboutSection(u.sub || 'overview'); return }
       urlRef.current = u
       if (SEASONS[u.country] && u.country !== country) setCountry(u.country)
       else {   // same country: apply season, run, method and site directly
         urlRef.current = null
         const s = (SEASONS[country] ?? SEASONS.kenya).find(x => x.id === u.season)
-        if (s) { setSelectedSeason(s.id); setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? u.run : s.init) }
+        if (s) { setSelectedSeason(s.id); setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? runFromUrl(u.run) : s.init) }
         if (ONSET_DEFS.some(d => d.id === u.method)) setOnsetDef(u.method)
         if (u.site) useDashboardStore.getState().setSelectedSite({ ...u.site, country })
       }
@@ -2369,6 +2554,12 @@ export default function App() {
     }
   }, [selectedSeason, selectedModel, activeTab])
 
+  // the Sub-seasonal tab is only for Kenya Short Rains with the weather-forecast run served
+  useEffect(() => {
+    if (activeTab === 'subseasonal' && (country !== 'kenya' || selectedSeason !== 'short_rains' ||
+        (modelsData?.models && !hasModel(modelsData, shortRainsModel(S2S_INIT))))) setActiveTab('forecast')
+  }, [activeTab, country, selectedSeason, modelsData])
+
   useEffect(()=>{
     if (modelsData?.models) {
       const names=Object.keys(modelsData.models)
@@ -2384,11 +2575,11 @@ export default function App() {
   const isBega = selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const isKiremt = !isBega && selectedSeason === 'kiremt'
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
-  // Short Rains model for the chosen init + onset definition (falls back to Dunning if that preset is not served)
-  const srModel = (() => {
-    const m = shortRainsModel(selectedInit, onsetDef)
-    return modelsData?.models && !hasModel(modelsData, m) ? shortRainsModel(selectedInit) : m
-  })()
+  // Short Rains model for the chosen init + onset definition (falls back to Dunning if that preset is not served);
+  // the Sub-seasonal tab always shows the weather-forecast run
+  const runInit = activeTab === 'subseasonal' ? S2S_INIT : selectedInit
+  const srDef = modelsData?.models && !hasModel(modelsData, shortRainsModel(runInit, onsetDef)) ? 'dunning' : onsetDef
+  const srModel = shortRainsModel(runInit, srDef)
   const effectiveModel = isBega
     ? 'ECMWF SEAS5 (Bega)'
     : (isFmam
@@ -2401,6 +2592,9 @@ export default function App() {
   const { data: pixelData,  isLoading: pixelLoading } = usePixelStats(querySite, selectedSeason, effectiveModel)
   const { data: chirpsHist }                           = useChirpsHistorical(querySite, selectedSeason, selectedSeason === 'short_rains' ? effectiveModel : '')
   const { data: validationData }                       = useValidation()
+  // Sub-seasonal tab: the same observations and method without weather forecasts, for comparison
+  const baseModel = shortRainsModel(S2S_BASE_INIT, srDef)
+  const { data: baseData }                             = usePixelStats(activeTab === 'subseasonal' ? querySite : null, selectedSeason, baseModel)
 
   const modelsLoaded = !!modelsData?.models
   useEffect(()=>{
@@ -2511,7 +2705,7 @@ export default function App() {
             !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:flex' : 'flex'
           } flex-col ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
            {!FULL_PAGE_TABS.includes(activeTab) && (
-             <div className="shrink-0"><RunStatusBar modelsData={modelsData} model={effectiveModel} health={health} selectedSeason={selectedSeason} selectedInit={selectedInit}/></div>
+             <div className="shrink-0"><RunStatusBar modelsData={modelsData} model={effectiveModel} health={health} selectedSeason={selectedSeason} selectedInit={runInit}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -2519,6 +2713,7 @@ export default function App() {
               ? <RainfallStatsPanel pixelData={pixelData} isLoading={pixelLoading} model={effectiveModel} gridData={mapGridData}/>
               : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>)}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
+            {activeTab==='subseasonal'   && <SubseasonalTab  pixelData={pixelData} baseData={baseData} isLoading={pixelLoading} modelsData={modelsData} model={effectiveModel} baseModel={baseModel} onsetDef={srDef} setOnsetDef={setOnsetDef} selectedYear={selectedYear} activeModels={activeModels}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}

@@ -47,6 +47,8 @@
   --info-border:    rgba(74, 143, 196, 0.45);
   --caution-bg:     rgba(234, 179, 8, 0.14);
   --caution-text:   #fde68a;
+  /* rainfall sources of the weather-forecast run (Sub-seasonal tab): observed, ENS, extended range, SEAS5 */
+  --src-obs: #3987e5; --src-ens: #d95926; --src-ext: #199e70; --src-seas: #c98500;
   --focus:          #7db4e6;
   /* Coloured text that stays readable in each theme (regimes, states) */
   --r1-text:        #38bdf8;
@@ -97,6 +99,7 @@ html.light {
   --info-border:    #b9d3ee;
   --caution-bg:     #fef9c3;
   --caution-text:   #854d0e;
+  --src-obs: #2a78d6; --src-ens: #eb6834; --src-ext: #1baf7a; --src-seas: #eda100;
   --focus:          #1a5fa8;
   --r1-text:        #0369a1;
   --r2-text:        #15803d;
