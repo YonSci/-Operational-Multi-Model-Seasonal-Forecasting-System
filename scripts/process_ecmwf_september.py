@@ -238,7 +238,9 @@ def run_pipeline():
 
     # 4. Member-Wise Empirical Quantile Mapping Bias Correction (EQM-BC)
     print("\n[Step 4/5] Running member-wise Empirical Quantile Mapping daily bias correction ...")
-    ecmwf_bc = ecmwf_raw.copy()
+    # corrected in place (one array, not two: the daily update runs short of memory). Safe: each pixel-day's
+    # model pool and the values it maps are read before that pixel-day is overwritten, and nothing reads them later
+    ecmwf_bc = ecmwf_raw
 
     cal_mask_c = np.isin(chirps_years, CAL_YEARS)
     cal_mask_e = np.isin(file_years, CAL_YEARS)

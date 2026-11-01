@@ -198,7 +198,7 @@ def jan_feb(seasonal_dir, m_years, lat, lon, lm, c_years, c_daily, o26):
     cont = np.stack([np.concatenate([c_daily[int(np.where(c_years == y)[0][0]), BC_END_DOY - w:BC_END_DOY],
                                      next_year_obs(c_years, c_daily, o26, y, EXT_DAYS + w)]) for y in cal])
     cal_e = np.isin(m_years, pes.CAL_YEARS)
-    bc = raw.copy()
+    bc = raw                                        # in place, as process_ecmwf_september.py
     for pi, pj in np.argwhere(lm):
         for d in range(EXT_DAYS):
             c_pool = cont[:, d:d + 2 * w + 1, pi, pj].ravel()
