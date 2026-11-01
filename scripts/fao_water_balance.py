@@ -614,7 +614,7 @@ def seas5_oct_bc(cfg, m_years, lat, lon, lm):
     cal = list(range(*[cfg["sources"]["calibration_years"][0], cfg["sources"]["calibration_years"][1] + 1]))
     pool = np.stack([chirps3_season(y, t0, n_day + 2 * w, lat, lon) for y in cal])     # (cal, n_day + 2w, lat, lon)
     cal_e = np.isin(m_years, cal)
-    bc = raw.copy()
+    bc = raw                                                            # in place, as process_ecmwf_september.py
     for pi, pj in np.argwhere(lm):
         for d in range(n_day):
             c_pool = pool[:, d:d + 2 * w + 1, pi, pj].ravel()
