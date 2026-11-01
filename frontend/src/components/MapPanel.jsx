@@ -150,6 +150,9 @@ function cleanGeoJSON(data) {
 
 // -- Colour scales ----------------------------------------------------------
 const CS = {
+  // Medium-range forecast rainfall (Forecast tab, Medium-range): fixed steps, so models and runs compare directly
+  mrf_d7:       { s:[0,5,10,25,50,75,100],         c:['#f7fcf0','#ccebc5','#a8ddb5','#7bccc4','#43a2ca','#0868ac','#084081'], label:'Forecast rainfall, next 7 days (mm)' },
+  mrf_all:      { s:[0,10,25,50,100,150,200],      c:['#f7fcf0','#ccebc5','#a8ddb5','#7bccc4','#43a2ca','#0868ac','#084081'], label:'Forecast rainfall, whole forecast (mm)' },
   onset_med:    { s:[50,65,75,85,95,105,120],    c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Ensemble onset P50 (DOY)' },
   onset_anom:   { s:[-20,-10,-5,0,5,10,20],      c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Onset anomaly (days)' },
   onset_spread: { s:[0,5,10,15,20,25],            c:['#f7fbff','#c6dbef','#9ecae1','#4292c6','#2171b5','#084594'],           label:'Onset spread (days)' },
@@ -388,8 +391,8 @@ function getEffectiveScale(scaleId, season = 'long_rains', gridData = null, seas
   const isProbability = scaleId.includes('prob') || scaleId.includes('failure') || scaleId.includes('tercile')
   const isSkill = scaleId.startsWith('v_') || scaleId.includes('det') || scaleId.includes('alpha')
 
-  // Keep fixed probability scale (0 to 0.6 or 0 to 1) and fixed skill bounds
-  if (isProbability || isSkill) return base
+  // Keep fixed probability scale (0 to 0.6 or 0 to 1), fixed skill bounds and fixed forecast-rainfall steps
+  if (isProbability || isSkill || scaleId.startsWith('mrf')) return base
 
   const nSteps = base.s.length
   let newS = [...base.s]
@@ -440,6 +443,13 @@ const LAYERS = [
   { id:'lgp_anom',     label:'Season Length Anomaly', group:'Anomaly', variable:'lgp',     layer:'anomaly' },
   // Probabilistic Terciles
   { id:'tercile_rainfall', label:'Rainfall Terciles (OND 2026)', group:'Tercile', variable:'rainfall', layer:'tercile' },
+]
+
+// Medium-range layers -- shown when App passes activeTab === 'medium' (Forecast tab, Medium-range forecasts);
+// App builds their grid from the tracker's forecast.csv
+const MRF_LAYERS = [
+  { id:'mrf_d7',  label:'Rainfall, next 7 days',   variable:'mrf', layer:'d7'  },
+  { id:'mrf_all', label:'Rainfall, whole forecast', variable:'mrf', layer:'all' },
 ]
 
 // Probabilistic-only layers -- shown only when activeTab === 'probabilistic'
@@ -609,6 +619,11 @@ function buildRaster(gridData, scale, seasonalMaskOnly = true) {
 
 function fmtTip(props, L, year = 2026, activeSeason = '') {
   if (!props) return null
+  if ((L ?? '').startsWith('mrf')) return [
+    (L === 'mrf_d7' ? 'Rainfall, next 7 days: ' : 'Rainfall, whole forecast: ') + (props.map_val != null ? Number(props.map_val).toFixed(0) + ' mm' : 'no data'),
+    props.model_label ?? '',
+    'Grid: ' + Number(props.lat).toFixed(2) + '°N,  ' + Number(props.lon).toFixed(2) + '°E (0.5°)',
+  ].filter(Boolean)
   const lines = [], mv = props.map_val
   L = L ?? ''
 
@@ -1025,6 +1040,7 @@ export default function MapPanel({
     activeTab==='historical'?'h_onset_p50':
     activeTab==='probabilistic'?'p_onset_bn':
     activeTab==='multimodel'?'onset_med':
+    activeTab==='medium'?'mrf_d7':
     'onset_med'
   )
   const [showLayers, setShowLayers]  = useState(false)
@@ -1044,6 +1060,10 @@ export default function MapPanel({
       setActiveLayer(cfg.id); if (onLayerChange) onLayerChange({variable:cfg.variable,layer:cfg.layer})
     } else if (activeTab === 'validation') {
       const cfg = VAL_LAYERS[0]
+      setActiveLayer(cfg.id)
+      if (onLayerChange) onLayerChange({variable: cfg.variable, layer: cfg.layer})
+    } else if (activeTab === 'medium') {
+      const cfg = MRF_LAYERS[0]
       setActiveLayer(cfg.id)
       if (onLayerChange) onLayerChange({variable: cfg.variable, layer: cfg.layer})
     } else {
@@ -1073,6 +1093,7 @@ export default function MapPanel({
     activeTab === 'historical'    ? HIST_LAYERS :
     activeTab === 'probabilistic' ? PROB_LAYERS :
     activeTab === 'multimodel'    ? MULTI_LAYERS :
+    activeTab === 'medium'        ? MRF_LAYERS :
     LAYERS
   )
   const layerCfg = ALL_LAYERS.find(l => l.id === activeLayer) ?? ALL_LAYERS[0]
@@ -1087,6 +1108,7 @@ export default function MapPanel({
       activeTab === 'historical'    ? HIST_LAYERS :
       activeTab === 'probabilistic' ? PROB_LAYERS :
       activeTab === 'multimodel'    ? MULTI_LAYERS :
+      activeTab === 'medium'        ? MRF_LAYERS :
       LAYERS
     )
     const cfg = allL.find(l=>l.id===layerId)??allL[0]
@@ -1509,7 +1531,23 @@ export default function MapPanel({
             <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
           </button>
         {showLayers && (
-          activeTab === 'probabilistic' ? (
+          activeTab === 'medium' ? (
+            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
+                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:200,display:'grid',gap:4}}>
+              {MRF_LAYERS.map(l=>{
+                const active=l.id===activeLayer
+                return (
+                  <button key={l.id} onClick={()=>handleLayerChange(l.id)}
+                    style={{padding:'6px 8px',borderRadius:5,fontSize:11,cursor:'pointer',textAlign:'left',
+                            border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
+                            background:active?'var(--accent-blue)':'var(--bg-surface)',
+                            color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
+                    {l.label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : activeTab === 'probabilistic' ? (
             <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
                          background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:280}}>
               <div style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>

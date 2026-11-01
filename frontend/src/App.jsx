@@ -1,14 +1,15 @@
 import React, { Fragment, useEffect, useState, useMemo, useRef } from 'react'
 import {
-  ComposedChart, Line, Area, Scatter, Customized, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Line, Area, Bar, Scatter, Customized, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer
 } from 'recharts'
+import { useQuery } from '@tanstack/react-query'
 import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation, useRainStats, API_BASE } from './api/queries'
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
 import { version } from '../package.json'
-import { BarChart3, Percent, CloudSun, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon } from 'lucide-react'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
@@ -2138,11 +2139,10 @@ function TimingCell({ m, row, year, base }) {
   )
 }
 
-function SubseasonalTab({ pixelData, baseData, isLoading, modelsData, model, baseModel, onsetDef, setOnsetDef, selectedYear, activeModels }) {
+function SubseasonalTab({ pixelData, baseData, isLoading, modelsData, model, baseModel, onsetDef, selectedYear, activeModels }) {
   const year = selectedYear ?? 2026
   const entry = runEntry(modelsData, model)
-  const avail = ONSET_DEFS.filter(d => d.id === 'dunning' || hasModel(modelsData, shortRainsModel(S2S_INIT, d.id)))
-  const cur = avail.find(d => d.id === onsetDef) ?? ONSET_DEFS[0]
+  const cur = ONSET_DEFS.find(d => d.id === onsetDef) ?? ONSET_DEFS[0]
   const pick = (data, name) => data?.models?.[name] ?? data?.models?.['ECMWF SEAS5']
   const one = pick(pixelData, model), base = pick(baseData, baseModel)
   const clim = one?.chirps_clim ?? pixelData?.chirps_clim
@@ -2151,16 +2151,6 @@ function SubseasonalTab({ pixelData, baseData, isLoading, modelsData, model, bas
   const td = {padding:'8px 10px', borderBottom:'1px solid var(--border-primary)', verticalAlign:'top'}
   return (
     <div className="flex flex-col gap-2 p-0.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 rounded-lg" style={{background:'var(--bg-elevated)', border:'1px solid var(--border-primary)'}}>
-        <div className="flex items-center gap-2">
-          <label style={FILTER_LABEL} title={cur.title}>Method</label>
-          <select value={cur.id} onChange={e => setOnsetDef(e.target.value)} style={FILTER_SELECT} title={cur.title}>
-            {avail.map(d => <option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
-          </select>
-        </div>
-        <span style={{fontSize:13, color:'var(--text-meta)'}}>Kenya · Short Rains {year} · ECMWF, 25 members</span>
-      </div>
-
       <Card title="Where each day's rainfall comes from">
         <div className="p-3">
           <p style={{margin:'0 0 10px', fontSize:14, lineHeight:1.55, color:'var(--text-secondary)'}}>
@@ -2228,11 +2218,213 @@ function SubseasonalTab({ pixelData, baseData, isLoading, modelsData, model, bas
   )
 }
 
+// --- Medium-range forecasts (Forecast tab) --------------------------------------------
+// The Short Rains Tracker's daily weather-model forecasts (scripts/fetch_nwp_direct.py): tracker/data/forecast.csv,
+// daily rain by model on a 0.5° Kenya grid, and products.csv, each model's run date.
+// Colours follow the model, in this fixed order (categorical slots 1-6, validated light and dark).
+const MRF_ORDER = ['ecmwf_ifs025', 'ecmwf_ens_median', 'gfs_global', 'gem_global', 'icon_global', 'ukmo_global_deterministic_10km']
+const MRF_COLORS = {
+  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6'],
+  dark:  ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'],
+}
+const mrfRank = id => { const i = MRF_ORDER.indexOf(id); return i < 0 ? MRF_ORDER.length : i }
+const mrfColor = (id, dark) => MRF_COLORS[dark ? 'dark' : 'light'][Math.min(mrfRank(id), MRF_ORDER.length - 1)]
+function parseCsv(text) {
+  const rows = []; let row = [], f = '', q = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++ } else q = false } else f += c }
+    else if (c === '"') q = true
+    else if (c === ',') { row.push(f); f = '' }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = '' }
+    else f += c
+  }
+  if (f || row.length) { row.push(f); rows.push(row) }
+  const [head = [], ...body] = rows
+  return body.filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((h, i) => [h, r[i]])))
+}
+function useMediumRange(enabled) {
+  return useQuery({
+    queryKey: ['medium-range'],
+    enabled,
+    staleTime: 30 * 60_000,
+    queryFn: async () => {
+      const [fc, pr] = await Promise.all(['tracker/data/forecast.csv', 'tracker/data/products.csv'].map(u =>
+        fetch(u).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text() })))
+      const runs = Object.fromEntries(parseCsv(pr).filter(p => p.kind === 'nwp').map(p => [p.id, p]))
+      const models = {}
+      for (const r of parseCsv(fc)) {
+        const m = models[r.model] ??= { id: r.model, label: r.model_label, dates: new Set(), cells: {} }
+        m.dates.add(r.date)
+        ;(m.cells[r.lat + ',' + r.lon] ??= {})[r.date] = Number(r.rain_mm)
+      }
+      return Object.values(models)
+        .map(m => ({ ...m, dates: [...m.dates].sort(), run: runs[m.id]?.run_date || null }))
+        .sort((a, b) => mrfRank(a.id) - mrfRank(b.id))
+    },
+  })
+}
+// the model's 0.5° cell nearest the location (none farther than about one cell)
+const mrfCell = (m, site) => {
+  if (!m || !site) return null
+  let best = null, bd = Infinity
+  for (const k of Object.keys(m.cells)) {
+    const [la, lo] = k.split(',').map(Number), d = (la - site.lat) ** 2 + (lo - site.lon) ** 2
+    if (d < bd) { bd = d; best = k }
+  }
+  return bd <= 0.5 ? best : null
+}
+const mrfTotal = (m, key, n) => key ? m.dates.slice(0, n ?? m.dates.length).reduce((a, d) => a + (m.cells[key][d] ?? 0), 0) : null
+// first day starting more than 20 mm in 3 days (the Agri rule 1 trigger, without its dry-spell check)
+const mrfPlanting = (m, key) => {
+  if (!key) return null
+  const r = m.dates.map(d => m.cells[key][d] ?? 0)
+  const i = r.findIndex((v, j) => j + 2 < r.length && v >= 1 && v + r[j + 1] + r[j + 2] > 20)
+  return i < 0 ? null : m.dates[i]
+}
+const mrfGrid = (m, layer) => m ? ({
+  type: 'FeatureCollection', meta: { variable: 'mrf', layer },
+  features: Object.keys(m.cells).map(k => {
+    const [lat, lon] = k.split(',').map(Number)
+    const v = mrfTotal(m, k, layer === 'd7' ? 7 : undefined)
+    return { type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [[[lon - .25, lat - .25], [lon + .25, lat - .25], [lon + .25, lat + .25], [lon - .25, lat + .25], [lon - .25, lat - .25]]] },
+      properties: { lat, lon, map_val: Math.round(v * 10) / 10, in_season_mask: true, model_label: m.label } }
+  }),
+}) : null
+const shortDate = iso => { const [, mo, d] = iso.split('-').map(Number); return `${d} ${MONTHS[mo - 1]}` }
+
+function MediumRangePanel({ models, isLoading, isError, modelId, site, dark }) {
+  const msg = t => <div className="flex items-center justify-center min-h-[240px] p-6 text-center" style={{fontSize:14, color:'var(--text-meta)'}}>{t}</div>
+  if (isError) return msg('The weather-model forecasts could not be loaded. The Short Rains Tracker tab shows the same forecasts.')
+  if (!models?.length) return msg(isLoading ? 'Loading the weather-model forecasts…' : 'No weather-model forecasts are available.')
+  const sel = models.find(m => m.id === modelId) ?? models[0]
+  const cells = Object.fromEntries(models.map(m => [m.id, mrfCell(m, site)]))
+  const key = cells[sel.id]
+  const ax = { fontSize: 12, fill: 'var(--text-meta)' }
+  const tip = { background:'var(--bg-surface)', border:'1px solid var(--border-primary)', borderRadius:8, fontSize:12 }
+  const card = (title, body) => <Card title={title}><div className="p-3">{body}</div></Card>
+  const head = (
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2 px-3 py-2 rounded-lg" style={{background:'var(--bg-surface)', border:'1px solid var(--border-primary)'}}>
+      {[['Model', sel.label], ['Run', sel.run ? `${fmtDate(sel.run)}, 00 UTC` : '–'],
+        ['Forecast days', `${fmtSpan(sel.dates[0], sel.dates.at(-1))} · ${sel.dates.length} days`], ['Grid', '0.5°, daily rainfall']].map(([l, v]) => (
+        <div key={l} style={{display:'flex', flexDirection:'column'}}>
+          <span style={{fontSize:12, color:'var(--text-meta)'}}>{l}</span>
+          <span style={{fontSize:13.5, fontWeight:600, color:'var(--heading)'}}>{v}</span>
+        </div>
+      ))}
+    </div>
+  )
+  if (!key) return <div className="flex flex-col gap-2 p-0.5">{head}{msg('Choose a location in Kenya on the map to see its forecast.')}</div>
+  const daily = sel.dates.map(d => ({ d: shortDate(d), rain: sel.cells[key][d] ?? null }))
+  const allDates = [...new Set(models.flatMap(m => m.dates))].sort()
+  const cum = allDates.map(d => Object.fromEntries([['d', shortDate(d)], ...models.map(m => {
+    const k = cells[m.id], i = m.dates.indexOf(d)
+    return [m.id, k && i >= 0 ? Math.round(mrfTotal(m, k, i + 1) * 10) / 10 : null]
+  })]))
+  const plant = mrfPlanting(sel, key)
+  const wet = daily.filter(r => r.rain >= 1).length
+  const mm = v => v == null ? '–' : Math.round(v) + ' mm'
+  const stat = (label, value, sub) => (
+    <div style={{padding:'8px 12px', borderRadius:8, background:'var(--bg-elevated)', border:'1px solid var(--border-primary)'}}>
+      <div style={{fontSize:12, color:'var(--text-meta)'}}>{label}</div>
+      <div style={{fontSize:18, fontWeight:600, color:'var(--heading)', fontVariantNumeric:'tabular-nums'}}>{value}</div>
+      {sub && <div style={{fontSize:12, color:'var(--text-meta)'}}>{sub}</div>}
+    </div>
+  )
+  const th = {textAlign:'left', fontSize:12.5, fontWeight:600, color:'var(--text-meta)', padding:'6px 10px', borderBottom:'1px solid var(--border-primary)'}
+  const td = {padding:'7px 10px', borderBottom:'1px solid var(--border-primary)', fontSize:13.5, color:'var(--text-secondary)', fontVariantNumeric:'tabular-nums'}
+  return (
+    <div className="flex flex-col gap-2 p-0.5">
+      {head}
+      {card(`Rainfall at this location${site?.site_name ? ' · ' + site.site_name : ''}`, (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2" style={{marginBottom:12}}>
+            {stat('Next 3 days', mm(mrfTotal(sel, key, 3)))}
+            {stat('Next 7 days', mm(mrfTotal(sel, key, 7)))}
+            {stat(`Whole forecast (${sel.dates.length} days)`, mm(mrfTotal(sel, key)), `${wet} days with ≥ 1 mm`)}
+            {stat('First > 20 mm in 3 days', plant ? shortDate(plant) : 'None', plant ? 'possible planting rain' : 'in this forecast')}
+          </div>
+          <div style={{height:240}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={daily} margin={{top:8, right:8, bottom:0, left:0}}>
+                <CartesianGrid vertical={false} stroke="var(--border-primary)"/>
+                <XAxis dataKey="d" tick={ax} interval="preserveStartEnd" minTickGap={12}/>
+                <YAxis tick={ax} width={56} tickFormatter={v => v + " mm"} allowDecimals={false}/>
+                <Tooltip formatter={v => [v == null ? '–' : v.toFixed(1) + ' mm', 'Daily rainfall']} cursor={{fill:'var(--bg-elevated)'}} contentStyle={tip}/>
+                <Bar dataKey="rain" fill={mrfColor(sel.id, dark)} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false}/>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <p style={{margin:'6px 0 0', fontSize:12.5, lineHeight:1.5, color:'var(--text-meta)'}}>
+            Daily rainfall from {sel.label} in the nearest 0.5° cell ({key.split(',').map(v => Number(v).toFixed(2)).join(', ')}). More than
+            20 mm in 3 days can start the planting rains; a dry spell afterwards can still end them, which a 1–2 week forecast cannot rule out.
+          </p>
+        </>
+      ))}
+      {card('All models: accumulated rainfall at this location', (
+        <>
+          <div style={{height:240}}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={cum} margin={{top:8, right:8, bottom:0, left:0}}>
+                <CartesianGrid vertical={false} stroke="var(--border-primary)"/>
+                <XAxis dataKey="d" tick={ax} interval="preserveStartEnd" minTickGap={12}/>
+                <YAxis tick={ax} width={56} tickFormatter={v => v + " mm"} allowDecimals={false}/>
+                <Tooltip contentStyle={tip} formatter={(v, id) => [v == null ? '–' : Math.round(v) + ' mm', models.find(m => m.id === id)?.label ?? id]}/>
+                {models.map(m => <Line key={m.id} dataKey={m.id} stroke={mrfColor(m.id, dark)} strokeWidth={m.id === sel.id ? 3 : 2}
+                                       dot={false} connectNulls={false} isAnimationActive={false}/>)}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <ul style={{listStyle:'none', margin:'8px 0 10px', padding:0, display:'flex', flexWrap:'wrap', gap:'4px 16px', fontSize:13, color:'var(--text-secondary)'}}>
+            {models.map(m => (
+              <li key={m.id} style={{display:'flex', alignItems:'center', gap:6, fontWeight: m.id === sel.id ? 600 : 400}}>
+                <span aria-hidden="true" style={{width:14, height:3, borderRadius:2, background:mrfColor(m.id, dark)}}/>{m.label}
+              </li>
+            ))}
+          </ul>
+          <div className="overflow-x-auto touch-scroll">
+            <table style={{width:'100%', minWidth:480, borderCollapse:'collapse'}}>
+              <thead><tr>{['Model', 'Run', 'Forecast to', 'Next 7 days', 'Whole forecast', 'First > 20 mm in 3 days'].map(h => <th key={h} style={th} scope="col">{h}</th>)}</tr></thead>
+              <tbody>
+                {models.map(m => {
+                  const k = cells[m.id], pl = mrfPlanting(m, k)
+                  return (
+                    <tr key={m.id}>
+                      <th scope="row" style={{...td, textAlign:'left', fontWeight: m.id === sel.id ? 700 : 600, color:'var(--heading)'}}>{m.label}</th>
+                      <td style={td}>{m.run ? shortDate(m.run) : '–'}</td>
+                      <td style={td}>{shortDate(m.dates.at(-1))} ({m.dates.length} d)</td>
+                      <td style={td}>{mm(mrfTotal(m, k, 7))}</td>
+                      <td style={td}>{mm(mrfTotal(m, k))}</td>
+                      <td style={td}>{k ? (pl ? shortDate(pl) : 'None') : '–'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{margin:'6px 0 0', fontSize:12.5, lineHeight:1.5, color:'var(--text-meta)'}}>
+            Each model's latest 00 UTC run, as used by the Short Rains Tracker; the models forecast different numbers of days.
+            The forecasts are not bias-corrected. ECMWF ENS is the median of its members.
+          </p>
+        </>
+      ))}
+    </div>
+  )
+}
+
+// Forecast tab: the kind of forecast (header toolbar). Sub-seasonal: Kenya Short Rains once the weather-forecast
+// run is served; Medium-range: Kenya.
+const FORECAST_TYPES = [
+  { id:'seasonal',    label:'Seasonal' },
+  { id:'subseasonal', label:'Sub-seasonal forecasts (weeks 2–6)' },
+  { id:'medium',      label:'Medium-range forecasts (7–16 days)' },
+]
+
 // --- TABS + TopNav ------------------------------------------------------------
 const TABS = [
-  {id:'forecast',      label:'Seasonal timing',      icon:BarChart3},
+  {id:'forecast',      label:'Forecast',             icon:BarChart3},
   {id:'probabilistic', label:'Probabilities',        icon:Percent},
-  {id:'subseasonal',   label:'Sub-seasonal & extended range', icon:CloudSun},
   {id:'multimodel',    label:'Compare models',       icon:Layers},
   {id:'validation',    label:'Forecast performance', icon:ShieldCheck},
   {id:'historical',    label:'Historical rainfall',  icon:HistoryIcon},
@@ -2242,14 +2434,13 @@ const TABS = [
 // Tabs that take the full width (no map panel beside them)
 const FULL_PAGE_TABS = ['about', 'tracker']
 
-function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
+function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, forecastType, setForecastType, mrfModels, mrfModel, setMrfModel, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
   const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
     : (modelsData?.models ? Object.keys(modelsData.models) : [])
-  // the Sub-seasonal tab: Kenya Short Rains, once the weather-forecast run is served
-  const hasS2S = country === 'kenya' && selectedSeason === 'short_rains' && hasModel(modelsData, shortRainsModel(S2S_INIT))
-  const tabs = TABS.filter(t => !(isSingleModelSeason && t.id === 'multimodel') && (t.id !== 'subseasonal' || hasS2S))
+  const tabs = isSingleModelSeason ? TABS.filter(t => t.id !== 'multimodel') : TABS
+  const typeOptions = FORECAST_TYPES.filter(t => forecastTypeAvailable(t.id, country, selectedSeason, modelsData))
   const selStyle = FILTER_SELECT
   const lbl = FILTER_LABEL
   const status = health?.status === 'ok' ? 'online' : healthError ? 'offline' : 'connecting'
@@ -2291,7 +2482,44 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
           </select>
         </div>
 
-        {activeTab==='forecast'&&(
+        {activeTab==='forecast' && typeOptions.length > 1 && (
+          <div className="flex items-center gap-2">
+            <label style={lbl}>Forecast</label>
+            <select value={forecastType} onChange={e=>setForecastType(e.target.value)} style={selStyle}>
+              {typeOptions.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+        )}
+        {activeTab==='forecast' && forecastType==='subseasonal' && (()=>{
+          // one sub-seasonal system so far; the methods are those run on the weather-forecast run
+          const avail = ONSET_DEFS.filter(d => d.id === 'dunning' || hasModel(modelsData, shortRainsModel(S2S_INIT, d.id)))
+          const cur = avail.find(d => d.id === onsetDef) ?? ONSET_DEFS[0]
+          return (
+            <>
+              <div className="flex items-center gap-2">
+                <label style={lbl}>Model</label>
+                <select value="ecmwf" onChange={()=>{}} style={selStyle} title="ECMWF ENS for days 1–15 and the ECMWF extended range to about day 46, then SEAS5">
+                  <option value="ecmwf">ECMWF ENS + extended range</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label style={lbl} title={cur.title}>Method</label>
+                <select value={cur.id} onChange={e=>setOnsetDef(e.target.value)} style={selStyle} title={cur.title}>
+                  {avail.map(d=><option key={d.id} value={d.id} title={d.title}>{d.label}</option>)}
+                </select>
+              </div>
+            </>
+          )
+        })()}
+        {activeTab==='forecast' && forecastType==='medium' && (
+          <div className="flex items-center gap-2">
+            <label style={lbl}>Model</label>
+            <select value={mrfModel} onChange={e=>setMrfModel(e.target.value)} style={selStyle} disabled={!mrfModels?.length}>
+              {(mrfModels?.length ? mrfModels : [{ id: mrfModel, label: 'Loading…' }]).map(m=><option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>
+        )}
+        {activeTab==='forecast'&&forecastType==='seasonal'&&(
           <div className="contents">
             <div className="flex items-center gap-2">
               <label style={lbl}>Model</label>
@@ -2409,12 +2637,18 @@ function readHash() {
   const s = (q.get('site') ?? '').split(',')
   const site = s.length >= 2 && s[0] !== '' && Number.isFinite(+s[0]) && Number.isFinite(+s[1])
     ? { lat: +s[0], lon: +s[1], site_name: 'Selected location' } : null
-  return { tab, sub, country: q.get('country'), season: q.get('season'), run: q.get('run'), method: q.get('method'), site }
+  return { tab, sub, country: q.get('country'), season: q.get('season'), run: q.get('run'), method: q.get('method'),
+           type: q.get('type'), model: q.get('model'), site }
 }
 
-// Addresses from before the Sub-seasonal tab named the weather-forecast run in the Forecast run selector
-// (run=1001w): they open that tab, and the other tabs fall back to the run with the same observations
-const tabFromUrl = u => u?.run === S2S_INIT && !FULL_PAGE_TABS.includes(u.tab) ? 'subseasonal' : TABS.some(t => t.id === u?.tab) ? u.tab : null
+// The weather-forecast run is the Forecast tab's Sub-seasonal view (type=subseasonal). Older addresses named it as
+// a run (run=1001w) or a tab (#/subseasonal): they open that view, and the other tabs fall back to the run with the
+// same observations
+const forecastTypeAvailable = (id, country, season, modelsData) =>
+  id === 'seasonal' || (country === 'kenya' && (id === 'medium' || (season === 'short_rains' && hasModel(modelsData, shortRainsModel(S2S_INIT)))))
+const isOldS2S = u => u?.tab === 'subseasonal' || (u?.run === S2S_INIT && !FULL_PAGE_TABS.includes(u?.tab))
+const tabFromUrl = u => isOldS2S(u) ? 'forecast' : TABS.some(t => t.id === u?.tab) ? u.tab : null
+const typeFromUrl = u => FORECAST_TYPES.some(t => t.id === u?.type) ? u.type : isOldS2S(u) ? 'subseasonal' : null
 const runFromUrl = r => r === S2S_INIT ? S2S_BASE_INIT : r
 
 // --- App ----------------------------------------------------------------------
@@ -2432,6 +2666,8 @@ export default function App() {
   const [selectedYear,  setSelectedYear]  = useState(2026)
   const [selectedInit,  setSelectedInit]  = useState('0901')
   const [onsetDef,      setOnsetDef]      = useState('dunning')
+  const [forecastType,  setForecastType]  = useState(typeFromUrl(opened) ?? 'seasonal')   // Forecast tab: seasonal | subseasonal | medium
+  const [mrfModel,      setMrfModel]      = useState(opened?.type === 'medium' && opened.model ? opened.model : 'ecmwf_ens_median')
   const [selectedSeason,setSelectedSeason]= useState('short_rains')
   const [bulletinModalOpen, setBulletinModalOpen] = useState(false)
   const [mobileViewMode, setMobileViewMode]       = useState('split') // 'split' | 'map' | 'charts'
@@ -2496,8 +2732,10 @@ export default function App() {
     if (!showLanding) {
       if (activeTab === 'about') h = `#/about/${aboutSection ?? 'overview'}`
       else {
-        const q = new URLSearchParams({ country, season: selectedSeason, run: activeTab === 'subseasonal' ? S2S_INIT : selectedInit })
-        if (selectedSeason === 'short_rains') q.set('method', onsetDef)
+        const q = new URLSearchParams({ country, season: selectedSeason, run: selectedInit })
+        if (activeTab === 'forecast' && forecastType !== 'seasonal') q.set('type', forecastType)
+        if (activeTab === 'forecast' && forecastType === 'medium') q.set('model', mrfModel)
+        else if (selectedSeason === 'short_rains') q.set('method', onsetDef)
         if (selectedSiteForUrl) q.set('site', `${(+selectedSiteForUrl.lat).toFixed(3)},${(+selectedSiteForUrl.lon).toFixed(3)}`)
         h = `#/${activeTab}?${String(q).replace(/%2C/g, ',')}`
       }
@@ -2507,13 +2745,15 @@ export default function App() {
     const url = h || window.location.pathname + window.location.search
     if (h.split('?')[0] !== cur.split('?')[0]) window.history.pushState(null, '', url)
     else window.history.replaceState(null, '', url)
-  },[showLanding, activeTab, aboutSection, country, selectedSeason, selectedInit, onsetDef, selectedSiteForUrl])
+  },[showLanding, activeTab, aboutSection, country, selectedSeason, selectedInit, onsetDef, forecastType, mrfModel, selectedSiteForUrl])
   useEffect(()=>{
     const onPop = () => {
       const u = readHash()
       if (!u) { setShowLanding(true); return }
       setShowLanding(false)
       const t = tabFromUrl(u); if (t) setActiveTab(t)
+      setForecastType(typeFromUrl(u) ?? 'seasonal')
+      if (u.type === 'medium' && u.model) setMrfModel(u.model)
       if (u.tab === 'about') { setAboutSection(u.sub || 'overview'); return }
       urlRef.current = u
       if (SEASONS[u.country] && u.country !== country) setCountry(u.country)
@@ -2554,11 +2794,11 @@ export default function App() {
     }
   }, [selectedSeason, selectedModel, activeTab])
 
-  // the Sub-seasonal tab is only for Kenya Short Rains with the weather-forecast run served
+  // a forecast type the country or season does not have falls back to Seasonal (once the season's runs are known)
   useEffect(() => {
-    if (activeTab === 'subseasonal' && (country !== 'kenya' || selectedSeason !== 'short_rains' ||
-        (modelsData?.models && !hasModel(modelsData, shortRainsModel(S2S_INIT))))) setActiveTab('forecast')
-  }, [activeTab, country, selectedSeason, modelsData])
+    if (forecastType !== 'seasonal' && (modelsData?.models || country !== 'kenya') &&
+        !forecastTypeAvailable(forecastType, country, selectedSeason, modelsData)) setForecastType('seasonal')
+  }, [forecastType, country, selectedSeason, modelsData])
 
   useEffect(()=>{
     if (modelsData?.models) {
@@ -2577,7 +2817,8 @@ export default function App() {
   const isFmam = !isBega && (selectedSeason === 'fmam' || selectedSeason === 'belg')
   // Short Rains model for the chosen init + onset definition (falls back to Dunning if that preset is not served);
   // the Sub-seasonal tab always shows the weather-forecast run
-  const runInit = activeTab === 'subseasonal' ? S2S_INIT : selectedInit
+  const isMedium = activeTab === 'forecast' && forecastType === 'medium'
+  const runInit = activeTab === 'forecast' && forecastType === 'subseasonal' ? S2S_INIT : selectedInit
   const srDef = modelsData?.models && !hasModel(modelsData, shortRainsModel(runInit, onsetDef)) ? 'dunning' : onsetDef
   const srModel = shortRainsModel(runInit, srDef)
   const effectiveModel = isBega
@@ -2594,11 +2835,15 @@ export default function App() {
   const { data: validationData }                       = useValidation()
   // Sub-seasonal tab: the same observations and method without weather forecasts, for comparison
   const baseModel = shortRainsModel(S2S_BASE_INIT, srDef)
-  const { data: baseData }                             = usePixelStats(activeTab === 'subseasonal' ? querySite : null, selectedSeason, baseModel)
+  const { data: baseData }                             = usePixelStats(runInit === S2S_INIT ? querySite : null, selectedSeason, baseModel)
+  // Medium-range: the tracker's weather-model forecasts; the map shows the chosen model's rainfall totals
+  const { data: mrfModels, isLoading: mrfLoading, isError: mrfError } = useMediumRange(isMedium)
+  const mrfSel = mrfModels?.find(m => m.id === mrfModel) ?? mrfModels?.[0]
+  const mrfGridData = useMemo(() => isMedium ? mrfGrid(mrfSel, mapLayer.layer === 'all' ? 'all' : 'd7') : null, [isMedium, mrfSel, mapLayer.layer])
 
   const modelsLoaded = !!modelsData?.models
   useEffect(()=>{
-    if (!modelsLoaded||!selectedModel) return
+    if (!modelsLoaded||!selectedModel||isMedium||mapLayer.variable==='mrf') return
     let model = selectedModel!=='multimodel'?selectedModel:''
     if (selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr') {
       model = 'ECMWF SEAS5 (Bega)'
@@ -2617,7 +2862,7 @@ export default function App() {
       .then(data=>setMapGridData(data))
       .catch(err=>{if(err.name!=='AbortError') console.warn('[Grid fetch error]',err)})
     return ()=>ctrl.abort()
-  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason,selectedInit,srModel])
+  },[selectedModel,mapLayer.variable,mapLayer.layer,modelsLoaded,selectedSeason,selectedInit,srModel,isMedium])
 
   if (showLanding) {
     return (
@@ -2639,6 +2884,8 @@ export default function App() {
               selectedYear={selectedYear} setSelectedYear={setSelectedYear}
               selectedInit={selectedInit} setSelectedInit={setSelectedInit}
               onsetDef={onsetDef} setOnsetDef={setOnsetDef}
+              forecastType={forecastType} setForecastType={setForecastType}
+              mrfModels={mrfModels} mrfModel={mrfSel?.id ?? mrfModel} setMrfModel={setMrfModel}
               onOpenBulletin={()=>setBulletinModalOpen(true)}
               darkMode={darkMode} setDarkMode={setDarkMode}/>
 
@@ -2689,9 +2936,9 @@ export default function App() {
               <MapPanel
                 darkMode={darkMode}
                 selectedModel={selectedModel}
-                gridData={mapGridData}
+                gridData={isMedium ? mrfGridData : mapGridData}
                 onLayerChange={setMapLayer}
-                activeTab={activeTab}
+                activeTab={isMedium ? 'medium' : activeTab}
                 country={country}
                 selectedSeason={selectedSeason}
                 selectedYear={selectedYear}
@@ -2704,16 +2951,17 @@ export default function App() {
           <div className={`flex-1 min-w-0 ${
             !FULL_PAGE_TABS.includes(activeTab) && mobileViewMode === 'map' ? 'hidden lg:flex' : 'flex'
           } flex-col ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
-           {!FULL_PAGE_TABS.includes(activeTab) && (
+           {!FULL_PAGE_TABS.includes(activeTab) && !isMedium && (
              <div className="shrink-0"><RunStatusBar modelsData={modelsData} model={effectiveModel} health={health} selectedSeason={selectedSeason} selectedInit={runInit}/></div>
            )}
            <div className="flex-1 min-h-0">
-           <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
-            {activeTab==='forecast'      && (mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile'
+           <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
+            {isMedium && <MediumRangePanel models={mrfModels} isLoading={mrfLoading} isError={mrfError} modelId={mrfSel?.id} site={selectedSite} dark={darkMode}/>}
+            {activeTab==='forecast' && forecastType==='subseasonal' && runInit === S2S_INIT && <SubseasonalTab pixelData={pixelData} baseData={baseData} isLoading={pixelLoading} modelsData={modelsData} model={effectiveModel} baseModel={baseModel} onsetDef={srDef} selectedYear={selectedYear} activeModels={activeModels}/>}
+            {activeTab==='forecast' && forecastType==='seasonal' && (mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile'
               ? <RainfallStatsPanel pixelData={pixelData} isLoading={pixelLoading} model={effectiveModel} gridData={mapGridData}/>
               : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>)}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
-            {activeTab==='subseasonal'   && <SubseasonalTab  pixelData={pixelData} baseData={baseData} isLoading={pixelLoading} modelsData={modelsData} model={effectiveModel} baseModel={baseModel} onsetDef={srDef} setOnsetDef={setOnsetDef} selectedYear={selectedYear} activeModels={activeModels}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
