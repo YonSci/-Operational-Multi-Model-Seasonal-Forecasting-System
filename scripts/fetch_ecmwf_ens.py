@@ -14,7 +14,7 @@ Output: data/ecmwf_ens/ens_tp_<YYYYMMDD><HH>_kenya.nc  (precip: member, time, la
 
 Usage:
   python scripts/fetch_ecmwf_ens.py                 # latest available 00z run
-  python scripts/fetch_ecmwf_ens.py --date 20261025 --run 00
+  python scripts/fetch_ecmwf_ens.py --date 20261025 --run 00   # runs older than ~4 days come from ECMWF's cloud mirrors
 """
 import argparse
 import concurrent.futures as cf
@@ -32,6 +32,8 @@ import xarray as xr
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUT_DIR = BASE_DIR / "data" / "ecmwf_ens"
 ROOT = "https://data.ecmwf.int/forecasts"
+# ECMWF's cloud copies keep the runs data.ecmwf.int has dropped (after ~4 days); AWS often answers "SlowDown"
+MIRRORS = ["https://storage.googleapis.com/ecmwf-open-data", "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"]
 STEPS = list(range(24, 361, 24))                        # 15 daily accumulations
 TARGET_LAT = np.round(np.arange(-4.875, 5.375 + 0.001, 0.25), 3)
 TARGET_LON = np.round(np.arange(33.625, 41.875 + 0.001, 0.25), 3)
@@ -51,8 +53,8 @@ def _get(url, headers=None, tries=10):
     raise RuntimeError(f"failed to fetch {url}")
 
 
-def _run_base(date, run):
-    return f"{ROOT}/{date}/{run}z/ifs/0p25/enfo/{date}{run}0000"
+def _run_base(date, run, root=ROOT):
+    return f"{root}/{date}/{run}z/ifs/0p25/enfo/{date}{run}0000"
 
 
 def latest_run(run="00"):
@@ -91,6 +93,17 @@ def fetch(date, run="00", workers=4):
         print(f"ENS {date} {run}z already downloaded: {out}")
         return out
     base = _run_base(date, run)
+    if _get(f"{base}-{STEPS[-1]}h-enfo-ef.index", tries=2) is None:      # an older run: take it from a mirror
+        for root in MIRRORS:
+            try:
+                if _get(f"{_run_base(date, run, root)}-{STEPS[-1]}h-enfo-ef.index", tries=2) is not None:
+                    break
+            except RuntimeError:
+                continue
+        else:
+            sys.exit(f"ENS {date} {run}z: not on {ROOT} or its mirrors")
+        base = _run_base(date, run, root)
+        print(f"ENS {date} {run}z: not on {ROOT}; using {root}")
     jobs = []
     for step in STEPS:
         idx = _get(f"{base}-{step}h-enfo-ef.index")
