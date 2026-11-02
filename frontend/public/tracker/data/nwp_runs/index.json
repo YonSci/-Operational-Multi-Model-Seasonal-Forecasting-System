@@ -61,6 +61,36 @@
    }
   },
   {
+   "run": "2026-10-27",
+   "file": "nwp_20261027.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-27",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-27",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-27",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-27",
+     "days": 15
+    },
+    "icon_global": {
+     "start": "2026-10-27",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-27",
+     "days": 7
+    }
+   }
+  },
+  {
    "run": "2026-10-28",
    "file": "nwp_20261028.csv",
    "models": {
@@ -86,6 +116,66 @@
     },
     "ukmo_global_deterministic_10km": {
      "start": "2026-10-28",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-10-29",
+   "file": "nwp_20261029.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-29",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-29",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-29",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-29",
+     "days": 15
+    },
+    "icon_global": {
+     "start": "2026-10-29",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-29",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-10-30",
+   "file": "nwp_20261030.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-30",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-30",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-30",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-30",
+     "days": 15
+    },
+    "icon_global": {
+     "start": "2026-10-30",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-30",
      "days": 7
     }
    }
@@ -141,6 +231,10 @@
      "days": 16
     },
     "icon_global": {
+     "start": "2026-11-01",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
      "start": "2026-11-01",
      "days": 7
     }
