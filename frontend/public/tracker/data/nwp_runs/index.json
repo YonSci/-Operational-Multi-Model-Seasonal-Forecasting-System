@@ -1,0 +1,180 @@
+{
+ "runs": [
+  {
+   "run": "2026-10-25",
+   "file": "nwp_20261025.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-25",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-25",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-25",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-25",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-10-25",
+     "days": 8
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-25",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-10-26",
+   "file": "nwp_20261026.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-25",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-26",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-26",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-26",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-10-26",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-26",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-10-28",
+   "file": "nwp_20261028.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-28",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-28",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-28",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-28",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-10-28",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-28",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-10-31",
+   "file": "nwp_20261031.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-10-31",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-10-31",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-10-31",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-10-31",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-10-31",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-10-31",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-11-01",
+   "file": "nwp_20261101.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-01",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-01",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-01",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-11-01",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-11-01",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-11-02",
+   "file": "nwp_20261102.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-02",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-02",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-02",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-11-02",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-11-02",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-11-02",
+     "days": 7
+    }
+   }
+  }
+ ]
+}

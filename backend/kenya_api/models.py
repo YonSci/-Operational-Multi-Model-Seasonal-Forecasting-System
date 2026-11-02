@@ -29,3 +29,13 @@ def get_models(season: str = Query(None, description="Optional season filter: 'l
         "win_doy_start": w_start,
         "win_doy_end"  : w_end,
     }
+
+
+@router.get("/forecast-runs")
+def get_forecast_runs():
+    """Forecast runs joining one weather model to the seasonal forecast (Forecast tab: Sub-seasonal and Medium-range
+    views): source, kind (s2s | medium), model, run date, where each day's rainfall comes from, and the model name to
+    request from /pixel and /grid (append a method suffix such as " - Agri rule 1" for the other methods)."""
+    if not dl.is_loaded():
+        raise HTTPException(503, "Data not yet loaded.")
+    return dl.forecast_runs_index()

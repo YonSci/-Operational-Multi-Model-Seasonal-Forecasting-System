@@ -445,11 +445,14 @@ const LAYERS = [
   { id:'tercile_rainfall', label:'Rainfall Terciles (OND 2026)', group:'Tercile', variable:'rainfall', layer:'tercile' },
 ]
 
-// Medium-range layers -- shown when App passes activeTab === 'medium' (Forecast tab, Medium-range forecasts);
-// App builds their grid from the tracker's forecast.csv
+// Forecast runs (a weather model joined to the seasonal forecast): onset, cessation and season length, no rainfall terciles
+const JOINED_LAYERS = LAYERS.filter(l => l.layer !== 'tercile')
+// Medium-range layers -- shown when App passes activeTab === 'medium' (Forecast tab, Medium-range forecasts): the
+// model's rainfall (App builds the grid from the run's file), then the forecast run's onset maps
 const MRF_LAYERS = [
   { id:'mrf_d7',  label:'Rainfall, next 7 days',   variable:'mrf', layer:'d7'  },
   { id:'mrf_all', label:'Rainfall, whole forecast', variable:'mrf', layer:'all' },
+  ...JOINED_LAYERS,
 ]
 
 // Probabilistic-only layers -- shown only when activeTab === 'probabilistic'
@@ -1007,6 +1010,7 @@ export default function MapPanel({
   gridData=null,
   onLayerChange,
   activeTab='',
+  joinedRun=false,          // Forecast tab, Sub-seasonal view: a forecast run (no rainfall terciles)
   country='kenya',
   selectedSeason='short_rains',
   selectedYear=2026,
@@ -1094,6 +1098,7 @@ export default function MapPanel({
     activeTab === 'probabilistic' ? PROB_LAYERS :
     activeTab === 'multimodel'    ? MULTI_LAYERS :
     activeTab === 'medium'        ? MRF_LAYERS :
+      joinedRun                     ? JOINED_LAYERS :
     LAYERS
   )
   const layerCfg = ALL_LAYERS.find(l => l.id === activeLayer) ?? ALL_LAYERS[0]
@@ -1109,6 +1114,7 @@ export default function MapPanel({
       activeTab === 'probabilistic' ? PROB_LAYERS :
       activeTab === 'multimodel'    ? MULTI_LAYERS :
       activeTab === 'medium'        ? MRF_LAYERS :
+      joinedRun                     ? JOINED_LAYERS :
       LAYERS
     )
     const cfg = allL.find(l=>l.id===layerId)??allL[0]
@@ -1116,6 +1122,46 @@ export default function MapPanel({
     setShowLayers(false)
     if(onLayerChange) onLayerChange({variable:cfg.variable, layer:cfg.layer})
   }
+  // the Sub-seasonal view's list has no rainfall terciles: leave that layer for the list's first
+  useEffect(() => { if (!ALL_LAYERS.some(l => l.id === activeLayer)) handleLayerChange(ALL_LAYERS[0].id) }, [joinedRun])
+  // onset / cessation / season length by median and anomaly (default and medium-range layer lists)
+  const seasonGrid = () => (
+    <>
+      <div style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr',gap:3,marginBottom:4}}>
+        <div/>
+        {['Median','Anomaly'].map(g=>(
+
+          <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
+                               letterSpacing:'0.08em',color:'var(--accent-blue)',
+                               textAlign:'center',padding:'2px 0'}}>{g}</div>
+        ))}
+      </div>
+      {[
+        {row:'Onset',      ids:['onset_med','onset_anom']},
+        {row:'Cessation',  ids:['cess_med','cess_anom']},
+        {row:'Season Len', ids:['lgp_med','lgp_anom']},
+      ].map(({row,ids})=>(
+        <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr',gap:4,marginBottom:4}}>
+          <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
+                       paddingLeft:2,fontWeight:600}}>{row}</div>
+          {ids.map(id=>{
+            const l=ALL_LAYERS.find(x=>x.id===id)
+            if(!l) return <div key={id}/>
+            const active=l.id===activeLayer
+            return (
+              <button key={id} onClick={()=>handleLayerChange(id)}
+                style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
+                        textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
+                        background:active?'var(--accent-blue)':'var(--bg-surface)',
+                        color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
+                {l.group?.slice(0,3)??id}
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </>
+  )
 
   // Build raster
   const [raster, setRaster] = useState(null)
@@ -1534,7 +1580,7 @@ export default function MapPanel({
           activeTab === 'medium' ? (
             <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
                          background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:200,display:'grid',gap:4}}>
-              {MRF_LAYERS.map(l=>{
+              {MRF_LAYERS.filter(l=>l.variable==='mrf').map(l=>{
                 const active=l.id===activeLayer
                 return (
                   <button key={l.id} onClick={()=>handleLayerChange(l.id)}
@@ -1546,6 +1592,10 @@ export default function MapPanel({
                   </button>
                 )
               })}
+              <div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--accent-blue)',margin:'6px 0 2px'}}>
+                With this forecast
+              </div>
+              {seasonGrid()}
             </div>
           ) : activeTab === 'probabilistic' ? (
             <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
@@ -1597,41 +1647,10 @@ export default function MapPanel({
           ) : activeTab !== 'historical' && activeTab !== 'validation' ? (
             <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
                          background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:280}}>
-              <div style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr',gap:3,marginBottom:4}}>
-                <div/>
-                {['Median','Anomaly'].map(g=>(
-
-                  <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
-                                       letterSpacing:'0.08em',color:'var(--accent-blue)',
-                                       textAlign:'center',padding:'2px 0'}}>{g}</div>
-                ))}
-              </div>
-              {[
-                {row:'Onset',      ids:['onset_med','onset_anom']},
-                {row:'Cessation',  ids:['cess_med','cess_anom']},
-                {row:'Season Len', ids:['lgp_med','lgp_anom']},
-              ].map(({row,ids})=>(
-                <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr',gap:4,marginBottom:4}}>
-                  <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
-                               paddingLeft:2,fontWeight:600}}>{row}</div>
-                  {ids.map(id=>{
-                    const l=ALL_LAYERS.find(x=>x.id===id)
-                    if(!l) return <div key={id}/>
-                    const active=l.id===activeLayer
-                    return (
-                      <button key={id} onClick={()=>handleLayerChange(id)}
-                        style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
-                                textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                                background:active?'var(--accent-blue)':'var(--bg-surface)',
-                                color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                        {l.group?.slice(0,3)??id}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
+              {seasonGrid()}
 
               {/* Probabilistic Tercile Section */}
+              {!joinedRun && (
               <div style={{marginTop:8, paddingTop:8, borderTop:'1px solid var(--border-subtle)'}}>
                 <div style={{fontSize:8, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#10b981', marginBottom:5, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                   <span style={{display:'flex', alignItems:'center', gap:4}}>
@@ -1655,6 +1674,7 @@ export default function MapPanel({
                   </button>
                 </div>
               </div>
+              )}
             </div>
           ) : activeTab === 'multimodel' ? (
             /* Multi-model: 3x3 grid -- Equal/HR-Wt/RPSS-Wt x Onset/Cess/Season */

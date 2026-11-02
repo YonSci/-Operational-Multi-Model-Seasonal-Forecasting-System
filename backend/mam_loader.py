@@ -97,8 +97,7 @@ _EXTRA_SHORT_RAINS = {
     "ECMWF SEAS5 (Oct+Obs)":        ("outputs/ecmwf_oct_obs",     244, 365, "01 October {y}"),   # + observed Sep CHIRPS
     # rolling run refreshed by scripts/update_forecast.py; {obs} comes from its run_meta.json
     "ECMWF SEAS5 (Oct+Obs latest)": ("outputs/ecmwf_oct_obs_latest", 244, 365, "01 October {y} + obs to {obs}"),
-    # experimental: + ECMWF ENS (days 1-15) and extended range (to day 46), blend_subseasonal.py
-    "ECMWF SEAS5 (Oct+Obs+S2S)":    ("outputs/ecmwf_oct_s2s", 244, 365, "01 October {y} + obs to {obs} + weather forecasts"),
+    # the runs joining weather forecasts are forecast runs (backend/forecast_runs, see _ModelDict)
 }
 
 
@@ -597,6 +596,112 @@ def _attach_rule_variants(MODELS, chirps_sep=None):
             for n in MODELS:
                 if n.startswith(parent + " - FAO"):
                     MODELS[n].setdefault("fao_paw", paw)
+
+
+# ── Forecast runs: the seasonal forecast with one weather model joined in (scripts/forecast_runs.py) ──────────
+# One small file per model and run date in backend/forecast_runs/ holds the operational year's members and calibrated
+# probabilities for every method. A run is served as "<parent> @ <source> <YYYYMMDD>[ - <method suffix>]": built on
+# first use from the parent's model of the same method (terciles, calibration, skill and CHIRPS history are the
+# parent's: the runs share its hindcasts) and kept in a small cache, so the archive costs no memory until it is read.
+FORECAST_PARENT = "ECMWF SEAS5 (Oct+Obs latest)"
+_FR_DIR = os.path.join(os.path.dirname(__file__), "forecast_runs")
+_FR_CACHE = 48                                  # forecast-run models kept built (each well under 1 MB)
+
+
+def _fr_split(name):
+    """(parent, source, run YYYYMMDD, method key, suffix) of a forecast-run model name, else None."""
+    import re
+    m = re.match(r"^(?P<parent>.+?) @ (?P<src>[a-z0-9_-]+) (?P<run>\d{8})(?P<suffix>( - .+)?)$", name)
+    if not m:
+        return None
+    suf = m["suffix"] or ""
+    if not suf:
+        key = "dunning"
+    elif re.fullmatch(r" - Agri rule \d", suf):
+        key = suf[-1]
+    elif (f := re.fullmatch(r" - FAO water balance \((\w+)\)", suf)):
+        key = f"fao-{f[1]}"
+    else:
+        return None
+    return m["parent"], m["src"], m["run"], key, suf
+
+
+def forecast_runs_index():
+    """backend/forecast_runs/index.json with each run's model name; empty when there are none."""
+    p = os.path.join(_FR_DIR, "index.json")
+    if not os.path.isfile(p):
+        return {"runs": []}
+    idx = json.load(open(p, encoding="utf-8"))
+    for r in idx.get("runs", []):
+        r["name"] = f"{FORECAST_PARENT} @ {r['source']} {r['run'].replace('-', '')}"
+    return idx
+
+
+def _build_forecast_run(models, name):
+    sp = _fr_split(name)
+    if sp is None:
+        return None
+    parent, src, run, key, suf = sp
+    path = os.path.join(_FR_DIR, f"{src}_{run}.npz")
+    base = dict.get(models, parent + suf)
+    if base is None or not os.path.isfile(path):
+        return None
+    with np.load(path) as z:
+        meta = json.loads(str(z["__meta__"]))
+        if f"{key}|onset|members" not in z.files:
+            return None
+        arr = {f"{v}|{k}": z[f"{key}|{v}|{k}"].astype(np.float32) for v in ("onset", "cessation", "lgp") for k in ("members", "probs")}
+    e = dict(base)                                       # shallow copy: climatology, terciles and skill are the parent's
+    for var, mkey, _ in _RULE_VARS:
+        e[mkey] = arr[f"{var}|members"][:, None]        # (member, 1 year, lat, lon)
+    e["probs_damped"] = {v: arr[f"{v}|probs"][:, None] for v in ("onset", "cessation", "lgp")}
+    year = int(meta["run"][:4])
+    e["model_years"], e["op_idx"] = np.array([year]), 0
+    e["bc_daily"] = None                                 # no daily traces: the plume is drawn from the climatology
+    e.pop("fao_paw", None)
+    e["init_label"] = f"{meta['model_label']} run {meta['run']} + 01 October {year} seasonal, obs to {meta['obs_end']}"
+    e["forecast_run"] = {k: meta.get(k) for k in ("source", "kind", "model_label", "run", "obs_end", "segments", "bias_correction")}
+    if meta.get("weather"):
+        e["weather"] = meta["weather"]
+    return e
+
+
+class _ModelDict(dict):
+    """The loaded models, plus forecast runs built on first use from backend/forecast_runs/ (not listed when iterating,
+    so every route that loops over the models sees only the loaded ones)."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        from collections import OrderedDict
+        self._fr = OrderedDict()
+
+    def _forecast_run(self, name):
+        if not isinstance(name, str) or " @ " not in name:
+            return None
+        if name in self._fr:
+            self._fr.move_to_end(name)
+            return self._fr[name]
+        md = _build_forecast_run(self, name)
+        if md is not None:
+            self._fr[name] = md
+            while len(self._fr) > _FR_CACHE:
+                self._fr.popitem(last=False)
+        return md
+
+    def __missing__(self, key):
+        md = self._forecast_run(key)
+        if md is None:
+            raise KeyError(key)
+        return md
+
+    def __contains__(self, key):
+        return dict.__contains__(self, key) or self._forecast_run(key) is not None
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
 
 
 class _LazyTraces(dict):
@@ -1110,7 +1215,7 @@ def _load_demo_npz():
         if md.get("probs_damped"):
             md["probs_damped"] = {k: (v.astype(np.float16) if isinstance(v, np.ndarray) else v) for k, v in md["probs_damped"].items()}
     print(f"[data_loader] Loaded {len(MODELS)} models from demo dataset (OND: {bool(chirps_sep)}, Kiremt: {bool(chirps_kiremt)}, Belg: {bool(chirps_fmam)}, Deyr/Bega: {bool(chirps_bega)}, Masks: {list(masks.keys())}, RegimeMap: {regime_map is not None}).")
-    return {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
+    return {**chirps, "MODELS": _ModelDict(MODELS), "OP_YEAR": _OP_YEAR, "demo_mode": True, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
 
 # ── Main load ──────────────────────────────────────────────────────────────
 def load(force=False):
@@ -1187,7 +1292,7 @@ def load(force=False):
             if "regime_map" in m_data:
                 regime_map = m_data["regime_map"].astype(np.int8)
 
-        _state  = {**chirps, "MODELS": MODELS, "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
+        _state  = {**chirps, "MODELS": _ModelDict(MODELS), "OP_YEAR": _OP_YEAR, "demo_mode": False, "chirps_sep": chirps_sep, "chirps_kiremt": chirps_kiremt, "chirps_fmam": chirps_fmam, "chirps_bega": chirps_bega, "seasonal_masks": masks, "regime_map": regime_map}
         _loaded = True
     except Exception as exc:
         print(f"[data_loader] Raw NetCDF data not available ({type(exc).__name__}: {exc})")

@@ -352,7 +352,9 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
           <S title="Medium-range weather forecasts" id="about-nwp" scope="Kenya · Short Rains Tracker and Forecast tab › Medium-range forecasts · next 7–16 days">
             <p className="about-intro">
               The tracker’s outlook for the next one to two weeks comes from six global weather models, taken each day from the 00 UTC run published by
-              each centre. A model that cannot be reached is filled from Open-Meteo. Forecast range is 7 to 16 days depending on the model.
+              each centre. A model that cannot be reached is filled from Open-Meteo. Forecast range is 7 to 16 days depending on the model. In the
+              Forecast tab each model's daily run is also joined to the seasonal forecast, so onset, end of rains and season length can be read
+              with every method (see Forecast runs with weather forecasts under Methods).
             </p>
             <SpecList items={NWP_INFO} fields={NWP_FIELDS}/>
           </S>
@@ -982,13 +984,35 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                   ['Oct 01', 'ECMWF SEAS5 from 1 Oct, to 28 Feb', 'Dunning, Agri rules 1–3, FAO water balance'],
                   ['Oct 01 + Sep obs', 'Observed CHIRPS for September, then SEAS5 from 1 Oct', 'Dunning, Agri rules 1–3'],
                   ['Oct 01 + latest obs', 'Observed CHIRPS to the latest available day, then SEAS5; refreshed by the daily update', 'Dunning, Agri rules 1–3, FAO water balance'],
-                  ['Oct 01 + obs + weather forecasts (experimental; Forecast tab › Sub-seasonal forecasts)', 'Observed CHIRPS to the latest available day, then ECMWF ENS for days 1–15, the ECMWF extended-range forecast to day 46, then SEAS5. The extended-range forecasts are bias-corrected against CHIRPS by lead with ECMWF’s extended-range reforecasts (20 past years), ENS days 1–15 provisionally with the SEAS5 mapping for the same day; the run has not yet been tested on past seasons; refreshed by the daily update', 'Dunning, Agri rules 1–3'],
                 ]}/>
                 <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
                   25 SEAS5 members, each bias-corrected day by day and cell by cell with empirical quantile mapping (EQM) against CHIRPS. Days before a run's forecast start are observed CHIRPS, in the hindcast years too. Picking a method that the selected run does not have switches to the latest run that has it.
                 </div>
                 <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
-                  <strong>Issued runs keep their original correction.</strong> On 1 Nov 2026 the quantile mapping was fixed so that, where SEAS5 has more wet days than CHIRPS, the surplus days become dry: before, they kept a trace of rain (over land, 26 Oct – 31 Dec, the corrected members had rain on 70% of days against 26% in CHIRPS; now 26%). Rain above 1 mm, seasonal totals (−2%) and onset and cessation skill barely changed. The Sep 01, Oct 01 and Oct 01 + Sep obs runs (Dunning and Agri rules) are shown as issued, with the earlier correction. The runs refreshed daily (Oct 01 + latest obs, the weather-forecast run) and the FAO water balance use the fixed correction.
+                  <strong>Issued runs keep their original correction.</strong> On 1 Nov 2026 the quantile mapping was fixed so that, where SEAS5 has more wet days than CHIRPS, the surplus days become dry: before, they kept a trace of rain (over land, 26 Oct – 31 Dec, the corrected members had rain on 70% of days against 26% in CHIRPS; now 26%). Rain above 1 mm, seasonal totals (−2%) and onset and cessation skill barely changed. The Sep 01, Oct 01 and Oct 01 + Sep obs runs (Dunning and Agri rules) are shown as issued, with the earlier correction. The runs refreshed daily (Oct 01 + latest obs, the forecast runs with weather forecasts) and the FAO water balance use the fixed correction.
+                </div>
+            </Disclosure>
+
+            <Disclosure title="Forecast runs with weather forecasts (Forecast tab › Sub-seasonal and Medium-range)" scope="Kenya · Short Rains · one run per model and day · experimental">
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginBottom:6}}>
+                  Each run takes the 25 members of Oct 01 + latest obs and joins one weather model's forecast from its run date: observed CHIRPS to the
+                  latest available day, then the days before the run from the ECMWF extended-range run started that day (lead day 1), then the
+                  model's forecast, then each SEAS5 member to the end of the season. Every method (Dunning, Agri rules 1–3, FAO water balance) is
+                  run on the joined rainfall for 2026; terciles, the calibration of the probabilities and the skill are those of Oct 01 + latest
+                  obs, whose hindcasts the runs share. Each day's run of each model is kept, so earlier runs can be compared (Forecast run).
+                </div>
+                <Tbl head={['Model','Forecast joined in','Members']} rows={[
+                  ['ECMWF ENS + extended range (Sub-seasonal)', 'ECMWF ENS days 1–15 (open data, 0.25°), then the ECMWF extended range to day 46 (dynamical.org, 1.5°)', 'ENS member k → member k; 25 of the 100 extended-range members, matched to the SEAS5 members by rank of rainfall'],
+                  ['NOAA GEFS 35-day (Sub-seasonal)', 'NOAA GEFS to day 35 (dynamical.org, 0.25°)', '25 of the 31 members, matched by rank of rainfall'],
+                  ['ECMWF ENS (Medium-range)', 'ECMWF ENS days 1–15', 'ENS member k → member k'],
+                  ['ECMWF IFS (HRES), GFS, GDPS, ICON, UKMO Global (Medium-range)', 'The model’s 00 UTC run, 7–16 days (0.5° cells)', 'The same forecast in every member'],
+                ]}/>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  Bias correction against CHIRPS: the ECMWF extended range by lead with ECMWF’s extended-range reforecasts (20 past years); all other
+                  forecasts provisionally with the SEAS5 quantile mapping for the same day. The FAO water balance keeps its own CHIRPS v3-corrected
+                  SEAS5 members and takes the weather forecasts on the days they cover. These runs have not yet been tested on past seasons. Before
+                  3 Nov 2026 the ECMWF ENS + extended-range run (Dunning and Agri rules only) was a separate experimental run; the archive was rebuilt
+                  from the forecasts on disk with the observations of the time (to 25 Oct).
                 </div>
             </Disclosure>
 

@@ -215,3 +215,16 @@ export async function downloadBulletin({ site_name, lat, lon, fmt = 'pdf', bulle
   return { filename, size: blob.size }
 }
 
+
+/**
+ * GET /models/forecast-runs -- forecast runs joining one weather model to the seasonal forecast (Forecast tab:
+ * Sub-seasonal and Medium-range views): source, kind, model label, run date, rainfall sources and model name
+ */
+export function useForecastRuns(enabled = true) {
+  return useQuery({
+    queryKey: ['forecast-runs'],
+    queryFn: () => fetchJSON('/models/forecast-runs'),
+    enabled,
+    staleTime: 5 * 60_000,
+  })
+}

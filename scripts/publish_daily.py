@@ -9,6 +9,8 @@ and push them to origin/main, which redeploys the dashboard (GitHub Pages) and t
   backend/demo_short_rains_extra.npz   Oct 01 + latest obs seasonal run for the hosted API
   backend/demo_short_rains_rules.npz   Agri rules 1–3 for every Short Rains run
   backend/rain_stats.npz               seasonal rainfall statistics (Rainfall Terciles view)
+  backend/forecast_runs/               forecast runs joining each weather model (Forecast tab, Sub-seasonal and
+                                       Medium-range views), one small file per model and run date
   backend/data_status.json             when the daily update last completed (shown in the dashboard)
 
 Only data is published. The commit is made in a separate worktree (outputs/publish_worktree, detached at
@@ -30,7 +32,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 WT = BASE / "outputs" / "publish_worktree"
 DATA_PATHS = ["frontend/public/tracker/data", "backend/demo_short_rains_extra.npz", "backend/demo_short_rains_rules.npz",
-              "backend/rain_stats.npz", "backend/data_status.json"]
+              "backend/rain_stats.npz", "backend/data_status.json", "backend/forecast_runs"]
 CODE_PATHS = ["scripts", "backend/*.py", "frontend/src", "frontend/tracker"]     # code that writes or reads the data
 
 
@@ -54,7 +56,11 @@ def sync_checkout():
     if git("diff", "--quiet", "origin/main", "--", *DATA_PATHS, check=False).returncode:
         log("checkout left as is: its data differ from origin/main")
         return
-    git("checkout", "--quiet", "HEAD", "--", *DATA_PATHS)          # same content as origin/main, restored by the merge
+    for p in DATA_PATHS:                                            # same content as origin/main, restored by the merge
+        git("checkout", "--quiet", "HEAD", "--", p, check=False)    # (a path new in origin/main is not in HEAD yet)
+    # new data files (a forecast run per model and day) are untracked here and would block the merge; they were just
+    # published, so origin/main brings them back
+    git("clean", "--quiet", "-fd", "--", *DATA_PATHS)
     if git("merge", "--quiet", "--ff-only", "origin/main", check=False).returncode:
         git("checkout", "--quiet", "origin/main", "--", *DATA_PATHS)
         log("checkout could not be fast-forwarded (local commits?); data kept")

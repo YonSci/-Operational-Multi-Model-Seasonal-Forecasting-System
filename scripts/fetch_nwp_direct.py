@@ -258,7 +258,7 @@ class RangeFile(io.RawIOBase):
 HORIZON = {"ecmwf_ifs025": 15, "ecmwf_ens_median": 15, "gfs_global": 16, "gem_global": 10, "icon_global": 7,
            "ukmo_global_deterministic_10km": 7}
 UKMO_BUDGET_S = 900                                    # stop UKMO after this and keep the complete days
-UKMO_WORKERS = 8
+UKMO_WORKERS = 4                                       # each worker holds h5py + numpy: 8 ran the PC out of memory
 
 
 def _ukmo_subset(url):
@@ -316,6 +316,7 @@ def ukmo(date):
     # files are read in parallel worker processes (h5py serialises reads within one process); a day counts
     # only when every file in it arrived within the time budget
     import concurrent.futures as cf
+    from concurrent.futures.process import BrokenProcessPool
     chain = [(lead, k) for lead, k in chain if (lead - 1) // 24 < nd]
     got = {}
     with cf.ProcessPoolExecutor(max_workers=UKMO_WORKERS) as ex:
@@ -324,12 +325,24 @@ def ukmo(date):
             for fu in cf.as_completed(futs, timeout=max(60, UKMO_BUDGET_S - (time.time() - t0))):
                 try:
                     got[futs[fu]] = fu.result()
+                except BrokenProcessPool:
+                    raise
                 except Exception as exc:
                     log(f"ukmo: lead {futs[fu]} h unavailable ({type(exc).__name__})")
         except cf.TimeoutError:
             log(f"ukmo: time budget reached with {len(got)} of {len(chain)} files")
             for fu in futs:
                 fu.cancel()
+        except BrokenProcessPool:
+            log(f"ukmo: worker processes stopped (low memory?) with {len(got)} of {len(chain)} files")
+    # files lost to a crashed worker pool are read here, one at a time, within the time budget
+    for lead, k in chain:
+        if lead in got or time.time() - t0 > UKMO_BUDGET_S:
+            continue
+        try:
+            got[lead] = _ukmo_subset(f"{base}/{k}")
+        except Exception as exc:
+            log(f"ukmo: lead {lead} h unavailable ({type(exc).__name__})")
     first_gap = min([(lead - 1) // 24 for lead, _ in chain if lead not in got], default=nd)
     nd = min(nd, first_gap)
     if nd == 0 or not got:
@@ -420,7 +433,9 @@ def main():
                     res = om.fetch_batch([(p[2], p[3]) for p in chunk])
                     for (kind, site, plat, plon), d in zip(chunk, res):
                         for m in fb:
-                            for t, v in zip(d["daily"]["time"], d["daily"].get(f"precipitation_sum_{m}") or []):
+                            # with one model requested, Open-Meteo names the field without the model suffix
+                            vals = d["daily"].get(f"precipitation_sum_{m}") or (d["daily"].get("precipitation_sum") if len(fb) == 1 else None)
+                            for t, v in zip(d["daily"]["time"], vals or []):
                                 if v is not None:
                                     fb_rows.append({"model": m, "kind": kind, "site": site, "lat": plat, "lon": plon,
                                                     "date": t, "rain_mm": round(float(v), 1), "source": "open-meteo"})
