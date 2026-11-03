@@ -41,7 +41,7 @@ def _fetch(lat, lon, start, end):
 def site_temperature(site, today=None, refresh=True):
     """DataFrame indexed by date: tmax, tmin (°C), ERA5-Land, 1 Jan 1993 to the last available day."""
     CACHE.mkdir(parents=True, exist_ok=True)
-    path = CACHE / f"era5land_t2m_{site.id}.csv"
+    path = CACHE / f"era5land_t2m_{site.id}_{site.lat:.4f}_{site.lon:.4f}.csv"      # a moved site is fetched again
     today = today or dt.date.today()
     df = pd.read_csv(path, parse_dates=["date"]) if path.exists() else None
     if df is None or df.empty:

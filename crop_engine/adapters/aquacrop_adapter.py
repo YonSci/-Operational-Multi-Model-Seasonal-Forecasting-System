@@ -6,7 +6,8 @@ Kept free of the climate pipeline's imports, so worker processes start light.
 
 Outcome of a member (status):
   ok          sown, reached maturity
-  died        sown, the crop died or was harvested before maturity (AquaCrop ends the season early)
+  died        sown, the crop died before maturity (AquaCrop ends the season early)
+  failed_establishment  died before its canopy reached 5 % (a false start: the seedlings dried out)
   too_late    sown too late to reach maturity by 31 Mar (not simulated: AquaCrop needs the full season)
   not_sown    no planting opportunity (no onset by the rule's search end)
   error       the model failed (message kept)
@@ -19,6 +20,7 @@ import pandas as pd
 
 from crop_engine.config import SOIL_DZ, STRESS_RATIO
 
+ESTABLISHED_CC = 0.05          # canopy cover a crop must reach to count as established
 PHENOLOGY = ("Emergence", "MaxRooting", "Senescence", "Maturity", "HIstart", "Flowering", "YldForm")
 
 
@@ -107,11 +109,13 @@ def simulate(task):
         with np.errstate(invalid="ignore", divide="ignore"):
             stressed = (trp[season] >= 0.5) & (tr[season] < STRESS_RATIO * trp[season])
         src = np.bincount(task["source"][season].astype(int), minlength=6)
-        r.update(status="ok" if harvest >= expected_maturity - pd.Timedelta(days=3) else "died",
-                 yield_t_ha=round(yld, 3), potential_t_ha=round(pot, 3),
+        cc = float(growth.canopy_cover.values[: kh + 1].max())
+        status = ("ok" if harvest >= expected_maturity - pd.Timedelta(days=3)
+                  else "failed_establishment" if cc < ESTABLISHED_CC else "died")
+        r.update(status=status, yield_t_ha=round(yld, 3), potential_t_ha=round(pot, 3),
                  biomass_t_ha=round(float(growth.biomass.values[: kh + 1].max()) / 100.0, 3),
                  harvest=f"{harvest:%Y-%m-%d}", expected_maturity=f"{expected_maturity:%Y-%m-%d}",
-                 max_canopy=round(float(growth.canopy_cover.values[: kh + 1].max()), 3), stress_days=int(stressed.sum()),
+                 max_canopy=round(cc, 3), stress_days=int(stressed.sum()),
                  rain_mm=round(float(task["rain"][m][season].sum()), 1), sources=src.tolist())
         out.append(r)
     return out

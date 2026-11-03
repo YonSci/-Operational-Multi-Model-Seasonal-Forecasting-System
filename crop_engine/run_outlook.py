@@ -68,10 +68,11 @@ def load_varieties(only=None):
     return ref, vs
 
 
-def config_hash(rules):
-    """Changes when the varieties, rules, AquaCrop version or the adapter change: results made before are rebuilt."""
+def config_hash(rules, sites):
+    """Changes when the varieties, rules, sites, AquaCrop version or the adapter change: results made before are rebuilt."""
     h = hashlib.sha1(C.VARIETIES_FILE.read_bytes())
     h.update(json.dumps(sorted(rules)).encode())
+    h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
     h.update(ENGINE.encode())
     h.update(Path(aq.__file__).read_bytes())
     return h.hexdigest()[:12]
@@ -104,17 +105,20 @@ def _date_q(ds, q):
     return dt.date.fromordinal(int(round(np.quantile(o, q)))).isoformat()
 
 
+SIMULATED = ("ok", "died", "failed_establishment")
+
+
 def effective_yield(m):
-    return m["yield_t_ha"] if m["status"] in ("ok", "died") else 0.0
+    return m["yield_t_ha"] if m["status"] in SIMULATED else 0.0
 
 
 def summarize(members, variety, bench=None):
     y = np.array([effective_yield(m) for m in members])
     st = [m["status"] for m in members]
-    sown = [m for m in members if m["status"] in ("ok", "died")]
+    sown = [m for m in members if m["status"] in SIMULATED]
     n = len(members)
     s = {"members": n,
-         "share": {k: round(st.count(k) / n, 3) for k in ("ok", "died", "too_late", "not_sown", "error")},
+         "share": {k: round(st.count(k) / n, 3) for k in SIMULATED + ("too_late", "not_sown", "error")},
          "yield_t_ha": {"median": _q(y, 0.5), "p10": _q(y, 0.1), "p90": _q(y, 0.9), "mean": round(float(y.mean()), 3)},
          "p_failure": round(float((y < variety["failure_t_ha"]).mean()), 3),
          "planting": {"median": _date_q([m["planting"] for m in members if m["planting"]], 0.5),
@@ -124,9 +128,12 @@ def summarize(members, variety, bench=None):
          "stress_days_median": _q([m["stress_days"] for m in sown], 0.5),
          "rain_mm_median": _q([m["rain_mm"] for m in sown], 0.5)}
     if bench and bench.get("t33") is not None:
-        s["vs_benchmark"] = {"p_below_normal": round(float((y < bench["t33"]).mean()), 3),
-                             "p_above_normal": round(float((y > bench["t67"]).mean()), 3),
-                             "benchmark_median": bench["median"], "t33": bench["t33"], "t67": bench["t67"]}
+        s["vs_benchmark"] = {"benchmark_p_failure": bench["p_failure"], "benchmark_median": bench["median"],
+                             "t33": bench["t33"], "t67": bench["t67"], "p_below_normal": None, "p_above_normal": None}
+        # terciles only when they separate yields: not when a third or more of the benchmark years failed
+        if bench["t33"] >= variety["failure_t_ha"] and bench["t67"] > bench["t33"]:
+            s["vs_benchmark"].update(p_below_normal=round(float((y < bench["t33"]).mean()), 3),
+                                     p_above_normal=round(float((y > bench["t67"]).mean()), 3))
     return s
 
 
@@ -238,11 +245,11 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
                  "fao_reference": {"agricultural": ref}, "results": {}}
         for sid in group:
             out_sites[sid] = {"name": next(x.name for x in inp.sites if x.id == sid), **entry}
-    for (sid, vk, rk), members in zip(keys, res):
+    for (sid, vk, rk), outcomes in zip(keys, res):
         group = next(g for s, g in rep_cells if s.id == sid)
-        summ = summarize(members, varieties[vk], bench.get(sid, {}).get(vk, {}).get(rk))
+        summ = summarize(outcomes, varieties[vk], bench.get(sid, {}).get(vk, {}).get(rk))
         for gid in group:
-            out_sites[gid]["results"].setdefault(vk, {})[rk] = {"summary": summ, "members": members}
+            out_sites[gid]["results"].setdefault(vk, {})[rk] = {"summary": summ, "members": outcomes}
     meta = {"id": rid, "source": source, "model_label": label, "run": f"{run}", "obs_end": f"{b.obs_end}",
             "members_kind": members, "segments": segs, "engine": ENGINE, "config_hash": chash,
             "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
@@ -275,9 +282,11 @@ def report(rid, sites=("kapiti_research_station_farm", "kalro_kiboko_makueni_far
             for rk, r in rs.items():
                 s = r["summary"]
                 vb = s.get("vs_benchmark", {})
+                bn = vb.get("p_below_normal")
                 log(f"    {vk:13s} {rk:16s} sow {s['planting']['median']}  yield median {s['yield_t_ha']['median']} t/ha "
                     f"(p10 {s['yield_t_ha']['p10']}, p90 {s['yield_t_ha']['p90']}; benchmark {vb.get('benchmark_median')})  "
-                    f"failure {s['p_failure']:.0%}  below normal {vb.get('p_below_normal', float('nan')):.0%}  "
+                    f"failure {s['p_failure']:.0%} (benchmark {vb.get('benchmark_p_failure', float('nan')):.0%})  "
+                    f"below normal {'n/a' if bn is None else f'{bn:.0%}'}  "
                     f"too late {s['share']['too_late']:.0%}  not sown {s['share']['not_sown']:.0%}")
 
 
@@ -294,8 +303,8 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ref, varieties = load_varieties(a.varieties)
-    chash = config_hash(a.rules)
     inp = W.Inputs(refresh=not a.no_refresh)
+    chash = config_hash(a.rules, inp.sites)
     rep_cells = cells(inp.sites)
     soils = {s.id: soil_mod.profile(s) for s, _ in rep_cells}
     log(f"{len(inp.sites)} sites in {len(rep_cells)} grid cells; varieties {', '.join(varieties)}; rules {', '.join(a.rules)}; "

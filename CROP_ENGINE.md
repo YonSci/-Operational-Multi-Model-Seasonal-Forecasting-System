@@ -52,9 +52,9 @@ provenance codes) before any simulation.
 ## Varieties (`crop_engine/varieties.yaml`)
 
 Maturity classes built from AquaCrop's own growing-degree-day crop files, every phenological stage scaled to the
-class's maturity at a daily mean of 23 °C (canopy growth and decline scaled inversely):
+class's maturity at a daily mean of 21 °C (mid-altitude dryland Kenya, where these maturity days are quoted) (canopy growth and decline scaled inversely):
 
-| Variety | AquaCrop crop | Days to maturity at 23 °C | Stands for |
+| Variety | AquaCrop crop | Days to maturity at 21 °C | Stands for |
 | :--- | :--- | ---: | :--- |
 | Early-maturing maize | MaizeGDD | 90 | Katumani / DH-series type dryland maize |
 | Medium-maturing maize | MaizeGDD | 120 | mid-altitude hybrid type |
@@ -65,10 +65,15 @@ They are not calibrated cultivars. Calibration needs observed yields, sowing dat
 
 ## Outcomes of a member
 
-`ok` (sown, matured), `died` (the season ended before maturity: canopy collapse under water stress), `too_late`
+`ok` (sown, matured), `failed_establishment` (died before its canopy reached 5 %: a false start, the seedlings
+dried out), `died` (an established crop that died before maturity: canopy collapse under water stress), `too_late`
 (sown too late to mature by 31 Mar), `not_sown` (no onset by the rule's search end, 15 Jan). Members not sown or too
 late count as zero yield in the risk figures. A crop failure is a yield below the variety's threshold (0.5 t/ha
 grain; 0.2 t/ha bean). A water-stress day is a day with transpiration below half its potential.
+
+Below / above normal compare a run's yields with the benchmark's terciles. They are left out (null) where a third or
+more of the benchmark years are crop failures, since the terciles then do not separate yields; the run's chance of
+crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 
 ## Limitations
 
@@ -77,6 +82,10 @@ grain; 0.2 t/ha bean). A water-stress day is a day with transpiration below half
 - No forecast temperature or radiation yet: after the last ERA5-Land day both are climatology.
 - Deterministic weather models are the same forecast in every member, so their near-term spread is zero.
 - March rain is a climatological continuation, not a forecast.
+- Establishment is very sensitive to the soil water on 1 Aug. ERA5-Land puts it at 4–20 % of the available water at
+  most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings. No re-sowing yet.
+- Sowing dates in cool sites (Kapiti, Maralal): the maturity classes are defined at 21 °C, so a medium maize or
+  sorghum sown in November there needs more heat than the season gives before 31 Mar and is counted as too late.
 - Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
 - The forecast runs have not been verified for crop outcomes; the benchmark comparison is the first step (P3).
 

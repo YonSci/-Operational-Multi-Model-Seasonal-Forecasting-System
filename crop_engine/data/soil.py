@@ -36,7 +36,8 @@ def profile(site, path=SOIL_FILE):
     """The site's layers (top to bottom); raises if the cell has no soil data."""
     with xr.open_dataset(path) as ds:
         c = ds.sel(lat=site.cell_lat, lon=site.cell_lon, method="nearest")
-        layers = [Layer(float(c.depth_top[k]), float(c.depth_bottom[k]), float(c.sand[k]), float(c.clay[k]),
+        layers = [Layer(round(float(c.depth_top[k]) * 100), round(float(c.depth_bottom[k]) * 100),   # file depths in m
+                        float(c.sand[k]), float(c.clay[k]),
                         float(c.om_pct[k]), float(c.cfvo[k]), float(c.theta_fc[k]), float(c.theta_wp[k]))
                   for k in range(ds.sizes["depth"])]
     check(layers, site.name)

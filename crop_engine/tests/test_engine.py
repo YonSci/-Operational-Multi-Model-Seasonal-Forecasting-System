@@ -89,6 +89,13 @@ def test_soil_check():
         soil.check(bad)
 
 
+@pytest.mark.skipif(not soil.SOIL_FILE.exists(), reason="no SoilGrids file")
+def test_site_profile_from_file():
+    s = on_grid(registered_sites()[:1], np.arange(-4.875, 5.4, 0.25), np.arange(33.625, 41.9, 0.25))[0]
+    L = soil.profile(s)
+    assert [x.bottom_cm for x in L] == [5, 15, 30, 60, 100, 200] and 30 < soil.taw_mm(L) < 250
+
+
 def test_climatology_is_smooth_and_complete():
     idx = pd.date_range("1993-01-01", "2016-12-31")
     s = pd.Series(20 + 5 * np.sin(2 * np.pi * idx.dayofyear / 365), index=idx)
@@ -108,6 +115,6 @@ def test_aquacrop_wet_beats_dry_and_statuses():
     wet = aq.simulate(_task(weather(1, True), [dt.date(2026, 10, 20)]))[0]
     dry = aq.simulate(_task(weather(1, False), [dt.date(2026, 10, 20)]))[0]
     assert wet["status"] in ("ok", "died") and wet["yield_t_ha"] > dry["yield_t_ha"]
-    assert wet["stress_days"] < dry["stress_days"] or dry["status"] == "died"
+    assert wet["stress_days"] < dry["stress_days"] or dry["status"] in ("died", "failed_establishment")
     late, none = aq.simulate(_task(weather(2, True), [dt.date(2027, 3, 1), None]))
     assert late["status"] == "too_late" and none["status"] == "not_sown" and none["yield_t_ha"] == 0.0

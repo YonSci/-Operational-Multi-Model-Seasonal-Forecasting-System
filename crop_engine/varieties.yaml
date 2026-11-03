@@ -10,7 +10,9 @@
 # for in Kenyan drylands. Yields are water-limited (no nutrient stress, AquaCrop's default plant density), so they
 # are an upper bound for smallholder fields. Calibrate with observed yields and phenology before any operational use.
 
-reference_tmean_c: 23.0
+# The days to maturity are those quoted for mid-altitude dryland Kenya (about 1,200-1,700 m: Katumani, Kiboko),
+# where the Short Rains season averages about 21 °C.
+reference_tmean_c: 21.0
 
 varieties:
   maize_early:
