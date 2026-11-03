@@ -131,7 +131,7 @@ def main():
     k = sites[sites.site.str.startswith("Kapiti")].iloc[0]
     dry = int((sites.rain_since_oct1_chirps_mm < 5).sum())
 
-    parts = [f"<header><h1>Kenya Short Rains 2026 Tracker</h1><p class='take'>Issued {issued}. Satellite rainfall since 1 October: "
+    parts = [f"<header><h1>Near real-time rainfall tracking: Kenya Short Rains 2026</h1><p class='take'>Issued {issued}. Satellite rainfall since 1 October: "
              f"<b>{dry} of {len(sites)}</b> monitored sites have had under 5 mm and no product shows a planting onset at any site. "
              f"The ECMWF ensemble of {k.ens_init} gives Kapiti a <b>{pct(k.p_event_7d)}</b> chance of planting rains within 7 days; "
              f"the seasonal outlook, given no onset yet, puts Kapiti's planting onset most likely on <b>{k.season_onset_median}</b> "
@@ -202,7 +202,7 @@ td.sk-useful{color:var(--ok)} td.sk-limited{color:var(--warn)} td.sk-no{color:va
 """
     out = BASE / "outputs" / f"results_report_{issued}.html"
     out.write_text(f"<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-                   f"<title>Kenya Short Rains 2026 Tracker</title><style>{css}</style></head><body>{''.join(parts)}</body></html>", encoding="utf-8")
+                   f"<title>Near real-time rainfall tracking · Kenya Short Rains 2026</title><style>{css}</style></head><body>{''.join(parts)}</body></html>", encoding="utf-8")
     print(f"wrote {out} ({out.stat().st_size / 1024:.0f} KB)")
 
 

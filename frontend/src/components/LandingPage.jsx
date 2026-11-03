@@ -1,6 +1,6 @@
 import {
   CalendarRange, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite,
-  ArrowRight, Sun, Moon, BookOpen
+  ArrowRight, Sun, Moon, BookOpen, Waves, CloudRain
 } from 'lucide-react'
 import { version } from '../../package.json'
 import { useModels, usePixelStats } from '../api/queries'
@@ -8,7 +8,7 @@ import { useModels, usePixelStats } from '../api/queries'
 // One label per destination, the same as the dashboard's tabs
 const FEATURES = [
   { id: 'forecast', icon: CalendarRange, title: 'Forecast',
-    desc: 'When the rains may start and end and how long the season may last, plus the coming weeks from sub-seasonal and medium-range forecasts.' },
+    desc: 'When the rains may start and end and how long the season may last, from seasonal, sub-seasonal (weeks 2–6) and medium-range (7–16 days) forecasts.' },
   { id: 'probabilistic', icon: Percent, title: 'Probabilities',
     desc: 'The chance of an early, normal or late onset, and of a short or long season.' },
   { id: 'multimodel', icon: Layers, title: 'Compare models',
@@ -17,8 +17,25 @@ const FEATURES = [
     desc: 'How closely past forecasts matched the observed seasons, location by location.' },
   { id: 'historical', icon: HistoryIcon, title: 'Historical rainfall',
     desc: 'Observed onset, cessation and season length in past years, with the long-term trend.' },
-  { id: 'tracker', icon: Satellite, title: 'Short Rains Tracker',
+  { id: 'tracker', icon: Satellite, title: 'Near real-time rainfall tracking',
     desc: 'Rain so far from satellites and the next 7–16 days from weather models at monitored sites, updated daily.' },
+]
+
+// Forecast timescales, from the season ahead to the rain already fallen; each card opens that view of the dashboard
+const KE_SR = '#/forecast?country=kenya&season=short_rains&run=1001ol&method=dunning'
+const TIMESCALES = [
+  { icon: CalendarRange, title: 'Seasonal', tag: 'Months ahead · the whole season', address: KE_SR,
+    desc: 'When the rains may start and end and how long the season may last, with the chance of an early, normal or late season. Kenya and Ethiopia, every season.',
+    models: 'ECMWF SEAS5; seven C3S models for the Kenya Long Rains' },
+  { icon: Waves, title: 'Sub-seasonal', tag: 'Weeks 2–6', address: KE_SR + '&type=subseasonal&model=s2s-ecmwf',
+    desc: 'The next five to six weeks from extended-range ensembles, joined to the seasonal forecast, so onset, end of rains and season length use the latest outlook. Kenya Short Rains, a new run every day.',
+    models: 'ECMWF ENS + extended range (to about 46 days), NOAA GEFS (35 days)' },
+  { icon: CloudRain, title: 'Medium-range', tag: 'Next 7–16 days', address: KE_SR + '&type=medium&model=ecmwf_ifs025',
+    desc: 'Daily rainfall maps from six global weather models, and the onset, end of rains and season length each one points to. Kenya Short Rains, a new run every day.',
+    models: 'ECMWF IFS and ENS, GFS, GDPS, ICON, UKMO Global' },
+  { icon: Satellite, title: 'Near real-time rainfall tracking', tag: 'Rain so far · updated daily', tab: 'tracker',
+    desc: 'How much rain has fallen at each monitored site since 1 September, from satellite products available within one to five days and checked against CHIRPS.',
+    models: 'CHIRPS preliminary, ARC2, TAMSAT, PDIR-Now, IMERG' },
 ]
 
 // Onset / cessation methods offered for the Kenya Short Rains (Method selector in the dashboard)
@@ -45,9 +62,9 @@ const OVERVIEW = [
   { value: '2 countries', label: 'Coverage',
     desc: 'Kenya: Long Rains (MAM), Short Rains (OND). Ethiopia: Kiremt (JJAS), Belg (FMAM), Bega (ONDJ).',
     cta: 'View coverage', tab: 'about', at: { section: 'data', anchor: 'about-seasons' } },
-  { value: 'Daily', label: 'Monitoring',
-    desc: 'Satellite rainfall observations and 7–16 day weather forecasts for the Kenya Short Rains.',
-    cta: 'View data sources', tab: 'about', at: { section: 'data', anchor: 'about-satellite' } },
+  { value: 'Months to days', label: 'Forecast timescales',
+    desc: 'Seasonal, sub-seasonal (weeks 2–6) and medium-range (7–16 days) forecasts, and near real-time rainfall tracking, updated daily.',
+    cta: 'View timescales', tab: 'about', at: { section: 'overview', anchor: 'about-timescales' } },
 ]
 
 // Live preview: the current Short Rains forecast at one monitored site, from the same API as the dashboard
@@ -149,10 +166,11 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
           <div className="site-hero-grid" aria-hidden="true" />
           <div className="site-container">
             <div className="site-hero-inner">
-              <p className="site-eyebrow">Kenya &amp; Ethiopia · Seasonal climate outlooks</p>
+              <p className="site-eyebrow">Kenya &amp; Ethiopia · Seasonal to medium-range rainfall outlooks</p>
               <h1>Understand the timing of the rainy season</h1>
               <p className="site-hero-lede">
-                Explore when rains may start and end, how long the season may last, and the uncertainty around these estimates.
+                Explore when rains may start and end, how long the season may last, and the uncertainty around these estimates: from the season
+                ahead to the coming weeks and days, with rainfall tracked in near real time.
               </p>
               <div className="site-hero-actions">
                 <button type="button" className="site-btn site-btn-primary" onClick={() => onEnter('forecast')}>
@@ -181,6 +199,32 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
             ))}
           </div>
         </div>
+
+        <section className="site-section site-container" aria-labelledby="timescales-heading">
+          <div className="site-section-head">
+            <h2 id="timescales-heading">Forecasts from months to days</h2>
+            <p className="site-section-intro">
+              From the whole season ahead to the rain that has already fallen. For the Kenya Short Rains the sub-seasonal and medium-range forecasts
+              are joined to the seasonal forecast, so all three give onset, end of rains and season length with the same methods.
+            </p>
+          </div>
+          <div className="site-grid-4">
+            {TIMESCALES.map(t => {
+              const Icon = t.icon
+              return (
+                <button key={t.title} type="button" className="site-card"
+                        onClick={() => t.address ? onOpenAddress(t.address) : onEnter(t.tab)}>
+                  <span className="site-card-icon"><Icon size={20} aria-hidden="true" /></span>
+                  <span className="site-card-tag">{t.tag}</span>
+                  <h3>{t.title}</h3>
+                  <p>{t.desc}</p>
+                  <span className="site-card-meta">{t.models}</span>
+                  <span className="site-card-link">Open <ArrowRight size={15} aria-hidden="true" /></span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
 
         <section className="site-section site-container" aria-labelledby="explore-heading">
           <div className="site-section-head">

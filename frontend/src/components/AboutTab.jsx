@@ -5,8 +5,8 @@ import { version } from '../../package.json'
 // Public method documents (main branch). `updated` is the date of the last commit to each file on main.
 const REPO_BLOB = 'https://github.com/YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System/blob/main/'
 const DOCS = {
-  fao:    { file: 'FAO_WATER_BALANCE_METHOD.md',         updated: '2026-10-29' },
-  readme: { file: 'README.md',                           updated: '2026-09-21' },
+  fao:    { file: 'FAO_WATER_BALANCE_METHOD.md',         updated: '2026-11-03' },
+  readme: { file: 'README.md',                           updated: '2026-11-03' },
   octRun: { file: 'ECMWF_SEAS5_OCTOBER_PIPELINE.md',     updated: '2026-10-28' },
   kiremt: { file: 'ECMWF_SEAS5_ETHIOPIA_KIREMT_PIPELINE.md', updated: '2026-09-17' },
 }
@@ -38,7 +38,7 @@ const C3S_MODELS = [
   { system: 'NCEP CFSv2',            centre: 'NOAA National Centers for Environmental Prediction, United States (NCEP)',   members: '24', hindcast: '1993–2016', hr: '0.37', vsChance: '+0.04' },
   { system: 'ECCC CanSIPS',          centre: 'Environment and Climate Change Canada (ECCC)',                               members: '20', hindcast: '1993–2016', hr: '0.36', vsChance: '+0.03' },
 ]
-// Short Rains Tracker inputs (see public/tracker/data/products.csv for the live latency of each)
+// Near real-time rainfall tracking inputs (see public/tracker/data/products.csv for the live latency of each)
 const TRACKER_ROLE = 'Rainfall since 1 September at monitored sites; compared with CHIRPS for bias, correlation and rain detection'
 const SATELLITE_INFO = [
   { name: 'CHIRPS 2.0', provider: 'UC Santa Barbara Climate Hazards Center', resolution: '0.05°, used at 0.25°', latency: 'Preliminary ~2–5 days; final ~3 weeks after the month',
@@ -244,7 +244,26 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             probabilities and the spread of outcomes across forecast members. It brings together seasonal climate-model forecasts, CHIRPS-based rainfall
             estimates and recent weather information. You can compare the available models, examine historical seasons and review forecast performance.
           </p>
-          <p>The Short Rains Tracker adds recent satellite rainfall and short- to medium-range weather forecasts for monitored sites.</p>
+          <h3 id="about-timescales">Forecast timescales and rainfall tracking</h3>
+          <p>
+            Forecasts cover three timescales, from the whole season ahead to the next one to two weeks, and near real-time rainfall tracking shows
+            the rain that has already fallen. Choose the timescale with the Forecast selector in the Forecast tab. For the Kenya Short Rains the
+            sub-seasonal and medium-range forecasts are joined to the seasonal forecast, so all three give onset, end of rains and season length
+            with every method (see Forecast runs with weather forecasts under <Link to="methods">Forecast methods</Link>).
+          </p>
+          <Tbl head={['Timescale','Range','Models and data','What it gives','Where']} rows={[
+            ['Seasonal', 'The whole season, from forecast starts months ahead', 'ECMWF SEAS5; seven C3S models for the Kenya Long Rains',
+             'Onset, cessation and season length with probabilities and skill, for every country and season', 'Forecast tab › Seasonal'],
+            ['Sub-seasonal', 'Weeks 2–6 (to about 46 days)', 'ECMWF ENS + extended range; NOAA GEFS 35-day',
+             'The forecast joined to the seasonal forecast: onset, end of rains and season length with every method; a new run every day', 'Forecast tab › Sub-seasonal forecasts (Kenya Short Rains)'],
+            ['Medium-range', '7–16 days', 'ECMWF IFS (HRES), ECMWF ENS, GFS, GDPS, ICON, UKMO Global',
+             'Daily rainfall maps, and the forecast joined to the seasonal forecast with every method; a new run every day', 'Forecast tab › Medium-range forecasts (Kenya Short Rains)'],
+            ['Near real-time rainfall tracking', 'Rain so far, one to five days behind real time', 'CHIRPS preliminary, ARC2, TAMSAT, PDIR-Now, IMERG; the medium-range models for the outlook',
+             'Rain since 1 September at monitored sites, checked against CHIRPS, with the next 7–16 days', 'Near real-time rainfall tracking tab (Kenya Short Rains)'],
+          ]}/>
+          <p>
+            Data sources are listed under <Link to="data">Data &amp; coverage</Link>: satellite rainfall products and medium-range weather forecasts.
+          </p>
 
           <h3>How seasonal timing is defined</h3>
           <p>
@@ -315,7 +334,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['ECMWF SEAS5 and C3S seasonal models', 'Seasonal forecasts and hindcasts (25 members for SEAS5)', 'Regridded to 0.25°', 'SEAS5 hindcasts from 1981 (Long Rains) or 1993; other C3S models from 1993'],
               ['ERA5-Land', 'FAO-56 reference evapotranspiration (ET0) and starting soil moisture', '0.1°, averaged to 0.25°', '1993 on'],
               ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
-              ['Satellite rainfall and 10–15 day forecasts', 'Short Rains Tracker at monitored sites', 'Site', 'Current season'],
+              ['Satellite rainfall and 10–15 day forecasts', 'Near real-time rainfall tracking at monitored sites; sub-seasonal and medium-range forecasts', 'Site', 'Current season'],
             ]}/>
             <h4 className="about-subhead">Open dataset documentation</h4>
             <DocLinks>
@@ -342,16 +361,16 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               provides.
             </p>
           </S>
-          <S title="Satellite rainfall products" id="about-satellite" scope="Kenya · Short Rains Tracker · monitored sites · from 1 Sep">
+          <S title="Satellite rainfall products" id="about-satellite" scope="Kenya · Near real-time rainfall tracking · monitored sites · from 1 Sep">
             <p className="about-intro">
-              The Short Rains Tracker shows how much rain has fallen at each monitored site since 1 September, from five satellite products downloaded
+              Near real-time rainfall tracking shows how much rain has fallen at each monitored site since 1 September, from five satellite products downloaded
               every day and placed on the 0.25° grid. Each product is compared with CHIRPS for bias, correlation and rain detection.
             </p>
             <SpecList items={SATELLITE_INFO} fields={SATELLITE_FIELDS}/>
           </S>
-          <S title="Medium-range weather forecasts" id="about-nwp" scope="Kenya · Short Rains Tracker and Forecast tab › Medium-range forecasts · next 7–16 days">
+          <S title="Medium-range weather forecasts" id="about-nwp" scope="Kenya · Near real-time rainfall tracking and Forecast tab › Medium-range forecasts · next 7–16 days">
             <p className="about-intro">
-              The tracker’s outlook for the next one to two weeks comes from six global weather models, taken each day from the 00 UTC run published by
+              The outlook for the next one to two weeks in near real-time rainfall tracking comes from six global weather models, taken each day from the 00 UTC run published by
               each centre. A model that cannot be reached is filled from Open-Meteo. Forecast range is 7 to 16 days depending on the model. In the
               Forecast tab each model's daily run is also joined to the seasonal forecast, so onset, end of rains and season length can be read
               with every method (see Forecast runs with weather forecasts under Methods).
@@ -364,7 +383,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             <KV label="Observed record" value="CHIRPS 1993–2025 for the Short Rains historical view and the Ethiopia regime diagnostics; 1981 on for the Long Rains."/>
             <KV label="Reference normal" value="WMO standard normal 1991–2020, for climatological context."/>
             <KV label="Grid and land masks" value="0.25° analysis grid; 842 land cells in Kenya and 1,485 in Ethiopia. Ethiopia maps are shown only inside each season’s climatological domain."/>
-            <KV label="Updates" value="The Short Rains run with the latest observations and the Short Rains Tracker are refreshed daily. Other seasons are updated when a new forecast is processed."/>
+            <KV label="Updates" value="The Short Rains run with the latest observations, the sub-seasonal and medium-range forecast runs and near real-time rainfall tracking are refreshed daily. Other seasons are updated when a new forecast is processed."/>
             <KV label="Developers" value="ILRI Climate Services in collaboration with ICPAC, EMI and KMD"/>
             <KV label="Version" value={`v${version}`}/>
           </S>

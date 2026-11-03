@@ -5,7 +5,7 @@ publish_daily.py
 Publish the day's refreshed data to the live platform: commit the files that update_forecast.py regenerates
 and push them to origin/main, which redeploys the dashboard (GitHub Pages) and the hosted API (Render).
 
-  frontend/public/tracker/data/        Short Rains Tracker data (observations, 10–16 day forecasts, outlooks)
+  frontend/public/tracker/data/        Near real-time rainfall tracking data (observations, 10–16 day forecasts, outlooks)
   backend/demo_short_rains_extra.npz   Oct 01 + latest obs seasonal run for the hosted API
   backend/demo_short_rains_rules.npz   Agri rules 1–3 for every Short Rains run
   backend/rain_stats.npz               seasonal rainfall statistics (Rainfall Terciles view)
