@@ -13,9 +13,11 @@ Outputs (not committed; outputs/crop_engine/):
   results/<run id>.json      per site, variety and rule: every member's outcome and a summary
   results/index.json         the runs, newest first
   climatology.json           the observed-weather benchmark (rebuilt when the configuration changes)
+and the Crop outlook tab's copy of the latest runs (frontend/public/tracker/data/crop/, crop_engine.dashboard).
 
 Usage:
   python -m crop_engine.run_outlook                         # all runs, 2 worker processes
+  python -m crop_engine.run_all --workers 1                 # one process per source (the daily update)
   python -m crop_engine.run_outlook --sources seasonal s2s-ecmwf --workers 3
   python -m crop_engine.run_outlook --climatology --force   # rebuild the benchmark and every run
 """
@@ -33,6 +35,7 @@ import numpy as np
 import yaml
 
 from crop_engine import config as C
+from crop_engine import dashboard
 from crop_engine.adapters import aquacrop_adapter as aq
 from crop_engine.data import soil as soil_mod
 from crop_engine.data import weather as W
@@ -263,15 +266,6 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
     return rid
 
 
-def write_index():
-    runs = []
-    for p in sorted(C.RESULTS_OUT.glob("*_????????.json")):
-        meta = json.loads(p.read_text(encoding="utf-8"))["meta"]
-        runs.append({k: meta[k] for k in ("id", "source", "model_label", "run", "obs_end", "members_kind", "created")})
-    runs.sort(key=lambda r: (r["run"], r["source"]), reverse=True)
-    (C.RESULTS_OUT / "index.json").write_text(json.dumps({"runs": runs}, indent=1), encoding="utf-8")
-
-
 def report(rid, sites=("kapiti_research_station_farm", "kalro_kiboko_makueni_farm")):
     d = json.loads((C.RESULTS_OUT / f"{rid}.json").read_text(encoding="utf-8"))
     for sid in sites:
@@ -299,9 +293,14 @@ def main():
     ap.add_argument("--climatology", action="store_true", help="rebuild the observed-weather benchmark")
     ap.add_argument("--force", action="store_true", help="rebuild runs already made from the same observations")
     ap.add_argument("--no-refresh", action="store_true", help="do not top up the ERA5-Land temperature series")
+    ap.add_argument("--list-sources", action="store_true", help="print the sources with a run on disk (JSON) and exit")
+    ap.add_argument("--no-dashboard", action="store_true", help="do not rewrite the results index and the tab's data")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if a.list_sources:
+        print(json.dumps(["seasonal"] + sorted({s for s, _, _ in fr.candidates(False, None)[0]})))
+        return 0
     ref, varieties = load_varieties(a.varieties)
     inp = W.Inputs(refresh=not a.no_refresh)
     chash = config_hash(a.rules, inp.sites)
@@ -334,10 +333,12 @@ def main():
                 done.append(got)
         except Exception as exc:                                         # one run must not stop the others
             log(f"{rid}: failed ({type(exc).__name__}: {str(exc)[:200]})")
-    write_index()
+    if not a.no_dashboard:
+        dashboard.write_index()
+        dashboard.write(log)
     for rid in done[:1]:
         report(rid)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

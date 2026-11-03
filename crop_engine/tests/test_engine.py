@@ -77,8 +77,9 @@ def test_registered_sites():
     s = registered_sites()
     assert len(s) >= 6 and all(x.country == "kenya" for x in s)
     assert slug("KALRO Kiboko, Makueni Farm") == "kalro_kiboko_makueni_farm"
-    g = on_grid(s[:1], np.array([-2.375, -2.125]), np.array([37.375, 37.625]))[0]
-    assert (g.cell_lat, g.cell_lon) == (-2.375, 37.375)
+    kiboko = [x for x in s if x.id == "kalro_kiboko_makueni_farm"]                  # -2.21046, 37.7190
+    g = on_grid(kiboko, np.array([-2.375, -2.125]), np.array([37.375, 37.625]))[0]
+    assert (g.cell_lat, g.cell_lon) == (-2.125, 37.625)
 
 
 def test_soil_check():

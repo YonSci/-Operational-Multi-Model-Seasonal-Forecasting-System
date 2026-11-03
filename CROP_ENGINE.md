@@ -4,7 +4,7 @@ The crop engine turns the platform's forecast rainfall ensembles into crop growt
 sites. It sits beside the climate pipeline: it reads that pipeline's outputs and never changes them, and a failure
 in the crop engine does not affect the forecasts.
 
-**Status:** pilot (phases P0–P2 of the integration plan). One crop model (AquaCrop-OSPy), the six Kenya monitored
+**Status:** pilot (phases P0–P2 of the integration plan, and the P4 Crop outlook tab). One crop model (AquaCrop-OSPy), the six Kenya monitored
 sites, the 2026 Short Rains, four maturity classes, two planting rules. **Not calibrated, not verified:** results are
 for development and discussion, not advice.
 
@@ -29,6 +29,22 @@ python -m pytest crop_engine/tests                      # unit tests (synthetic 
 
 Outputs (not committed; `outputs/crop_engine/`): `weather/<run>.nc` (the daily inputs), `results/<run>.json` (every
 member's outcome and the summaries), `results/index.json`, `climatology.json` (the benchmark).
+
+The daily update runs `python -m crop_engine.run_all --workers 1`: one process per source, so each run's memory is
+released before the next. It then writes the **Crop outlook** tab's data, `frontend/public/tracker/data/crop/`
+(`crop_engine/dashboard.py`: the latest run of each source and the benchmark, about 0.8 MB), which the daily publish
+commits with the other tracker data.
+
+## Crop outlook tab
+
+`frontend/src/components/CropOutlookTab.jsx`, Kenya only. Pick a site, crop, sowing rule and forecast (seasonal,
+sub-seasonal or medium-range run) to see:
+
+- headline figures: median yield and the middle 8 in 10 members, the chance of crop failure, the sowing and harvest
+  dates, each against the past seasons;
+- the chance of more than each yield, for the forecast members and for the past seasons (1993–2025);
+- what happens to the crop: matured, died before maturity, failed to establish, not grown;
+- every forecast side by side for the same site and crop, each member's outcome, and the inputs behind the result.
 
 ## Inputs
 
@@ -92,5 +108,5 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 ## Next phases
 
 P3: hindcast verification (crop forecasts against crops grown in the observed weather, 1993–2016) and calibration
-with observed yields and phenology. P4: Crop Outlook tab. P5: PCSE/WOFOST, SEAS5 temperature and radiation, bulletins,
+with observed yields and phenology. P5: PCSE/WOFOST, SEAS5 temperature and radiation, bulletins,
 Ethiopia.

@@ -12,6 +12,7 @@ OUT = BASE / "outputs" / "crop_engine"           # weather inputs and results (n
 WEATHER_OUT = OUT / "weather"
 RESULTS_OUT = OUT / "results"
 VARIETIES_FILE = Path(__file__).with_name("varieties.yaml")
+DASHBOARD_OUT = BASE / "frontend" / "public" / "tracker" / "data" / "crop"   # Crop outlook tab (published daily)
 
 CAL_YEARS = (1993, 2016)                         # the platform's calibration years: terciles of the benchmark
 HIST_YEARS = (1993, 2025)                        # seasons with observed weather for the benchmark (season y: Aug y – Mar y+1)

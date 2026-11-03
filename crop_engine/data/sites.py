@@ -3,8 +3,6 @@ import ast
 import re
 from dataclasses import dataclass
 
-import numpy as np
-
 from crop_engine.config import BASE
 
 
@@ -17,8 +15,8 @@ class Site:
     country: str
     i: int = -1        # grid cell (row, column) on the analysis grid
     j: int = -1
-    cell_lat: float = np.nan
-    cell_lon: float = np.nan
+    cell_lat: float = float("nan")
+    cell_lon: float = float("nan")
 
     @property
     def cell(self):
@@ -47,6 +45,7 @@ def registered_sites(country="kenya"):
 
 def on_grid(sites, lat, lon, land=None):
     """Each site with its nearest grid cell (a land cell when `land` (lat, lon) bool is given)."""
+    import numpy as np                    # here, so listing the sites stays light (crop_engine.run_all)
     out = []
     for s in sites:
         d = (lat[:, None] - s.lat) ** 2 + (lon[None, :] - s.lon) ** 2

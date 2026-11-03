@@ -17,6 +17,7 @@ Refresh the Kenya Short Rains forecast as new observations and medium-range fore
      (forecast_runs.py); site reports, tracker data and page
   6. Hot-reload the local backend if it is running; record the completed update in backend/data_status.json
   7. With --publish: push the refreshed data to origin/main (publish_daily.py), which redeploys the live platform
+  8. Experimental crop outlook (crop_engine.run_all, CROP_ENGINE.md), then a second publish with its tab data
 
 Usage:
   python scripts/update_forecast.py                 # everything, skip steps that are already current
@@ -161,18 +162,21 @@ def update_forecast_runs(env):
 
 def update_crop_outlook(env):
     """Experimental crop outlook (crop_engine/, CROP_ENGINE.md): AquaCrop at the monitored sites for every forecast
-    run → outputs/crop_engine/ (not published yet). Skipped when AquaCrop is not installed; at most 60 min; never
-    stops the daily update."""
+    run → outputs/crop_engine/, and the Crop outlook tab's copy → frontend/public/tracker/data/crop/ (published). One
+    process per source, so memory is released between runs. Skipped when AquaCrop is not installed; at most 90 min;
+    never stops the daily update."""
     import importlib.util
     if not importlib.util.find_spec("aquacrop"):
         log("crop outlook: AquaCrop not installed (pip install aquacrop); skipped")
         return
     try:
-        r = subprocess.run([PY, "-m", "crop_engine.run_outlook", "--workers", "2"], cwd=BASE_DIR, env=env, timeout=60 * 60)
+        # run_all keeps the 90 min itself (it stops its own child); this outer limit is only a safety net
+        r = subprocess.run([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", "90"], cwd=BASE_DIR, env=env,
+                           timeout=100 * 60)
         if r.returncode:
-            log(f"crop outlook: failed (exit {r.returncode}); previous results kept")
+            log(f"crop outlook: some runs failed or were stopped (exit {r.returncode}); their previous results kept")
     except subprocess.TimeoutExpired:
-        log("crop outlook: took over 60 min; stopped, previous results kept")
+        log("crop outlook: took over 100 min; stopped, previous results kept")
 
 
 def update_fao(env):
@@ -273,7 +277,6 @@ def main():
         update_forecast_runs(env)
     except Exception as exc:
         log(f"forecast runs: failed ({str(exc)[:160]}); previous runs kept")
-    update_crop_outlook(env)
     subprocess.run([PY, rt, "sync", "--start", f"{YEAR}-09-01", "--products", *products], check=False, env=env)
     subprocess.run([PY, rt, "monitor", "--since", f"{YEAR}-10-01"], check=False, env=env)
     subprocess.run([PY, rt, "verify", "--ref", "chirps", "--periods", f"{YEAR - 1}-10-01:{YEAR - 1}-12-31",
@@ -294,6 +297,12 @@ def main():
     (BASE_DIR / "backend" / "data_status.json").write_text(json.dumps(status, indent=1) + "\n", encoding="utf-8")
     if a.publish:
         subprocess.run([PY, str(BASE_DIR / "scripts" / "publish_daily.py"), "--note", f"observations to {obs_end}"],
+                       check=False, env=env)
+    # crop outlook last (it can take an hour on a busy PC): the forecasts above are already published; its tab data
+    # goes out in a second, crop-only publish
+    update_crop_outlook(env)
+    if a.publish:
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "publish_daily.py"), "--note", f"crop outlook, observations to {obs_end}"],
                        check=False, env=env)
     log("update complete")
 

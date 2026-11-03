@@ -9,10 +9,11 @@ import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
 import { version } from '../package.json'
-import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon } from 'lucide-react'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
+import CropOutlookTab from './components/CropOutlookTab'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -2449,10 +2450,11 @@ const TABS = [
   {id:'validation',    label:'Forecast performance', icon:ShieldCheck},
   {id:'historical',    label:'Historical rainfall',  icon:HistoryIcon},
   {id:'tracker',       label:'Near real-time rainfall tracking', icon:Satellite},
+  {id:'crop',          label:'Crop outlook',  icon:Sprout},
   {id:'about',         label:'About',         icon:Info},
 ]
 // Tabs that take the full width (no map panel beside them)
-const FULL_PAGE_TABS = ['about', 'tracker']
+const FULL_PAGE_TABS = ['about', 'tracker', 'crop']
 
 function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, forecastType, setForecastType, frRuns, joinedModels, joinedModel, setJoinedModel, frList, frSel, setFcRun, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
   const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
@@ -2881,7 +2883,7 @@ export default function App() {
       <LandingPage
         darkMode={darkMode} setDarkMode={setDarkMode}
         onOpenAddress={addr => { window.history.pushState(null, '', addr); window.dispatchEvent(new PopStateEvent('popstate')) }}
-        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setAboutInitial(aboutAt); if (tab === 'about') setAboutSection(aboutAt?.section ?? 'overview'); setActiveTab(tab); setShowLanding(false) }}
+        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } if (tab === 'crop') setCountry('kenya'); setAboutInitial(aboutAt); if (tab === 'about') setAboutSection(aboutAt?.section ?? 'overview'); setActiveTab(tab); setShowLanding(false) }}
       />
     )
   }
@@ -2986,6 +2988,7 @@ export default function App() {
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
+            {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite}/>}
             {activeTab==='tracker'       && (
               <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
                       style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
