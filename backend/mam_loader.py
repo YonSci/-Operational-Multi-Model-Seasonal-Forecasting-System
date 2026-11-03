@@ -66,7 +66,7 @@ MODEL_COLORS: dict = {
     "ECCC CanSIPS"         : "#0E7490",
 }
 SITES: list = [
-    {"site_name": "El Karama Sahiwals Farm",              "lat": -2.3871,  "lon": 37.4851, "country": "kenya"},
+    {"site_name": "El Karama Sahiwals Farm",              "lat":  0.2074,  "lon": 36.9038, "country": "kenya"},
     {"site_name": "Genco LTD Maralal Samburu Farm",       "lat":  0.9273,  "lon": 36.5690, "country": "kenya"},
     {"site_name": "Genco LTD Tana River Farm",            "lat": -2.21314, "lon": 40.0517, "country": "kenya"},
     {"site_name": "KALRO Kiboko, Makueni Farm",           "lat": -2.21046, "lon": 37.7190, "country": "kenya"},
