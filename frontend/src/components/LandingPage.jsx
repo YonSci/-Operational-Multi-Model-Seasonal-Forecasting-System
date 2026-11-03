@@ -1,6 +1,6 @@
 import {
   CalendarRange, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite,
-  ArrowRight, Sun, Moon, BookOpen, Waves, CloudRain
+  ArrowRight, Sun, Moon, BookOpen, Waves, CloudRain, Sprout
 } from 'lucide-react'
 import { version } from '../../package.json'
 import { useModels, usePixelStats } from '../api/queries'
@@ -19,6 +19,8 @@ const FEATURES = [
     desc: 'Observed onset, cessation and season length in past years, with the long-term trend.' },
   { id: 'tracker', icon: Satellite, title: 'Near real-time rainfall tracking',
     desc: 'Rain so far from satellites and the next 7–16 days from weather models at monitored sites, updated daily.' },
+  { id: 'crop', icon: Sprout, title: 'Crop outlook',
+    desc: 'Experimental: maize, sorghum and bean yields and crop-failure risk at the Kenya monitored sites, from a crop model run on every forecast.' },
 ]
 
 // Forecast timescales, from the season ahead to the rain already fallen; each card opens that view of the dashboard

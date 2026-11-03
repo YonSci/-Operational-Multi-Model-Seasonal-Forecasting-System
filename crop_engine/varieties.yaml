@@ -1,0 +1,41 @@
+# Pilot crop varieties for the Kenya Short Rains (AquaCrop-OSPy).
+#
+# Each variety is AquaCrop's own growing-degree-day parameter set for the crop, with every phenological stage
+# (emergence, maximum rooting, flowering, yield formation, senescence, maturity) scaled so the crop reaches
+# maturity in `maturity_days` at a daily mean temperature of `reference_tmean_c`; the canopy growth and decline
+# coefficients are scaled inversely, so the canopy develops in step. Cooler sites therefore take longer and warmer
+# sites less, as real varieties do.
+#
+# These are maturity classes, NOT calibrated cultivars: the examples name the kind of variety each class stands
+# for in Kenyan drylands. Yields are water-limited (no nutrient stress, AquaCrop's default plant density), so they
+# are an upper bound for smallholder fields. Calibrate with observed yields and phenology before any operational use.
+
+# The days to maturity are those quoted for mid-altitude dryland Kenya (about 1,200-1,700 m: Katumani, Kiboko),
+# where the Short Rains season averages about 21 °C.
+reference_tmean_c: 21.0
+
+varieties:
+  maize_early:
+    label: Early-maturing maize
+    examples: Katumani / DH-series type dryland maize
+    aquacrop_crop: MaizeGDD
+    maturity_days: 90
+    failure_t_ha: 0.5           # yield below this counts as a crop failure (grain, dry)
+  maize_medium:
+    label: Medium-maturing maize
+    examples: mid-altitude hybrid type
+    aquacrop_crop: MaizeGDD
+    maturity_days: 120
+    failure_t_ha: 0.5
+  sorghum:
+    label: Sorghum
+    examples: Gadam type
+    aquacrop_crop: SorghumGDD
+    maturity_days: 100
+    failure_t_ha: 0.5
+  bean:
+    label: Dry bean
+    examples: KAT-series type
+    aquacrop_crop: DryBeanGDD
+    maturity_days: 75
+    failure_t_ha: 0.2

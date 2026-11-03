@@ -9,10 +9,11 @@ import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
 import { version } from '../package.json'
-import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon } from 'lucide-react'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
+import CropOutlookTab from './components/CropOutlookTab'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -166,15 +167,8 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   // For each model: compute A(D) for EVERY member separately, then get P10/P50/P90 across members
   // A_m(d) = cumsum_t[ bc_daily[m,t] - Q_bar ]   (correct Dunning method)
   const modelSeries = activeEntries.map(([name, ms]) => {
-    let A = ms.bc_pixel ?? []   // [n_members][n_days]
-    if ((!A || !A.length) && C_vec && C_vec.length >= nDays) {
-      // Defensive fallback synthesis from cumulative C_clim_vec
-      const dBase = C_vec.map((v, i) => i === 0 ? v : Math.max(0, v - C_vec[i-1]))
-      A = Array.from({length: 10}, (_, mIdx) => {
-        return dBase.map((val, dIdx) => Number((val * (0.85 + 0.3 * Math.cos(mIdx * 1.4 + dIdx * 0.1))).toFixed(2)))
-      })
-    }
-    if (!A || !A.length) return null
+    const A = ms.bc_pixel ?? []   // [n_members][n_days]; only the members' real daily rainfall, never a made-up trace
+    if (!A.length) return null
     const color = ms.color ?? '#4a6fa5'
     const d_s_model = ms.on_med   // model P50 onset DOY
     const d_e_model = ms.cs_med   // model P50 cessation DOY
@@ -373,25 +367,9 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
 
   const allTraces = []
   entries.forEach(([name, ms]) => {
-    let bc = ms.bc_pixel ?? []
-    // Fallback: if bc_pixel is empty, synthesize daily rainfall plume from C_clim_vec
-    if ((!bc || !bc.length) && pixelData.C_clim_vec && pixelData.C_clim_vec.length >= 100) {
-      const cCurve = pixelData.C_clim_vec
-      const dBase = cCurve.map((v, i) => i === 0 ? v : Math.max(0, v - cCurve[i-1]))
-      const bMax = Math.max(...dBase, 0.1)
-      const scaled = dBase.map(v => (v / bMax) * 5.5)
-      const onMed = ms.on_med ?? (isBega ? 265 : (isFmam ? 75 : (isKiremt ? 170 : (isShort ? 315 : 80))))
-      const csMed = ms.cs_med ?? (isBega ? 325 : (isFmam ? 145 : (isKiremt ? 270 : (isShort ? 350 : 140))))
-      bc = Array.from({length: 10}, (_, mIdx) => {
-        return scaled.map((val, dIdx) => {
-          const doy = DOY_START + dIdx
-          const active = doy >= onMed && doy <= csMed
-          const factor = active ? (0.85 + 0.3 * Math.sin(mIdx + dIdx * 0.2)) : 0.15
-          return Number((val * factor).toFixed(2))
-        })
-      })
-    }
-    if (!bc || !bc.length) return
+    // only the members' real daily rainfall: no traces are drawn when the data service does not provide it
+    const bc = ms.bc_pixel ?? []
+    if (!bc.length) return
     bc.forEach(memberDays => {
       if (!memberDays?.length) return
       allTraces.push({ color: ms.color ?? '#4a8fc4', data: memberDays.slice(0, N_DAYS) })
@@ -405,7 +383,7 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
 
   if (!allTraces.length) return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:8,color:'var(--text-faint)',fontSize:11}}>
-      <span>No BC precipitation data available</span>
+      <span>The members' daily rainfall is not available from this data service for this forecast.</span>
     </div>
   )
 
@@ -2472,10 +2450,11 @@ const TABS = [
   {id:'validation',    label:'Forecast performance', icon:ShieldCheck},
   {id:'historical',    label:'Historical rainfall',  icon:HistoryIcon},
   {id:'tracker',       label:'Near real-time rainfall tracking', icon:Satellite},
+  {id:'crop',          label:'Crop outlook',  icon:Sprout},
   {id:'about',         label:'About',         icon:Info},
 ]
 // Tabs that take the full width (no map panel beside them)
-const FULL_PAGE_TABS = ['about', 'tracker']
+const FULL_PAGE_TABS = ['about', 'tracker', 'crop']
 
 function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, forecastType, setForecastType, frRuns, joinedModels, joinedModel, setJoinedModel, frList, frSel, setFcRun, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
   const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
@@ -2904,7 +2883,7 @@ export default function App() {
       <LandingPage
         darkMode={darkMode} setDarkMode={setDarkMode}
         onOpenAddress={addr => { window.history.pushState(null, '', addr); window.dispatchEvent(new PopStateEvent('popstate')) }}
-        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } setAboutInitial(aboutAt); if (tab === 'about') setAboutSection(aboutAt?.section ?? 'overview'); setActiveTab(tab); setShowLanding(false) }}
+        onEnter={(tab, aboutAt)=>{ if (tab === 'multimodel') { setCountry('kenya'); changeSeason('long_rains') } if (tab === 'crop') setCountry('kenya'); setAboutInitial(aboutAt); if (tab === 'about') setAboutSection(aboutAt?.section ?? 'overview'); setActiveTab(tab); setShowLanding(false) }}
       />
     )
   }
@@ -3009,6 +2988,7 @@ export default function App() {
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
+            {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite}/>}
             {activeTab==='tracker'       && (
               <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
                       style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
