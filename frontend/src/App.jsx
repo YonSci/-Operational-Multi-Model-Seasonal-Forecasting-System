@@ -2262,7 +2262,7 @@ function JoinedRunControls({ models, model, setModel, runs, run, setRun, onsetDe
 }
 
 // --- Medium-range forecasts (Forecast tab) --------------------------------------------
-// The Short Rains Tracker's daily weather-model forecasts (scripts/fetch_nwp_direct.py), one file per run date.
+// The daily weather-model forecasts of near real-time rainfall tracking (scripts/fetch_nwp_direct.py), one file per run date.
 // Colours follow the model, in this fixed order (categorical slots 1-6, validated light and dark).
 const MRF_ORDER = ['ecmwf_ifs025', 'ecmwf_ens_median', 'gfs_global', 'gem_global', 'icon_global', 'ukmo_global_deterministic_10km']
 const MRF_COLORS = {
@@ -2340,7 +2340,7 @@ const shortDate = iso => { const [, mo, d] = iso.split('-').map(Number); return 
 
 function MediumRangePanel({ models, isLoading, isError, modelId, site, dark }) {
   const msg = t => <div className="flex items-center justify-center min-h-[240px] p-6 text-center" style={{fontSize:14, color:'var(--text-meta)'}}>{t}</div>
-  if (isError) return msg('The weather-model rainfall for this run could not be loaded. The Short Rains Tracker tab shows the latest forecasts.')
+  if (isError) return msg('The weather-model rainfall for this run could not be loaded. The Near real-time rainfall tracking tab shows the latest forecasts.')
   if (!models?.length) return msg(isLoading ? 'Loading the weather-model forecasts…' : 'No weather-model forecasts are available.')
   const sel = models.find(m => m.id === modelId) ?? models[0]
   const cells = Object.fromEntries(models.map(m => [m.id, mrfCell(m, site)]))
@@ -2448,7 +2448,7 @@ function MediumRangePanel({ models, isLoading, isError, modelId, site, dark }) {
             </table>
           </div>
           <p style={{margin:'6px 0 0', fontSize:12.5, lineHeight:1.5, color:'var(--text-meta)'}}>
-            Each model's 00 UTC run of {fmtDate(sel.run)}, as used by the Short Rains Tracker; the models forecast different
+            Each model's 00 UTC run of {fmtDate(sel.run)}, as used by near real-time rainfall tracking; the models forecast different
             numbers of days. The rainfall here is not bias-corrected; ECMWF ENS is the median of its members.
           </p>
         </>
@@ -2471,7 +2471,7 @@ const TABS = [
   {id:'multimodel',    label:'Compare models',       icon:Layers},
   {id:'validation',    label:'Forecast performance', icon:ShieldCheck},
   {id:'historical',    label:'Historical rainfall',  icon:HistoryIcon},
-  {id:'tracker',       label:'Short Rains Tracker', icon:Satellite},
+  {id:'tracker',       label:'Near real-time rainfall tracking', icon:Satellite},
   {id:'about',         label:'About',         icon:Info},
 ]
 // Tabs that take the full width (no map panel beside them)
@@ -3010,7 +3010,7 @@ export default function App() {
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
             {activeTab==='tracker'       && (
-              <iframe ref={trackerRef} title="Short Rains Tracker" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
+              <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
                       style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
             )}
            </ErrorBoundary>

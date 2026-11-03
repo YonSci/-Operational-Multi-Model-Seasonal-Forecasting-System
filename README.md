@@ -15,7 +15,7 @@
 An operational, end-to-end seasonal climate forecasting and agro-pastoral decision-support platform designed for East Africa. Developed for **ILRI (International Livestock Research Institute) Climate Services** and **CGIAR**, this platform moves beyond traditional seasonal rainfall totals by delivering high-resolution probabilistic forecasts of **Rainfall Onset (ONS)**, **Cessation (CESS)**, and **Length of Growing Period (LGP / Season Length)** derived from Copernicus Climate Change Service (C3S) multi-model global ensembles and calibrated against CHIRPS daily precipitation records.
 
 ### 🌐 Live System Access & Guides
-- **Interactive Web Dashboard**: [GitHub Pages Deployment](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/)
+- **Interactive Web Dashboard**: [GitHub Pages Deployment](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/) — seasonal, sub-seasonal and medium-range forecasts, and near real-time rainfall tracking ([see below](#forecast-timescales--near-real-time-rainfall-tracking))
 - **Live Operational API**: [Render Backend Service](https://operational-multi-model-seasonal-1t6w.onrender.com)
 - **Interactive API Documentation (Swagger)**: [API Swagger Docs](https://operational-multi-model-seasonal-1t6w.onrender.com/docs)
 - **Automated Pipeline Guide**: [AUTOMATION_GUIDE.md](AUTOMATION_GUIDE.md) — Complete instructions for scheduled data download, Method 2 downscaling, email reminders, and approval workflow.
@@ -33,6 +33,21 @@ An operational, end-to-end seasonal climate forecasting and agro-pastoral decisi
 | **Ethiopia** | `Belg` | Early Spring Rains (`FMAM`) | DOY 32 – 166 (Feb 01 – Jun 15) | ECMWF SEAS5 System 51 (Jan 01 Init, 25 members) |
 | **Ethiopia** | `Bega / Deyr` | Autumn–Winter Rains (`ONDJ`) | DOY 244 – 396 (Sep 01 – Jan 31) | ECMWF SEAS5 System 51 (Sep 01 Init, 25 members) |
 | **Ethiopia (West)** | `Annual` | Western Extended Season | DOY 100 – 320 (Apr 10 – Nov 16) | Climatological Monsoonal Continuum (May–October) |
+
+---
+
+## Forecast Timescales & Near Real-Time Rainfall Tracking
+
+The dashboard's **Forecast** tab offers three forecast timescales (the *Forecast* selector), and a separate tab tracks the rain that has already fallen. For the Kenya Short Rains, the sub-seasonal and medium-range forecasts are joined to the seasonal forecast: each run takes the 25 members of the October forecast with the latest observations, adds the weather model's forecast from its run date, then continues with SEAS5. Onset, end of rains and season length are then computed with every method (Dunning, Agri rules 1–3, FAO water balance with its three definitions).
+
+| Timescale | Range | Models / data | What it gives | Where |
+| :--- | :--- | :--- | :--- | :--- |
+| **Seasonal** | The whole season | ECMWF SEAS5; seven C3S models for the Kenya Long Rains | Onset, cessation and season length with tercile probabilities and skill, for every country and season | Forecast › Seasonal |
+| **Sub-seasonal** | Weeks 2–6 (to ~46 days) | ECMWF ENS + extended range; NOAA GEFS 35-day | The forecast joined to the seasonal forecast, every method; a new run each day, earlier runs kept | Forecast › Sub-seasonal forecasts (Kenya Short Rains) |
+| **Medium-range** | 7–16 days | ECMWF IFS (HRES), ECMWF ENS, GFS, GDPS, ICON, UKMO Global | Daily rainfall maps, and the forecast joined to the seasonal forecast with every method; a new run each day | Forecast › Medium-range forecasts (Kenya Short Rains) |
+| **Near real-time rainfall tracking** | Rain so far, 1–5 days behind real time | CHIRPS preliminary, ARC2, TAMSAT, PDIR-Now, IMERG; the medium-range models for the outlook | Rain since 1 September at monitored sites, verified against CHIRPS, with the next 7–16 days | Near real-time rainfall tracking tab (Kenya Short Rains) |
+
+All four are refreshed by the daily update (`scripts/update_forecast.py`). The forecast runs are built by `scripts/forecast_runs.py` into `backend/forecast_runs/` and served at `/models/forecast-runs`. A day the update misses is filled in afterwards (up to six days back) from ECMWF's cloud copies of its open data, dynamical.org (GEFS) and Open-Meteo's archive of past runs. The weather forecasts other than the ECMWF extended range are bias-corrected provisionally, and the joined runs have not yet been tested on past seasons.
 
 ---
 

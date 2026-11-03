@@ -133,7 +133,7 @@ A panel shows the chance that this definition's onset or cessation has happened 
 days. It also shows the PAW/TAW outlook: the members' median and 10–90% range, with the 0.20 critical level. The
 median date is a summary of the members, not a deterministic event date.
 
-The Short Rains Tracker lists FAO agricultural, FAO rainfall and FAO crop-water next to Dunning and the Agri rules.
+Near real-time rainfall tracking lists FAO agricultural, FAO rainfall and FAO crop-water next to Dunning and the Agri rules.
 
 ## Flags
 
