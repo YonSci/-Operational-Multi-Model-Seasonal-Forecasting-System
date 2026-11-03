@@ -97,7 +97,7 @@ const BASEMAPS = {
 export const MONITORED_SITES_KENYA = [
   { site_name: "Kapiti Research Station Farm",   lat: -1.63209, lon: 37.1479, county: "Machakos",   country: "kenya",    desc: "ILRI Research Farm" },
   { site_name: "KALRO Kiboko, Makueni Farm",     lat: -2.21046, lon: 37.7190, county: "Makueni",    country: "kenya",    desc: "KALRO Dryland Station" },
-  { site_name: "El Karama Sahiwals Farm",         lat: -2.38710, lon: 37.4851, county: "Kajiado",    country: "kenya",    desc: "Livestock Breeding Farm" },
+  { site_name: "El Karama Sahiwals Farm",         lat:  0.20740, lon: 36.9038, county: "Laikipia",   country: "kenya",    desc: "Livestock Breeding Farm" },
   { site_name: "LiveMo LTD, Memerush, Kajiado",  lat: -2.38726, lon: 37.4850, county: "Kajiado",    country: "kenya",    desc: "Commercial Pastoral Ranch" },
   { site_name: "Genco LTD Maralal Samburu Farm", lat:  0.92730, lon: 36.5690, county: "Samburu",    country: "kenya",    desc: "Northern Pastoral Hub" },
   { site_name: "Genco LTD Tana River Farm",      lat: -2.21314, lon: 40.0517, county: "Tana River", country: "kenya",    desc: "Coast Rangeland Site" },

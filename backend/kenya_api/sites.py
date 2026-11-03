@@ -12,7 +12,7 @@ DEFAULT_SITES = [
     # Kenya Research Farms
     {"site_name": "Kapiti Research Station Farm",   "lat": -1.63209, "lon": 37.1479, "county": "Machakos",   "country": "kenya"},
     {"site_name": "KALRO Kiboko, Makueni Farm",     "lat": -2.21046, "lon": 37.7190, "county": "Makueni",    "country": "kenya"},
-    {"site_name": "El Karama Sahiwals Farm",         "lat": -2.38710, "lon": 37.4851, "county": "Kajiado",    "country": "kenya"},
+    {"site_name": "El Karama Sahiwals Farm",         "lat":  0.20740, "lon": 36.9038, "county": "Laikipia",   "country": "kenya"},
     {"site_name": "LiveMo LTD, Memerush, Kajiado",  "lat": -2.38726, "lon": 37.4850, "county": "Kajiado",    "country": "kenya"},
     {"site_name": "Genco LTD Maralal Samburu Farm", "lat":  0.92730, "lon": 36.5690, "county": "Samburu",    "country": "kenya"},
     {"site_name": "Genco LTD Tana River Farm",      "lat": -2.21314, "lon": 40.0517, "county": "Tana River", "country": "kenya"},
