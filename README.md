@@ -18,6 +18,7 @@ An operational, end-to-end seasonal climate forecasting and agro-pastoral decisi
 - **Interactive Web Dashboard**: [GitHub Pages Deployment](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/) — seasonal, sub-seasonal and medium-range forecasts, and near real-time rainfall tracking ([see below](#forecast-timescales--near-real-time-rainfall-tracking))
 - **Live Operational API**: [Render Backend Service](https://operational-multi-model-seasonal-1t6w.onrender.com)
 - **Interactive API Documentation (Swagger)**: [API Swagger Docs](https://operational-multi-model-seasonal-1t6w.onrender.com/docs)
+- **Crop Model Engine (experimental pilot)**: [CROP_ENGINE.md](CROP_ENGINE.md) — AquaCrop crop growth, yield and risk at the Kenya monitored sites from every forecast run.
 - **Automated Pipeline Guide**: [AUTOMATION_GUIDE.md](AUTOMATION_GUIDE.md) — Complete instructions for scheduled data download, Method 2 downscaling, email reminders, and approval workflow.
 - **Open GIS Shapefile Bundle**: [`/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip`](https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/shapefiles/ethiopia_climate_regimes_and_masks_shp.zip)
 

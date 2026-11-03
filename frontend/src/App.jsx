@@ -166,15 +166,8 @@ function ADPlume({ pixelData, selectedModel, activeModels, weightMode=null, weig
   // For each model: compute A(D) for EVERY member separately, then get P10/P50/P90 across members
   // A_m(d) = cumsum_t[ bc_daily[m,t] - Q_bar ]   (correct Dunning method)
   const modelSeries = activeEntries.map(([name, ms]) => {
-    let A = ms.bc_pixel ?? []   // [n_members][n_days]
-    if ((!A || !A.length) && C_vec && C_vec.length >= nDays) {
-      // Defensive fallback synthesis from cumulative C_clim_vec
-      const dBase = C_vec.map((v, i) => i === 0 ? v : Math.max(0, v - C_vec[i-1]))
-      A = Array.from({length: 10}, (_, mIdx) => {
-        return dBase.map((val, dIdx) => Number((val * (0.85 + 0.3 * Math.cos(mIdx * 1.4 + dIdx * 0.1))).toFixed(2)))
-      })
-    }
-    if (!A || !A.length) return null
+    const A = ms.bc_pixel ?? []   // [n_members][n_days]; only the members' real daily rainfall, never a made-up trace
+    if (!A.length) return null
     const color = ms.color ?? '#4a6fa5'
     const d_s_model = ms.on_med   // model P50 onset DOY
     const d_e_model = ms.cs_med   // model P50 cessation DOY
@@ -373,25 +366,9 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
 
   const allTraces = []
   entries.forEach(([name, ms]) => {
-    let bc = ms.bc_pixel ?? []
-    // Fallback: if bc_pixel is empty, synthesize daily rainfall plume from C_clim_vec
-    if ((!bc || !bc.length) && pixelData.C_clim_vec && pixelData.C_clim_vec.length >= 100) {
-      const cCurve = pixelData.C_clim_vec
-      const dBase = cCurve.map((v, i) => i === 0 ? v : Math.max(0, v - cCurve[i-1]))
-      const bMax = Math.max(...dBase, 0.1)
-      const scaled = dBase.map(v => (v / bMax) * 5.5)
-      const onMed = ms.on_med ?? (isBega ? 265 : (isFmam ? 75 : (isKiremt ? 170 : (isShort ? 315 : 80))))
-      const csMed = ms.cs_med ?? (isBega ? 325 : (isFmam ? 145 : (isKiremt ? 270 : (isShort ? 350 : 140))))
-      bc = Array.from({length: 10}, (_, mIdx) => {
-        return scaled.map((val, dIdx) => {
-          const doy = DOY_START + dIdx
-          const active = doy >= onMed && doy <= csMed
-          const factor = active ? (0.85 + 0.3 * Math.sin(mIdx + dIdx * 0.2)) : 0.15
-          return Number((val * factor).toFixed(2))
-        })
-      })
-    }
-    if (!bc || !bc.length) return
+    // only the members' real daily rainfall: no traces are drawn when the data service does not provide it
+    const bc = ms.bc_pixel ?? []
+    if (!bc.length) return
     bc.forEach(memberDays => {
       if (!memberDays?.length) return
       allTraces.push({ color: ms.color ?? '#4a8fc4', data: memberDays.slice(0, N_DAYS) })
@@ -405,7 +382,7 @@ function PrecipPlume({pixelData,selectedModel,activeModels,selectedSeason='long_
 
   if (!allTraces.length) return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:8,color:'var(--text-faint)',fontSize:11}}>
-      <span>No BC precipitation data available</span>
+      <span>The members' daily rainfall is not available from this data service for this forecast.</span>
     </div>
   )
 

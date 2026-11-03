@@ -159,6 +159,22 @@ def update_forecast_runs(env):
     subprocess.run([PY, str(BASE_DIR / "scripts" / "forecast_runs.py")], check=True, env=env)
 
 
+def update_crop_outlook(env):
+    """Experimental crop outlook (crop_engine/, CROP_ENGINE.md): AquaCrop at the monitored sites for every forecast
+    run → outputs/crop_engine/ (not published yet). Skipped when AquaCrop is not installed; at most 60 min; never
+    stops the daily update."""
+    import importlib.util
+    if not importlib.util.find_spec("aquacrop"):
+        log("crop outlook: AquaCrop not installed (pip install aquacrop); skipped")
+        return
+    try:
+        r = subprocess.run([PY, "-m", "crop_engine.run_outlook", "--workers", "2"], cwd=BASE_DIR, env=env, timeout=60 * 60)
+        if r.returncode:
+            log(f"crop outlook: failed (exit {r.returncode}); previous results kept")
+    except subprocess.TimeoutExpired:
+        log("crop outlook: took over 60 min; stopped, previous results kept")
+
+
 def update_fao(env):
     """FAO water balance (fao_water_balance.py): fetch new CHIRPS v3 days (Earth Engine, then CHC preliminary) and
     the latest ERA5-Land ET0 (Earth Engine; at most 45 min — days ERA5-Land does not have yet use the ET0
@@ -257,6 +273,7 @@ def main():
         update_forecast_runs(env)
     except Exception as exc:
         log(f"forecast runs: failed ({str(exc)[:160]}); previous runs kept")
+    update_crop_outlook(env)
     subprocess.run([PY, rt, "sync", "--start", f"{YEAR}-09-01", "--products", *products], check=False, env=env)
     subprocess.run([PY, rt, "monitor", "--since", f"{YEAR}-10-01"], check=False, env=env)
     subprocess.run([PY, rt, "verify", "--ref", "chirps", "--periods", f"{YEAR - 1}-10-01:{YEAR - 1}-12-31",

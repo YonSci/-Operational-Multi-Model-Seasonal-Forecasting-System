@@ -66,6 +66,10 @@ SOURCES = {
     "mr-icon_global": ("medium", "ICON"),
     "mr-ukmo_global_deterministic_10km": ("medium", "UKMO Global"),
 }
+# how the weather forecast fills the 25 members: an ensemble member by member, or one deterministic forecast repeated
+# in every member (no near-term spread; the spread comes from the observations and SEAS5 only)
+ENSEMBLE_SOURCES = {"s2s-ecmwf", "s2s-gefs", "mr-ecmwf_ens_median"}
+members_kind = lambda source: "ensemble" if source in ENSEMBLE_SOURCES else "deterministic, repeated in every member"  # noqa: E731
 
 
 def log(m):
@@ -189,6 +193,31 @@ class Methods:
         return out
 
 
+def joined_rain(b, source, run, path, nwp_cache):
+    """The run's joined daily rain (member, 1 Sep – 31 Dec, lat, lon) → (P, info, segments, extra metadata), or the
+    reason it cannot be built. Also used by the crop engine (crop_engine/data/weather.py)."""
+    extra = {}
+    if source == "s2s-ecmwf":
+        if not [p for i, p in b.ext_by_init.items() if i < run]:
+            return "no extended-range run before it on disk"
+        P, info, weather, segs = b.ecmwf(path)
+        extra["weather"] = weather
+    elif source == "s2s-gefs":
+        P, info, segs = b.gefs(path)
+    elif source == "mr-ecmwf_ens_median" and (BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc").exists():
+        P, info, segs = b.ens_only(BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc")
+    else:
+        if path not in nwp_cache:
+            nwp_cache.clear()
+            df = pd.read_csv(path)
+            nwp_cache[path] = df[df.kind == "grid"]
+        rows = nwp_cache[path][nwp_cache[path].model == source[3:]]
+        P, info, segs = b.nwp(source[3:], run, rows, SOURCES[source][1])
+        if info["fc_days"] is None:
+            return "no forecast day after the observations"
+    return P, info, segs, extra
+
+
 def save(source, run, info, segs, results, extra=None):
     kind, label = SOURCES[source]
     meta = {"source": source, "kind": kind, "model_label": label, "run": str(run), "obs_end": info["obs_end"],
@@ -213,7 +242,7 @@ def write_index():
         if meta["source"] not in SOURCES:
             continue
         runs.append({**{k: meta[k] for k in ("source", "kind", "run", "obs_end", "segments", "bias_correction", "created")},
-                     "model_label": SOURCES[meta["source"]][1], "file": p.name})
+                     "model_label": SOURCES[meta["source"]][1], "members": members_kind(meta["source"]), "file": p.name})
     runs.sort(key=lambda r: (r["kind"], r["source"], r["run"]))
     (OUT / "index.json").write_text(json.dumps({"updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
                                                 "runs": runs}, indent=1) + "\n", encoding="utf-8")
@@ -287,29 +316,11 @@ def main():
     for source, run, path in todo:
         t0 = time.time()
         try:
-            extra = {}
-            if source == "s2s-ecmwf":
-                ext = [p for i, p in b.ext_by_init.items() if i < run]
-                if not ext:
-                    log(f"{source} {run}: no extended-range run before it on disk; skipped")
-                    continue
-                P, info, weather, segs = b.ecmwf(path)
-                extra["weather"] = weather
-            elif source == "s2s-gefs":
-                P, info, segs = b.gefs(path)
-            elif source == "mr-ecmwf_ens_median" and (BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc").exists():
-                P, info, segs = b.ens_only(BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc")
-            else:
-                if path not in nwp_cache:
-                    nwp_cache.clear()
-                    df = pd.read_csv(path)
-                    nwp_cache[path] = df[df.kind == "grid"]
-                df = nwp_cache[path]
-                rows = df[df.model == source[3:]]
-                P, info, segs = b.nwp(source[3:], run, rows, SOURCES[source][1])
-                if info["fc_days"] is None:
-                    log(f"{source} {run}: no forecast day after the observations; skipped")
-                    continue
+            got = joined_rain(b, source, run, path, nwp_cache)
+            if isinstance(got, str):
+                log(f"{source} {run}: {got}; skipped")
+                continue
+            P, info, segs, extra = got
             res = meth.run(P, (P != b.seas).any(axis=(0, 2, 3)))
             p, meta = save(source, run, info, segs, res, extra)
             med = lambda k, v: np.nanmedian(res[k][v][0][:, meth.lm])           # noqa: E731
