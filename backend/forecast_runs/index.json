@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-02T20:34+03:00",
+ "updated": "2026-11-03T15:39+03:00",
  "runs": [
   {
    "source": "mr-ecmwf_ens_median",
@@ -206,6 +206,42 @@
    "file": "mr-ecmwf_ens_median_20261102.npz"
   },
   {
+   "source": "mr-ecmwf_ens_median",
+   "kind": "medium",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "ECMWF ENS (25 members), run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-17"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-18",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:08+03:00",
+   "model_label": "ECMWF ENS",
+   "file": "mr-ecmwf_ens_median_20261103.npz"
+  },
+  {
    "source": "mr-ecmwf_ifs025",
    "kind": "medium",
    "run": "2026-10-25",
@@ -408,6 +444,42 @@
    "created": "2026-11-02T20:21+03:00",
    "model_label": "ECMWF IFS (HRES)",
    "file": "mr-ecmwf_ifs025_20261102.npz"
+  },
+  {
+   "source": "mr-ecmwf_ifs025",
+   "kind": "medium",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "ECMWF IFS (HRES), run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-17"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-18",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:28+03:00",
+   "model_label": "ECMWF IFS (HRES)",
+   "file": "mr-ecmwf_ifs025_20261103.npz"
   },
   {
    "source": "mr-gem_global",
@@ -614,6 +686,42 @@
    "file": "mr-gem_global_20261102.npz"
   },
   {
+   "source": "mr-gem_global",
+   "kind": "medium",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "GDPS, run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-12"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-13",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:34+03:00",
+   "model_label": "GDPS",
+   "file": "mr-gem_global_20261103.npz"
+  },
+  {
    "source": "mr-gfs_global",
    "kind": "medium",
    "run": "2026-10-25",
@@ -816,6 +924,42 @@
    "created": "2026-11-02T20:22+03:00",
    "model_label": "GFS",
    "file": "mr-gfs_global_20261102.npz"
+  },
+  {
+   "source": "mr-gfs_global",
+   "kind": "medium",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "GFS, run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-18"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-19",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:31+03:00",
+   "model_label": "GFS",
+   "file": "mr-gfs_global_20261103.npz"
   },
   {
    "source": "mr-icon_global",
@@ -1022,6 +1166,42 @@
    "file": "mr-icon_global_20261102.npz"
   },
   {
+   "source": "mr-icon_global",
+   "kind": "medium",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "ICON, run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-09"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-10",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:37+03:00",
+   "model_label": "ICON",
+   "file": "mr-icon_global_20261103.npz"
+  },
+  {
    "source": "mr-ukmo_global_deterministic_10km",
    "kind": "medium",
    "run": "2026-10-25",
@@ -1188,6 +1368,42 @@
    "created": "2026-11-02T20:22+03:00",
    "model_label": "UKMO Global",
    "file": "mr-ukmo_global_deterministic_10km_20261102.npz"
+  },
+  {
+   "source": "mr-ukmo_global_deterministic_10km",
+   "kind": "medium",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "UKMO Global, run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-09"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-10",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:39+03:00",
+   "model_label": "UKMO Global",
+   "file": "mr-ukmo_global_deterministic_10km_20261103.npz"
   },
   {
    "source": "s2s-ecmwf",
@@ -1478,6 +1694,48 @@
    "file": "s2s-ecmwf_20261102.npz"
   },
   {
+   "source": "s2s-ecmwf",
+   "kind": "s2s",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "ens",
+     "label": "ECMWF ENS, run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-11-17"
+    },
+    {
+     "kind": "ext",
+     "label": "ECMWF extended range, run 2026-11-01",
+     "start": "2026-11-18",
+     "end": "2026-12-16"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-12-17",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
+   "created": "2026-11-03T15:06+03:00",
+   "model_label": "ECMWF ENS + extended range",
+   "file": "s2s-ecmwf_20261103.npz"
+  },
+  {
    "source": "s2s-gefs",
    "kind": "s2s",
    "run": "2026-10-31",
@@ -1548,6 +1806,42 @@
    "created": "2026-11-02T20:14+03:00",
    "model_label": "NOAA GEFS 35-day",
    "file": "s2s-gefs_20261101.npz"
+  },
+  {
+   "source": "s2s-gefs",
+   "kind": "s2s",
+   "run": "2026-11-02",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-01"
+    },
+    {
+     "kind": "fc",
+     "label": "NOAA GEFS 35-day, run 2026-11-02",
+     "start": "2026-11-02",
+     "end": "2026-12-06"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-12-07",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-03T15:07+03:00",
+   "model_label": "NOAA GEFS 35-day",
+   "file": "s2s-gefs_20261102.npz"
   }
  ]
 }
