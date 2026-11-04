@@ -77,14 +77,30 @@ class's maturity at a daily mean of 21 °C (mid-altitude dryland Kenya, where th
 | Sorghum | SorghumGDD | 100 | Gadam type |
 | Dry bean | DryBeanGDD | 75 | KAT-series type |
 
-They are not calibrated cultivars. Calibration needs observed yields, sowing dates and crop stages (phase P3).
+They are maturity classes, not cultivars. Maize and sorghum carry Kenyan practice and the trials at the sites
+(`parameters` in `varieties.yaml`, used as given after the phenology scaling):
+
+| Variety | Plants /ha | Max. canopy (CCx) | Reference harvest index (HI0) | Basis |
+| :--- | ---: | ---: | ---: | :--- |
+| Maize (both classes) | 44,444 (75 x 30 cm) | 0.75 | 0.48 (AquaCrop) | Kiboko maize trials: median 4.5, high-input 6.1 dry t/ha |
+| Sorghum | 66,667 (75 x 20 cm) | 0.75 | 0.30 | Kiboko 2020 sorghum: median 1.75, best 3.15 dry t/ha, measured HI 0.28 |
+| Dry bean | 131,579 (AquaCrop) | 0.99 (AquaCrop) | 0.40 (AquaCrop) | no bean trials near the sites |
+
+AquaCrop's own densities (maize 75,000, sorghum 200,000 /ha) are high-input ones, and its density sets only the
+initial canopy, so the maximum canopy is set with it.
 
 ## Outcomes of a member
 
 `ok` (sown, matured), `failed_establishment` (died before its canopy reached 5 %: a false start, the seedlings
 dried out), `died` (an established crop that died before maturity: canopy collapse under water stress), `too_late`
 (sown too late to mature by 31 Mar), `not_sown` (no onset by the rule's search end, 15 Jan). Members not sown or too
-late count as zero yield in the risk figures. A crop failure is a yield below the variety's threshold (0.5 t/ha
+late count as zero yield in the risk figures.
+
+**Re-sowing.** After a failed establishment the member is sown again at the next day that meets Agri rule 1's onset
+criteria after the seedlings died (`config.RESOW_RULE`, at most `RESOW_MAX` = 1 more sowing, by 15 Jan), as a farmer
+re-sows after the next good rain, provided the variety can still mature by 31 Mar. The outcome is then the re-sown
+crop's; `sowings` and `first_planting` record it, and the summary's `resown` gives the share of members re-sown.
+A `died` crop can still yield: AquaCrop ends the season when the canopy collapses, often late in grain filling. A crop failure is a yield below the variety's threshold (0.5 t/ha
 grain; 0.2 t/ha bean). A water-stress day is a day with transpiration below half its potential.
 
 Below / above normal compare a run's yields with the benchmark's terciles. They are left out (null) where a third or
@@ -93,13 +109,17 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 
 ## Limitations
 
-- Yields are **water-limited**: no nutrient stress, pests, weeds or management losses, and AquaCrop's default plant
-  density. They are an upper bound for smallholder fields.
+- Yields are **water-limited**: no nutrient stress, pests, diseases, weeds or management losses. They are an upper
+  bound for smallholder fields; the plant densities are the recommended ones, not farmers' (often lower).
 - No forecast temperature or radiation yet: after the last ERA5-Land day both are climatology.
 - Deterministic weather models are the same forecast in every member, so their near-term spread is zero.
 - March rain is a climatological continuation, not a forecast.
 - Establishment is very sensitive to the soil water on 1 Aug. ERA5-Land puts it at 4–20 % of the available water at
-  most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings. No re-sowing yet.
+  most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings (re-sown once).
+  At Kiboko a fixed 50 % would roughly halve the failures; without soil moisture measurements it is left as is.
+- Agri rule 1 finds no onset by 15 Jan in many seasons at the drier sites (Kiboko 15 of 33, Kapiti and El Karama
+  12): its "no 7-day dry spell in 21 days" criterion is rarely met there. Farmers sow anyway, so the rule-1 figures
+  overstate failure there; the FAO agricultural onset sows every year.
 - Sowing dates in cool sites (Kapiti, Maralal): the maturity classes are defined at 21 °C, so a medium maize or
   sorghum sown in November there needs more heat than the season gives before 31 Mar and is counted as too late.
 - Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
@@ -131,7 +151,8 @@ First comparison (November 2026):
   example, fails 76–83 % of them, while the county averages about 1 t/ha in the Short Rains and the 2020–21 trial
   averaged 1.8 t/ha (dry). The two failure modes are failed establishment after a false start, which happens even
   in wet seasons (Kiboko, Short Rains 2019, sown 1 Oct), and death before maturity. Re-sowing after a failed
-  establishment and a wetter starting soil are the first things to calibrate.
+  establishment and a wetter starting soil are the first things to calibrate. (Not matured is not failed: a crop
+  AquaCrop ends early under drought often still yields; the dashboard's failure is a yield below the threshold.)
 - **Matured seasons yield too much.** Their median is 5–15 times the county average for maize and sorghum (2–4.5
   times for bean). Part of that is the missing nutrient stress: nitrogen trials at Kiboko (2013) range from 1.8 t/ha
   with no N to 7.2 t/ha at 160 kg N/ha. But matured maize medians of 5.4–12.4 t/ha exceed even the best fertilized
@@ -142,6 +163,35 @@ First comparison (November 2026):
   plausibility check, not a score.
 - What is still missing for calibration: sowing dates at the sites (the Kiboko trials give years only), Long Rains
   simulations (several trials are Long Rains), and the underlying plot data of the Kiboko sorghum and maize studies.
+
+### First calibration (November 2026)
+
+Re-sowing after a failed establishment, Kenyan plant densities with their maximum canopy, and a sorghum harvest
+index from the Kiboko trial (see *Varieties*). Observed-weather benchmark, Short Rains 1993–2025, before → after
+(failure: share of all seasons below the failure yield, as on the dashboard; matured: median of the seasons that
+reached maturity, dry t/ha), FAO agricultural onset:
+
+| Site | Early maize failure | Early maize matured | Sorghum failure | Sorghum matured | Trials at the site |
+| :--- | ---: | ---: | ---: | ---: | :--- |
+| Kiboko | 48 → 42 % | 5.5 → 4.8 | 61 → 52 % | 5.4 → 3.9 | maize median 4.5, high-input 6.1; sorghum 2020 median 1.75, best 3.15 |
+| Kapiti | 48 → 42 % | 6.7 → 5.8 | 61 → 64 % | 7.4 → 4.6 | maize 2015 median 0.8 (low-input on-farm trial) |
+| El Karama | 39 → 27 % | 8.3 → 7.2 | 46 → 36 % | 9.4 → 5.8 | none |
+| Tana River | 76 → 48 % | 2.9 → 4.6 | 76 → 52 % | 2.9 → 2.4 | none |
+| Maralal | 33 → 33 % | 10.7 → 9.5 | 39 → 39 % | 8.7 → 5.6 | none |
+| Memerush | 55 → 52 % | 4.7 → 4.3 | 64 → 58 % | 3.7 → 2.0 | none |
+
+In the Kiboko trial year (2020) the benchmark sorghum now yields 2.6 t/ha (FAO onset; 2.8 with rule 1, against 4.2
+and 4.7 before), between the trial's median and its best entry, as a model without nutrient or disease stress
+should. Still open:
+
+- **Medium maize and the cool, wet sites yield too much when they mature**: Kiboko medium maize about 8 t/ha
+  against the best trial plot's 7.4; El Karama and Maralal maize 7–13 t/ha, where there are no trials to calibrate
+  against. A lower maize harvest index (0.42 takes about an eighth off) needs trials from those sites to justify.
+- **Starting soil water** remains ERA5-Land's (4–20 % of the available water on 1 Aug); it is the strongest
+  remaining lever on failure (see *Limitations*), and needs soil moisture observations.
+- **Agri rule 1 sows no crop in 12–15 of the 33 seasons** at Kiboko, Kapiti and El Karama (see *Limitations*).
+- Re-sowing rescues few seasons (1–4 of 33 per site and variety): most failures are crops that die later, under
+  mid-season drought, not failed establishments.
 
 ## Next phases
 

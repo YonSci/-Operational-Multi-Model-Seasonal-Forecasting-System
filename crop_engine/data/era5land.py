@@ -8,6 +8,7 @@ ET0 is not taken from here: the engine uses the platform's own ERA5-Land FAO-56 
 so the crop model and the FAO water balance see the same evaporative demand.
 """
 import datetime as dt
+import os
 import time
 
 import numpy as np
@@ -43,16 +44,20 @@ def site_temperature(site, today=None, refresh=True):
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / f"era5land_t2m_{site.id}_{site.lat:.4f}_{site.lon:.4f}.csv"      # a moved site is fetched again
     today = today or dt.date.today()
-    df = pd.read_csv(path, parse_dates=["date"]) if path.exists() else None
+    df = pd.read_csv(path, parse_dates=["date"]) if path.exists() and path.stat().st_size else None
+    fetched = False
     if df is None or df.empty:
-        df = _fetch(site.lat, site.lon, FIRST, today)
+        df, fetched = _fetch(site.lat, site.lon, FIRST, today), True
     elif refresh:
         last = df.date.max().date()
         if (today - last).days > 2:
             new = _fetch(site.lat, site.lon, last - dt.timedelta(days=7), today)
-            df = pd.concat([df[df.date < pd.Timestamp(last - dt.timedelta(days=7))], new], ignore_index=True)
+            df, fetched = pd.concat([df[df.date < pd.Timestamp(last - dt.timedelta(days=7))], new], ignore_index=True), True
     df = df.drop_duplicates("date", keep="last").sort_values("date")
-    df.to_csv(path, index=False, float_format="%.2f")
+    if fetched:                       # written only when it changed, and whole: parallel runs read the same cache
+        tmp = path.with_name(f"{path.stem}.{os.getpid()}.tmp")
+        df.to_csv(tmp, index=False, float_format="%.2f")
+        os.replace(tmp, path)
     return df.set_index("date")
 
 

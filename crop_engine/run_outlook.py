@@ -77,7 +77,9 @@ def config_hash(rules, sites):
     h.update(json.dumps(sorted(rules)).encode())
     h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
     h.update(ENGINE.encode())
+    h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX]).encode())
     h.update(Path(aq.__file__).read_bytes())
+    h.update(Path(pl.__file__).read_bytes())
     return h.hexdigest()[:12]
 
 
@@ -127,6 +129,7 @@ def summarize(members, variety, bench=None):
          "planting": {"median": _date_q([m["planting"] for m in members if m["planting"]], 0.5),
                       "p10": _date_q([m["planting"] for m in members if m["planting"]], 0.1),
                       "p90": _date_q([m["planting"] for m in members if m["planting"]], 0.9)},
+         "resown": round(sum(1 for m in members if m.get("sowings", 0) > 1) / n, 3),
          "harvest_median": _date_q([m["harvest"] for m in sown], 0.5),
          "stress_days_median": _q([m["stress_days"] for m in sown], 0.5),
          "rain_mm_median": _q([m["rain_mm"] for m in sown], 0.5)}
@@ -153,12 +156,14 @@ def benchmark(inp, rep_cells, varieties, rules, soils, workers):
         for s, _ in rep_cells:
             k = [x.id for x in inp.sites].index(s.id)
             rain = ds.precip_mm.values[:, k]
+            resow = pl.sowing_opportunities(rain, dates)
             for rk in rules:
                 plant = (pl.observed_rule_date(rain[0], dates, pet[:, s.i, s.j], rk) if rk.startswith("rule")
                          else fao[s.id].get(y))
                 for vk, v in varieties.items():
                     tasks.append(dict(dates=dates.values, rain=rain, tmax=ds.tmax_c.values[k], tmin=ds.tmin_c.values[k],
-                                      et0=ds.et0_mm.values[k], source=ds.precip_source.values, planting=[plant], variety=v,
+                                      et0=ds.et0_mm.values[k], source=ds.precip_source.values, planting=[plant],
+                                      resow=resow, variety=v,
                                       kw=v["kw"], layers=soils[s.id], initial_frac=float(frac[k])))
                     keys.append((s.id, vk, rk, y))
     log(f"benchmark: {len(tasks)} observed seasons to simulate ({len(years)} years)")
@@ -169,7 +174,8 @@ def benchmark(inp, rep_cells, varieties, rules, soils, workers):
     for (sid, vk, rk, y), r in zip(keys, res):
         m = r[0]
         out.setdefault(sid, {}).setdefault(vk, {}).setdefault(rk, {"years": {}})["years"][str(y)] = {
-            k: m.get(k) for k in ("status", "planting", "harvest", "yield_t_ha", "stress_days", "rain_mm")}
+            k: m.get(k) for k in ("status", "planting", "harvest", "yield_t_ha", "stress_days", "rain_mm", "sowings",
+                                  "first_planting")}
     for sid, vs in out.items():
         for vk, rs in vs.items():
             for rk, b in rs.items():
@@ -219,11 +225,12 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
     ids = [x.id for x in inp.sites]
     for s, _ in rep_cells:
         k = ids.index(s.id)
+        resow = pl.sowing_opportunities(ds.precip_mm.values[:, k], dates)
         for rk in rules:
             for vk, v in varieties.items():
                 tasks.append(dict(dates=dates.values, rain=ds.precip_mm.values[:, k], tmax=ds.tmax_c.values[k],
                                   tmin=ds.tmin_c.values[k], et0=ds.et0_mm.values[k], source=ds.precip_source.values,
-                                  planting=plant[rk][s.id], variety=v, kw=v["kw"], layers=soils[s.id],
+                                  planting=plant[rk][s.id], resow=resow, variety=v, kw=v["kw"], layers=soils[s.id],
                                   initial_frac=float(frac[k])))
                 keys.append((s.id, vk, rk))
     t0 = time.time()
