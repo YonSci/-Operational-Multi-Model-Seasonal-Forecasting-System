@@ -11,6 +11,7 @@ from crop_engine.adapters import aquacrop_adapter as aq
 from crop_engine.data import era5land, soil
 from crop_engine.data.sites import Site, on_grid, registered_sites, slug
 from crop_engine.data.weather import to_dataset, validate
+from crop_engine.scenarios import planting as pl
 from crop_engine.scenarios.planting import doy_to_date
 
 DATES = pd.date_range("2026-08-01", "2027-03-31")
@@ -119,3 +120,40 @@ def test_aquacrop_wet_beats_dry_and_statuses():
     assert wet["stress_days"] < dry["stress_days"] or dry["status"] in ("died", "failed_establishment")
     late, none = aq.simulate(_task(weather(2, True), [dt.date(2027, 3, 1), None]))
     assert late["status"] == "too_late" and none["status"] == "not_sown" and none["yield_t_ha"] == 0.0
+
+
+# ── re-sowing ───────────────────────────────────────────────────────────────
+def _false_start(n_mem=1):
+    """A 30 mm sowing rain on 1 Oct, six dry weeks, then a wet season from 15 Nov."""
+    ds = weather(n_mem, True)
+    r = ds.precip_mm.values
+    r[:] = 0
+    r[..., DATES.get_loc(pd.Timestamp("2026-10-01"))] = 30
+    wet = (DATES >= pd.Timestamp("2026-11-15")) & (DATES <= pd.Timestamp("2027-01-31"))
+    r[..., wet] = np.where(np.arange(wet.sum()) % 2 == 0, 12.0, 3.0)
+    return ds
+
+
+def test_sowing_opportunities_in_turn():
+    ds = _false_start()
+    opp = pl.sowing_opportunities(ds.precip_mm.values[:, 0], DATES)[0]
+    assert opp[0] == dt.date(2026, 11, 15)                 # 1 Oct is followed by a dry spell: not an opportunity
+    assert opp == sorted(set(opp)) and len(opp) > 10       # each 12 mm day to 15 Jan (27 mm in 3 days), once
+    assert opp[-1] <= dt.date(2027, 1, 15)                                         # the rules' search end
+
+
+def test_resowing_after_a_false_start():
+    ds = _false_start()
+    t = dict(_task(ds, [dt.date(2026, 10, 1)]), initial_frac=0.05)
+    first = aq.simulate(dict(t, resow=None))[0]
+    assert first["status"] == "failed_establishment" and first["sowings"] == 1
+    again = aq.simulate(dict(t, resow=pl.sowing_opportunities(ds.precip_mm.values[:, 0], DATES)))[0]
+    assert again["sowings"] == 2 and again["first_planting"] == "2026-10-01"
+    assert again["planting"] >= "2026-11-15" and again["status"] in ("ok", "died") and again["yield_t_ha"] > 0
+
+
+def test_variety_parameters_override():
+    kw, _ = aq.crop_parameters(dict(VARIETY, parameters={"PlantPop": 44000, "HI0": 0.4}), 23.0)
+    assert kw["PlantPop"] == 44000 and kw["HI0"] == 0.4
+    with pytest.raises(ValueError):
+        aq.crop_parameters(dict(VARIETY, parameters={"PlantPopulation": 44000}), 23.0)

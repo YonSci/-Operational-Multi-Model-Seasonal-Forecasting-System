@@ -10,6 +10,7 @@ Outputs (not committed; outputs/crop_engine/yields/):
   compare_county.csv     benchmark vs the site's county Short Rains yields, year by year (HarvestStat)
   compare_sites.csv      benchmark vs the trials at the sites (same crop, year and season)
   levels.csv             per site and crop: benchmark median vs county, MapSPAM and national yields
+  targets.csv            calibration targets per site and crop: the trials' typical and high-input yields, HI, days
   report.md             inventory of both databases and the two comparisons
 
 Usage:
@@ -24,12 +25,15 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")   # one BLAS thread: a few sm
 
 import numpy as np                                    # noqa: E402
 import pandas as pd                                   # noqa: E402
+import yaml                                           # noqa: E402
 
-from crop_engine.config import DASHBOARD_OUT          # noqa: E402
+from crop_engine.config import DASHBOARD_OUT, VARIETIES_FILE  # noqa: E402
 from crop_engine.data.sites import registered_sites   # noqa: E402
 from crop_engine.yields import (CROPS, NEAR_SITE_KM, YIELD_DATA, YIELD_OUT, haversine_km,  # noqa: E402
                                 observations, statistics)
 
+FAILURE_T_HA = {k: v["failure_t_ha"] for k, v in
+                yaml.safe_load(VARIETIES_FILE.read_text(encoding="utf-8"))["varieties"].items()}
 MIN_YEARS = 8                                         # fewer overlapping years: no correlation reported
 
 
@@ -137,9 +141,27 @@ def levels(bench, stats, counties):
                 for rule, b in bench[(bench.site_id == site) & (bench.engine_variety == var)].groupby("rule"):
                     sown = b[b.status != "not_sown"]
                     row[f"bench_{rule}"] = round(float(sown.model_t_ha.median()), 2) if len(sown) else np.nan
-                    row[f"failed_{rule}"] = f"{(sown.status != 'ok').mean():.0%}" if len(sown) else ""
+                    row[f"not_matured_{rule}"] = f"{(sown.status != 'ok').mean():.0%}" if len(sown) else ""
+                    row[f"failure_{rule}"] = f"{(b.model_t_ha < FAILURE_T_HA[var]).mean():.0%}"
                 out.append(dict(row, **ref))
     return pd.DataFrame(out)
+
+
+def targets(obs):
+    """Calibration targets per monitored site and crop (dry t/ha): the trials' median (typical management) and 90th
+    percentile (high input: the level a crop model without nutrient stress should reach when water allows), with the
+    harvest index and days to maturity where measured. Irrigated plots are kept apart (`irrigated`)."""
+    at = obs[obs.site_id.notna() & obs.crop.isin(CROPS) & obs.quality_flag.fillna("").str.contains("doubtful").eq(False)]
+    at = at.assign(irrigated=at.irrigated.map({True: "yes", False: "no"}).fillna("not stated"),
+                   t=at.grain_yield_dry_kg_ha / 1000)
+    g = (at.groupby(["site_id", "crop", "irrigated"])
+           .agg(n=("obs_id", "size"), studies=("study", "nunique"),
+                years=("year", lambda y: ", ".join(f"{v:.0f}" for v in sorted(y.dropna().unique()))),
+                median_t_ha=("t", "median"), p90_t_ha=("t", lambda x: x.quantile(0.9)), max_t_ha=("t", "max"),
+                n_kg_ha=("n_kg_ha", lambda x: f"{x.min():.0f}–{x.max():.0f}" if x.notna().any() else ""),
+                harvest_index=("harvest_index", "median"), days_to_maturity=("days_to_maturity", "median"))
+           .reset_index())
+    return g.round(2)
 
 
 def _md(df, cols=None):
@@ -148,7 +170,7 @@ def _md(df, cols=None):
     return head + "".join("| " + " | ".join("" if pd.isna(v) else str(v) for v in r) + " |\n" for r in df.itertuples(index=False))
 
 
-def report(obs, stats, sites_df, cc, cs, lv):
+def report(obs, stats, sites_df, cc, cs, lv, tg):
     inv_o = (obs.assign(at_site=obs.site_id.notna())
              .groupby(["source", "crop"]).agg(rows=("obs_id", "size"), years=("year", lambda y: f"{y.min():.0f}–{y.max():.0f}" if y.notna().any() else ""),
                                                at_sites=("at_site", "sum"), with_sowing_date=("date_quality", lambda q: int((q == "day").sum())),
@@ -168,7 +190,9 @@ def report(obs, stats, sites_df, cc, cs, lv):
         "## Statistics", "", _md(inv_s), "",
         "## Yield levels (dry t/ha)", "",
         "Median benchmark yield of the sown Short Rains seasons (1993–2025) per variety and planting rule "
-        "(`failed_`: share of the sown seasons that did not mature), against "
+        "(`not_matured_`: share of the sown seasons that did not reach maturity, though some still yield; "
+        "`failure_`: share of all seasons below the variety's failure yield, unsown ones included, as on the "
+        "dashboard), against "
         "the county Short Rains mean, the county annual mean of 2010–2020 (HarvestStat, QC-flagged years left out), "
         "MapSPAM 2020 rainfed yield over the site's 0.25° cell and FAOSTAT's Kenya mean of 2015–2024.", "",
         _md(lv), "",
@@ -176,6 +200,10 @@ def report(obs, stats, sites_df, cc, cs, lv):
         "`model_over_county`: the simulated water-limited yield over the county average (all farmers' fields). "
         f"`r_detrended`: year-to-year correlation after removing each series' linear trend (>= {MIN_YEARS} years).", "",
         _md(sel), "",
+        "## Calibration targets (trials at the sites, dry t/ha)", "",
+        "Median: typical trial management; p90: high input, the level the engine (no nutrient stress) should reach in "
+        "a season when water is not limiting.", "",
+        _md(tg) if len(tg) else "No trials at the monitored sites.", "",
         "## Benchmark vs trials at the sites", "",
         "AquaCrop here has no nutrient stress, so it should be compared with the well-fertilized plots.", "",
         _md(cs) if len(cs) else "No trials at the monitored sites.", ""])
@@ -196,12 +224,13 @@ def main():
     stats = statistics.load_all(sites, root)
     bench = load_benchmark()
     cc, cs, lv = compare_county(bench, stats, counties), compare_sites(bench, obs), levels(bench, stats, counties)
+    tg = targets(obs)
 
     YIELD_OUT.mkdir(parents=True, exist_ok=True)
     for name, df in (("observations", obs), ("statistics", stats), ("sites", sites_df),
-                     ("compare_county", cc), ("compare_sites", cs), ("levels", lv)):
+                     ("compare_county", cc), ("compare_sites", cs), ("levels", lv), ("targets", tg)):
         df.to_csv(YIELD_OUT / f"{name}.csv", index=False)
-    (YIELD_OUT / "report.md").write_text(report(obs, stats, sites_df, cc, cs, lv), encoding="utf-8")
+    (YIELD_OUT / "report.md").write_text(report(obs, stats, sites_df, cc, cs, lv, tg), encoding="utf-8")
     print(f"observations {len(obs)} rows ({obs.site_id.notna().sum()} at monitored sites), statistics {len(stats)} rows")
     print(f"written to {YIELD_OUT}")
 

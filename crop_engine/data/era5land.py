@@ -8,6 +8,7 @@ ET0 is not taken from here: the engine uses the platform's own ERA5-Land FAO-56 
 so the crop model and the FAO water balance see the same evaporative demand.
 """
 import datetime as dt
+import os
 import time
 
 import numpy as np
@@ -29,6 +30,9 @@ def _fetch(lat, lon, start, end):
             if r.status_code == 429:
                 time.sleep(30 * (k + 1))
                 continue
+            if 400 <= r.status_code < 500:                              # a bad request is not retried
+                raise RuntimeError(f"ERA5-Land temperature for {lat}, {lon}: HTTP {r.status_code} "
+                                   f"{r.json().get('reason', '') if 'json' in r.headers.get('content-type', '') else ''}")
             r.raise_for_status()
             d = r.json()["daily"]
             df = pd.DataFrame({"date": pd.to_datetime(d["time"]), "tmax": d["temperature_2m_max"], "tmin": d["temperature_2m_min"]})
@@ -42,17 +46,22 @@ def site_temperature(site, today=None, refresh=True):
     """DataFrame indexed by date: tmax, tmin (°C), ERA5-Land, 1 Jan 1993 to the last available day."""
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / f"era5land_t2m_{site.id}_{site.lat:.4f}_{site.lon:.4f}.csv"      # a moved site is fetched again
-    today = today or dt.date.today()
-    df = pd.read_csv(path, parse_dates=["date"]) if path.exists() else None
+    # the archive's dates are UTC: between midnight and 03:00 in Kenya, the local date is a day past its last allowed one
+    today = today or dt.datetime.now(dt.timezone.utc).date()
+    df = pd.read_csv(path, parse_dates=["date"]) if path.exists() and path.stat().st_size else None
+    fetched = False
     if df is None or df.empty:
-        df = _fetch(site.lat, site.lon, FIRST, today)
+        df, fetched = _fetch(site.lat, site.lon, FIRST, today), True
     elif refresh:
         last = df.date.max().date()
         if (today - last).days > 2:
             new = _fetch(site.lat, site.lon, last - dt.timedelta(days=7), today)
-            df = pd.concat([df[df.date < pd.Timestamp(last - dt.timedelta(days=7))], new], ignore_index=True)
+            df, fetched = pd.concat([df[df.date < pd.Timestamp(last - dt.timedelta(days=7))], new], ignore_index=True), True
     df = df.drop_duplicates("date", keep="last").sort_values("date")
-    df.to_csv(path, index=False, float_format="%.2f")
+    if fetched:                       # written only when it changed, and whole: parallel runs read the same cache
+        tmp = path.with_name(f"{path.stem}.{os.getpid()}.tmp")
+        df.to_csv(tmp, index=False, float_format="%.2f")
+        os.replace(tmp, path)
     return df.set_index("date")
 
 

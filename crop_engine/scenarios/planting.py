@@ -6,6 +6,9 @@ Sowing dates from the platform's onset methods. The methods' own outputs are use
                   FAO agricultural onset: the FAO water balance's historical run (outputs/fao_wb/historical)
 
 A member or year without an onset by the method's search end (15 Jan) has no sowing date: "no planting opportunity".
+
+Re-sowing after a failed establishment uses every later day that meets Agri rule C.RESOW_RULE's onset criteria
+(sowing_opportunities), with the same detector as the onsets (agro_onset.detect).
 """
 import datetime as dt
 
@@ -15,6 +18,7 @@ import xarray as xr
 
 from crop_engine import config as C
 
+import agro_onset as ao  # noqa: E402
 import onset_rules as orl  # noqa: E402
 
 FAO_HIST = C.BASE / "outputs" / "fao_wb" / "historical" / "fao_wb_seasons.nc"
@@ -48,6 +52,31 @@ def observed_rule_date(rain, dates, pet, rule_key):
     if not np.isfinite(on[0]):
         return None
     return (dates[start] + pd.Timedelta(days=int(on[0]) - orl.SEARCH_START_DOY)).date()
+
+
+def sowing_opportunities(rain, dates, most=60):
+    """Every day from 15 Aug to 15 Jan that meets Agri rule C.RESOW_RULE's onset criteria (rain over the next days
+    and no dry spell after them): rain (member, T) of a season from 1 Aug, dates (T,) → [[date, ...] per member].
+    Found one at a time: each search starts the day after the previous hit (earlier days masked dry, which only
+    removes their own triggers: the criteria look forward)."""
+    o = orl.RULES[C.RESOW_RULE]["onset"]
+    dates = pd.DatetimeIndex(dates)
+    i0 = int(np.where((dates.month == 8) & (dates.day == 15))[0][0])
+    i1 = int(np.where((dates.month == 1) & (dates.day == 15))[0][0])
+    x = np.asarray(rain, np.float32).reshape(-1, len(dates))
+    t = np.arange(x.shape[1])
+    start = np.full(x.shape[0], i0)
+    out = [[] for _ in range(x.shape[0])]
+    for _ in range(most):
+        live = start <= i1
+        if not live.any():
+            break
+        idx, _ = ao.detect(np.where(t[None] < start[:, None], 0.0, x), 0, dry_day_mm=orl.DRY_DAY_MM, end_idx=i1, **o)
+        hit = live & np.isfinite(idx)
+        for m in np.where(hit)[0]:
+            out[m].append(dates[int(idx[m])].date())
+        start = np.where(hit, np.nan_to_num(idx, nan=0).astype(int) + 1, i1 + 1)
+    return out
 
 
 def observed_fao_dates(sites, years):

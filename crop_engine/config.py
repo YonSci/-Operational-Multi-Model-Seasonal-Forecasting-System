@@ -1,8 +1,11 @@
 """Paths, periods and scenario choices shared by the crop engine."""
+import os
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent
+# The checkout holding data/ and outputs/: this one, or CROP_ENGINE_BASE (e.g. code in a git worktree run against the
+# main checkout's data; the worktree's own varieties.yaml is still used)
+BASE = Path(os.environ.get("CROP_ENGINE_BASE") or Path(__file__).resolve().parent.parent).resolve()
 SCRIPTS = BASE / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
@@ -22,6 +25,12 @@ PLANTING_RULES = {
     "rule1": dict(method="1", label="Agri rule 1 onset"),
     "fao-agricultural": dict(method="fao-agricultural", label="FAO agricultural onset"),
 }
+
+# Re-sowing after a failed establishment (the seedlings dried out after a false start): at the next day that meets
+# Agri rule 1's onset criteria after the crop died (by the rules' search end, 15 Jan), as a farmer re-sows after the
+# next good rain; at most RESOW_MAX times, and only while the variety can still mature by 31 Mar.
+RESOW_RULE = 1
+RESOW_MAX = 1
 
 # Per-day source of the rainfall (precip_source) and of temperature / ET0 (met_source)
 PRECIP_SOURCES = ["obs_final", "obs_prelim", "gap", "forecast", "seasonal", "climatology"]

@@ -6,9 +6,18 @@
 # coefficients are scaled inversely, so the canopy develops in step. Cooler sites therefore take longer and warmer
 # sites less, as real varieties do.
 #
-# These are maturity classes, NOT calibrated cultivars: the examples name the kind of variety each class stands
-# for in Kenyan drylands. Yields are water-limited (no nutrient stress, AquaCrop's default plant density), so they
-# are an upper bound for smallholder fields. Calibrate with observed yields and phenology before any operational use.
+# These are maturity classes, not cultivars: the examples name the kind of variety each class stands for in Kenyan
+# drylands. Yields are water-limited (no nutrient, pest or disease stress), so they are an upper bound for
+# smallholder fields.
+#
+# `parameters`: AquaCrop crop parameters set for Kenyan practice, used as given (after the phenology scaling).
+# Maize and sorghum were set against the trials at the monitored sites (crop_engine/yields, targets.csv; Kiboko:
+# maize trials median 4.5, high-input 6.1 dry t/ha; sorghum 2020 median 1.75, best 3.15, harvest index 0.28):
+#   PlantPop  the recommended spacing, 75 x 30 cm for maize (44,444 /ha), 75 x 20 cm for sorghum (66,667 /ha);
+#             AquaCrop's defaults (75,000 and 200,000) are high-input densities
+#   CCx       maximum canopy cover of that density (AquaCrop's density sets only the initial canopy)
+#   HI0       sorghum reference harvest index 0.30 (the Kiboko trial measured 0.28; AquaCrop's default 0.45)
+# The bean keeps AquaCrop's defaults: no bean trials near the sites.
 
 # The days to maturity are those quoted for mid-altitude dryland Kenya (about 1,200-1,700 m: Katumani, Kiboko),
 # where the Short Rains season averages about 21 °C.
@@ -21,18 +30,21 @@ varieties:
     aquacrop_crop: MaizeGDD
     maturity_days: 90
     failure_t_ha: 0.5           # yield below this counts as a crop failure (grain, dry)
+    parameters: {PlantPop: 44444, CCx: 0.75}
   maize_medium:
     label: Medium-maturing maize
     examples: mid-altitude hybrid type
     aquacrop_crop: MaizeGDD
     maturity_days: 120
     failure_t_ha: 0.5
+    parameters: {PlantPop: 44444, CCx: 0.75}
   sorghum:
     label: Sorghum
     examples: Gadam type
     aquacrop_crop: SorghumGDD
     maturity_days: 100
     failure_t_ha: 0.5
+    parameters: {PlantPop: 66667, CCx: 0.75, HI0: 0.30}
   bean:
     label: Dry bean
     examples: KAT-series type
