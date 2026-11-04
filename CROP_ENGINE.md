@@ -5,8 +5,8 @@ sites. It sits beside the climate pipeline: it reads that pipeline's outputs and
 in the crop engine does not affect the forecasts.
 
 **Status:** pilot (phases P0–P2 of the integration plan, and the P4 Crop outlook tab). One crop model (AquaCrop-OSPy), the six Kenya monitored
-sites, the 2026 Short Rains, four maturity classes, two planting rules. **Not calibrated, not verified:** results are
-for development and discussion, not advice.
+sites, the 2026 Short Rains, four maturity classes, two planting rules. **First calibration done (maize and sorghum
+against the Kiboko trials), not verified:** results are for development and discussion, not advice.
 
 ## What it does
 
@@ -17,7 +17,8 @@ run of every sub-seasonal and medium-range model — and for each site, variety 
 2. takes each member's **sowing date** from the platform's own onset method (the dates the dashboard shows for that run);
 3. simulates the crop with **AquaCrop** from 1 Aug to 31 Mar;
 4. summarises the members: yield distribution, chance of crop failure, sowing and harvest dates, water-stress days,
-   and the chance of a below- or above-normal yield compared with a **benchmark** — the same crop, rule and soil
+   the share re-sown, the yield without water stress (AquaCrop's potential), the weekly canopy cover of the sown
+   crops (median and 10th–90th percentiles), and the chance of a below- or above-normal yield compared with a **benchmark** — the same crop, rule and soil
    grown in the observed weather of 1993–2025 (terciles from 1993–2016, as the climate forecasts).
 
 ```
@@ -28,7 +29,9 @@ python -m pytest crop_engine/tests                      # unit tests (synthetic 
 ```
 
 Outputs (not committed; `outputs/crop_engine/`): `weather/<run>.nc` (the daily inputs), `results/<run>.json` (every
-member's outcome and the summaries), `results/index.json`, `climatology.json` (the benchmark).
+member's outcome: sowing and harvest dates, yield, yield without water stress, biomass, maximum canopy, water-stress
+days, season rain, sowings; the summaries and the canopy band), `results/index.json`, `climatology.json` (the
+benchmark, with the same canopy band over the observed seasons).
 
 The daily update runs `python -m crop_engine.run_all --workers 1`: one process per source, so each run's memory is
 released before the next. It then writes the **Crop outlook** tab's data, `frontend/public/tracker/data/crop/`
@@ -41,10 +44,14 @@ commits with the other tracker data.
 sub-seasonal or medium-range run) to see:
 
 - headline figures: median yield and the middle 8 in 10 members, the chance of crop failure, the sowing and harvest
-  dates, each against the past seasons;
+  dates (with the share re-sown after a failed start), each against the past seasons, and what water stress costs
+  the sown crops (their yield against AquaCrop's yield without water stress);
 - the chance of more than each yield, for the forecast members and for the past seasons (1993–2025);
 - what happens to the crop: matured, died before maturity, failed to establish, not grown;
-- every forecast side by side for the same site and crop, each member's outcome, and the inputs behind the result.
+- how the canopy develops: the sown crops' canopy cover week by week (median and 8 in 10 band) against the past
+  seasons' median;
+- every forecast side by side for the same site and crop (with the yield without water stress), each member's
+  outcome (re-sown members marked), and the inputs behind the result.
 
 ## Inputs
 

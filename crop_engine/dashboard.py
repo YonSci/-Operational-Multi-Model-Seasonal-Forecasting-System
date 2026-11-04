@@ -6,9 +6,11 @@ the latest result of each forecast source and of the benchmark, read by frontend
                     caveats
   <source>.json     the source's latest run (one file per source, overwritten, so the published history does not
                     pile up): per site, variety and rule, the summary and every member as
-                    [planting, harvest, yield t/ha, outcome, water-stress days, season rain mm]
-  benchmark.json    per site, variety and rule: terciles, median, failure chance and every observed season as
-                    [year, planting, harvest, yield t/ha, outcome]
+                    [planting, harvest, yield t/ha, outcome, water-stress days, season rain mm,
+                    yield without water stress t/ha, sowings], and the canopy band (weekly canopy cover of the
+                    simulated members from 1 Aug: median, 10th and 90th percentiles)
+  benchmark.json    per site, variety and rule: terciles, median, failure chance, canopy band and every observed
+                    season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
 
 Older runs are removed, so the published folder holds one run per source.
 """
@@ -24,7 +26,7 @@ OUTCOMES = [
     ("too_late", "Too late to mature", "Sown too late to reach maturity by 31 Mar (counted as no yield)"),
     ("not_sown", "No sowing opportunity", "No onset by the rule's search end, 15 Jan (counted as no yield)"),
 ]
-MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "rain_mm")
+MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "rain_mm", "potential_t_ha", "sowings")
 
 
 def _dump(path, obj):
@@ -63,7 +65,8 @@ def write(log=print):
                                    "topsoil": {k: round(v) for k, v in s["topsoil"].items()}})
             out["sites"][sid] = {
                 "initial_water_fraction": s["initial_water_fraction"], "fao_reference": s["fao_reference"],
-                "results": {vk: {rk: {"summary": x["summary"], "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["members"]]}
+                "results": {vk: {rk: {"summary": x["summary"], "canopy": x.get("canopy"),
+                                      "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["members"]]}
                                  for rk, x in rs.items()} for vk, rs in s["results"].items()}}
         _dump(C.DASHBOARD_OUT / f"{r['source']}.json", out)
     if not meta0:
@@ -74,8 +77,9 @@ def write(log=print):
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
     _dump(C.DASHBOARD_OUT / "benchmark.json", {
         "years": bench["years"], "cal_years": bench["cal_years"],
-        "sites": {sid: {vk: {rk: {**{k: b.get(k) for k in ("t33", "t67", "median", "cal_median", "p_failure")},
-                                  "seasons": [[int(y), v["planting"], v["harvest"], v["yield_t_ha"], v["status"]]
+        "sites": {sid: {vk: {rk: {**{k: b.get(k) for k in ("t33", "t67", "median", "cal_median", "p_failure", "canopy")},
+                                  "seasons": [[int(y), v["planting"], v["harvest"], v["yield_t_ha"], v["status"],
+                                               v.get("potential_t_ha")]
                                               for y, v in sorted(b["years"].items())]}
                              for rk, b in rs.items()} for vk, rs in vs.items()} for sid, vs in bench["sites"].items()}})
     _dump(C.DASHBOARD_OUT / "index.json", {

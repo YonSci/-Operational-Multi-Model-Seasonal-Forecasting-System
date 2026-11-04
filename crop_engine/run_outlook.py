@@ -117,6 +117,21 @@ def effective_yield(m):
     return m["yield_t_ha"] if m["status"] in SIMULATED else 0.0
 
 
+def canopy_band(members, start=None):
+    """Takes each member's `_canopy` (weekly canopy cover of a simulated member) off it, so it is not written,
+    and returns their median and 10th / 90th percentiles per week, or None when no member was simulated."""
+    rows = [m.pop("_canopy") for m in members if m.get("_canopy") is not None]
+    for m in members:
+        m.pop("_canopy", None)
+    if not rows:
+        return None
+    n = max(map(len, rows))                                   # a shorter season (fewer days): no value past its end
+    a = np.array([np.pad(np.asarray(r, np.float32), (0, n - len(r)), constant_values=np.nan) for r in rows])
+    q = lambda p: [None if np.isnan(x) else round(float(x), 3) for x in np.nanquantile(a, p, axis=0)]
+    band = {"step_days": aq.CANOPY_STEP, "n": len(rows), "median": q(0.5), "p10": q(0.1), "p90": q(0.9)}
+    return {"start": start, **band} if start else band
+
+
 def summarize(members, variety, bench=None):
     y = np.array([effective_yield(m) for m in members])
     st = [m["status"] for m in members]
@@ -125,6 +140,9 @@ def summarize(members, variety, bench=None):
     s = {"members": n,
          "share": {k: round(st.count(k) / n, 3) for k in SIMULATED + ("too_late", "not_sown", "error")},
          "yield_t_ha": {"median": _q(y, 0.5), "p10": _q(y, 0.1), "p90": _q(y, 0.9), "mean": round(float(y.mean()), 3)},
+         # AquaCrop's yield without water stress, over the sown crops: the gap to their yield is what water costs
+         "potential_t_ha": {"median": _q([m["potential_t_ha"] for m in sown], 0.5),
+                            "yield_median": _q([m["yield_t_ha"] for m in sown], 0.5)},
          "p_failure": round(float((y < variety["failure_t_ha"]).mean()), 3),
          "planting": {"median": _date_q([m["planting"] for m in members if m["planting"]], 0.5),
                       "p10": _date_q([m["planting"] for m in members if m["planting"]], 0.1),
@@ -170,15 +188,17 @@ def benchmark(inp, rep_cells, varieties, rules, soils, workers):
     t0 = time.time()
     res = run_tasks(tasks, workers)
     log(f"benchmark done in {time.time() - t0:.0f} s")
-    out = {}
+    out, canopy = {}, {}
     for (sid, vk, rk, y), r in zip(keys, res):
         m = r[0]
+        canopy.setdefault((sid, vk, rk), []).append(m)
         out.setdefault(sid, {}).setdefault(vk, {}).setdefault(rk, {"years": {}})["years"][str(y)] = {
-            k: m.get(k) for k in ("status", "planting", "harvest", "yield_t_ha", "stress_days", "rain_mm", "sowings",
-                                  "first_planting")}
+            k: m.get(k) for k in ("status", "planting", "harvest", "yield_t_ha", "potential_t_ha", "stress_days",
+                                  "rain_mm", "sowings", "first_planting")}
     for sid, vs in out.items():
         for vk, rs in vs.items():
             for rk, b in rs.items():
+                b["canopy"] = canopy_band(canopy[(sid, vk, rk)])     # by week of the season (every year from 1 Aug)
                 cal = [effective_yield(b["years"][str(y)]) for y in years if C.CAL_YEARS[0] <= y <= C.CAL_YEARS[1]]
                 allv = [effective_yield(v) for v in b["years"].values()]
                 b.update(t33=_q(cal, 1 / 3), t67=_q(cal, 2 / 3), median=_q(allv, 0.5), cal_median=_q(cal, 0.5),
@@ -258,8 +278,9 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
     for (sid, vk, rk), outcomes in zip(keys, res):
         group = next(g for s, g in rep_cells if s.id == sid)
         summ = summarize(outcomes, varieties[vk], bench.get(sid, {}).get(vk, {}).get(rk))
+        band = canopy_band(outcomes, f"{dates[0]:%Y-%m-%d}")
         for gid in group:
-            out_sites[gid]["results"].setdefault(vk, {})[rk] = {"summary": summ, "members": outcomes}
+            out_sites[gid]["results"].setdefault(vk, {})[rk] = {"summary": summ, "canopy": band, "members": outcomes}
     meta = {"id": rid, "source": source, "model_label": label, "run": f"{run}", "obs_end": f"{b.obs_end}",
             "members_kind": members, "segments": segs, "engine": ENGINE, "config_hash": chash,
             "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
