@@ -2988,7 +2988,10 @@ export default function App() {
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
-            {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite}/>}
+            {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite} season={selectedSeason}
+                                              initId={selectedInit} initLabel={SHORT_RAINS_INITS.find(i => i.init === selectedInit)?.initLabel}
+                                              onsetDef={onsetDef} onsetLabel={(d => d && (d.group ? `${d.label} (${d.defLabel})` : d.label))(ONSET_DEFS.find(d => d.id === onsetDef))}
+                                              forecastType={forecastType} mrfModel={mrfModel} s2sModel={s2sModel}/>}
             {activeTab==='tracker'       && (
               <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
                       style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>

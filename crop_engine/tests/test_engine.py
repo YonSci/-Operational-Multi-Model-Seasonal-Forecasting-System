@@ -204,3 +204,46 @@ def test_dashboard_carries_the_new_outputs(tmp_path, monkeypatch):
     assert d["canopy"]["median"] == band["median"] and "potential_t_ha" in d["summary"]
     b = json.loads((C.DASHBOARD_OUT / "benchmark.json").read_text())["sites"]["test_site"]["maize_early"]["rule1"]
     assert b["seasons"][0][5] == 4.0 and b["canopy"]["n"] == 1
+
+
+def test_outcome_rates_have_their_own_denominators():
+    from crop_engine import run_outlook as ro
+    m = lambda st, y=0.0: {"status": st, "yield_t_ha": y, "planting": None if st == "not_sown" else "2026-11-01"}
+    recs = [m("ok", 3.0), m("ok", 0.2), m("died", 1.0), m("failed_establishment"), m("not_sown"), m("too_late"), m("error")]
+    r = ro.outcome_rates(recs, 0.5)
+    assert (r["n_valid"], r["n_error"], r["n_sown"]) == (6, 1, 4)               # the error is in no denominator
+    assert r["p_sowing_opportunity"] == round(5 / 6, 3)                         # too late had an onset: sowable
+    assert r["p_establishment_failure"] == 0.25 and r["p_failure_if_sown"] == 0.5   # of the 4 sown crops
+    assert r["p_failure"] == round(4 / 6, 3)                                    # overall: no crop or a failed one
+    assert r["yield_if_sown_t_ha"]["median"] == pytest.approx(0.6)
+    assert ro.outcome_rates([m("error")], 0.5)["p_failure"] is None
+
+
+# ── regression: fixed synthetic seasons against stored outputs ──────────────────────────────────────────────────
+REFERENCE = json.loads((__import__("pathlib").Path(__file__).with_name("reference") / "aquacrop_synthetic.json").read_text())
+
+
+def _reference_cases():
+    from crop_engine import run_outlook as ro
+    _, vs = ro.load_varieties(["maize_early", "sorghum"])
+    cases = {"wet_20oct": _task(weather(1, True), [dt.date(2026, 10, 20)])}
+    ds = _false_start()
+    cases["false_start_resown"] = dict(_task(ds, [dt.date(2026, 10, 1)]), initial_frac=0.05,
+                                       resow=pl.sowing_opportunities(ds.precip_mm.values[:, 0], DATES))
+    for vk, v in vs.items():
+        cases[f"{vk}_wet_20oct"] = dict(_task(weather(1, True), [dt.date(2026, 10, 20)]), variety=v,
+                                        kw=aq.crop_parameters(v, 23.0)[0])
+    return cases
+
+
+@pytest.mark.parametrize("name", sorted(REFERENCE))
+def test_regression_against_reference(name):
+    """A change of the adapter, AquaCrop or varieties.yaml that moves these outputs must be deliberate: regenerate
+    crop_engine/tests/reference/aquacrop_synthetic.json and say why in the commit."""
+    r = aq.simulate(_reference_cases()[name])[0]
+    ref = REFERENCE[name]
+    for k in ("status", "planting", "harvest", "sowings"):
+        assert r[k] == ref[k], (name, k)
+    for k in ("yield_t_ha", "potential_t_ha", "biomass_t_ha", "max_canopy"):
+        assert r[k] == pytest.approx(ref[k], abs=0.02), (name, k)
+    assert abs(r["stress_days"] - ref["stress_days"]) <= 1

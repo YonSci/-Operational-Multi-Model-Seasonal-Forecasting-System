@@ -9,12 +9,17 @@ the latest result of each forecast source and of the benchmark, read by frontend
                     [planting, harvest, yield t/ha, outcome, water-stress days, season rain mm,
                     yield without water stress t/ha, sowings], and the canopy band (weekly canopy cover of the
                     simulated members from 1 Aug: median, 10th and 90th percentiles)
-  benchmark.json    per site, variety and rule: terciles, median, failure chance, canopy band and every observed
+  index.json also carries the measured yields at each site (crop_engine/yields targets.csv, when built): the trials'
+  median and high-input yields per site and crop, kept apart from the simulated past seasons.
+  benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
+                    and every observed
                     season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
 
 Older runs are removed, so the published folder holds one run per source.
 """
 import json
+
+import pandas as pd
 
 from crop_engine import config as C
 from crop_engine.data.sites import registered_sites
@@ -23,10 +28,33 @@ OUTCOMES = [
     ("ok", "Matured", "Sown and reached maturity"),
     ("died", "Died before maturity", "Established, then died of water stress before maturity (yield so far counted)"),
     ("failed_establishment", "Failed to establish", "Died before its canopy reached 5 %: a false start, the seedlings dried out"),
-    ("too_late", "Too late to mature", "Sown too late to reach maturity by 31 Mar (counted as no yield)"),
+    ("too_late", "Too late to mature", "Sown too late to reach maturity by 28 Feb, the season's end (counted as no yield)"),
     ("not_sown", "No sowing opportunity", "No onset by the rule's search end, 15 Jan (counted as no yield)"),
+    ("error", "Model error", "AquaCrop failed for this member: no outcome, left out of every probability"),
 ]
 MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "rain_mm", "potential_t_ha", "sowings")
+
+
+BENCH_KEYS = ("t33", "t67", "median", "cal_median", "p_failure", "p_sowing_opportunity", "p_establishment_failure",
+              "p_failure_if_sown", "yield_if_sown_t_ha", "n_valid", "n_error", "n_sown", "canopy")
+
+
+def observed_yields():
+    """{site: {crop: [trial groups]}} from the yield build's targets.csv (measured plot yields within 25 km, dry
+    t/ha), or {} before the build has run. Rainfed and unstated plots only: the engine is rainfed."""
+    from crop_engine.yields import YIELD_OUT
+    p = YIELD_OUT / "targets.csv"
+    if not p.exists():
+        return {}
+    t = pd.read_csv(p, dtype={"years": str, "n_kg_ha": str})
+    t = t[t.irrigated.isin(["no", "not stated"])]
+    out = {}
+    for r in t.itertuples():
+        out.setdefault(r.site_id, {}).setdefault(r.crop, []).append({
+            "n": int(r.n), "studies": int(r.studies), "years": r.years if isinstance(r.years, str) else "",
+            "median_t_ha": float(r.median_t_ha), "p90_t_ha": float(r.p90_t_ha), "max_t_ha": float(r.max_t_ha),
+            "n_kg_ha": r.n_kg_ha if isinstance(r.n_kg_ha, str) else "", "irrigated": r.irrigated})
+    return out
 
 
 def _dump(path, obj):
@@ -77,7 +105,7 @@ def write(log=print):
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
     _dump(C.DASHBOARD_OUT / "benchmark.json", {
         "years": bench["years"], "cal_years": bench["cal_years"],
-        "sites": {sid: {vk: {rk: {**{k: b.get(k) for k in ("t33", "t67", "median", "cal_median", "p_failure", "canopy")},
+        "sites": {sid: {vk: {rk: {**{k: b.get(k) for k in BENCH_KEYS},
                                   "seasons": [[int(y), v["planting"], v["harvest"], v["yield_t_ha"], v["status"],
                                                v.get("potential_t_ha")]
                                               for y, v in sorted(b["years"].items())]}
@@ -87,6 +115,7 @@ def write(log=print):
                   "file": f"{r['source']}.json"} for r in runs],
         "summaries": summaries, "sites": sites, "varieties": meta0["varieties"], "planting_rules": meta0["planting_rules"],
         "outcomes": [{"id": i, "label": a, "title": t} for i, a, t in OUTCOMES], "member_keys": list(MEMBER_KEYS),
+        "observed_yields": observed_yields(),
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
     keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json"}
     for p in C.DASHBOARD_OUT.glob("*.json"):
