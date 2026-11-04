@@ -105,6 +105,44 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 - Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
 - The forecast runs have not been verified for crop outcomes; the benchmark comparison is the first step (P3).
 
+## Yield data for calibration and validation (`crop_engine/yields/`)
+
+Two databases, kept apart so a field-scale model is never calibrated against a county average or a modelled yield:
+
+| Database | Sources (downloads in `data/Yield/`, not committed) | Use |
+|---|---|---|
+| **observations** (plots, trials) | IITA international maize trials (Kiboko 2013: early, extra-early, late entries, days to silking); Kenya soil health data (Alliance Bioversity–CIAT 2026: N-rate and management trials, incl. Kiboko); N2Africa bean trials (western Kenya 2011: sowing, flowering and maturity dates); published tables transcribed in `yields/published/` (Koima et al. 2023, sorghum at Kiboko and Ithookwe) | calibration, site checks |
+| **statistics** (areas) | HarvestStat Africa v1.2 (county yields by Long / Short Rains); FAOSTAT (Kenya national, 1961–2024); MapSPAM 2020 (gridded, over each site's 0.25° cell) | regional validation and plausibility only |
+
+```
+python -m crop_engine.yields.build        # writes outputs/crop_engine/yields/ (CSV tables + report.md)
+```
+
+Each observation keeps what its source states (cultivar, sowing date and its precision, N and P, irrigation,
+treatment, replicate) and is linked to its nearest monitored site (within 25 km). Yields are compared as dry matter,
+the basis AquaCrop reports: the source's grain moisture where stated (12.5 % in the sorghum paper), otherwise an
+assumed one (maize 15 %, sorghum 12.5 %, bean 13 %), flagged. Each site's county comes from the HarvestStat
+boundaries. Each run of the build compares the engine's observed-weather benchmark with the county Short Rains
+yields, year by year, and with the trials at the sites.
+
+First comparison (November 2026):
+
+- **Too many failed seasons.** 40–100 % of the sown benchmark seasons do not mature: sorghum at Kiboko, for
+  example, fails 76–83 % of them, while the county averages about 1 t/ha in the Short Rains and the 2020–21 trial
+  averaged 1.8 t/ha (dry). The two failure modes are failed establishment after a false start, which happens even
+  in wet seasons (Kiboko, Short Rains 2019, sown 1 Oct), and death before maturity. Re-sowing after a failed
+  establishment and a wetter starting soil are the first things to calibrate.
+- **Matured seasons yield too much.** Their median is 5–15 times the county average for maize and sorghum (2–4.5
+  times for bean). Part of that is the missing nutrient stress: nitrogen trials at Kiboko (2013) range from 1.8 t/ha
+  with no N to 7.2 t/ha at 160 kg N/ha. But matured maize medians of 5.4–12.4 t/ha exceed even the best fertilized
+  plots there (7.2–7.4 t/ha), so AquaCrop's default maize and sorghum (biomass, harvest index, plant density) also
+  need calibrating against the trials.
+- **Year-to-year agreement with the county is weak** (detrended r from −0.7 to 0.5); only Kapiti early maize and
+  Tana River medium maize (Agri rule 1) reach about 0.5. County averages are not point yields, so this is a
+  plausibility check, not a score.
+- What is still missing for calibration: sowing dates at the sites (the Kiboko trials give years only), Long Rains
+  simulations (several trials are Long Rains), and the underlying plot data of the Kiboko sorghum and maize studies.
+
 ## Next phases
 
 P3: hindcast verification (crop forecasts against crops grown in the observed weather, 1993–2016) and calibration

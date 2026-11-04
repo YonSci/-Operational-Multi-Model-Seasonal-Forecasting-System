@@ -1,3 +1,4 @@
 # Crop engine only (not needed by the API on Render): pip install -r crop_engine/requirements.txt
 aquacrop==3.1.0
 pyyaml>=6
+geopandas>=0.14          # crop_engine.yields.build only: the county of each site
