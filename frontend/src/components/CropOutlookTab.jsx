@@ -535,7 +535,9 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                sub="Canopy cover of the sown crops week by week, from 1 Aug. It falls to zero as each crop is harvested or dies, so the median drops once about half the crops are done. Hover for values.">
           {runQ.isLoading ? msg('Loading…')
             : canopy ? <CanopyChart fc={canopy} past={b?.canopy} nMembers={members.length}/>
-            : msg(members.length ? 'No sown crop in this forecast: no canopy to show.' : 'No members for this choice.')}
+            : msg(!members.length ? 'No members for this choice.'
+                  : R?.nSown ? 'The canopy curve comes with the next crop run (this run was made before it was added).'
+                  : 'No sown crop in this forecast: no canopy to show.')}
         </Panel>
       </div>
 
