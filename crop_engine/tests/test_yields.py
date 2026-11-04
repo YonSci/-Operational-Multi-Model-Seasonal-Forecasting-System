@@ -56,7 +56,8 @@ def test_published_table_is_complete():
 def test_link_sites():
     obs = pd.DataFrame(dict(latitude=[-2.22, -2.27, 0.1, np.nan], longitude=[37.70, 37.65, 34.4, np.nan]))
     out = build.link_sites(obs, [KIBOKO, TANA])
-    assert list(out.site_id[:3]) == [KIBOKO.id, KIBOKO.id, None]                # western Kenya is far from both
+    assert list(out.site_id[:2]) == [KIBOKO.id, KIBOKO.id]                     # western Kenya is far from both
+    assert pd.isna(out.site_id.iloc[2])
     assert out.site_km[0] < 3 and out.site_km[1] < 11 and np.isnan(out.site_km[3])
 
 
