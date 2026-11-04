@@ -157,3 +157,50 @@ def test_variety_parameters_override():
     assert kw["PlantPop"] == 44000 and kw["HI0"] == 0.4
     with pytest.raises(ValueError):
         aq.crop_parameters(dict(VARIETY, parameters={"PlantPopulation": 44000}), 23.0)
+
+
+def test_canopy_band_and_potential():
+    from crop_engine import run_outlook as ro
+    out = aq.simulate(_task(weather(2, True), [dt.date(2026, 10, 20), None]))
+    sown, none = out
+    assert len(sown["_canopy"]) == len(DATES[::aq.CANOPY_STEP]) and 0 < max(sown["_canopy"]) <= 1
+    assert "_canopy" not in none
+    assert sown["potential_t_ha"] >= sown["yield_t_ha"]
+    s = ro.summarize(out, VARIETY)
+    assert s["potential_t_ha"]["median"] == pytest.approx(sown["potential_t_ha"], abs=1e-3)
+    band = ro.canopy_band(out, "2026-08-01")
+    assert band["n"] == 1 and band["start"] == "2026-08-01" and band["step_days"] == aq.CANOPY_STEP
+    assert len(band["median"]) == len(sown.get("_canopy", band["median"])) and band["p10"] <= band["p90"]
+    assert all("_canopy" not in m for m in out)                    # taken off: not written to the results
+    json.dumps(out)
+
+
+def test_dashboard_carries_the_new_outputs(tmp_path, monkeypatch):
+    from crop_engine import dashboard, run_outlook as ro
+    monkeypatch.setattr(C, "RESULTS_OUT", tmp_path / "results")
+    monkeypatch.setattr(C, "DASHBOARD_OUT", tmp_path / "crop")
+    monkeypatch.setattr(C, "OUT", tmp_path)
+    monkeypatch.setattr(C, "BASE", tmp_path)
+    out = aq.simulate(_task(weather(2, True), [dt.date(2026, 10, 20), None]))
+    summ, band = ro.summarize(out, VARIETY), ro.canopy_band(out, "2026-08-01")
+    res = {"summary": summ, "canopy": band, "members": out}
+    meta = {"id": "seasonal_20261001", "source": "seasonal", "model_label": "SEAS5", "run": "2026-10-01", "obs_end": "2026-10-25",
+            "members_kind": "ensemble", "segments": [], "created": "x", "engine": "test", "caveats": [],
+            "varieties": {"maize_early": VARIETY}, "planting_rules": {"rule1": "Agri rule 1"}}
+    site = {"name": "Test", "cell": [-2.125, 37.625], "soil_taw_100cm_mm": 100, "topsoil": {"sand": 60, "clay": 22},
+            "initial_water_fraction": 0.1, "fao_reference": {}, "results": {"maize_early": {"rule1": res}}}
+    C.RESULTS_OUT.mkdir()
+    (C.RESULTS_OUT / "seasonal_20261001.json").write_text(json.dumps({"meta": meta, "sites": {"test_site": site}}))
+    year = {"status": "ok", "planting": "2020-10-20", "harvest": "2021-01-20", "yield_t_ha": 3.0, "potential_t_ha": 4.0}
+    (tmp_path / "climatology.json").write_text(json.dumps({"years": [2020, 2020], "cal_years": [2020, 2020], "sites": {"test_site": {
+        "maize_early": {"rule1": {"years": {"2020": year}, "t33": 1, "t67": 2, "median": 3, "cal_median": 3, "p_failure": 0,
+                                  "canopy": band}}}}}))
+    dashboard.write_index()
+    dashboard.write(log=lambda *a: None)
+    d = json.loads((C.DASHBOARD_OUT / "seasonal.json").read_text())["sites"]["test_site"]["results"]["maize_early"]["rule1"]
+    keys = json.loads((C.DASHBOARD_OUT / "index.json").read_text())["member_keys"]
+    m = dict(zip(keys, d["members"][0]))
+    assert m["potential_t_ha"] == out[0]["potential_t_ha"] and m["sowings"] == 1
+    assert d["canopy"]["median"] == band["median"] and "potential_t_ha" in d["summary"]
+    b = json.loads((C.DASHBOARD_OUT / "benchmark.json").read_text())["sites"]["test_site"]["maize_early"]["rule1"]
+    assert b["seasons"][0][5] == 4.0 and b["canopy"]["n"] == 1

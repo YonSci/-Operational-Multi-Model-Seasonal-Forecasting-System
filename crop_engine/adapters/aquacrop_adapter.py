@@ -16,6 +16,9 @@ A member that is not sown or too late counts as zero yield in the risk figures.
 After a failed establishment the member is re-sown at its next sowing opportunity after the crop died (task
 "resow": Agri rule dates, config.RESOW_MAX times at most) when the variety can still mature; the outcome is then the
 re-sown crop's, with `sowings` and `first_planting` recording it.
+
+A simulated member also carries `_canopy`: its canopy cover (fraction) every CANOPY_STEP days from the season start,
+for the canopy bands of the summaries (run_outlook.canopy_band); it is not written to the results.
 """
 import datetime as dt
 import warnings
@@ -26,6 +29,7 @@ import pandas as pd
 from crop_engine.config import RESOW_MAX, SOIL_DZ, STRESS_RATIO
 
 ESTABLISHED_CC = 0.05          # canopy cover a crop must reach to count as established
+CANOPY_STEP = 7                # days between the canopy values kept per member (from the season start, 1 Aug)
 PHENOLOGY = ("Emergence", "MaxRooting", "Senescence", "Maturity", "HIstart", "Flowering", "YldForm")
 
 
@@ -100,14 +104,17 @@ def _sow(task, m, plant, dates, g):
     with np.errstate(invalid="ignore", divide="ignore"):
         stressed = (trp[season] >= 0.5) & (tr[season] < STRESS_RATIO * trp[season])
     src = np.bincount(task["source"][season].astype(int), minlength=6)
-    cc = float(growth.canopy_cover.values[: kh + 1].max())
+    ccs = np.nan_to_num(growth.canopy_cover.values[: len(dates)].astype(np.float32))
+    ccs = np.pad(ccs, (0, len(dates) - len(ccs)))                     # zero after the season ends
+    cc = float(ccs[: kh + 1].max())
     status = ("ok" if harvest >= expected_maturity - pd.Timedelta(days=3)
               else "failed_establishment" if cc < ESTABLISHED_CC else "died")
     r.update(status=status, yield_t_ha=round(yld, 3), potential_t_ha=round(pot, 3),
              biomass_t_ha=round(float(growth.biomass.values[: kh + 1].max()) / 100.0, 3),
              harvest=f"{harvest:%Y-%m-%d}", expected_maturity=f"{expected_maturity:%Y-%m-%d}",
              max_canopy=round(cc, 3), stress_days=int(stressed.sum()),
-             rain_mm=round(float(task["rain"][m][season].sum()), 1), sources=src.tolist())
+             rain_mm=round(float(task["rain"][m][season].sum()), 1), sources=src.tolist(),
+             _canopy=ccs[::CANOPY_STEP])
     return r
 
 

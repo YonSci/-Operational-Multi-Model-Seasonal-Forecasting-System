@@ -39,6 +39,8 @@ const kindOf = source => KINDS.find(k => k.test(source)) ?? KINDS[0]
 const fmtDate = iso => { if (!iso) return '—'; const [, m, d] = iso.split('-').map(Number); return `${d} ${MONTHS[m - 1]}` }
 const fmtT = v => v == null ? '—' : v < 0.05 ? '0' : v.toFixed(1)
 const pct = v => v == null ? '—' : `${Math.round(v * 100)}%`
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), h = s.length >> 1
+                      return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2 }
 const effYield = (status, y) => SIMULATED.includes(status) ? (y ?? 0) : 0
 const groupOf = status => GROUPS.find(g => g.ids.includes(status))?.id ?? 'not_grown'
 const runLabel = r => r.source === 'seasonal' ? r.model_label : `${r.model_label} · ${fmtDate(r.run)}`
@@ -235,6 +237,96 @@ function OutcomeBars({ rows }) {
   )
 }
 
+// ── How the canopy develops: weekly canopy cover of the sown crops, forecast band vs past seasons ───────────────────
+const DAY = 86_400_000
+function CanopyChart({ fc, past, nMembers }) {
+  const [ref, w] = useWidth()
+  const [hi, setHi] = useState(null)
+  const H = 250, m = { l: 46, r: 18, t: 14, b: 34 }
+  const step = fc.step_days ?? 7
+  const t0 = new Date(fc.start + 'T00:00:00Z').getTime()
+  const n = fc.median.length
+  const span = Math.max(1, (n - 1) * step)
+  const iw = Math.max(0, w - m.l - m.r), ih = H - m.t - m.b
+  const xs = i => m.l + (i * step) / span * iw
+  const ys = v => m.t + (1 - v) * ih
+  const label = i => { const d = new Date(t0 + i * step * DAY); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}` }
+  const line = arr => arr.reduce((d, v, i) => v == null ? d : d + `${i && arr[i - 1] != null ? 'L' : 'M'}${xs(i)},${ys(v)}`, '')
+  const keep = fc.median.map((_, i) => fc.p10[i] != null && fc.p90[i] != null)
+  const top = fc.p90.map((v, i) => keep[i] ? `${xs(i)},${ys(v)}` : null).filter(Boolean)
+  const bot = fc.p10.map((v, i) => keep[i] ? `${xs(i)},${ys(v)}` : null).filter(Boolean).reverse()
+  const band = top.length ? `M${top.join('L')}L${bot.join('L')}Z` : ''
+  const months = []                                                   // a tick on the 1st of each month in range
+  for (let d = new Date(t0); d.getTime() <= t0 + span * DAY; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (d.getUTCDate() === 1) months.push({ x: m.l + (d.getTime() - t0) / DAY / span * iw, label: MONTHS[d.getUTCMonth()] })
+  }
+  const pastMed = past?.median?.slice(0, n)
+  const series = [
+    { key: 'fc', label: `This forecast: median of the sown crops (${fc.n} of ${nMembers} members); band: 8 in 10`, color: 'var(--crop-fc)', dash: null },
+    ...(pastMed ? [{ key: 'past', label: `Past seasons: median (${past.n} sown seasons)`, color: 'var(--text-meta)', dash: '6 4' }] : []),
+  ]
+  const move = e => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const i = Math.round((e.clientX - r.left - m.l) / iw * (n - 1))
+    setHi(i < 0 || i > n - 1 ? null : i)
+  }
+  const pc = v => v == null ? '—' : `${Math.round(v * 100)}%`
+  const peak = fc.median.reduce((a, v, i) => (v ?? -1) > (fc.median[a] ?? -1) ? i : a, 0)
+  const pastPeak = pastMed ? Math.max(...pastMed.filter(v => v != null)) : null
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 13, color: 'var(--text-body)', marginBottom: 6 }}>
+        {series.map(s => (
+          <span key={s.key} className="inline-flex items-center gap-2">
+            <svg width="22" height="10" aria-hidden="true">
+              {s.key === 'fc' && <rect x="1" y="1" width="20" height="8" rx="2" fill="var(--crop-fc)" opacity="0.2"/>}
+              <line x1="1" x2="21" y1="5" y2="5" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash ?? undefined} strokeLinecap="round"/>
+            </svg>
+            {s.label}
+          </span>
+        ))}
+      </div>
+      {w > 0 && (
+        <svg width={w} height={H} role="img" style={{ display: 'block', touchAction: 'pan-y' }}
+             aria-label={`Canopy cover of the sown crops, week by week: this forecast's median peaks at ${pc(fc.median[peak])} in the week of ${label(peak)}`
+                         + (pastPeak != null ? `; the past seasons' median peaks at ${pc(pastPeak)}` : '')}
+             onPointerMove={move} onPointerLeave={() => setHi(null)}>
+          {[0, 0.25, 0.5, 0.75, 1].map(p => (
+            <g key={p}>
+              <line x1={m.l} x2={m.l + iw} y1={ys(p)} y2={ys(p)} stroke="var(--chart-grid)"/>
+              <text x={m.l - 8} y={ys(p) + 4} fontSize="12" textAnchor="end" fill="var(--text-meta)">{p * 100}%</text>
+            </g>
+          ))}
+          {months.map(mo => <text key={mo.label + mo.x} x={mo.x} y={m.t + ih + 20} fontSize="12" textAnchor="middle" fill="var(--text-meta)">{mo.label}</text>)}
+          <path d={band} fill="var(--crop-fc)" opacity="0.18"/>
+          {pastMed && <path d={line(pastMed)} fill="none" stroke="var(--text-meta)" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round"/>}
+          <path d={line(fc.median)} fill="none" stroke="var(--crop-fc)" strokeWidth="2" strokeLinejoin="round"/>
+          {hi != null && (
+            <g pointerEvents="none">
+              <line x1={xs(hi)} x2={xs(hi)} y1={m.t} y2={m.t + ih} stroke="var(--text-meta)"/>
+              {fc.median[hi] != null && <circle cx={xs(hi)} cy={ys(fc.median[hi])} r="5" fill="var(--crop-fc)" stroke="var(--bg-surface)" strokeWidth="2"/>}
+              {pastMed?.[hi] != null && <circle cx={xs(hi)} cy={ys(pastMed[hi])} r="5" fill="var(--text-meta)" stroke="var(--bg-surface)" strokeWidth="2"/>}
+            </g>
+          )}
+        </svg>
+      )}
+      {hi != null && (
+        <div style={{ position: 'absolute', top: 30, left: Math.min(Math.max(xs(hi) + 12, 0), Math.max(0, w - 240)), width: 228, pointerEvents: 'none',
+                      background: 'var(--chart-tooltip-bg)', border: '1px solid var(--border-primary)', borderRadius: 8, padding: '8px 10px',
+                      fontSize: 13, color: 'var(--text-body)', boxShadow: '0 4px 14px rgba(0,0,0,.18)' }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Week of {label(hi)}</div>
+          <div className="flex justify-between gap-3"><span>This forecast</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pc(fc.median[hi])}</span></div>
+          <div className="flex justify-between gap-3" style={{ color: 'var(--text-meta)' }}><span>8 in 10 sown crops</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{pc(fc.p10[hi])}–{pc(fc.p90[hi])}</span></div>
+          {pastMed && <div className="flex justify-between gap-3"><span>Past seasons</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pc(pastMed[hi])}</span></div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const countOutcomes = statuses => {
   const raw = {}, counts = Object.fromEntries(GROUPS.map(g => [g.id, 0]))
   for (const s of statuses) { raw[s] = (raw[s] ?? 0) + 1; counts[groupOf(s)] += 1 }
@@ -271,9 +363,11 @@ export default function CropOutlookTab({ country, selectedSite }) {
   const summary = ix.summaries?.[run.id]?.[sid]?.[vk]?.[rk]
   const res = runQ.data?.sites?.[sid]
   const members = res?.results?.[vk]?.[rk]?.members ?? []
+  const canopy = res?.results?.[vk]?.[rk]?.canopy
   const b = bench.data?.sites?.[sid]?.[vk]?.[rk]
   const fcY = members.map(m => effYield(m[3], m[2]))
   const pastY = (b?.seasons ?? []).map(s => effYield(s[4], s[3]))
+  const pastPotential = median((b?.seasons ?? []).filter(s => SIMULATED.includes(s[4]) && s[5] != null).map(s => s[5]))
   const vb = summary?.vs_benchmark ?? {}
   const sownShare = summary ? 1 - (summary.share.not_sown ?? 0) : null
   const years = bench.data?.years ?? [1993, 2025]
@@ -325,7 +419,8 @@ export default function CropOutlookTab({ country, selectedSite }) {
                 sub={sownShare === 0 ? 'No member has a sowing opportunity by 15 Jan'
                      : <>{summary.planting.p10 === summary.planting.p90 ? `Most members: ${fmtDate(summary.planting.p10)}`
                           : `Most members ${fmtDate(summary.planting.p10)} – ${fmtDate(summary.planting.p90)}`}
-                         {summary.share.not_sown ? `; no sowing opportunity in ${pct(summary.share.not_sown)}` : ''}</>}/>
+                         {summary.share.not_sown ? `; no sowing opportunity in ${pct(summary.share.not_sown)}` : ''}
+                         {summary.resown ? `; re-sown after a failed start in ${pct(summary.resown)}` : ''}</>}/>
           <Stat label="Harvest" value={fmtDate(summary.harvest_median)}
                 sub={summary.stress_days_median != null ? <>Water-stress days: {Math.round(summary.stress_days_median)}. Season rain: {Math.round(summary.rain_mm_median)} mm (medians of sown crops)</> : 'No sown crop'}/>
         </div>
@@ -335,6 +430,9 @@ export default function CropOutlookTab({ country, selectedSite }) {
           {vb.p_below_normal != null
             ? <>Compared with past seasons: {pct(vb.p_below_normal)} of members below the normal range ({fmtT(vb.t33)}–{fmtT(vb.t67)} t/ha), {pct(vb.p_above_normal)} above it.</>
             : <>No normal range for this crop: a third or more of the past seasons were crop failures, so the failure chance is the comparison.</>}
+          {summary.potential_t_ha?.median != null && <>
+            {' '}Water stress: the sown crops yield a median {fmtT(summary.potential_t_ha.yield_median)} t/ha, against {fmtT(summary.potential_t_ha.median)} t/ha
+            without water stress (AquaCrop’s potential yield).</>}
           {' '}{run.members_kind?.startsWith('deterministic') ? `${run.model_label} is a single forecast, repeated in all 25 members: the spread comes from the observations and the seasonal forecast after it.` : ''}
         </p>
       )}
@@ -361,11 +459,20 @@ export default function CropOutlookTab({ country, selectedSite }) {
       </div>
 
       <div style={{ marginTop: 18 }}>
+        <Panel title="How the crop canopy develops"
+               sub="Canopy cover of the sown crops week by week, from 1 Aug. It falls to zero as each crop is harvested or dies, so the median drops once about half the crops are done. Hover for values.">
+          {runQ.isLoading ? msg('Loading…')
+            : canopy ? <CanopyChart fc={canopy} past={b?.canopy} nMembers={members.length}/>
+            : msg(members.length ? 'No sown crop in this forecast: no canopy to show.' : 'No members for this choice.')}
+        </Panel>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
         <Panel title="Every forecast for this site and crop" sub="Select a row to show that forecast above.">
           <div style={{ overflowX: 'auto' }}>
             <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Yield, median</th><th>8 in 10 members</th><th>Crop failure</th><th>Matured</th></tr>
+                <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Yield, median</th><th>8 in 10 members</th><th>Without water stress</th><th>Crop failure</th><th>Matured</th></tr>
               </thead>
               <tbody>
                 {runs.map(r => {
@@ -385,6 +492,7 @@ export default function CropOutlookTab({ country, selectedSite }) {
                       <td>{fmtDate(s.planting.median)}</td>
                       <td>{fmtT(s.yield_t_ha.median)} t/ha</td>
                       <td>{fmtT(s.yield_t_ha.p10)}–{fmtT(s.yield_t_ha.p90)} t/ha</td>
+                      <td>{s.potential_t_ha?.median != null ? `${fmtT(s.potential_t_ha.median)} t/ha` : '—'}</td>
                       <td>{pct(s.p_failure)}</td>
                       <td>{pct(s.share.ok)}</td>
                     </tr>
@@ -397,6 +505,7 @@ export default function CropOutlookTab({ country, selectedSite }) {
                     <td>—</td>
                     <td>{fmtT(b.median)} t/ha</td>
                     <td>—</td>
+                    <td>{pastPotential != null ? `${fmtT(pastPotential)} t/ha` : '—'}</td>
                     <td>{pct(b.p_failure)}</td>
                     <td>{pct(b.seasons.filter(x => x[4] === 'ok').length / b.seasons.length)}</td>
                   </tr>
@@ -413,11 +522,12 @@ export default function CropOutlookTab({ country, selectedSite }) {
             <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--accent-text)' }}>Show each member’s sowing, harvest and yield</summary>
             <div style={{ overflowX: 'auto', marginTop: 10, maxHeight: 420, overflowY: 'auto' }}>
               <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr><th>Member</th><th>Sowing</th><th>Harvest</th><th>Yield</th><th>Outcome</th><th>Stress days</th><th>Rain</th></tr></thead>
+                <thead><tr><th>Member</th><th>Sowing</th><th>Harvest</th><th>Yield</th><th>Without water stress</th><th>Outcome</th><th>Stress days</th><th>Rain</th></tr></thead>
                 <tbody>
                   {members.map((m, i) => (
                     <tr key={i}>
-                      <td>{i + 1}</td><td>{fmtDate(m[0])}</td><td>{fmtDate(m[1])}</td><td>{fmtT(effYield(m[3], m[2]))} t/ha</td>
+                      <td>{i + 1}</td><td>{fmtDate(m[0])}{m[7] > 1 ? ' (re-sown)' : ''}</td><td>{fmtDate(m[1])}</td><td>{fmtT(effYield(m[3], m[2]))} t/ha</td>
+                      <td>{SIMULATED.includes(m[3]) && m[6] != null ? `${fmtT(m[6])} t/ha` : '—'}</td>
                       <td>{STATUS_LABEL[m[3]] ?? m[3]}</td><td>{m[4] ?? '—'}</td><td>{m[5] != null ? `${Math.round(m[5])} mm` : '—'}</td>
                     </tr>
                   ))}
