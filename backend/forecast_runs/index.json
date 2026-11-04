@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-03T15:39+03:00",
+ "updated": "2026-11-04T14:19+03:00",
  "runs": [
   {
    "source": "mr-ecmwf_ens_median",
@@ -29,6 +29,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:29+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261025.npz"
   },
   {
@@ -59,6 +60,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:30+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261026.npz"
   },
   {
@@ -95,6 +97,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:15+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261028.npz"
   },
   {
@@ -131,6 +134,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:32+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261031.npz"
   },
   {
@@ -167,6 +171,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:33+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261101.npz"
   },
   {
@@ -203,6 +208,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:21+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261102.npz"
   },
   {
@@ -239,7 +245,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:08+03:00",
    "model_label": "ECMWF ENS",
+   "members": "ensemble",
    "file": "mr-ecmwf_ens_median_20261103.npz"
+  },
+  {
+   "source": "mr-ecmwf_ens_median",
+   "kind": "medium",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "fc",
+     "label": "ECMWF ENS (25 members), run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-18"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-19",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:18+03:00",
+   "model_label": "ECMWF ENS",
+   "members": "ensemble",
+   "file": "mr-ecmwf_ens_median_20261104.npz"
   },
   {
    "source": "mr-ecmwf_ifs025",
@@ -269,6 +313,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:29+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261025.npz"
   },
   {
@@ -299,6 +344,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:30+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261026.npz"
   },
   {
@@ -335,6 +381,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:31+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261028.npz"
   },
   {
@@ -371,6 +418,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:17+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261031.npz"
   },
   {
@@ -407,6 +455,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:19+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261101.npz"
   },
   {
@@ -443,6 +492,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:21+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261102.npz"
   },
   {
@@ -479,7 +529,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:28+03:00",
    "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ecmwf_ifs025_20261103.npz"
+  },
+  {
+   "source": "mr-ecmwf_ifs025",
+   "kind": "medium",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "fc",
+     "label": "ECMWF IFS (HRES), run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-18"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-19",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:17+03:00",
+   "model_label": "ECMWF IFS (HRES)",
+   "members": "deterministic, repeated in every member",
+   "file": "mr-ecmwf_ifs025_20261104.npz"
   },
   {
    "source": "mr-gem_global",
@@ -509,6 +597,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:30+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261025.npz"
   },
   {
@@ -539,6 +628,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:15+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261026.npz"
   },
   {
@@ -575,6 +665,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:16+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261028.npz"
   },
   {
@@ -611,6 +702,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:32+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261031.npz"
   },
   {
@@ -647,6 +739,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:33+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261101.npz"
   },
   {
@@ -683,6 +776,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:22+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261102.npz"
   },
   {
@@ -719,7 +813,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:34+03:00",
    "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gem_global_20261103.npz"
+  },
+  {
+   "source": "mr-gem_global",
+   "kind": "medium",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "fc",
+     "label": "GDPS, run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-13"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-14",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:18+03:00",
+   "model_label": "GDPS",
+   "members": "deterministic, repeated in every member",
+   "file": "mr-gem_global_20261104.npz"
   },
   {
    "source": "mr-gfs_global",
@@ -749,6 +881,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:30+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261025.npz"
   },
   {
@@ -779,6 +912,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:15+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261026.npz"
   },
   {
@@ -815,6 +949,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:16+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261028.npz"
   },
   {
@@ -851,6 +986,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:32+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261031.npz"
   },
   {
@@ -887,6 +1023,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:33+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261101.npz"
   },
   {
@@ -923,6 +1060,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:22+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261102.npz"
   },
   {
@@ -959,7 +1097,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:31+03:00",
    "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
    "file": "mr-gfs_global_20261103.npz"
+  },
+  {
+   "source": "mr-gfs_global",
+   "kind": "medium",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "fc",
+     "label": "GFS, run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-19"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-20",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:18+03:00",
+   "model_label": "GFS",
+   "members": "deterministic, repeated in every member",
+   "file": "mr-gfs_global_20261104.npz"
   },
   {
    "source": "mr-icon_global",
@@ -989,6 +1165,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:30+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261025.npz"
   },
   {
@@ -1019,6 +1196,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:31+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261026.npz"
   },
   {
@@ -1055,6 +1233,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:16+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261028.npz"
   },
   {
@@ -1091,6 +1270,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:33+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261031.npz"
   },
   {
@@ -1127,6 +1307,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:20+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261101.npz"
   },
   {
@@ -1163,6 +1344,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:22+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261102.npz"
   },
   {
@@ -1199,7 +1381,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:37+03:00",
    "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
    "file": "mr-icon_global_20261103.npz"
+  },
+  {
+   "source": "mr-icon_global",
+   "kind": "medium",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "fc",
+     "label": "ICON, run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-10"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-11",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:18+03:00",
+   "model_label": "ICON",
+   "members": "deterministic, repeated in every member",
+   "file": "mr-icon_global_20261104.npz"
   },
   {
    "source": "mr-ukmo_global_deterministic_10km",
@@ -1229,6 +1449,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:30+03:00",
    "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ukmo_global_deterministic_10km_20261025.npz"
   },
   {
@@ -1259,6 +1480,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:31+03:00",
    "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ukmo_global_deterministic_10km_20261026.npz"
   },
   {
@@ -1295,6 +1517,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:17+03:00",
    "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ukmo_global_deterministic_10km_20261028.npz"
   },
   {
@@ -1331,6 +1554,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:33+03:00",
    "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ukmo_global_deterministic_10km_20261031.npz"
   },
   {
@@ -1367,6 +1591,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:22+03:00",
    "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ukmo_global_deterministic_10km_20261102.npz"
   },
   {
@@ -1403,7 +1628,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:39+03:00",
    "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
    "file": "mr-ukmo_global_deterministic_10km_20261103.npz"
+  },
+  {
+   "source": "mr-ukmo_global_deterministic_10km",
+   "kind": "medium",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "fc",
+     "label": "UKMO Global, run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-10"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-11-11",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:19+03:00",
+   "model_label": "UKMO Global",
+   "members": "deterministic, repeated in every member",
+   "file": "mr-ukmo_global_deterministic_10km_20261104.npz"
   },
   {
    "source": "s2s-ecmwf",
@@ -1439,6 +1702,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:05+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261025.npz"
   },
   {
@@ -1481,6 +1745,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:06+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261027.npz"
   },
   {
@@ -1523,6 +1788,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:07+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261028.npz"
   },
   {
@@ -1565,6 +1831,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:08+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261030.npz"
   },
   {
@@ -1607,6 +1874,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:10+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261031.npz"
   },
   {
@@ -1649,6 +1917,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:11+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261101.npz"
   },
   {
@@ -1691,6 +1960,7 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-02T20:12+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261102.npz"
   },
   {
@@ -1733,7 +2003,51 @@
    "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
    "created": "2026-11-03T15:06+03:00",
    "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
    "file": "s2s-ecmwf_20261103.npz"
+  },
+  {
+   "source": "s2s-ecmwf",
+   "kind": "s2s",
+   "run": "2026-11-04",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-03"
+    },
+    {
+     "kind": "ens",
+     "label": "ECMWF ENS, run 2026-11-04",
+     "start": "2026-11-04",
+     "end": "2026-11-18"
+    },
+    {
+     "kind": "ext",
+     "label": "ECMWF extended range, run 2026-11-02",
+     "start": "2026-11-19",
+     "end": "2026-12-17"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-12-18",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
+   "created": "2026-11-04T14:16+03:00",
+   "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
+   "file": "s2s-ecmwf_20261104.npz"
   },
   {
    "source": "s2s-gefs",
@@ -1769,6 +2083,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:13+03:00",
    "model_label": "NOAA GEFS 35-day",
+   "members": "ensemble",
    "file": "s2s-gefs_20261031.npz"
   },
   {
@@ -1805,6 +2120,7 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-02T20:14+03:00",
    "model_label": "NOAA GEFS 35-day",
+   "members": "ensemble",
    "file": "s2s-gefs_20261101.npz"
   },
   {
@@ -1841,7 +2157,45 @@
    "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
    "created": "2026-11-03T15:07+03:00",
    "model_label": "NOAA GEFS 35-day",
+   "members": "ensemble",
    "file": "s2s-gefs_20261102.npz"
+  },
+  {
+   "source": "s2s-gefs",
+   "kind": "s2s",
+   "run": "2026-11-03",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-02"
+    },
+    {
+     "kind": "fc",
+     "label": "NOAA GEFS 35-day, run 2026-11-03",
+     "start": "2026-11-03",
+     "end": "2026-12-07"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-12-08",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-04T14:17+03:00",
+   "model_label": "NOAA GEFS 35-day",
+   "members": "ensemble",
+   "file": "s2s-gefs_20261103.npz"
   }
  ]
 }

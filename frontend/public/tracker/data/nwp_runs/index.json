@@ -205,6 +205,36 @@
      "days": 7
     }
    }
+  },
+  {
+   "run": "2026-11-04",
+   "file": "nwp_20261104.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-04",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-04",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-04",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-11-04",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-11-04",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-11-04",
+     "days": 7
+    }
+   }
   }
  ]
 }
