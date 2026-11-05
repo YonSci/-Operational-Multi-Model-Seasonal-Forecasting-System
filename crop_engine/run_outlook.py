@@ -46,13 +46,15 @@ import onset_rules as orl  # noqa: E402
 
 ENGINE = f"AquaCrop-OSPy {version('aquacrop')}"
 CAVEATS = [
-    "Experimental: the crop model is not calibrated for these sites or varieties, and the forecast runs have not been "
-    "verified for crop outcomes.",
-    "Varieties are maturity classes built from AquaCrop's default crop parameters, not calibrated cultivars.",
-    "Yields are water-limited: no nutrient stress, pests or management losses, AquaCrop default plant density; they are "
-    "an upper bound for smallholder fields.",
-    "Temperature and ET0 after the last ERA5-Land day are the 1993–2016 day-of-year climatology; March rain is a "
-    "climatological continuation (observed CHIRPS of a calibration year).",
+    "Experimental: maize and sorghum have a first calibration against trials at Kiboko only; the crop forecasts have "
+    "not been verified against observed crop outcomes.",
+    "Varieties are maturity classes (AquaCrop crop files with Kenyan plant densities), not calibrated cultivars.",
+    "Yields are water-limited: no nutrient stress, pests, diseases or management losses; they are an upper bound for "
+    "smallholder fields.",
+    "Past seasons are simulated: AquaCrop grown in the observed weather of 1993–2025, not measured yields.",
+    "A crop season runs from 1 Aug to 28 Feb: a crop that cannot mature by 28 Feb is counted as too late.",
+    "Temperature and ET0 after the last ERA5-Land day are the 1993–2016 day-of-year climatology; 1 Jan – 28 Feb rain "
+    "is ECMWF SEAS5 (bias-corrected), as for the Agri rules.",
     "Soil is the 0.25° SoilGrids average of the site's grid cell, not a field measurement.",
     "Deterministic weather models are the same forecast in every member: their spread comes from SEAS5 only.",
 ]
@@ -132,18 +134,42 @@ def canopy_band(members, start=None):
     return {"start": start, **band} if start else band
 
 
+def outcome_rates(records, failure_t_ha):
+    """The outcome probabilities, each with its own denominator (members or seasons; model errors left out of all):
+      p_sowing_opportunity      sown or sowable (an onset by the rule's search end), of the valid ones
+      p_establishment_failure   failed to establish, of the sown crops
+      p_failure_if_sown         yield below the failure threshold, of the sown crops
+      yield_if_sown_t_ha        the sown crops' yield
+      p_failure                 no crop (no sowing opportunity, too late) or a failed one, of the valid ones
+    No sowing opportunity is the rule's outcome, not a farmer's: it is reported apart from crop failure."""
+    valid = [r for r in records if r["status"] != "error"]
+    sown = [r for r in valid if r["status"] in SIMULATED]
+    ys = np.array([r["yield_t_ha"] for r in sown])
+    ny = np.array([effective_yield(r) for r in valid])
+    rate = lambda k, n: round(k / n, 3) if n else None
+    return {"n_valid": len(valid), "n_error": len(records) - len(valid), "n_sown": len(sown),
+            "p_sowing_opportunity": rate(sum(1 for r in valid if r["status"] != "not_sown"), len(valid)),
+            "p_establishment_failure": rate(sum(1 for r in sown if r["status"] == "failed_establishment"), len(sown)),
+            "p_failure_if_sown": rate(int((ys < failure_t_ha).sum()), len(sown)),
+            "yield_if_sown_t_ha": {"median": _q(ys, 0.5), "p10": _q(ys, 0.1), "p90": _q(ys, 0.9)},
+            "p_failure": rate(int((ny < failure_t_ha).sum()), len(valid))}
+
+
 def summarize(members, variety, bench=None):
-    y = np.array([effective_yield(m) for m in members])
+    valid = [m for m in members if m["status"] != "error"]          # a model error is no outcome: left out
+    y = np.array([effective_yield(m) for m in valid])
     st = [m["status"] for m in members]
     sown = [m for m in members if m["status"] in SIMULATED]
     n = len(members)
+    rates = outcome_rates(members, variety["failure_t_ha"])
     s = {"members": n,
          "share": {k: round(st.count(k) / n, 3) for k in SIMULATED + ("too_late", "not_sown", "error")},
-         "yield_t_ha": {"median": _q(y, 0.5), "p10": _q(y, 0.1), "p90": _q(y, 0.9), "mean": round(float(y.mean()), 3)},
+         **rates,
+         "yield_t_ha": {"median": _q(y, 0.5), "p10": _q(y, 0.1), "p90": _q(y, 0.9),
+                        "mean": round(float(y.mean()), 3) if len(y) else None},
          # AquaCrop's yield without water stress, over the sown crops: the gap to their yield is what water costs
          "potential_t_ha": {"median": _q([m["potential_t_ha"] for m in sown], 0.5),
                             "yield_median": _q([m["yield_t_ha"] for m in sown], 0.5)},
-         "p_failure": round(float((y < variety["failure_t_ha"]).mean()), 3),
          "planting": {"median": _date_q([m["planting"] for m in members if m["planting"]], 0.5),
                       "p10": _date_q([m["planting"] for m in members if m["planting"]], 0.1),
                       "p90": _date_q([m["planting"] for m in members if m["planting"]], 0.9)},
@@ -153,9 +179,11 @@ def summarize(members, variety, bench=None):
          "rain_mm_median": _q([m["rain_mm"] for m in sown], 0.5)}
     if bench and bench.get("t33") is not None:
         s["vs_benchmark"] = {"benchmark_p_failure": bench["p_failure"], "benchmark_median": bench["median"],
+                             **{f"benchmark_{k}": bench.get(k) for k in ("p_sowing_opportunity", "p_establishment_failure",
+                                                                         "p_failure_if_sown", "yield_if_sown_t_ha")},
                              "t33": bench["t33"], "t67": bench["t67"], "p_below_normal": None, "p_above_normal": None}
         # terciles only when they separate yields: not when a third or more of the benchmark years failed
-        if bench["t33"] >= variety["failure_t_ha"] and bench["t67"] > bench["t33"]:
+        if len(y) and bench["t33"] >= variety["failure_t_ha"] and bench["t67"] > bench["t33"]:
             s["vs_benchmark"].update(p_below_normal=round(float((y < bench["t33"]).mean()), 3),
                                      p_above_normal=round(float((y > bench["t67"]).mean()), 3))
     return s
@@ -202,7 +230,7 @@ def benchmark(inp, rep_cells, varieties, rules, soils, workers):
                 cal = [effective_yield(b["years"][str(y)]) for y in years if C.CAL_YEARS[0] <= y <= C.CAL_YEARS[1]]
                 allv = [effective_yield(v) for v in b["years"].values()]
                 b.update(t33=_q(cal, 1 / 3), t67=_q(cal, 2 / 3), median=_q(allv, 0.5), cal_median=_q(cal, 0.5),
-                         p_failure=round(float(np.mean(np.array(allv) < varieties[vk]["failure_t_ha"])), 3))
+                         **outcome_rates(list(b["years"].values()), varieties[vk]["failure_t_ha"]))
     return out
 
 

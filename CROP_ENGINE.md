@@ -15,7 +15,7 @@ run of every sub-seasonal and medium-range model — and for each site, variety 
 
 1. builds the run's **daily weather** for each of its 25 members (below);
 2. takes each member's **sowing date** from the platform's own onset method (the dates the dashboard shows for that run);
-3. simulates the crop with **AquaCrop** from 1 Aug to 31 Mar;
+3. simulates the crop with **AquaCrop** from 1 Aug to 28 Feb (the FAO water balance's season: its cessation search end);
 4. summarises the members: yield distribution, chance of crop failure, sowing and harvest dates, water-stress days,
    the share re-sown, the yield without water stress (AquaCrop's potential), the weekly canopy cover of the sown
    crops (median and 10th–90th percentiles), and the chance of a below- or above-normal yield compared with a **benchmark** — the same crop, rule and soil
@@ -41,17 +41,25 @@ commits with the other tracker data.
 ## Crop outlook tab
 
 `frontend/src/components/CropOutlookTab.jsx`, Kenya only. Pick a site, crop, sowing rule and forecast (seasonal,
-sub-seasonal or medium-range run) to see:
+sub-seasonal or medium-range run). The tab starts from the dashboard's own choices — the forecast type and model,
+the onset method when it is also a sowing rule (Agri rule 1, FAO agricultural), the map's site — and says so in a
+notice whenever it cannot follow one: a seasonal run other than Oct 01 + latest obs (the only one simulated), a
+climate onset method (Dunning, rules 2–3), a forecast without a crop run, another season, or a map location that is
+not a crop site (the nearest site is shown, with its distance). It shows:
 
-- headline figures: median yield and the middle 8 in 10 members, the chance of crop failure, the sowing and harvest
-  dates (with the share re-sown after a failed start), each against the past seasons, and what water stress costs
-  the sown crops (their yield against AquaCrop's yield without water stress);
-- the chance of more than each yield, for the forecast members and for the past seasons (1993–2025);
+- headline figures, each against the **simulated past seasons** (AquaCrop in the observed weather of 1993–2025, not
+  measured yields): the chance of a **sowing opportunity** under the rule (with the sowing dates and the share
+  re-sown), the **yield if sown** (median, 8 in 10 sown crops, and the yields **measured** in trials at the site),
+  the **crop failure if sown** (and the share that failed to establish), and the harvest; then the all-members
+  figures (no crop counted as no yield), model errors, and what water stress costs the sown crops (their yield
+  against AquaCrop's yield without water stress);
+- the chance of more than each yield, for the forecast members and for the simulated past seasons;
 - what happens to the crop: matured, died before maturity, failed to establish, not grown;
 - how the canopy develops: the sown crops' canopy cover week by week (median and 8 in 10 band) against the past
   seasons' median;
-- every forecast side by side for the same site and crop (with the yield without water stress), each member's
-  outcome (re-sown members marked), and the inputs behind the result.
+- every forecast side by side for the same site and crop (sowing opportunity, yield and failure if sown, yield
+  without water stress), with the simulated past seasons and the measured trials as reference rows; each member's
+  outcome (re-sown members marked); and the inputs behind the result.
 
 ## Inputs
 
@@ -60,7 +68,7 @@ sub-seasonal or medium-range run) to see:
 | Rain 1–31 Aug | CHIRPS v2 observed (final, then preliminary) | |
 | Rain 1 Sep – 31 Dec | the run's joined members (`scripts/forecast_runs.py`) | observed → gap days → weather forecast → SEAS5 |
 | Rain 1 Jan – 28 Feb | SEAS5 member, quantile-mapped to CHIRPS (`onset_rules.EXT_CACHE`) | as the Agri rules |
-| Rain 1–31 Mar | observed CHIRPS March of calibration year 1993 + (k mod 24) | the SEAS5 October files on disk end on 28 Feb |
+| (Rain 1–31 Mar) | not simulated: the season ends on 28 Feb | the SEAS5 October files on disk end on 28 Feb |
 | Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then the 1993–2016 day-of-year climatology | |
 | ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology | the same as the FAO water balance |
 | Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
@@ -100,12 +108,23 @@ initial canopy, so the maximum canopy is set with it.
 
 `ok` (sown, matured), `failed_establishment` (died before its canopy reached 5 %: a false start, the seedlings
 dried out), `died` (an established crop that died before maturity: canopy collapse under water stress), `too_late`
-(sown too late to mature by 31 Mar), `not_sown` (no onset by the rule's search end, 15 Jan). Members not sown or too
-late count as zero yield in the risk figures.
+(sown too late to mature by 28 Feb), `not_sown` (no onset by the rule's search end, 15 Jan), `error` (AquaCrop
+failed for the member).
+
+**Outcome figures, each with its own denominator** (`run_outlook.outcome_rates`, the same for the forecast members
+and the benchmark seasons; model errors are in none of them and are counted apart, `n_error`):
+
+| Figure | Of | Meaning |
+| :--- | :--- | :--- |
+| `p_sowing_opportunity` | valid members | an onset by the rule's search end (sown, or sowable but too late): the rule's outcome, not a farmer's |
+| `yield_if_sown_t_ha` | sown crops | median, 10th and 90th percentile of the yield |
+| `p_establishment_failure` | sown crops | failed to establish |
+| `p_failure_if_sown` | sown crops | yield below the variety's failure threshold |
+| `p_failure`, `yield_t_ha` | valid members | no crop (no sowing opportunity, too late) or a failed one: the overall figures, no crop counted as no yield |
 
 **Re-sowing.** After a failed establishment the member is sown again at the next day that meets Agri rule 1's onset
 criteria after the seedlings died (`config.RESOW_RULE`, at most `RESOW_MAX` = 1 more sowing, by 15 Jan), as a farmer
-re-sows after the next good rain, provided the variety can still mature by 31 Mar. The outcome is then the re-sown
+re-sows after the next good rain, provided the variety can still mature by 28 Feb. The outcome is then the re-sown
 crop's; `sowings` and `first_planting` record it, and the summary's `resown` gives the share of members re-sown.
 A `died` crop can still yield: AquaCrop ends the season when the canopy collapses, often late in grain filling. A crop failure is a yield below the variety's threshold (0.5 t/ha
 grain; 0.2 t/ha bean). A water-stress day is a day with transpiration below half its potential.
@@ -120,7 +139,8 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
   bound for smallholder fields; the plant densities are the recommended ones, not farmers' (often lower).
 - No forecast temperature or radiation yet: after the last ERA5-Land day both are climatology.
 - Deterministic weather models are the same forecast in every member, so their near-term spread is zero.
-- March rain is a climatological continuation, not a forecast.
+- The season ends on 28 Feb: a crop sown so late that it cannot mature by then counts as too late (no March rain is
+  simulated; the SEAS5 runs on disk end on 28 Feb, and a March from past years would not be a forecast).
 - Establishment is very sensitive to the soil water on 1 Aug. ERA5-Land puts it at 4–20 % of the available water at
   most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings (re-sown once).
   At Kiboko a fixed 50 % would roughly halve the failures; without soil moisture measurements it is left as is.
@@ -128,7 +148,7 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
   12): its "no 7-day dry spell in 21 days" criterion is rarely met there. Farmers sow anyway, so the rule-1 figures
   overstate failure there; the FAO agricultural onset sows every year.
 - Sowing dates in cool sites (Kapiti, Maralal): the maturity classes are defined at 21 °C, so a medium maize or
-  sorghum sown in November there needs more heat than the season gives before 31 Mar and is counted as too late.
+  sorghum sown in November there needs more heat than the season gives before 28 Feb and is counted as too late.
 - Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
 - The forecast runs have not been verified for crop outcomes; the benchmark comparison is the first step (P3).
 
@@ -200,8 +220,29 @@ should. Still open:
 - Re-sowing rescues few seasons (1–4 of 33 per site and variety): most failures are crops that die later, under
   mid-season drought, not failed establishments.
 
+## Testing
+
+`python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
+and push that touches the engine): the weather contract and provenance, variety scaling and parameters, sites and
+soil, the AquaCrop adapter (statuses, re-sowing, canopy, potential yield), the outcome rates, the dashboard export,
+the yield databases, and a **regression** check of fixed synthetic seasons against stored outputs
+(`tests/reference/aquacrop_synthetic.json`: regenerate it deliberately, and say why, when the adapter, AquaCrop or
+`varieties.yaml` change them).
+
 ## Next phases
 
-P3: hindcast verification (crop forecasts against crops grown in the observed weather, 1993–2016) and calibration
-with observed yields and phenology. P5: PCSE/WOFOST, SEAS5 temperature and radiation, bulletins,
-Ethiopia.
+Priorities after the November 2026 review (software MVP in place; the next milestone is scientific credibility):
+
+- **P1 Calibration and independent validation**, Kiboko first (early maize and sorghum): a versioned calibration
+  set (which observations train, which are held out), phenology (days to flowering and maturity) as well as yield,
+  fitted parameter sets reported with their scores on the held-out trials and seasons; then the other sites as
+  trials are found.
+- **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
+  weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
+  beyond the onset, cessation, season length and FAO water balance forecasts?
+- **P1 Weather forcing**: forecast temperature and radiation (SEAS5) with source metadata per day; a season past
+  28 Feb only with March rain from a forecast or a declared climatological ensemble.
+- **P1 Management scenarios**: sowing-date offsets and fixed dates, plant density, initial soil water.
+- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations — after AquaCrop's calibration.
+- **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
+  bulletins and gridded regional yield forecasts.

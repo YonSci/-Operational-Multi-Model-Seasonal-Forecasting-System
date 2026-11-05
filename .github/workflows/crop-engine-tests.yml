@@ -1,0 +1,36 @@
+name: Crop engine tests
+
+# The crop engine's unit, contract and regression tests (crop_engine/tests): synthetic weather and the committed
+# yield tables only, no forecast data. The SoilGrids test is skipped here (the soil file is not committed).
+on:
+  pull_request:
+    paths: ["crop_engine/**", "scripts/**", "notebook/dunning_lib.py", "backend/mam_loader.py", "config/**",
+            ".github/workflows/crop-engine-tests.yml"]
+  push:
+    branches: ["main"]
+    paths: ["crop_engine/**", "scripts/**", "notebook/dunning_lib.py", "backend/mam_loader.py", "config/**",
+            ".github/workflows/crop-engine-tests.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: crop_engine/requirements.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r crop_engine/requirements.txt numpy pandas xarray scipy netCDF4 requests pytest
+      - name: Test
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+        run: python -m pytest crop_engine/tests -q

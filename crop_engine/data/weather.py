@@ -2,7 +2,8 @@
 Standard daily crop weather: the platform's forecast rainfall members and observed weather at each site, as one
 xarray Dataset per forecast run (or per observed season), with the source of every day.
 
-Dimensions: member, site, time (1 Aug of the season year – 31 Mar of the next; the FAO water-balance window).
+Dimensions: member, site, time (1 Aug of the season year – 28 Feb of the next: the FAO water-balance window, which
+ends at its cessation search end; a longer window would add March below).
   precip_mm (member, site, time)   daily rain
   tmax_c, tmin_c (site, time)      2 m temperature
   et0_mm (site, time)              FAO-56 reference evapotranspiration
@@ -14,8 +15,8 @@ exactly this rain):
   1–31 Aug        observed CHIRPS v2 (final, then preliminary)
   1 Sep – 31 Dec  the run's joined rain: observed to the last observed day, gap days, the weather forecast, SEAS5
   1 Jan – 28 Feb  SEAS5 member k, bias-corrected as the Agri rules' January–February (onset_rules.EXT_CACHE)
-  1–31 Mar        climatological continuation: observed CHIRPS March of calibration year 1993 + (k mod 24) (SEAS5
-                  October runs on disk end on 28 Feb)
+  (1–31 Mar       only if the window were extended past 28 Feb: observed CHIRPS March of calibration year
+                  1993 + (k mod 24), since the SEAS5 October runs on disk end on 28 Feb; not used now)
 Temperature and ET0: ERA5-Land to its last day (temperature: Open-Meteo point series; ET0: the platform's ERA5-Land
 FAO-56 grid), then the 1993–2016 day-of-year climatology; no forecast temperature or radiation is used yet.
 """
@@ -50,7 +51,7 @@ class Inputs:
         self.b = blender or bs.Blender(C.BASE)
         self.year, self.lat, self.lon = self.b.year, self.b.lat, self.b.lon
         self.cfg = fw.load_config()
-        self.t0, self.T, _ = fw.season_days(self.cfg)                       # 1 Aug, 243 days (to 31 Mar)
+        self.t0, self.T, _ = fw.season_days(self.cfg)                       # 1 Aug, 212 days (to 28 Feb)
         self.sites = sites_mod.on_grid(sites or sites_mod.registered_sites(), self.lat, self.lon, self.b.lm)
         self.ii = np.array([s.i for s in self.sites])
         self.jj = np.array([s.j for s in self.sites])
@@ -135,7 +136,7 @@ class Inputs:
         jf = (dates > last) & (dates < pd.Timestamp(y + 1, 3, 1))         # 1 Jan – 28 Feb: SEAS5 member k
         rain[:, :, jf] = np.moveaxis(self.janfeb[:n_mem, :jf.sum()], 1, 2)
         src[jf] = C.PRECIP_SOURCES.index("seasonal")
-        mar = dates >= pd.Timestamp(y + 1, 3, 1)                          # March: climatological continuation
+        mar = dates >= pd.Timestamp(y + 1, 3, 1)                          # March (none in the 28 Feb window): climatology
         cal = np.arange(C.CAL_YEARS[0], C.CAL_YEARS[1] + 1)
         for m in range(n_mem):
             cy = int(cal[m % len(cal)])

@@ -18,7 +18,7 @@ VARIETIES_FILE = Path(__file__).with_name("varieties.yaml")
 DASHBOARD_OUT = BASE / "frontend" / "public" / "tracker" / "data" / "crop"   # Crop outlook tab (published daily)
 
 CAL_YEARS = (1993, 2016)                         # the platform's calibration years: terciles of the benchmark
-HIST_YEARS = (1993, 2025)                        # seasons with observed weather for the benchmark (season y: Aug y – Mar y+1)
+HIST_YEARS = (1993, 2025)                        # seasons with observed weather for the benchmark (season y: 1 Aug y – 28 Feb y+1)
 
 # Planting rules: the platform's onset methods (forecast_runs.Methods keys) used as sowing dates
 PLANTING_RULES = {
@@ -28,7 +28,7 @@ PLANTING_RULES = {
 
 # Re-sowing after a failed establishment (the seedlings dried out after a false start): at the next day that meets
 # Agri rule 1's onset criteria after the crop died (by the rules' search end, 15 Jan), as a farmer re-sows after the
-# next good rain; at most RESOW_MAX times, and only while the variety can still mature by 31 Mar.
+# next good rain; at most RESOW_MAX times, and only while the variety can still mature by the season's end (28 Feb).
 RESOW_RULE = 1
 RESOW_MAX = 1
 

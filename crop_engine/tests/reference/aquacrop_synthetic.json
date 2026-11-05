@@ -1,0 +1,46 @@
+{
+ "wet_20oct": {
+  "status": "ok",
+  "planting": "2026-10-20",
+  "harvest": "2027-01-19",
+  "yield_t_ha": 6.895,
+  "potential_t_ha": 10.606,
+  "biomass_t_ha": 14.535,
+  "max_canopy": 0.86,
+  "stress_days": 10,
+  "sowings": 1
+ },
+ "false_start_resown": {
+  "status": "ok",
+  "planting": "2026-11-15",
+  "harvest": "2027-02-16",
+  "yield_t_ha": 10.71,
+  "potential_t_ha": 10.732,
+  "biomass_t_ha": 22.313,
+  "max_canopy": 0.959,
+  "stress_days": 0,
+  "sowings": 2
+ },
+ "maize_early_wet_20oct": {
+  "status": "ok",
+  "planting": "2026-10-20",
+  "harvest": "2027-01-19",
+  "yield_t_ha": 5.786,
+  "potential_t_ha": 8.869,
+  "biomass_t_ha": 12.157,
+  "max_canopy": 0.671,
+  "stress_days": 9,
+  "sowings": 1
+ },
+ "sorghum_wet_20oct": {
+  "status": "died",
+  "planting": "2026-10-20",
+  "harvest": "2027-01-19",
+  "yield_t_ha": 2.05,
+  "potential_t_ha": 3.472,
+  "biomass_t_ha": 10.042,
+  "max_canopy": 0.707,
+  "stress_days": 11,
+  "sowings": 1
+ }
+}

@@ -17,7 +17,7 @@ const GROUPS = [
   { id: 'ok', label: 'Matured', ids: ['ok'] },
   { id: 'died', label: 'Died before maturity', ids: ['died'] },
   { id: 'failed_establishment', label: 'Failed to establish', ids: ['failed_establishment'] },
-  { id: 'not_grown', label: 'Not grown', ids: ['too_late', 'not_sown', 'error'] },
+  { id: 'not_grown', label: 'Not grown', ids: ['too_late', 'not_sown'] },
 ]
 const SIMULATED = ['ok', 'died', 'failed_establishment']
 const STATUS_LABEL = { ok: 'Matured', died: 'Died before maturity', failed_establishment: 'Failed to establish',
@@ -44,6 +44,35 @@ const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) =
 const effYield = (status, y) => SIMULATED.includes(status) ? (y ?? 0) : 0
 const groupOf = status => GROUPS.find(g => g.ids.includes(status))?.id ?? 'not_grown'
 const runLabel = r => r.source === 'seasonal' ? r.model_label : `${r.model_label} · ${fmtDate(r.run)}`
+const quant = (a, q) => {                                              // linear, as numpy.quantile
+  if (!a.length) return null
+  const s = [...a].sort((x, y) => x - y), pos = (s.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos)
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo)
+}
+// The outcome rates of crop_engine.run_outlook.outcome_rates, each with its own denominator, from member or season
+// records ({ status, y }): model errors are in none; no sowing opportunity is the rule's outcome, kept apart from
+// crop failure
+function rates(recs, thr) {
+  const valid = recs.filter(r => r.status !== 'error'), sown = valid.filter(r => SIMULATED.includes(r.status))
+  const ys = sown.map(r => r.y ?? 0)
+  const rate = (k, n) => n ? k / n : null
+  return { nValid: valid.length, nError: recs.length - valid.length, nSown: sown.length,
+           pSowing: rate(valid.filter(r => r.status !== 'not_sown').length, valid.length),
+           pEst: rate(sown.filter(r => r.status === 'failed_establishment').length, sown.length),
+           pFailSown: rate(ys.filter(y => y < thr).length, sown.length),
+           ySown: { median: quant(ys, 0.5), p10: quant(ys, 0.1), p90: quant(ys, 0.9) },
+           pFail: rate(valid.filter(r => effYield(r.status, r.y) < thr).length, valid.length),
+           pOk: rate(valid.filter(r => r.status === 'ok').length, valid.length) }
+}
+const km = (a, b, c, d) => {                                            // great-circle distance
+  const r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2
+  return 2 * 6371 * Math.asin(Math.sqrt(x))
+}
+const SAME_SITE_KM = 2
+const cropOf = vk => ['maize', 'sorghum', 'bean'].find(c => vk.startsWith(c)) ?? vk
+// the dashboard's onset methods that are also crop sowing rules (the others are climate onsets)
+const SOWING_RULE_OF = { r1: 'rule1', 'fao-agricultural': 'fao-agricultural' }
+const SEASONAL_CROP_INIT = '1001ol'                                    // the crop outlook's seasonal run: Oct 01 + latest obs
 
 function useWidth() {
   const ref = useRef(null)
@@ -107,7 +136,7 @@ function ExceedanceChart({ fc, past, threshold, fcLabel }) {
   const xTicks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => +(i * step).toFixed(2))
   const series = [
     { key: 'fc', label: fcLabel, vals: fc, color: 'var(--crop-fc)', dash: null },
-    { key: 'past', label: `Past seasons (${past.length})`, vals: past, color: 'var(--text-meta)', dash: '6 4' },
+    { key: 'past', label: `Simulated past seasons (${past.length})`, vals: past, color: 'var(--text-meta)', dash: '6 4' },
   ]
   // direct labels where the two curves are furthest apart (the higher one above its line, the lower one below),
   // dropped when they are closer than a label's height
@@ -151,7 +180,7 @@ function ExceedanceChart({ fc, past, threshold, fcLabel }) {
           {labelsFit && series.map((s, i) => (
             <text key={s.key} x={xs(xl)} y={yl[i] + (yl[i] < yl[1 - i] ? -8 : 17)} fontSize="12" fontWeight="600" fill="var(--text-body)"
                   textAnchor="middle" stroke="var(--bg-surface)" strokeWidth="4" paintOrder="stroke">
-              {i === 0 ? 'This forecast' : 'Past seasons'}
+              {i === 0 ? 'This forecast' : 'Simulated past'}
             </text>
           ))}
           {hx != null && (
@@ -169,7 +198,7 @@ function ExceedanceChart({ fc, past, threshold, fcLabel }) {
           <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>More than {hx.toFixed(hx < 1 ? 2 : 1)} t/ha</div>
           {series.map(s => (
             <div key={s.key} className="flex justify-between gap-3">
-              <span>{s.key === 'fc' ? 'This forecast' : 'Past seasons'}</span>
+              <span>{s.key === 'fc' ? 'This forecast' : 'Simulated past seasons'}</span>
               <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pct(share(s.vals, hx))}</span>
             </div>
           ))}
@@ -192,7 +221,7 @@ function OutcomeBars({ rows }) {
       <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 13, color: 'var(--text-body)', marginBottom: 10 }}>
         {GROUPS.map((g, i) => (
           <span key={g.id} className="inline-flex items-center gap-2"
-                title={g.id === 'not_grown' ? 'Too late to mature by 31 Mar, or no sowing opportunity by 15 Jan' : undefined}>
+                title={g.id === 'not_grown' ? 'Too late to mature by 28 Feb, or no sowing opportunity by 15 Jan' : undefined}>
             <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 3, background: `var(--crop-o${i + 1})` }}/>
             {g.label}
           </span>
@@ -228,7 +257,7 @@ function OutcomeBars({ rows }) {
           <div style={{ color: 'var(--text-meta)', marginTop: 2 }}>{tip.row.label}</div>
           {tip.g.id === 'not_grown' && (
             <div style={{ marginTop: 4 }}>
-              {['too_late', 'not_sown', 'error'].filter(s => tip.row.raw[s]).map(s => <div key={s}>{STATUS_LABEL[s]}: {tip.row.raw[s]}</div>)}
+              {['too_late', 'not_sown'].filter(s => tip.row.raw[s]).map(s => <div key={s}>{STATUS_LABEL[s]}: {tip.row.raw[s]}</div>)}
             </div>
           )}
         </div>
@@ -263,7 +292,7 @@ function CanopyChart({ fc, past, nMembers }) {
   const pastMed = past?.median?.slice(0, n)
   const series = [
     { key: 'fc', label: `This forecast: median of the sown crops (${fc.n} of ${nMembers} members); band: 8 in 10`, color: 'var(--crop-fc)', dash: null },
-    ...(pastMed ? [{ key: 'past', label: `Past seasons: median (${past.n} sown seasons)`, color: 'var(--text-meta)', dash: '6 4' }] : []),
+    ...(pastMed ? [{ key: 'past', label: `Simulated past seasons: median (${past.n} sown seasons)`, color: 'var(--text-meta)', dash: '6 4' }] : []),
   ]
   const move = e => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -289,7 +318,7 @@ function CanopyChart({ fc, past, nMembers }) {
       {w > 0 && (
         <svg width={w} height={H} role="img" style={{ display: 'block', touchAction: 'pan-y' }}
              aria-label={`Canopy cover of the sown crops, week by week: this forecast's median peaks at ${pc(fc.median[peak])} in the week of ${label(peak)}`
-                         + (pastPeak != null ? `; the past seasons' median peaks at ${pc(pastPeak)}` : '')}
+                         + (pastPeak != null ? `; the simulated past seasons' median peaks at ${pc(pastPeak)}` : '')}
              onPointerMove={move} onPointerLeave={() => setHi(null)}>
           {[0, 0.25, 0.5, 0.75, 1].map(p => (
             <g key={p}>
@@ -319,7 +348,7 @@ function CanopyChart({ fc, past, nMembers }) {
             <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pc(fc.median[hi])}</span></div>
           <div className="flex justify-between gap-3" style={{ color: 'var(--text-meta)' }}><span>8 in 10 sown crops</span>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{pc(fc.p10[hi])}–{pc(fc.p90[hi])}</span></div>
-          {pastMed && <div className="flex justify-between gap-3"><span>Past seasons</span>
+          {pastMed && <div className="flex justify-between gap-3"><span>Simulated past seasons</span>
             <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pc(pastMed[hi])}</span></div>}
         </div>
       )}
@@ -334,22 +363,39 @@ const countOutcomes = statuses => {
 }
 
 // ── The tab ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-export default function CropOutlookTab({ country, selectedSite }) {
+// The dashboard's own choices (season, seasonal run, onset method, forecast type and model) set the defaults here; a
+// choice the crop outlook cannot follow is named in a notice, never replaced silently
+export default function CropOutlookTab({ country, selectedSite, season, initId, initLabel, onsetDef, onsetLabel,
+                                         forecastType, mrfModel, s2sModel }) {
   const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000 })
   const bench = useQuery({ queryKey: ['crop-benchmark'], queryFn: () => getJSON(DATA + 'benchmark.json'), staleTime: 30 * 60_000 })
   const ix = idx.data
   const runs = useMemo(() => (ix?.runs ?? []).slice().sort((a, b) =>
     KINDS.indexOf(kindOf(a.source)) - KINDS.indexOf(kindOf(b.source)) || runLabel(a).localeCompare(runLabel(b))), [ix])
   const siteIds = Object.keys(ix?.sites ?? {})
-  const fromMap = siteIds.find(id => ix.sites[id].name === selectedSite?.site_name)
+  // the map's location: a crop site by name or within SAME_SITE_KM; otherwise the nearest, named as such below
+  const near = useMemo(() => {
+    if (!ix || !selectedSite) return null
+    const byName = siteIds.find(id => ix.sites[id].name === selectedSite.site_name)
+    if (byName) return { id: byName, km: 0 }
+    if (!Number.isFinite(+selectedSite.lat) || !Number.isFinite(+selectedSite.lon)) return null
+    return siteIds.filter(id => ix.sites[id].lat != null)
+      .map(id => ({ id, km: km(+selectedSite.lat, +selectedSite.lon, ix.sites[id].lat, ix.sites[id].lon) }))
+      .sort((a, b) => a.km - b.km)[0] ?? null
+  }, [ix, selectedSite])                                                // eslint-disable-line react-hooks/exhaustive-deps
   const [siteId, setSiteId] = useState(null)
   const [variety, setVariety] = useState('maize_early')
-  const [rule, setRule] = useState('fao-agricultural')
-  const [runId, setRunId] = useState(null)
-  const sid = siteIds.includes(siteId) ? siteId : fromMap ?? (siteIds.includes('kalro_kiboko_makueni_farm') ? 'kalro_kiboko_makueni_farm' : siteIds[0])
+  const [rule, setRule] = useState(null)                               // null: follow the dashboard's onset method
+  const [runId, setRunId] = useState(null)                             // null: follow the dashboard's forecast
+  const sid = siteIds.includes(siteId) ? siteId
+    : near?.id ?? (siteIds.includes('kalro_kiboko_makueni_farm') ? 'kalro_kiboko_makueni_farm' : siteIds[0])
   const vk = ix?.varieties?.[variety] ? variety : Object.keys(ix?.varieties ?? {})[0]
-  const rk = ix?.planting_rules?.[rule] ? rule : Object.keys(ix?.planting_rules ?? {})[0]
-  const run = runs.find(r => r.id === runId) ?? runs[0]
+  const rules = ix?.planting_rules ?? {}
+  const mainRule = SOWING_RULE_OF[onsetDef]
+  const rk = rules[rule] ? rule : rules[mainRule] ? mainRule : rules['fao-agricultural'] ? 'fao-agricultural' : Object.keys(rules)[0]
+  const mainSource = forecastType === 'medium' ? `mr-${mrfModel}` : forecastType === 'subseasonal' ? s2sModel : 'seasonal'
+  const mainRun = runs.find(r => r.source === mainSource)
+  const run = runs.find(r => r.id === runId) ?? mainRun ?? runs[0]
   const runQ = useQuery({ queryKey: ['crop-run', run?.id], enabled: !!run, staleTime: 30 * 60_000,
                           queryFn: () => getJSON(DATA + (run.file ?? run.source + '.json')) })
 
@@ -365,11 +411,25 @@ export default function CropOutlookTab({ country, selectedSite }) {
   const members = res?.results?.[vk]?.[rk]?.members ?? []
   const canopy = res?.results?.[vk]?.[rk]?.canopy
   const b = bench.data?.sites?.[sid]?.[vk]?.[rk]
-  const fcY = members.map(m => effYield(m[3], m[2]))
-  const pastY = (b?.seasons ?? []).map(s => effYield(s[4], s[3]))
+  const fcY = members.filter(m => m[3] !== 'error').map(m => effYield(m[3], m[2]))
+  const pastY = (b?.seasons ?? []).filter(s => s[4] !== 'error').map(s => effYield(s[4], s[3]))
+  const R = members.length ? rates(members.map(m => ({ status: m[3], y: m[2] })), v.failure_t_ha) : null
+  const RB = b ? rates(b.seasons.map(s => ({ status: s[4], y: s[3] })), v.failure_t_ha) : null
+  const measured = ix.observed_yields?.[sid]?.[cropOf(vk)] ?? []
+  const notes = []
+  if (!siteId && near && near.km > SAME_SITE_KM)
+    notes.push(`The location selected on the map (${(+selectedSite.lat).toFixed(2)}, ${(+selectedSite.lon).toFixed(2)}) is not a crop site: the crop `
+               + `model runs only at the monitored sites. Shown: the nearest, ${ix.sites[near.id].name}, ${Math.round(near.km)} km away.`)
+  if (season && season !== 'short_rains') notes.push('The crop outlook covers the Short Rains only; the dashboard is set to another season.')
+  if (!runId && !mainRun)
+    notes.push(`The dashboard's forecast (${forecastType === 'medium' ? mrfModel : s2sModel}) has no crop run yet. Shown: ${runLabel(run)}.`)
+  else if (!runId && mainSource === 'seasonal' && initId && initId !== SEASONAL_CROP_INIT)
+    notes.push(`The dashboard shows the ${initLabel ?? initId} seasonal run; the crop outlook is made only from the Oct 01 + latest obs run, shown here.`)
+  if (!rule && !mainRule && onsetLabel)
+    notes.push(`The dashboard's onset method (${onsetLabel}) is a climate onset, not a sowing rule: crops are sown here by `
+               + `${Object.values(rules).join(' or ')}. Shown: ${rules[rk]}.`)
   const pastPotential = median((b?.seasons ?? []).filter(s => SIMULATED.includes(s[4]) && s[5] != null).map(s => s[5]))
   const vb = summary?.vs_benchmark ?? {}
-  const sownShare = summary ? 1 - (summary.share.not_sown ?? 0) : null
   const years = bench.data?.years ?? [1993, 2025]
 
   return (
@@ -383,12 +443,13 @@ export default function CropOutlookTab({ country, selectedSite }) {
       </div>
       <p style={{ fontSize: 15, color: 'var(--text-body)', lineHeight: 1.6, margin: '8px 0 0', maxWidth: 860 }}>
         What each forecast means for a crop at the monitored sites: the AquaCrop crop model grown in the weather of every forecast
-        member, sown on the platform’s onset date, and compared with the same crop grown in the observed seasons of {years[0]}–{years[1]}.
+        member, sown on the platform’s onset date, and compared with the same crop simulated in the observed weather of {years[0]}–{years[1]}
+        (simulated past seasons, not measured yields) and with the yields measured in field trials at the site, where there are any.
       </p>
       <div role="note" style={{ marginTop: 12, background: 'var(--caution-bg)', color: 'var(--caution-text)', borderRadius: 8, padding: '10px 14px',
                                 fontSize: 14, lineHeight: 1.55, maxWidth: 860 }}>
-        Not calibrated or verified yet: use for discussion, not as advice. Yields are water-limited (no nutrient, pest or management
-        losses), so they are higher than most smallholder fields get.
+        First calibration only (maize and sorghum, against trials at Kiboko), not verified: use for discussion, not as advice. Yields
+        are water-limited (no nutrient, pest or management losses), so they are higher than most smallholder fields get.
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3" style={{ margin: '18px 0' }}>
@@ -398,7 +459,7 @@ export default function CropOutlookTab({ country, selectedSite }) {
         <Select label="Crop" value={vk} onChange={setVariety}>
           {Object.entries(ix.varieties).map(([k, x]) => <option key={k} value={k}>{x.label} ({x.maturity_days} days)</option>)}
         </Select>
-        <Select label="Sowing date" value={rk} onChange={setRule}>
+        <Select label="Sowing rule" value={rk} onChange={setRule}>
           {Object.entries(ix.planting_rules).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </Select>
         <Select label="Forecast" value={run.id} onChange={setRunId}>
@@ -408,28 +469,39 @@ export default function CropOutlookTab({ country, selectedSite }) {
           })}
         </Select>
       </div>
+      {notes.length > 0 && (
+        <div role="status" style={{ margin: '-6px 0 16px', border: '1px solid var(--border-primary)', background: 'var(--bg-surface)', borderRadius: 8,
+                                    padding: '10px 14px', fontSize: 14, color: 'var(--text-body)', lineHeight: 1.55, maxWidth: 860 }}>
+          {notes.map(n => <div key={n}>{n}</div>)}
+        </div>
+      )}
 
-      {summary && (
+      {summary && R && (
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Likely yield" value={`${fmtT(summary.yield_t_ha.median)} t/ha`}
-                sub={<>Middle 8 in 10 members: {fmtT(summary.yield_t_ha.p10)}–{fmtT(summary.yield_t_ha.p90)} t/ha. Past seasons: {fmtT(vb.benchmark_median)} t/ha</>}/>
-          <Stat label="Chance of crop failure" value={pct(summary.p_failure)}
-                sub={<>Yield below {v.failure_t_ha} t/ha, or no crop. Past seasons: {pct(vb.benchmark_p_failure)}</>}/>
-          <Stat label="Sowing date" value={fmtDate(summary.planting.median)}
-                sub={sownShare === 0 ? 'No member has a sowing opportunity by 15 Jan'
-                     : <>{summary.planting.p10 === summary.planting.p90 ? `Most members: ${fmtDate(summary.planting.p10)}`
-                          : `Most members ${fmtDate(summary.planting.p10)} – ${fmtDate(summary.planting.p90)}`}
-                         {summary.share.not_sown ? `; no sowing opportunity in ${pct(summary.share.not_sown)}` : ''}
-                         {summary.resown ? `; re-sown after a failed start in ${pct(summary.resown)}` : ''}</>}/>
+          <Stat label="Sowing opportunity" value={pct(R.pSowing)}
+                sub={!R.pSowing ? 'No member has a sowing opportunity by 15 Jan under this rule'
+                     : <>Sowing {summary.planting.p10 === summary.planting.p90 ? fmtDate(summary.planting.median)
+                          : `${fmtDate(summary.planting.p10)} – ${fmtDate(summary.planting.p90)} (median ${fmtDate(summary.planting.median)})`}
+                         {summary.resown ? `; re-sown after a failed start in ${pct(summary.resown)}` : ''}.
+                         {' '}Simulated past seasons: {pct(RB?.pSowing)}</>}/>
+          <Stat label="Yield if sown" value={R.nSown ? `${fmtT(R.ySown.median)} t/ha` : '—'}
+                sub={<>{R.nSown ? `8 in 10 sown crops: ${fmtT(R.ySown.p10)}–${fmtT(R.ySown.p90)} t/ha. ` : 'No sown crop. '}
+                       Simulated past seasons: {fmtT(RB?.ySown.median)} t/ha.
+                       {measured.map(o => ` Measured in trials here: median ${fmtT(o.median_t_ha)}, high-input ${fmtT(o.p90_t_ha)} t/ha (${o.n} plots${o.years ? `, ${o.years}` : ''}).`).join('')}</>}/>
+          <Stat label="Crop failure if sown" value={pct(R.pFailSown)}
+                sub={<>Yield below {v.failure_t_ha} t/ha. Failed to establish: {pct(R.pEst)}. Simulated past seasons: {pct(RB?.pFailSown)}</>}/>
           <Stat label="Harvest" value={fmtDate(summary.harvest_median)}
                 sub={summary.stress_days_median != null ? <>Water-stress days: {Math.round(summary.stress_days_median)}. Season rain: {Math.round(summary.rain_mm_median)} mm (medians of sown crops)</> : 'No sown crop'}/>
         </div>
       )}
-      {summary && (
+      {summary && R && (
         <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
-          {vb.p_below_normal != null
-            ? <>Compared with past seasons: {pct(vb.p_below_normal)} of members below the normal range ({fmtT(vb.t33)}–{fmtT(vb.t67)} t/ha), {pct(vb.p_above_normal)} above it.</>
-            : <>No normal range for this crop: a third or more of the past seasons were crop failures, so the failure chance is the comparison.</>}
+          All {R.nValid} members, a member with no crop counted as no yield: median {fmtT(summary.yield_t_ha.median)} t/ha, chance of no crop
+          or a failed one {pct(R.pFail)} (simulated past seasons: {pct(RB?.pFail)}).
+          {R.nError ? ` ${R.nError} member${R.nError > 1 ? 's' : ''} failed to run in the crop model and ${R.nError > 1 ? 'are' : 'is'} left out of every figure.` : ''}
+          {' '}{vb.p_below_normal != null
+            ? <>Compared with the simulated past seasons: {pct(vb.p_below_normal)} of members below their normal range ({fmtT(vb.t33)}–{fmtT(vb.t67)} t/ha), {pct(vb.p_above_normal)} above it.</>
+            : <>No normal range for this crop: a third or more of the simulated past seasons were crop failures, so the failure chances are the comparison.</>}
           {summary.potential_t_ha?.median != null && <>
             {' '}Water stress: the sown crops yield a median {fmtT(summary.potential_t_ha.yield_median)} t/ha, against {fmtT(summary.potential_t_ha.median)} t/ha
             without water stress (AquaCrop’s potential yield).</>}
@@ -439,21 +511,21 @@ export default function CropOutlookTab({ country, selectedSite }) {
 
       <div className="grid gap-4 lg:grid-cols-2" style={{ marginTop: 18 }}>
         <Panel title="Chance of more than each yield"
-               sub="Share of forecast members (solid) and of past seasons (dashed) with a yield above the value on the axis. Hover for values.">
+               sub="Share of forecast members (solid) and of simulated past seasons (dashed) with a yield above the value on the axis; a member or season with no crop counts as zero. Hover for values.">
           {runQ.isLoading || bench.isLoading ? msg('Loading…')
-            : members.length ? <ExceedanceChart fc={fcY} past={pastY} threshold={v.failure_t_ha} fcLabel={`This forecast (${members.length} members)`}/>
+            : fcY.length ? <ExceedanceChart fc={fcY} past={pastY} threshold={v.failure_t_ha} fcLabel={`This forecast (${fcY.length} members)`}/>
             : msg('No members for this choice.')}
         </Panel>
-        <Panel title="What happens to the crop" sub="Outcome of each forecast member and of each past season.">
-          {members.length && b ? (
+        <Panel title="What happens to the crop" sub="Outcome of each forecast member and of each simulated past season.">
+          {R?.nValid && RB?.nValid ? (
             <OutcomeBars rows={[
-              { label: 'This forecast', unit: 'members', n: members.length, ...countOutcomes(members.map(m => m[3])) },
-              { label: `Past seasons ${years[0]}–${years[1]}`, unit: 'seasons', n: b.seasons.length, ...countOutcomes(b.seasons.map(s => s[4])) },
+              { label: 'This forecast', unit: 'members', n: R.nValid, ...countOutcomes(members.map(m => m[3]).filter(s => s !== 'error')) },
+              { label: `Simulated past seasons ${years[0]}–${years[1]}`, unit: 'seasons', n: RB.nValid, ...countOutcomes(b.seasons.map(s => s[4]).filter(s => s !== 'error')) },
             ]}/>
           ) : msg(runQ.isLoading || bench.isLoading ? 'Loading…' : 'No outcomes for this choice.')}
           <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '6px 0 0', lineHeight: 1.5 }}>
             Failed to establish: a sowing rain followed by a dry spell, the seedlings dried out. Not grown: sown too late to mature by
-            31 Mar, or no sowing opportunity by 15 Jan.
+            28 Feb (the season’s end), or no sowing opportunity by 15 Jan under this rule. Model errors are left out.
           </p>
         </Panel>
       </div>
@@ -463,7 +535,9 @@ export default function CropOutlookTab({ country, selectedSite }) {
                sub="Canopy cover of the sown crops week by week, from 1 Aug. It falls to zero as each crop is harvested or dies, so the median drops once about half the crops are done. Hover for values.">
           {runQ.isLoading ? msg('Loading…')
             : canopy ? <CanopyChart fc={canopy} past={b?.canopy} nMembers={members.length}/>
-            : msg(members.length ? 'No sown crop in this forecast: no canopy to show.' : 'No members for this choice.')}
+            : msg(!members.length ? 'No members for this choice.'
+                  : R?.nSown ? 'The canopy curve comes with the next crop run (this run was made before it was added).'
+                  : 'No sown crop in this forecast: no canopy to show.')}
         </Panel>
       </div>
 
@@ -472,7 +546,8 @@ export default function CropOutlookTab({ country, selectedSite }) {
           <div style={{ overflowX: 'auto' }}>
             <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Yield, median</th><th>8 in 10 members</th><th>Without water stress</th><th>Crop failure</th><th>Matured</th></tr>
+                <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
+                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th></tr>
               </thead>
               <tbody>
                 {runs.map(r => {
@@ -490,26 +565,38 @@ export default function CropOutlookTab({ country, selectedSite }) {
                       </td>
                       <td>{kindOf(r.source).label.split(' (')[0]}{r.members_kind?.startsWith('deterministic') ? ', single run' : ''}</td>
                       <td>{fmtDate(s.planting.median)}</td>
-                      <td>{fmtT(s.yield_t_ha.median)} t/ha</td>
-                      <td>{fmtT(s.yield_t_ha.p10)}–{fmtT(s.yield_t_ha.p90)} t/ha</td>
+                      <td>{pct(s.p_sowing_opportunity ?? 1 - (s.share.not_sown ?? 0))}</td>
+                      <td>{s.yield_if_sown_t_ha ? `${fmtT(s.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
+                      <td>{s.yield_if_sown_t_ha ? `${fmtT(s.yield_if_sown_t_ha.p10)}–${fmtT(s.yield_if_sown_t_ha.p90)} t/ha` : '—'}</td>
                       <td>{s.potential_t_ha?.median != null ? `${fmtT(s.potential_t_ha.median)} t/ha` : '—'}</td>
-                      <td>{pct(s.p_failure)}</td>
+                      <td>{pct(s.p_failure_if_sown)}</td>
                       <td>{pct(s.share.ok)}</td>
                     </tr>
                   )
                 })}
-                {b && (
+                {b && RB && (
                   <tr>
-                    <td style={{ fontWeight: 600, color: 'var(--heading)' }}>Past seasons {years[0]}–{years[1]}</td>
-                    <td>Observed weather</td>
+                    <td style={{ fontWeight: 600, color: 'var(--heading)' }}>Simulated past seasons {years[0]}–{years[1]}</td>
+                    <td>AquaCrop in observed weather</td>
                     <td>—</td>
-                    <td>{fmtT(b.median)} t/ha</td>
-                    <td>—</td>
+                    <td>{pct(RB.pSowing)}</td>
+                    <td>{fmtT(RB.ySown.median)} t/ha</td>
+                    <td>{fmtT(RB.ySown.p10)}–{fmtT(RB.ySown.p90)} t/ha</td>
                     <td>{pastPotential != null ? `${fmtT(pastPotential)} t/ha` : '—'}</td>
-                    <td>{pct(b.p_failure)}</td>
-                    <td>{pct(b.seasons.filter(x => x[4] === 'ok').length / b.seasons.length)}</td>
+                    <td>{pct(RB.pFailSown)}</td>
+                    <td>{pct(RB.pOk)}</td>
                   </tr>
                 )}
+                {measured.map(o => (
+                  <tr key={o.irrigated + o.years}>
+                    <td style={{ fontWeight: 600, color: 'var(--heading)' }}>Measured: field trials here{o.years ? `, ${o.years}` : ''}</td>
+                    <td>{o.n} plots, {o.studies} {o.studies > 1 ? 'studies' : 'study'}{o.n_kg_ha ? `, ${o.n_kg_ha} kg N/ha` : ''}</td>
+                    <td>—</td><td>—</td>
+                    <td>{fmtT(o.median_t_ha)} t/ha</td>
+                    <td>high-input {fmtT(o.p90_t_ha)} t/ha</td>
+                    <td>—</td><td>—</td><td>—</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -543,7 +630,7 @@ export default function CropOutlookTab({ country, selectedSite }) {
               ['Forecast', `${runLabel(run)}; observations to ${fmtDate(run.obs_end)}`],
               ['Rainfall', [...(runQ.data?.meta?.segments ?? []).map((s, i) =>      // the crop season starts on 1 Aug
                               `${s.label} ${i === 0 && s.kind === 'obs' ? '1 Aug' : fmtDate(s.start)} – ${fmtDate(s.end)}`),
-                            'ECMWF SEAS5 1 Jan – 28 Feb', 'an observed past March (climatology)'].join('; ')],
+                            'ECMWF SEAS5 1 Jan – 28 Feb (the season ends on 28 Feb)'].join('; ')],
               ['Temperature, ET0', 'ERA5-Land to its latest day, then the 1993–2016 average for the day of the year'],
               ['Site', `${site.name}, 0.25° grid cell ${site.cell?.join(', ')}`],
               ['Soil', `SoilGrids, ${site.topsoil?.sand}% sand and ${site.topsoil?.clay}% clay at the surface; ${site.soil_taw_100cm_mm} mm available water in the top metre`
