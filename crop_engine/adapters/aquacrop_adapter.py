@@ -80,8 +80,8 @@ def _sow(task, m, plant, dates, g):
     if cum[-1] <= task["kw"]["Maturity"] * 1.01:
         return dict(r, status="too_late")
     expected_maturity = dates[k0 + int(np.argmax(cum > task["kw"]["Maturity"]))]
-    wdf = pd.DataFrame({"MinTemp": task["tmin"], "MaxTemp": task["tmax"], "Precipitation": task["rain"][m],
-                        "ReferenceET": np.maximum(task["et0"], 0.1), "Date": dates})
+    wdf = pd.DataFrame({"MinTemp": task["tmin"][m], "MaxTemp": task["tmax"][m], "Precipitation": task["rain"][m],
+                        "ReferenceET": np.maximum(task["et0"][m], 0.1), "Date": dates})
     try:
         model = AquaCropModel(
             sim_start_time=f"{dates[0]:%Y/%m/%d}", sim_end_time=f"{dates[-1]:%Y/%m/%d}", weather_df=wdf,
@@ -121,13 +121,16 @@ def _sow(task, m, plant, dates, g):
 
 
 def simulate(task):
-    """task: dict(dates, rain (member, T), tmax, tmin, et0 (T,), source (T,), planting [date|None per member],
+    """task: dict(dates, rain (member, T), tmax, tmin, et0 ((member, T), or (T,) for every member), source (T,),
+    planting [date|None per member],
     resow [[date, ...] per member] (optional), variety, kw, layers, initial_frac) → list of per-member outcome dicts."""
     from aquacrop.entities.crop import crop_params
     warnings.filterwarnings("ignore")
     dates = pd.DatetimeIndex(task["dates"])
     base = crop_params[task["variety"]["aquacrop_crop"]]
-    g = gdd(task["tmax"], task["tmin"], base["Tbase"], base["Tupp"])
+    M, T = len(task["planting"]), len(dates)
+    task = dict(task, **{k: np.broadcast_to(np.asarray(task[k], np.float64), (M, T)) for k in ("tmax", "tmin", "et0")})
+    g = gdd(task["tmax"], task["tmin"], base["Tbase"], base["Tupp"])           # (member, T)
     resow = task.get("resow") or [[] for _ in task["planting"]]
     out = []
     for m, plant in enumerate(task["planting"]):
@@ -136,13 +139,13 @@ def simulate(task):
                             biomass_t_ha=None, harvest=None, max_canopy=None, stress_days=None, rain_mm=None,
                             sources=None, sowings=0))
             continue
-        r, sowings = _sow(task, m, plant, dates, g), 1
+        r, sowings = _sow(task, m, plant, dates, g[m]), 1
         while r["status"] == "failed_establishment" and sowings <= RESOW_MAX:
             died = dt.date.fromisoformat(r["harvest"])
             later = [d for d in resow[m] if d > died]
             if not later:
                 break
-            again = _sow(task, m, later[0], dates, g)
+            again = _sow(task, m, later[0], dates, g[m])
             if again["status"] in ("too_late", "error"):              # no time left to re-sow: the failure stands
                 break
             r, sowings = dict(again, first_planting=plant.isoformat()), sowings + 1

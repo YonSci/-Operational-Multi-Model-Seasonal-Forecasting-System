@@ -178,10 +178,25 @@ the model in the observed weather, not measured yields.
 | Rain 1–31 Aug | CHIRPS v2 observed (final, then preliminary) | |
 | Rain 1 Sep – 31 Dec | the run's joined members (`scripts/forecast_runs.py`) | observed → gap days → weather forecast → SEAS5 |
 | Rain 1 Jan – 28 Feb | SEAS5 member, quantile-mapped to CHIRPS (`onset_rules.EXT_CACHE`) | as the Agri rules |
-| Rain 1–31 Mar | climatological: member k takes the observed CHIRPS March of 1994 + (k mod 24) | a declared climatological ensemble: the SEAS5 October files on disk end on 28 Feb; observed seasons use their own March |
-| Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then the 1993–2016 day-of-year climatology | |
-| ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology | the same as the FAO water balance |
+| Rain 1–31 Mar | SEAS5 member k (1 Oct run, lead days 152–182), quantile-mapped to CHIRPS per site and day (`data/seas5.py`) | without the 182-day SEAS5 files: a declared climatological ensemble, member k the observed CHIRPS March of 1994 + (k mod 24); observed seasons use their own March |
+| Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then SEAS5 member k bias-corrected to ERA5-Land (`data/seas5.py`) | per member (`tmax_c (member, site, time)`); the 1993–2016 day-of-year climatology where neither is available |
+| ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day; no forecast radiation, humidity or wind |
 | Solar radiation, vapour pressure, 2 m wind | ERA5-Land at the site's 0.1° cell (Google Earth Engine), then the 1993–2016 day-of-year climatology | for WOFOST; AquaCrop does not use them (its ET0 is the platform's). The same fields as the platform's ET0 (`scripts/fao_era5land_gee.py`): vapour pressure at the daily mean dewpoint, wind the mean of 00/06/12/18 UTC at 10 m taken to 2 m (FAO-56 Eq. 47). Left out of a run, with the reason in its `radiation` attribute, when Earth Engine has never been reached |
+
+**SEAS5 for the crop weather** (`crop_engine/data/seas5.py`): the 1 Oct runs of 1993–2026 with daily maximum and
+minimum temperature and rain for 182 lead days (to 31 Mar), in `data/seasonal_downloads_ke/ecmwf_oct_182d/` (not
+committed; about 110 MB):
+
+    python scripts/download_seasonal_forecasts_daily_c3s.py --models ecmwf --system ecmwf=51 --months 10 \
+        --year-start 1993 --year-end 2026 --leadtime-days 182 --north 5.5 --west 33 --south -5.5 --east 42.5 \
+        --variables maximum_2m_temperature_in_the_last_24_hours minimum_2m_temperature_in_the_last_24_hours \
+                    total_precipitation --outdir data/seasonal_downloads_ke/ecmwf_oct_182d
+
+Temperature is corrected for its mean bias by lead day: the calibration years' (1993–2016) member mean minus the
+site's ERA5-Land series on the same days, ±15-day smoothed, subtracted from every member, so the forecast's anomaly
+and member spread are kept. Member k of the temperature is member k of the rain from 1 Jan, so a dry member is also
+its own temperature's member. Each run's `meta.weather` says which March rain and temperature it used; when a file
+is missing the engine falls back to climatology and says so.
 | Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
 | Soil water on 1 Aug | ERA5-Land root-zone soil moisture, as the FAO water balance starts | |
 | Sowing date | Agri rule 1 onset; FAO agricultural onset | unchanged outputs of the platform's methods |
@@ -254,12 +269,13 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 
 - Yields are **water-limited**: no nutrient stress, pests, diseases, weeds or management losses. They are an upper
   bound for smallholder fields; the plant densities are the recommended ones, not farmers' (often lower).
-- No forecast temperature or radiation yet: after the last ERA5-Land day both are climatology.
+- Forecast temperature is SEAS5's daily maximum and minimum with a mean-bias correction only (no variance or
+  quantile correction); radiation, humidity and wind are not forecast: ET0 scales its climatology by temperature.
+- Temperature members come from SEAS5 also on the days the rain comes from a sub-seasonal or deterministic model.
 - Deterministic weather models are the same forecast in every member, so their near-term spread is zero.
 - The season ends on 31 Mar: a crop sown so late that it cannot mature by then counts as too late (to 30 Mar when
-  the next year is a leap year). **March rain is not a forecast**: each member takes the observed March of a past
-  year (the SEAS5 October runs on disk end on 28 Feb, and SEAS5 has little skill five months ahead), so the spread
-  of a crop still growing in March is climatological; the onset and cessation forecasts keep their 28 Feb end.
+  the next year is a leap year). March rain is SEAS5 at five to six months' lead, where its skill is small: treat
+  the March spread as near-climatological. The onset and cessation forecasts keep their 28 Feb end.
 - Establishment is very sensitive to the soil water on 1 Aug. ERA5-Land puts it at 4–20 % of the available water at
   most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings (re-sown once).
   At Kiboko a fixed 50 % would roughly halve the failures; without soil moisture measurements it is left as is.
@@ -473,9 +489,8 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   verification*). First result: skilful, but on a par with the season-length forecast rather than better (better at
   El Karama and Genco Maralal, worse at Genco Tana River and Livemo). Next: the FAO agricultural onset (its 1 Oct
   hindcast onsets), county yields as a reference, and the sub-seasonal reforecasts.
-- **P1 Weather forcing**: the season runs to 31 Mar with a declared climatological March (done). Next: forecast
-  temperature and radiation (SEAS5) with source metadata per day; SEAS5 March rain (the October runs' lead days
-  152–182, to download for 1993–2026 and bias-correct as January–February).
+- **P1 Weather forcing**: the season runs to 31 Mar; SEAS5 temperature per member and SEAS5 March rain (done).
+  Next: forecast radiation and humidity for ET0; temperature from the sub-seasonal models in their range.
 - **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
   seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
   irrigation and field-management options: mulch, bunds), where partners can say what is practised.

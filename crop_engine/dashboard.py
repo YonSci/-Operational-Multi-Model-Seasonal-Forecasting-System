@@ -90,7 +90,7 @@ def write(log=print):
         summaries[r["id"]] = {sid: {vk: {rk: x["summary"] for rk, x in rs.items()} for vk, rs in s["results"].items()}
                               for sid, s in d["sites"].items()}
         out = {"meta": {k: d["meta"].get(k) for k in ("id", "source", "model_label", "run", "obs_end", "members_kind",
-                                                       "segments", "created", "engine")}, "sites": {}}
+                                                       "segments", "created", "engine", "weather")}, "sites": {}}
         for sid, s in d["sites"].items():
             sites.setdefault(sid, {"name": s["name"], "cell": s["cell"], "soil_taw_100cm_mm": s["soil_taw_100cm_mm"],
                                    "topsoil": {k: round(v) for k, v in s["topsoil"].items()}})

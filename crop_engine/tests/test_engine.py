@@ -41,7 +41,7 @@ def test_valid_dataset_passes():
 def test_contract_catches_problems():
     ds = weather()
     ds["precip_mm"].values[0, 0, 5] = np.nan
-    ds["tmin_c"].values[0, 10] = 40.0
+    ds["tmin_c"].values[0, 0, 10] = 40.0
     p = validate(ds)
     assert any("precip_mm" in x for x in p) and any("tmin above tmax" in x for x in p)
     ds2 = weather().drop_vars("et0_mm")
@@ -123,8 +123,8 @@ def test_climatology_is_smooth_and_complete():
 # ── AquaCrop ────────────────────────────────────────────────────────────────
 def _task(ds, planting):
     kw, _ = aq.crop_parameters(VARIETY, 23.0)
-    return dict(dates=ds.time.values, rain=ds.precip_mm.values[:, 0], tmax=ds.tmax_c.values[0], tmin=ds.tmin_c.values[0],
-                et0=ds.et0_mm.values[0], source=ds.precip_source.values, planting=planting, variety=VARIETY, kw=kw,
+    return dict(dates=ds.time.values, rain=ds.precip_mm.values[:, 0], tmax=ds.tmax_c.values[:, 0], tmin=ds.tmin_c.values[:, 0],
+                et0=ds.et0_mm.values[:, 0], source=ds.precip_source.values, planting=planting, variety=VARIETY, kw=kw,
                 layers=LAYERS, initial_frac=0.3)
 
 

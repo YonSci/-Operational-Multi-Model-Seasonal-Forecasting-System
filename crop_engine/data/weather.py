@@ -6,8 +6,8 @@ Dimensions: member, site, time (1 Aug of the season year – config.SEASON_END o
 water balance's 28 Feb, its cessation search end, so a medium-maturity crop can mature; 243 days, to 30 Mar when the
 next year is a leap year).
   precip_mm (member, site, time)   daily rain
-  tmax_c, tmin_c (site, time)      2 m temperature
-  et0_mm (site, time)              FAO-56 reference evapotranspiration
+  tmax_c, tmin_c (member, site, time)  2 m temperature (the same in every member where observed)
+  et0_mm (member, site, time)      FAO-56 reference evapotranspiration
   precip_source (time)             index into attrs["precip_sources"] (config.PRECIP_SOURCES)
   tmax_source, et0_source (site, time)  index into attrs["met_sources"] (config.MET_SOURCES)
 and, when the ERA5-Land site series are available (crop_engine.data.era5land.site_met; for WOFOST, not AquaCrop):
@@ -21,14 +21,17 @@ exactly this rain):
   1 Sep – 31 Dec  the run's joined rain: observed to the last observed day, gap days, the weather forecast, SEAS5
   1 Jan – 28 Feb  SEAS5 member k, bias-corrected as the Agri rules' January–February (onset_rules.EXT_CACHE);
                   a 29 Feb repeats 28 Feb
-  1–31 Mar        climatological: observed CHIRPS March of year 1994 + (k mod 24), the March after calibration
-                  year 1993 + (k mod 24), since the SEAS5 October runs on disk end on 28 Feb (and SEAS5 has little
-                  skill five months ahead)
+  1–31 Mar        SEAS5 member k, quantile-mapped to CHIRPS (data/seas5.py) when the 182-day SEAS5 files are on
+                  disk; otherwise climatological: observed CHIRPS March of 1994 + (k mod 24), the March after
+                  calibration year 1993 + (k mod 24)
 Observed seasons (the benchmark) are observed CHIRPS throughout, March included.
-Temperature and ET0: ERA5-Land to its last day (temperature: Open-Meteo point series; ET0: the platform's ERA5-Land
-FAO-56 grid), then the 1993–2016 day-of-year climatology (ET0: by season day, to SEASON_END); radiation, vapour
-pressure and wind likewise (ERA5-Land from Earth Engine, then their day-of-year climatology); no forecast
-temperature or radiation is used yet.
+Temperature: ERA5-Land at the site (Open-Meteo point series) to its last day, then SEAS5 member k bias-corrected to
+ERA5-Land (data/seas5.py) to 31 Mar; the 1993–2016 day-of-year climatology where neither is available.
+ET0: the platform's ERA5-Land FAO-56 grid to its last day, then its climatology by season day, scaled on SEAS5 days
+by member k's Hargreaves ET0 over that of the climatological temperatures (0.7–1.3): a warmer member with a wider
+daily range evaporates more. No forecast radiation, humidity or wind is used.
+Radiation, vapour pressure and wind (for WOFOST): ERA5-Land from Earth Engine to its last day, then their
+day-of-year climatology; no forecast of them yet.
 """
 import datetime as dt
 import json
@@ -39,6 +42,7 @@ import xarray as xr
 
 from crop_engine import config as C
 from crop_engine.data import era5land
+from crop_engine.data import seas5 as s5
 from crop_engine.data import sites as sites_mod
 
 import blend_subseasonal as bs  # noqa: E402  (scripts/, on sys.path via config)
@@ -101,6 +105,19 @@ class Inputs:
                                      columns=[s.id for s in self.sites])
         taw, _, _ = fw.taw_mm(self.cfg["crop_params"]["rooting_depth_m"])
         self.taw = taw
+        self.seas5, self.seas5_note = self._seas5()
+
+    def _seas5(self):
+        """The SEAS5 1 Oct run of the season year at the sites (temperature, March rain), or None and why not."""
+        gone = s5.missing_years(self.year)
+        if gone:
+            more = f" and {len(gone) - 1} more" if len(gone) > 1 else ""
+            return None, f"no SEAS5 temperature: the 182-day 1 Oct file of {gone[0]}{more} is missing ({s5.DIR})"
+        try:
+            s = s5.Seas5(self.year, [x.id for x in self.sites], self.lat[self.ii], self.lon[self.jj], self.temps, self.hist)
+        except Exception as exc:                                           # the climatological fallback stands
+            return None, f"no SEAS5 temperature: {type(exc).__name__}: {str(exc)[:160]}"
+        return s, s5.describe(s)
 
     # ── shared pieces ─────────────────────────────────────────────────────
     def dates(self, year):
@@ -192,15 +209,38 @@ class Inputs:
         jf = (dates > last) & (dates < pd.Timestamp(y + 1, 3, 1))         # 1 Jan – 28 Feb: SEAS5 member k
         rain[:, :, jf] = np.moveaxis(self.janfeb[:n_mem, jan_feb_index(dates[jf], y)], 1, 2)
         src[jf] = C.PRECIP_SOURCES.index("seasonal")
-        mar = dates >= pd.Timestamp(y + 1, 3, 1)                          # March: climatology (CHIRPS of a past March)
+        mar = dates >= pd.Timestamp(y + 1, 3, 1)                          # March
+        S = self.seas5
         cal = np.arange(C.CAL_YEARS[0], C.CAL_YEARS[1] + 1)
-        for m in range(n_mem):
-            cy = int(cal[m % len(cal)])
-            md = pd.DatetimeIndex([pd.Timestamp(cy + 1, d.month, min(d.day, 28 if d.month == 2 else 31)) for d in dates[mar]])
-            rain[m][:, mar] = self.observed_rain(md)                     # (site, March days)
-        src[mar] = C.PRECIP_SOURCES.index("climatology")
+        mk = np.arange(n_mem) % (S.n_members if S else 1)                # SEAS5 member of each rain member
+        pos = S.march_dates.get_indexer(dates[mar]) if S is not None else None
+        if S is not None and (pos >= 0).all():                            # SEAS5 member k, quantile-mapped
+            rain[:, :, mar] = np.moveaxis(S.march[mk][:, pos], 1, 2)
+            src[mar] = C.PRECIP_SOURCES.index("seasonal")
+            attrs = {**attrs, "march_rain": "ECMWF SEAS5 1 Oct, member k, quantile-mapped to CHIRPS"}
+        else:                                                             # climatology: CHIRPS of a past March
+            for m in range(n_mem):
+                cy = int(cal[m % len(cal)])
+                md = pd.DatetimeIndex([pd.Timestamp(cy + 1, d.month, min(d.day, 28 if d.month == 2 else 31)) for d in dates[mar]])
+                rain[m][:, mar] = self.observed_rain(md)                 # (site, March days)
+            src[mar] = C.PRECIP_SOURCES.index("climatology")
+            attrs = {**attrs, "march_rain": f"climatology: member k takes CHIRPS March {cal[0] + 1}+(k mod {len(cal)})"}
         tmax, tmin, et0, tsrc, esrc = self.met(y, dates)
-        attrs = {**attrs, "season_year": y, "climatological_march_years": f"member k: CHIRPS March {cal[0] + 1}+(k mod {len(cal)})"}
+        tmax, tmin, et0 = (np.repeat(a[None], n_mem, axis=0) for a in (tmax, tmin, et0))
+        if S is not None:                                                 # after ERA5-Land: SEAS5 member k
+            p = S.on(dates)
+            use = (tsrc == C.MET_SOURCES.index("climatology")) & (p >= 0)[None, :]          # (site, T)
+            k = np.where(p >= 0, p, 0)
+            fx = np.moveaxis(S.tmax[mk][:, k], 1, 2)                       # (member, site, T)
+            fn = np.moveaxis(S.tmin[mk][:, k], 1, 2)
+            on_e = use & (esrc == C.MET_SOURCES.index("climatology"))    # ET0 climatology on a SEAS5 day: scaled
+            ratio = s5.hargreaves_ratio(fx, fn, tmax, tmin)
+            et0 = np.where(on_e[None], et0 * ratio, et0).astype(np.float32)
+            tmax = np.where(use[None], fx, tmax).astype(np.float32)
+            tmin = np.minimum(np.where(use[None], fn, tmin), tmax).astype(np.float32)
+            tsrc = np.where(use, C.MET_SOURCES.index("seasonal"), tsrc).astype(np.int8)
+            esrc = np.where(on_e, C.MET_SOURCES.index("seasonal"), esrc).astype(np.int8)
+        attrs = {**attrs, "season_year": y, "temperature_forecast": self.seas5_note}
         return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, self._extra(dates))
 
     # ── an observed season (benchmark) ───────────────────────────────────
@@ -215,13 +255,18 @@ class Inputs:
 
 
 def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs, extra=None):
-    """The crop-weather Dataset. extra: Inputs.radiation's (values, source, elevation), or a note why there are none."""
+    """The crop-weather Dataset. tmax, tmin, et0: (member, site, time), or (site, time) for the same in every member;
+    extra: Inputs.radiation's (values, source, elevation), or a note why there are none."""
+    n = rain.shape[0]
+    tmax, tmin, et0 = (np.broadcast_to(a, (n, *a.shape)) if a.ndim == 2 else a for a in (tmax, tmin, et0))
     site_coords = {"site": [s.id for s in sites], "site_name": ("site", [s.name for s in sites]),
                    "lat": ("site", [s.lat for s in sites]), "lon": ("site", [s.lon for s in sites]),
                    "cell_lat": ("site", [s.cell_lat for s in sites]), "cell_lon": ("site", [s.cell_lon for s in sites])}
     ds = xr.Dataset(
         {"precip_mm": (("member", "site", "time"), rain.astype(np.float32)),
-         "tmax_c": (("site", "time"), tmax), "tmin_c": (("site", "time"), tmin), "et0_mm": (("site", "time"), et0),
+         "tmax_c": (("member", "site", "time"), np.ascontiguousarray(tmax, np.float32)),
+         "tmin_c": (("member", "site", "time"), np.ascontiguousarray(tmin, np.float32)),
+         "et0_mm": (("member", "site", "time"), np.ascontiguousarray(et0, np.float32)),
          "precip_source": (("time",), src), "tmax_source": (("site", "time"), tsrc), "et0_source": (("site", "time"), esrc)},
         coords={"member": np.arange(1, rain.shape[0] + 1), "time": dates, **site_coords})
     ds["precip_mm"].attrs["units"] = "mm/day"
@@ -248,8 +293,9 @@ def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs, extr
     return ds
 
 
-REQUIRED = {"precip_mm": ("member", "site", "time"), "tmax_c": ("site", "time"), "tmin_c": ("site", "time"),
-            "et0_mm": ("site", "time"), "precip_source": ("time",), "tmax_source": ("site", "time"), "et0_source": ("site", "time")}
+REQUIRED = {"precip_mm": ("member", "site", "time"), "tmax_c": ("member", "site", "time"),
+            "tmin_c": ("member", "site", "time"), "et0_mm": ("member", "site", "time"), "precip_source": ("time",),
+            "tmax_source": ("site", "time"), "et0_source": ("site", "time")}
 OPTIONAL = {"rad_mj_m2": (0, 40), "vap_hpa": (0, 50), "wind2_ms": (0, 20)}     # all or none, with rad_source
 REQUIRED_ATTRS = ("forecast_source", "season_year", "precip_sources", "met_sources", "calibration", "spatial_resolution")
 
