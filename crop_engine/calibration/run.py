@@ -267,8 +267,8 @@ def _yield_runs_rainfed(g, v, plants_of, ctx):
         if p is None:
             runs[label] = {"status": "not_sown"}
             continue
-        r = aq.simulate(dict(dates=dates.values, rain=rain, tmax=ds.tmax_c.values[k], tmin=ds.tmin_c.values[k],
-                             et0=ds.et0_mm.values[k], source=ds.precip_source.values, planting=[p], resow=None,
+        r = aq.simulate(dict(dates=dates.values, rain=rain, tmax=ds.tmax_c.values[:, k], tmin=ds.tmin_c.values[:, k],
+                             et0=ds.et0_mm.values[:, k], source=ds.precip_source.values, planting=[p], resow=None,
                              variety=v, kw=v["kw"], layers=layers, initial_frac=float(inp.initial_water(y)[k])))[0]
         runs[label] = {kk: r.get(kk) for kk in ("status", "planting", "harvest", "yield_t_ha", "potential_t_ha",
                                                "stress_days")}
