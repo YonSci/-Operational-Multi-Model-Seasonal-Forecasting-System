@@ -4,7 +4,7 @@ import json as _json
 import re as _re
 from pathlib import Path as _Path
 
-PLATFORM = "Seasonal Climate Forecast Dashboard"
+PLATFORM = "Onset–Cessation–SL Forecast System (OCL-FS)"
 
 
 def platform_version():

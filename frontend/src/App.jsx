@@ -2473,8 +2473,8 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <button type="button" onClick={onLogoClick} className="flex flex-col text-left" title="Back to the start page"
                 style={{background:'transparent',border:'none',cursor:'pointer',padding:0,gap:2}}>
-          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>Seasonal Climate Forecast Dashboard</span>
-          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>ILRI Climate Services, in collaboration with ICPAC</span>
+          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>Onset–Cessation–SL Forecast System (OCL-FS)</span>
+          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>Onset, cessation, LGP and crop forecasts for Kenya and Ethiopia: ILRI &amp; ICPAC</span>
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
           <span className="hidden md:inline-flex items-center gap-2" style={{fontSize:13.5,color:'var(--text-meta)'}}
