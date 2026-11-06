@@ -167,17 +167,17 @@ def update_forecast_runs(env):
 def update_crop_outlook(env):
     """Experimental crop outlook (crop_engine/, CROP_ENGINE.md): AquaCrop at the monitored sites for every forecast
     run → outputs/crop_engine/, and the Crop outlook tab's copy → frontend/public/tracker/data/crop/ (published). One
-    process per source, so memory is released between runs. Skipped when AquaCrop is not installed; at most 150 min;
+    process per source, so memory is released between runs. Skipped when AquaCrop is not installed; at most 180 min;
     never stops the daily update."""
     import importlib.util
     if not importlib.util.find_spec("aquacrop"):
         log("crop outlook: AquaCrop not installed (pip install aquacrop); skipped")
         return
     try:
-        # run_all keeps the 150 min itself (it stops its own child); this outer limit is only a safety net.
-        # A full rebuild (new observations, or a changed configuration with its benchmark) is ~110 min
-        r = subprocess.run([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", "150"], cwd=BASE_DIR, env=env,
-                           timeout=160 * 60)
+        # run_all keeps the 180 min itself (it stops its own child); this outer limit is only a safety net.
+        # A full rebuild (new observations, or a changed configuration with its benchmark) is ~110 min with a 28 Feb season, ~140 min to 31 Mar
+        r = subprocess.run([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", "180"], cwd=BASE_DIR, env=env,
+                           timeout=190 * 60)
         if r.returncode:
             log(f"crop outlook: some runs failed or were stopped (exit {r.returncode}); their previous results kept")
     except subprocess.TimeoutExpired:
