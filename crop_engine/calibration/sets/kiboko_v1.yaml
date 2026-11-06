@@ -1,0 +1,124 @@
+# Calibration set kiboko_v1: which observations at KALRO Kiboko train the crop engine, which are held out to test
+# it, which are only checked against it, and which are left out, with the reason for each.
+#
+# A set is versioned: once its results are reported, it is not edited. A change of roles, windows or observations
+# is a new set (kiboko_v2, ...), so every fitted parameter can be traced to the observations it was fitted on.
+#
+# Observations come from the yield database (python -m crop_engine.yields.build → outputs/crop_engine/yields/
+# observations.csv), selected by site and obs_id prefix. An observation's value of a target is in one group only
+# (the same trial can give a phenology target and a yield check).
+#
+# Roles
+#   train     the target the variety's parameter is fitted to
+#   holdout   not used in the fit; scored with the fitted parameter (independent of the training trial)
+#   check     scored only (before and after the fit), for targets the water-limited model cannot match exactly
+#   excluded  not used, with the reason
+#
+# Targets
+#   days_to_flowering   days from sowing to silking (maize) → AquaCrop HIstart (start of yield formation)
+#   days_to_maturity    days from sowing to physiological maturity → AquaCrop Maturity
+#   yield               grain yield, dry t/ha, against AquaCrop in the observed weather of the season
+#
+# Sowing windows: the sowing dates the model is run from when the source gives none (phenology targets: every day
+# of each window; the model's days to the stage are a range, its median is fitted). Kiboko trials are grown in the
+# Long Rains, the Short Rains, or the dry season under irrigation (KALRO's managed drought-stress site), so a trial
+# without a date gets all three.
+
+version: kiboko_v1
+created: 2026-11-06
+site: kalro_kiboko_makueni_farm
+fit:
+  parameter: maturity_days           # one per variety: all phenological stages scaled together (varieties.yaml)
+  varieties: [maize_early, maize_medium, sorghum]
+
+windows:
+  any_2013: &any_2013
+    - {label: Long Rains 2013, start: 2013-03-15, end: 2013-04-30}
+    - {label: dry season 2013 (irrigated), start: 2013-06-01, end: 2013-07-31}
+    - {label: Short Rains 2013, start: 2013-10-15, end: 2013-11-30}
+  koima: &koima
+    - {label: Short Rains 2020 (onset), start: 2020-11-01, end: 2020-11-30}
+    - {label: Long Rains 2021 (onset), start: 2021-04-01, end: 2021-04-30}
+
+groups:
+  - id: maize_early_silking_train
+    role: train
+    variety: maize_early
+    target: days_to_flowering
+    select: {obs_id_prefix: "iita:M13-3KIB:"}
+    windows: *any_2013
+    why: IITA RUVT Early 2013, 25 entries (early maize, days to silking); no sowing date or season given.
+
+  - id: maize_early_silking_holdout
+    role: holdout
+    variety: maize_early
+    target: days_to_flowering
+    select: {obs_id_prefix: "iita:M13-4KIB:"}
+    windows: *any_2013
+    why: >-
+      IITA RUVT Extra-early 2013, 22 entries: a separate trial of the class just shorter than the training trial's,
+      so it also tests whether one early class covers both.
+
+  - id: maize_medium_silking_train
+    role: train
+    variety: maize_medium
+    target: days_to_flowering
+    select: {obs_id_prefix: "iita:M1301KBK:"}
+    windows: *any_2013
+    why: IITA Evt-Lsr-W 2013, 20 late-maturing white entries (days to silking).
+
+  - id: maize_medium_silking_holdout
+    role: holdout
+    variety: maize_medium
+    target: days_to_flowering
+    select: {obs_id_prefix: "iita:M1312KBK:"}
+    windows: *any_2013
+    why: >-
+      IITA single-cross and three-way Striga-resistant hybrids 2013, 21 entries. The source gives no maturity
+      class; the programme's hybrids are intermediate-to-late, so the medium class (assigned here, not from the
+      silking days).
+
+  - id: sorghum_maturity_train
+    role: train
+    variety: sorghum
+    target: days_to_maturity
+    select: {obs_id_prefix: "pub:koima2023_sorghum_kiboko_ithookwe:KALRO_Kiboko"}
+    windows: *koima
+    weak: true
+    why: >-
+      Koima et al. 2023, 14 genotypes sown at the onset in SR 2020 and LR 2021. Maturity was scored once, at 105
+      days after sowing, for every genotype: a weak target (one date, not one per genotype), and there is no other
+      sorghum phenology at Kiboko to hold out.
+
+  - id: sorghum_yield_sr2020_check
+    role: check
+    variety: sorghum
+    target: yield
+    select: {obs_id_prefix: "pub:koima2023_sorghum_kiboko_ithookwe:KALRO_Kiboko"}
+    season_year: 2020
+    sowing: [fao-agricultural, rule1]
+    expect: upper_bound
+    why: >-
+      The same trial's yields (median 1.75, best 3.15 t/ha, two seasons pooled, anthracnose losses included)
+      against the SR 2020 crop in the observed weather: the water-limited model should yield at least the trial
+      median.
+
+  - id: maize_yield_potential_2013_check
+    role: check
+    variety: [maize_early, maize_medium]
+    target: yield
+    select: {obs_id_prefix: ["iita:M13-3KIB:", "iita:M13-4KIB:", "iita:M1301KBK:", "iita:M1312KBK:"]}
+    season_year: 2013
+    sowing: {start: 2013-10-15, end: 2013-11-30, every_days: 7}
+    model: potential
+    expect: upper_bound
+    why: >-
+      The IITA 2013 trial yields against AquaCrop's yield without water stress in SR 2013 (management and
+      irrigation unknown): the potential should be at least the trial median.
+
+  - id: maize_irrigated_np_excluded
+    role: excluded
+    select: {obs_id_prefix: "ksh:", site_id: kalro_kiboko_makueni_farm}
+    why: >-
+      Nitrogen and phosphorus trials (doi 10.5061/dryad.j3tx95xhc, 10 irrigated plots; doi 10.7910/DVN/SOAWL6,
+      9 treatments): AquaCrop-OSPy has no nutrient stress, so a fertilizer response cannot calibrate it.

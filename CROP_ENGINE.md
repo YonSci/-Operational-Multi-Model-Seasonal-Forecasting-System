@@ -26,6 +26,7 @@ python -m crop_engine.run_outlook                       # all runs (2 worker pro
 python -m crop_engine.run_outlook --sources seasonal    # one run
 python -m crop_engine.run_outlook --climatology --force # rebuild the benchmark and every run
 python -m pytest crop_engine/tests                      # unit tests (synthetic data)
+python -m crop_engine.calibration.run --set kiboko_v1 --benchmark   # a calibration set (see Calibration sets)
 ```
 
 Outputs (not committed; `outputs/crop_engine/`): `weather/<run>.nc` (the daily inputs), `results/<run>.json` (every
@@ -220,12 +221,56 @@ should. Still open:
 - Re-sowing rescues few seasons (1–4 of 33 per site and variety): most failures are crops that die later, under
   mid-season drought, not failed establishments.
 
+## Calibration sets (`crop_engine/calibration/`)
+
+A **calibration set** (`calibration/sets/<version>.yaml`) names the observations of the yield database
+(`outputs/crop_engine/yields/observations.csv`, by site and obs_id prefix) that **train** a variety's parameters,
+those **held out** to test them, those only **checked** against the model, and those **excluded**, each with the
+reason, and the sowing windows assumed where a trial gives no date. A set is not edited once reported: a change is
+a new version, so a fitted parameter can always be traced to its observations. An observation's value of a target
+is in one group only (`run.validate` refuses a set that breaks this).
+
+`python -m crop_engine.calibration.run --set <version> [--benchmark]` fits each variety's `maturity_days` (every
+phenological stage scaled together) to the training trials' median days to silking or maturity, in the site's
+ERA5-Land temperatures over every sowing date of the windows; scores the training and held-out groups before and
+after (bias, MAE, range); runs the yield checks with AquaCrop in the observed weather of their seasons; and, with
+`--benchmark`, the site's 1993–2025 benchmark before and after. It writes `outputs/crop_engine/calibration/
+<version>/` (`report.md`, `results.json`, `fitted_varieties.yaml`). **`varieties.yaml` is never changed by it**: a
+fitted value is adopted by hand, citing the set.
+
+### kiboko_v1 (November 2026): result and decision
+
+Training: IITA RUVT Early (25 entries, maize_early) and Evt-Lsr-W (20, maize_medium) 2013, days to silking;
+Koima et al. 2023 sorghum, maturity (a weak target: one scoring date, 105 days, for every genotype). Held out: IITA
+RUVT Extra-early (22) and the Striga-resistant hybrids (21). No sowing dates: Long Rains, dry season (irrigated)
+and Short Rains 2013 windows.
+
+| Variety | Days to silking / maturity at Kiboko: observed | model now | fitted | held out: bias now → fitted |
+| :--- | ---: | ---: | ---: | ---: |
+| maize_early (silking) | 61 (train), 59 (held out) | 41 | 61 (`maturity_days` 90 → 134) | −18 → **+2** days |
+| maize_medium (silking) | 70.9 (train), 70.3 (held out) | 54 | 71 (120 → 157) | −16 → **+0.7** days |
+| sorghum (maturity) | 105 | 84 | 105 (100 → 124) | none held out |
+
+The current classes develop **16–21 days too fast** for every Kiboko trial: Kiboko (ERA5-Land, 23.3 °C) is warmer
+than the classes' 21 °C reference. The fit removes the bias, and holds on the held-out trials. **It was not
+adopted**, because in the Short Rains at Kiboko the fitted crops cannot be grown (benchmark 1993–2025, FAO
+agricultural onset): medium maize is too late in 32 of 33 seasons, early maize fails in 61 % of seasons
+(42 % now) with 8 too late, and sorghum fails in 70 % (52 %). The IITA lines are later germplasm than the
+early dryland maize (Katumani, KDV, DH types) and Gadam-type sorghum that the classes stand for, and that farmers
+grow in the Short Rains for exactly this reason. Next set (kiboko_v2): days to silking and maturity of the Kenyan
+dryland varieties (KALRO National Performance Trials, release data) for maize_early and sorghum, keeping the IITA
+trials as a held-out check of maize_medium.
+
+The yield checks were not informative: the Short Rains 2013 killed both maize classes in the model, and
+AquaCrop's yield potential stops when the crop dies, so it is not a no-stress yield there. kiboko_v2 checks yield
+potential with full irrigation instead.
+
 ## Testing
 
 `python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
 and push that touches the engine): the weather contract and provenance, variety scaling and parameters, sites and
 soil, the AquaCrop adapter (statuses, re-sowing, canopy, potential yield), the outcome rates, the dashboard export,
-the yield databases, and a **regression** check of fixed synthetic seasons against stored outputs
+the yield databases, the calibration sets and the phenology fit, and a **regression** check of fixed synthetic seasons against stored outputs
 (`tests/reference/aquacrop_synthetic.json`: regenerate it deliberately, and say why, when the adapter, AquaCrop or
 `varieties.yaml` change them).
 
@@ -233,10 +278,10 @@ the yield databases, and a **regression** check of fixed synthetic seasons again
 
 Priorities after the November 2026 review (software MVP in place; the next milestone is scientific credibility):
 
-- **P1 Calibration and independent validation**, Kiboko first (early maize and sorghum): a versioned calibration
-  set (which observations train, which are held out), phenology (days to flowering and maturity) as well as yield,
-  fitted parameter sets reported with their scores on the held-out trials and seasons; then the other sites as
-  trials are found.
+- **P1 Calibration and independent validation**, Kiboko first (early maize and sorghum): versioned calibration
+  sets, phenology fit and held-out scores are in place (*Calibration sets*); kiboko_v1 was not adopted. Next:
+  kiboko_v2 with Kenyan dryland variety phenology and a full-irrigation yield-potential check; then the other sites
+  as trials are found.
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
   weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
   beyond the onset, cessation, season length and FAO water balance forecasts?
