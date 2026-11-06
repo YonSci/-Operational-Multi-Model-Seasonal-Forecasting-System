@@ -40,7 +40,7 @@ import xarray as xr
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PY = sys.executable
-CHC = "https://data.chc.ucsb.edu/products/CHIRPS-2.0"
+CHC = "https://data.chc.ucsb.edu/products/CHIRPS/v2.0"         # moved from products/CHIRPS-2.0 (404 since Oct 2026)
 FINAL = BASE_DIR / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc"
 PRELIM_DIR = BASE_DIR / "data" / "chirps_prelim_2026"
 PRELIM_NC = PRELIM_DIR / "chirps_prelim_2026_p25_kenya.nc"
@@ -105,6 +105,10 @@ def sync_prelim(final_end):
         if not (PRELIM_DIR / name).exists():
             try:
                 if not download(f"{CHC}/prelim/global_daily/tifs/p05/{day.year}/{name}", PRELIM_DIR / name):
+                    late = (dt.date.today() - day).days
+                    if late > 6:                        # CHC publishes within ~2–5 days: a moved or broken address
+                        log(f"WARNING CHIRPS preliminary: {day} not on the server ({late} days old; usually 2–5): "
+                            f"check {CHC}/prelim/global_daily/tifs/p05/")
                     break                               # not published yet
             except RuntimeError as exc:                 # server refusing access: keep the days already on disk
                 log(f"CHIRPS preliminary: server not reachable ({str(exc)[:120]}); using the days on disk")

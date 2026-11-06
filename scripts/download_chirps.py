@@ -82,7 +82,7 @@ def build_url(year: int, res: str) -> str:
     str
         The full URL to the CHIRPS NetCDF file.
     """
-    base = f"https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/netcdf/{res}"
+    base = f"https://data.chc.ucsb.edu/products/CHIRPS/v2.0/global_daily/netcdf/{res}"   # was products/CHIRPS-2.0
     # Base URL points to the CHIRPS v2.0 global daily NetCDF folder for the chosen resolution.
 
     return f"{base}/chirps-v2.0.{year}.days_{res}.nc"
