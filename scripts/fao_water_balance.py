@@ -443,10 +443,12 @@ def era5_season(y, t0, T, lat, lon, var="ET0"):
     return out
 
 
-def et0_climatology(cfg, lat, lon):
-    """ET0 by season day (T, lat, lon): CAL-year mean for each calendar day, ±7-day smoothed; cached."""
-    t0, T, _ = season_days(cfg)
-    dest = ET0_DIR / "et0_climatology.nc"
+def et0_climatology(cfg, lat, lon, T=None):
+    """ET0 by season day (T, lat, lon): CAL-year mean for each calendar day, ±7-day smoothed; cached. T: days from
+    the season start (default: to the cessation search end); another length has its own cache file."""
+    t0, T_season, _ = season_days(cfg)
+    T = T or T_season
+    dest = ET0_DIR / ("et0_climatology.nc" if T == T_season else f"et0_climatology_{T}d.nc")
     y0, y1 = cfg["sources"]["calibration_years"]
     if dest.exists():
         with xr.open_dataarray(dest) as da:

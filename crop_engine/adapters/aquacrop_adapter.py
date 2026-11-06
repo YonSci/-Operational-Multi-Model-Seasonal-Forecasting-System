@@ -1,7 +1,7 @@
 """
 AquaCrop-OSPy (FAO AquaCrop, water-driven crop growth) for one site, variety and planting rule: each weather member is
 simulated from 1 Aug (soil water from ERA5-Land, as the FAO water balance) to the season's end, sown on that member's
-onset. The season is the FAO water balance's: 1 Aug to its cessation search end, 28 Feb (212 days).
+onset. The season runs from 1 Aug (the FAO water balance's start) to config.SEASON_END, 31 Mar: the weather's days.
 
 Kept free of the climate pipeline's imports, so worker processes start light.
 
@@ -9,7 +9,7 @@ Outcome of a member (status):
   ok          sown, reached maturity
   died        sown, the crop died before maturity (AquaCrop ends the season early)
   failed_establishment  died before its canopy reached 5 % (a false start: the seedlings dried out)
-  too_late    sown too late to reach maturity by 28 Feb (not simulated: AquaCrop needs the full season)
+  too_late    sown too late to reach maturity by the season's end (not simulated: AquaCrop needs the full season)
   not_sown    no planting opportunity (no onset by the rule's search end)
   error       the model failed (message kept): no outcome, left out of every probability
 A member that is not sown or too late counts as zero yield in the overall figures; the summaries also give the
@@ -98,7 +98,7 @@ def _sow(task, m, plant, dates, g):
         harvest = pd.Timestamp(res["Harvest Date (YYYY/MM/DD)"].iloc[0])
         yld = float(res["Dry yield (tonne/ha)"].iloc[0])
         pot = float(res["Yield potential (tonne/ha)"].iloc[0])
-    else:                                                            # season not closed by its end (28 Feb)
+    else:                                                            # season not closed by its end (31 Mar)
         harvest, yld, pot = dates[-1], float(growth.DryYield.max()), float(growth.YieldPot.max())
     kh = int(dates.get_indexer([harvest])[0]) if harvest in dates else len(dates) - 1
     season = slice(k0, kh + 1)

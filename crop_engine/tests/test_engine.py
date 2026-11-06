@@ -10,7 +10,7 @@ from crop_engine import config as C
 from crop_engine.adapters import aquacrop_adapter as aq
 from crop_engine.data import era5land, soil
 from crop_engine.data.sites import Site, on_grid, registered_sites, slug
-from crop_engine.data.weather import to_dataset, validate
+from crop_engine.data.weather import jan_feb_index, season_length, to_dataset, validate
 from crop_engine.scenarios import planting as pl
 from crop_engine.scenarios.planting import doy_to_date
 
@@ -66,6 +66,21 @@ def test_variety_scaling_hits_maturity_days():
 
 
 # ── planting dates ──────────────────────────────────────────────────────────
+def test_season_runs_to_its_end():
+    import fao_water_balance as fw
+    t0 = fw.season_days(fw.load_config())[0]
+    T = season_length(t0)
+    assert T == 243 and season_length(t0, (2, 28)) == fw.season_days(fw.load_config())[1]   # 28 Feb: the FAO window
+    assert fw.season_dates(2026, t0, T)[-1] == pd.Timestamp("2027-03-31")
+    assert fw.season_dates(2027, t0, T)[-1] == pd.Timestamp("2028-03-30")                   # a leap year: one day short
+
+
+def test_jan_feb_members_map_by_day_and_29_feb_repeats_28_feb():
+    d = pd.date_range("2028-01-01", "2028-02-29")
+    i = jan_feb_index(d, 2027)
+    assert i[0] == 0 and i[-2] == 58 and i[-1] == 58 and len(i) == 60
+
+
 def test_doy_to_date():
     assert doy_to_date(227, 2026) == dt.date(2026, 8, 15)
     assert doy_to_date(366, 2026) == dt.date(2027, 1, 1)

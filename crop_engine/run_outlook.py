@@ -46,15 +46,16 @@ import onset_rules as orl  # noqa: E402
 
 ENGINE = f"AquaCrop-OSPy {version('aquacrop')}"
 CAVEATS = [
-    "Experimental: early maize is calibrated against trials at Kiboko (phenology and harvest index), medium maize and "
-    "sorghum only set against them; the crop forecasts have not been verified against observed crop outcomes.",
+    "Experimental: maize is calibrated against trials at Kiboko (phenology and harvest index), sorghum only set "
+    "against them; the crop forecasts have not been verified against observed crop outcomes.",
     "Varieties are maturity classes (AquaCrop crop files with Kenyan plant densities), not calibrated cultivars.",
     "Yields are water-limited: no nutrient stress, pests, diseases or management losses; they are an upper bound for "
     "smallholder fields.",
     "Past seasons are simulated: AquaCrop grown in the observed weather of 1993–2025, not measured yields.",
-    "A crop season runs from 1 Aug to 28 Feb: a crop that cannot mature by 28 Feb is counted as too late.",
+    "A crop season runs from 1 Aug to 31 Mar: a crop that cannot mature by 31 Mar is counted as too late.",
     "Temperature and ET0 after the last ERA5-Land day are the 1993–2016 day-of-year climatology; 1 Jan – 28 Feb rain "
-    "is ECMWF SEAS5 (bias-corrected), as for the Agri rules.",
+    "is ECMWF SEAS5 (bias-corrected), as for the Agri rules; March rain is climatological (each member the observed "
+    "March of a past year), so a crop still growing in March is not forecast for that month.",
     "Soil is the 0.25° SoilGrids average of the site's grid cell, not a field measurement.",
     "Deterministic weather models are the same forecast in every member: their spread comes from SEAS5 only.",
 ]
@@ -74,12 +75,13 @@ def load_varieties(only=None):
 
 
 def config_hash(rules, sites):
-    """Changes when the varieties, rules, sites, AquaCrop version or the adapter change: results made before are rebuilt."""
+    """Changes when the varieties, rules, sites, season end, AquaCrop version or the adapter change: results made
+    before are rebuilt."""
     h = hashlib.sha1(C.VARIETIES_FILE.read_bytes())
     h.update(json.dumps(sorted(rules)).encode())
     h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
     h.update(ENGINE.encode())
-    h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX]).encode())
+    h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(aq.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
     return h.hexdigest()[:12]

@@ -221,7 +221,7 @@ function OutcomeBars({ rows }) {
       <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 13, color: 'var(--text-body)', marginBottom: 10 }}>
         {GROUPS.map((g, i) => (
           <span key={g.id} className="inline-flex items-center gap-2"
-                title={g.id === 'not_grown' ? 'Too late to mature by 28 Feb, or no sowing opportunity by 15 Jan' : undefined}>
+                title={g.id === 'not_grown' ? 'Too late to mature by 31 Mar, or no sowing opportunity by 15 Jan' : undefined}>
             <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 3, background: `var(--crop-o${i + 1})` }}/>
             {g.label}
           </span>
@@ -525,7 +525,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
           ) : msg(runQ.isLoading || bench.isLoading ? 'Loading…' : 'No outcomes for this choice.')}
           <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '6px 0 0', lineHeight: 1.5 }}>
             Failed to establish: a sowing rain followed by a dry spell, the seedlings dried out. Not grown: sown too late to mature by
-            28 Feb (the season’s end), or no sowing opportunity by 15 Jan under this rule. Model errors are left out.
+            31 Mar (the season’s end), or no sowing opportunity by 15 Jan under this rule. Model errors are left out.
           </p>
         </Panel>
       </div>
@@ -630,7 +630,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
               ['Forecast', `${runLabel(run)}; observations to ${fmtDate(run.obs_end)}`],
               ['Rainfall', [...(runQ.data?.meta?.segments ?? []).map((s, i) =>      // the crop season starts on 1 Aug
                               `${s.label} ${i === 0 && s.kind === 'obs' ? '1 Aug' : fmtDate(s.start)} – ${fmtDate(s.end)}`),
-                            'ECMWF SEAS5 1 Jan – 28 Feb (the season ends on 28 Feb)'].join('; ')],
+                            'ECMWF SEAS5 1 Jan – 28 Feb', 'climatology 1–31 Mar (each member the observed March of a past year; the season ends on 31 Mar)'].join('; ')],
               ['Temperature, ET0', 'ERA5-Land to its latest day, then the 1993–2016 average for the day of the year'],
               ['Site', `${site.name}, 0.25° grid cell ${site.cell?.join(', ')}`],
               ['Soil', `SoilGrids, ${site.topsoil?.sand}% sand and ${site.topsoil?.clay}% clay at the surface; ${site.soil_taw_100cm_mm} mm available water in the top metre`

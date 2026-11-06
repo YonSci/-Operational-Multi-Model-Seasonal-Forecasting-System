@@ -2,8 +2,9 @@
 Standard daily crop weather: the platform's forecast rainfall members and observed weather at each site, as one
 xarray Dataset per forecast run (or per observed season), with the source of every day.
 
-Dimensions: member, site, time (1 Aug of the season year – 28 Feb of the next: the FAO water-balance window, which
-ends at its cessation search end; a longer window would add March below).
+Dimensions: member, site, time (1 Aug of the season year – config.SEASON_END of the next, 31 Mar: past the FAO
+water balance's 28 Feb, its cessation search end, so a medium-maturity crop can mature; 243 days, to 30 Mar when the
+next year is a leap year).
   precip_mm (member, site, time)   daily rain
   tmax_c, tmin_c (site, time)      2 m temperature
   et0_mm (site, time)              FAO-56 reference evapotranspiration
@@ -14,11 +15,15 @@ Rain of a forecast run, member k (the members of forecast_runs.py, so the onset 
 exactly this rain):
   1–31 Aug        observed CHIRPS v2 (final, then preliminary)
   1 Sep – 31 Dec  the run's joined rain: observed to the last observed day, gap days, the weather forecast, SEAS5
-  1 Jan – 28 Feb  SEAS5 member k, bias-corrected as the Agri rules' January–February (onset_rules.EXT_CACHE)
-  (1–31 Mar       only if the window were extended past 28 Feb: observed CHIRPS March of calibration year
-                  1993 + (k mod 24), since the SEAS5 October runs on disk end on 28 Feb; not used now)
+  1 Jan – 28 Feb  SEAS5 member k, bias-corrected as the Agri rules' January–February (onset_rules.EXT_CACHE);
+                  a 29 Feb repeats 28 Feb
+  1–31 Mar        climatological: observed CHIRPS March of year 1994 + (k mod 24), the March after calibration
+                  year 1993 + (k mod 24), since the SEAS5 October runs on disk end on 28 Feb (and SEAS5 has little
+                  skill five months ahead)
+Observed seasons (the benchmark) are observed CHIRPS throughout, March included.
 Temperature and ET0: ERA5-Land to its last day (temperature: Open-Meteo point series; ET0: the platform's ERA5-Land
-FAO-56 grid), then the 1993–2016 day-of-year climatology; no forecast temperature or radiation is used yet.
+FAO-56 grid), then the 1993–2016 day-of-year climatology (ET0: by season day, to SEASON_END); no forecast
+temperature or radiation is used yet.
 """
 import datetime as dt
 import json
@@ -39,6 +44,18 @@ KIND_TO_SOURCE = {"obs": "obs_final", "gap": "gap", "ens": "forecast", "ext": "f
 CHIRPS_HIST = C.BASE / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
 
 
+def season_length(t0, end=C.SEASON_END):
+    """Days from the season start (DOY t0, 2025 numbering) to `end` (month, day) of the next year, counted in a
+    non-leap year pair as the FAO water balance counts its days."""
+    start = dt.date(2025, 1, 1) + dt.timedelta(days=int(t0) - 1)
+    return (dt.date(2026, *end) - start).days + 1
+
+
+def jan_feb_index(dates, y):
+    """Day index into the SEAS5 1 Jan – 28 Feb members (0–58) of each date in Jan–Feb of y+1: 29 Feb takes 28 Feb's."""
+    return np.minimum((dates - pd.Timestamp(y + 1, 1, 1)).days.values, orl.EXT_DAYS - 1)
+
+
 def _last_time(path):
     with xr.open_dataset(path) as ds:
         return pd.Timestamp(ds.time.values[-1]).date()
@@ -51,14 +68,15 @@ class Inputs:
         self.b = blender or bs.Blender(C.BASE)
         self.year, self.lat, self.lon = self.b.year, self.b.lat, self.b.lon
         self.cfg = fw.load_config()
-        self.t0, self.T, _ = fw.season_days(self.cfg)                       # 1 Aug, 212 days (to 28 Feb)
+        self.t0 = fw.season_days(self.cfg)[0]                               # 1 Aug
+        self.T = season_length(self.t0)                                     # to SEASON_END (31 Mar: 243 days)
         self.sites = sites_mod.on_grid(sites or sites_mod.registered_sites(), self.lat, self.lon, self.b.lm)
         self.ii = np.array([s.i for s in self.sites])
         self.jj = np.array([s.j for s in self.sites])
         self.temps = {s.id: era5land.site_temperature(s, refresh=refresh) for s in self.sites}
         self.tclim = {s.id: (era5land.climatology(t.tmax), era5land.climatology(t.tmin)) for s, t in
                       ((s, self.temps[s.id]) for s in self.sites)}
-        self.et0_clim = fw.et0_climatology(self.cfg, self.lat, self.lon)[:, self.ii, self.jj]      # (T, site)
+        self.et0_clim = fw.et0_climatology(self.cfg, self.lat, self.lon, self.T)[:, self.ii, self.jj]  # (T, site)
         self.o26 = orl.obs_2026(self.lat, self.lon)[:, self.ii, self.jj]                           # (366, site)
         self.final_end = _last_time(orl.FINAL_2026) if orl.FINAL_2026.exists() else dt.date(self.year, 1, 1)
         with xr.open_dataarray(orl.EXT_CACHE) as da:                      # (member, 59, site)
@@ -134,9 +152,9 @@ class Inputs:
         src[is_obs] = np.where(dates[is_obs].date > self.final_end, C.PRECIP_SOURCES.index("obs_prelim"),
                                C.PRECIP_SOURCES.index("obs_final"))
         jf = (dates > last) & (dates < pd.Timestamp(y + 1, 3, 1))         # 1 Jan – 28 Feb: SEAS5 member k
-        rain[:, :, jf] = np.moveaxis(self.janfeb[:n_mem, :jf.sum()], 1, 2)
+        rain[:, :, jf] = np.moveaxis(self.janfeb[:n_mem, jan_feb_index(dates[jf], y)], 1, 2)
         src[jf] = C.PRECIP_SOURCES.index("seasonal")
-        mar = dates >= pd.Timestamp(y + 1, 3, 1)                          # March (none in the 28 Feb window): climatology
+        mar = dates >= pd.Timestamp(y + 1, 3, 1)                          # March: climatology (CHIRPS of a past March)
         cal = np.arange(C.CAL_YEARS[0], C.CAL_YEARS[1] + 1)
         for m in range(n_mem):
             cy = int(cal[m % len(cal)])
