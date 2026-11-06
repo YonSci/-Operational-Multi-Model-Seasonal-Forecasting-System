@@ -5,8 +5,8 @@ sites. It sits beside the climate pipeline: it reads that pipeline's outputs and
 in the crop engine does not affect the forecasts.
 
 **Status:** pilot (phases P0–P2 of the integration plan, and the P4 Crop outlook tab). One crop model (AquaCrop-OSPy), the six Kenya monitored
-sites, the 2026 Short Rains, four maturity classes, two planting rules. **Early maize calibrated (phenology and harvest
-index, calibration sets kiboko_v2 and kiboko_v3), the other classes set against the Kiboko trials; not verified:** results are for development and discussion, not advice.
+sites, the 2026 Short Rains, four maturity classes, two planting rules. **Maize calibrated (phenology and harvest
+index, calibration sets kiboko_v2 and kiboko_v3), sorghum set against the Kiboko trials; not verified:** results are for development and discussion, not advice.
 
 ## What it does
 
@@ -90,7 +90,7 @@ class's maturity at a daily mean of 21 °C (mid-altitude dryland Kenya, where th
 | Variety | AquaCrop crop | Days to maturity at 21 °C | Stands for |
 | :--- | :--- | ---: | :--- |
 | Early-maturing maize | MaizeGDD | 115 (calibrated, kiboko_v2: about 100 at Kiboko) | Katumani / DH-series type dryland maize |
-| Medium-maturing maize | MaizeGDD | 120 | mid-altitude hybrid type |
+| Medium-maturing maize | MaizeGDD | 142 (calibrated, kiboko_v2: about 122 at Kiboko) | Duma 43 / mid-altitude hybrid type |
 | Sorghum | SorghumGDD | 100 | Gadam type |
 | Dry bean | DryBeanGDD | 75 | KAT-series type |
 
@@ -99,8 +99,7 @@ They are maturity classes, not cultivars. Maize and sorghum carry Kenyan practic
 
 | Variety | Plants /ha | Max. canopy (CCx) | Reference harvest index (HI0) | Basis |
 | :--- | ---: | ---: | ---: | :--- |
-| Early maize | 44,444 (75 x 30 cm) | 0.75 | 0.324 (kiboko_v3) | Duma 43 well watered at Kiboko, 7.76 t/ha (shared HI0) |
-| Medium maize | 44,444 (75 x 30 cm) | 0.75 | 0.48 (AquaCrop) | Kiboko maize trials: median 4.5, high-input 6.1 dry t/ha |
+| Maize (both classes) | 44,444 (75 x 30 cm) | 0.75 | 0.324 (kiboko_v3) | Duma 43 well watered at Kiboko, 7.76 t/ha |
 | Sorghum | 66,667 (75 x 20 cm) | 0.75 | 0.30 | Kiboko 2020 sorghum: median 1.75, best 3.15 dry t/ha, measured HI 0.28 |
 | Dry bean | 131,579 (AquaCrop) | 0.99 (AquaCrop) | 0.40 (AquaCrop) | no bean trials near the sites |
 
@@ -330,8 +329,11 @@ maize takes the same value.
   early maize fails in 42 → 52 % of seasons (yield below 0.5 t/ha), matured crops 4.8 → 5.3 t/ha; medium maize as in
   kiboko_v2 (too late in 21 of 33 seasons with the 28 Feb season end).
 
-Status: **early maize adopted** (November 2026, `varieties.yaml`: `maturity_days` 115, `HI0` 0.324); medium
-maize waits for a season past 28 Feb (its proposals stay in `outputs/crop_engine/calibration/kiboko_v3/`).
+Status: **adopted** (November 2026, `varieties.yaml`): early maize `maturity_days` 115 and `HI0` 0.324; medium
+maize `maturity_days` 142 and `HI0` 0.324 once the crop season ran to 31 Mar. Kiboko benchmark of medium maize
+(1993–2025, FAO agricultural onset), 120 days and HI0 0.48 → 142 and 0.324 with the 31 Mar season: matured in 6 → 5
+seasons, died of water stress 21 → 22, too late 0 → 0 (21 with a 28 Feb end), failure 46 → 61 %, median yield
+1.05 → 0.4 t/ha: at Kiboko the longer crop is still growing after the Short Rains end.
 
 ## Testing
 
@@ -349,8 +351,8 @@ Priorities after the November 2026 review (software MVP in place; the next miles
 - **P1 Calibration and independent validation**, Kiboko first (early maize and sorghum): versioned calibration
   sets, phenology fit, held-out scores and full-irrigation yield checks are in place (*Calibration sets*):
   kiboko_v1 not adopted; kiboko_v2 fits the maize phenology to Kenyan checks and kiboko_v3 the maize harvest index
-  to Duma 43; early maize adopted. Next: medium maize after the season runs past 28 Feb; an improved early
-  variety's well-watered yield; then the other sites as trials are found.
+  to Duma 43; both maize classes adopted (medium once the season ran to 31 Mar). Next: an improved early
+  variety's well-watered yield; sorghum phenology; then the other sites as trials are found.
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
   weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
   beyond the onset, cessation, season length and FAO water balance forecasts?

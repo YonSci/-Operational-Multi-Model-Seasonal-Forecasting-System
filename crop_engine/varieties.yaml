@@ -17,18 +17,20 @@
 #             AquaCrop's defaults (75,000 and 200,000) are high-input densities
 #   CCx       maximum canopy cover of that density (AquaCrop's density sets only the initial canopy)
 #   HI0       sorghum reference harvest index 0.30 (the Kiboko trial measured 0.28; AquaCrop's default 0.45);
-#             early maize 0.324 (calibration set kiboko_v3, below)
+#             maize 0.324 (calibration set kiboko_v3, below)
 # The bean keeps AquaCrop's defaults: no bean trials near the sites.
 #
-# Early maize is calibrated (crop_engine/calibration, CROP_ENGINE.md "Calibration sets"):
-#   maturity_days 115   kiboko_v2: the local Katumani composite's days to silking at KARI Kiboko (2012, well
-#                       watered; Ngugi et al. 2013), about 100 days to maturity at Kiboko; held-out IITA 2013
-#                       early trials 8 days later (−19 before)
-#   HI0 0.324           kiboko_v3: Duma 43's yield under full irrigation in the same trial (7.76 t/ha), shared
-#                       with medium maize, whose own calibration waits for a season past 28 Feb
+# Maize is calibrated (crop_engine/calibration, CROP_ENGINE.md "Calibration sets"):
+#   early  maturity_days 115   kiboko_v2: the local Katumani composite's days to silking at KARI Kiboko (2012, well
+#                              watered; Ngugi et al. 2013), about 100 days to maturity at Kiboko; held-out IITA
+#                              2013 early trials 8 days later (−19 before)
+#   medium maturity_days 142   kiboko_v2: Duma 43's days to silking in the same trial, about 122 days at Kiboko;
+#                              held-out IITA 2013 late trials 6.6 days later (−16.6 before). Adopted once the
+#                              crop season ran to 31 Mar (it matures in March when sown in November)
+#   both   HI0 0.324           kiboko_v3: Duma 43's yield under full irrigation in the same trial (7.76 t/ha)
 
 # The days to maturity are those quoted for mid-altitude dryland Kenya (about 1,200-1,700 m: Katumani, Kiboko),
-# where the Short Rains season averages about 21 °C (early maize: calibrated, see above).
+# where the Short Rains season averages about 21 °C (maize: calibrated, see above).
 reference_tmean_c: 21.0
 
 varieties:
@@ -41,11 +43,11 @@ varieties:
     parameters: {PlantPop: 44444, CCx: 0.75, HI0: 0.324}    # HI0: kiboko_v3 (AquaCrop's 0.48)
   maize_medium:
     label: Medium-maturing maize
-    examples: mid-altitude hybrid type
+    examples: Duma 43 / mid-altitude hybrid type
     aquacrop_crop: MaizeGDD
-    maturity_days: 120
+    maturity_days: 142          # kiboko_v2 (was 120)
     failure_t_ha: 0.5
-    parameters: {PlantPop: 44444, CCx: 0.75}
+    parameters: {PlantPop: 44444, CCx: 0.75, HI0: 0.324}    # HI0: kiboko_v3 (AquaCrop's 0.48)
   sorghum:
     label: Sorghum
     examples: Gadam type
