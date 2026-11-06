@@ -59,8 +59,64 @@ def test_validate_keeps_each_target_of_an_observation_in_one_group():
         cal.validate(_set([train, dict(hold, select={"obs_id_prefix": "zz:"})]), obs)
 
 
-def test_the_kiboko_set_is_well_formed():
-    cs, _ = cal.load_set("kiboko_v1")
+def test_inline_published_values_become_observations():
+    cs = {"version": "t", "site": "s1", "fit": {"varieties": ["maize_early"]}}
+    g = {"id": "lit", "role": "train", "variety": "maize_early", "target": "days_to_flowering",
+         "location": {"id": "far", "lat": 0.0, "lon": 37.0, "name": "x"},
+         "observed": {"source": "a paper, Table 2", "values": [{"entry": "V1", "days_to_flowering": 53.0},
+                                                            {"entry": "V2", "yield_t_ha": 3.0}]}}
+    rows = cal.validate(dict(cs, groups=[g]), _obs([]))["lit"]
+    assert list(rows.obs_id) == ["lit:t:lit:1"] and rows.site_id.iloc[0] == "far" and rows.days_to_flowering.iloc[0] == 53
+    y = cal.inline(cs, g)
+    assert y.grain_yield_dry_kg_ha.iloc[1] == 3000 and y.study.iloc[0] == "a paper, Table 2"
+
+
+def test_hargreaves_et0_is_plausible_for_kenya():
+    from crop_engine.calibration.potential import hargreaves_et0
+    dates = pd.date_range("2012-06-01", periods=30)
+    et0 = hargreaves_et0(np.full(30, 28.0), np.full(30, 16.0), dates, -2.2)
+    assert 3.5 < et0.mean() < 5.5                                  # mm/day, a warm dry-season month near the equator
+
+
+def test_irrigated_potential_matures_without_water_stress():
+    from crop_engine.adapters.aquacrop_adapter import crop_parameters
+    from crop_engine.calibration.potential import irrigated_potential
+    kw, _ = crop_parameters(MAIZE, 21.0)
+    r = irrigated_potential("MaizeGDD", kw, _temps(22.0, days=400), "2013-03-01", -2.2)
+    assert r["status"] == "ok" and r["yield_t_ha"] > 3 and r["irrigation_mm"] > 0
+    assert irrigated_potential("MaizeGDD", kw, _temps(22.0, days=100), "2013-03-01", -2.2)["status"] == "no weather"
+
+
+def test_base_and_parameter_values_build_the_proposal():
+    varieties = {"maize_medium": dict(MAIZE, parameters={"PlantPop": 44444})}
+    cs = {"base": {"from": "earlier", "varieties": {"maize_medium": {"maturity_days": 142}}}}
+    base = cal.based(cs, varieties)
+    assert base["maize_medium"]["maturity_days"] == 142 and varieties["maize_medium"]["maturity_days"] == 100
+    after = {"maize_medium": cal._set_value(base["maize_medium"], "HI0", 0.33)}
+    assert cal._value(after["maize_medium"], "HI0") == 0.33
+    assert cal._value(varieties["maize_medium"], "HI0") > 0.4                   # AquaCrop's own MaizeGDD value
+    prop = cal.proposal(varieties, after)["maize_medium"]
+    assert prop["maturity_days"] == {"value": 142, "was": 100} and prop["HI0"]["value"] == 0.33
+    assert "PlantPop" not in prop                                               # unchanged parameters are not proposed
+
+
+def test_fit_yield_matches_a_training_yield(monkeypatch):
+    # the irrigated yield scales with HI0 here: the fit must find the HI0 that gives the observed 6.0 t/ha
+    monkeypatch.setattr(cal, "_irrigated_runs",
+                        lambda g, v, ref, temps_of: {"d": {"status": "ok", "yield_t_ha": 20 * v["parameters"]["HI0"]}})
+    cs = {"fit": {"parameter": "HI0", "range": [0.1, 0.6], "varieties": ["maize_medium"],
+                  "share": {"maize_early": "maize_medium"}},
+          "groups": [{"id": "tr", "role": "train", "variety": "maize_medium", "target": "yield"}]}
+    rows = {"tr": _obs([("x:1", "s1", None, 6000)])}
+    base = {"maize_medium": dict(MAIZE, parameters={}), "maize_early": dict(MAIZE, parameters={})}
+    fitted, trace = cal.fit_yield(cs, rows, base, 21.0, None)
+    assert abs(fitted["maize_medium"] - 0.30) < 0.002 and fitted["maize_early"] == fitted["maize_medium"]
+    assert trace["maize_early"]["shared_from"] == "maize_medium" and abs(trace["maize_medium"]["model_after"] - 6.0) < 0.05
+
+
+@pytest.mark.parametrize("version", ["kiboko_v1", "kiboko_v2", "kiboko_v3"])
+def test_the_kiboko_sets_are_well_formed(version):
+    cs, _ = cal.load_set(version)
     roles = {g["id"]: g["role"] for g in cs["groups"]}
     assert set(roles.values()) <= set(cal.ROLES)
     for v in cs["fit"]["varieties"]:                               # every fitted variety: a training group
@@ -70,6 +126,9 @@ def test_the_kiboko_set_is_well_formed():
         assert ph.sowing_dates(g["windows"]).size > 0
     pre = {}                                                       # train and holdout never share observations
     for g in pheno:
+        if "observed" in g:                                        # published values: their own obs ids
+            assert g["observed"]["source"] and g["observed"]["values"]
+            continue
         for p in cal._as_list(g["select"]["obs_id_prefix"]):
             assert p not in pre, f"{p} in {pre.get(p)} and {g['id']}"
             pre[p] = g["id"]

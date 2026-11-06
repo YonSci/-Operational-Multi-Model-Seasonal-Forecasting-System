@@ -1,0 +1,185 @@
+# Calibration set kiboko_v2: the Kenyan dryland varieties the classes stand for train them; the IITA trials of
+# kiboko_v1 are held out. (Roles, targets and windows as in kiboko_v1.yaml.)
+#
+# Why a second set: kiboko_v1 fitted the classes to IITA lines, which removed the phenology bias but made the
+# crops too late for the Kiboko Short Rains — the IITA lines are later than the varieties farmers grow there
+# (Katumani-type composites, Duma 43, Gadam). Here those varieties train the classes:
+#   maize_early   the local Katumani composite, KARI Kiboko 2012 dry season, well watered (Ngugi et al. 2013)
+#   maize_medium  Duma 43 in the same trial
+#   sorghum       Gadam, University of Embu farm, 2020 (Shinda et al. 2021): flowering and maturity
+# and the IITA 2013 Kiboko trials and the Koima 2020–21 sorghum trial are held out.
+#
+# `observed`: published figures not in the yield database, with their source (obs_id lit:<set>:<group>:<n>).
+# `location`: a trial away from the set's site (its ERA5-Land temperatures are used for that group).
+# Days to silking from Ngugi et al. are their days to anthesis plus the anthesis–silking interval, both well
+# watered (Table 5: AD-IRR, ASI-IRR).
+
+version: kiboko_v2
+created: 2026-11-06
+site: kalro_kiboko_makueni_farm
+fit:
+  parameter: maturity_days
+  varieties: [maize_early, maize_medium, sorghum]
+
+windows:
+  kiboko_dry_2012: &kiboko_dry_2012
+    - {label: dry season 2012 (irrigated), start: 2012-06-01, end: 2012-07-31}
+  any_2013: &any_2013
+    - {label: Long Rains 2013, start: 2013-03-15, end: 2013-04-30}
+    - {label: dry season 2013 (irrigated), start: 2013-06-01, end: 2013-07-31}
+    - {label: Short Rains 2013, start: 2013-10-15, end: 2013-11-30}
+  embu_lr_2020: &embu_lr_2020
+    - {label: Long Rains 2020 (Embu), start: 2020-03-15, end: 2020-05-15}
+  koima: &koima
+    - {label: Short Rains 2020 (onset), start: 2020-11-01, end: 2020-11-30}
+    - {label: Long Rains 2021 (onset), start: 2021-04-01, end: 2021-04-30}
+
+locations:
+  embu: &embu {id: university_of_embu_farm, name: University of Embu farm (1463 m), lat: -0.5903, lon: 37.4253}
+
+groups:
+  # ── maize_early ──────────────────────────────────────────────────────────
+  - id: maize_early_katumani_train
+    role: train
+    variety: maize_early
+    target: days_to_flowering
+    observed:
+      source: "Ngugi, Collins & Muchira 2013, Aust. J. Crop Sci. 7(13):2014-2020, Table 5 (well watered, 3 reps)"
+      values:
+        - {entry: Local Katumani composite, days_to_flowering: 53.0, note: anthesis 51.0 + ASI 2.0 days}
+    windows: *kiboko_dry_2012
+    why: >-
+      The local Katumani composite, a check of the KARI Kiboko 2012 dry-season trial under full irrigation: the
+      kind of early dryland maize the class stands for. No sowing date given (the Kiboko dry season).
+
+  - id: maize_early_iita_holdout
+    role: holdout
+    variety: maize_early
+    target: days_to_flowering
+    select: {obs_id_prefix: ["iita:M13-3KIB:", "iita:M13-4KIB:"]}
+    windows: *any_2013
+    why: >-
+      IITA RUVT Early and Extra-early 2013 at Kiboko (47 entries, kiboko_v1's training and held-out trials):
+      independent trials of early maize, from West African germplasm.
+
+  # ── maize_medium ─────────────────────────────────────────────────────────
+  - id: maize_medium_duma43_train
+    role: train
+    variety: maize_medium
+    target: days_to_flowering
+    observed:
+      source: "Ngugi, Collins & Muchira 2013, Aust. J. Crop Sci. 7(13):2014-2020, Table 5 (well watered, 3 reps)"
+      values:
+        - {entry: Duma 43, days_to_flowering: 64.7, note: anthesis 62.67 + ASI 2.00 days}
+    windows: *kiboko_dry_2012
+    why: >-
+      Duma 43, the drought-tolerant hybrid check of the same trial: a medium-maturity hybrid grown in the
+      Makueni drylands.
+
+  - id: maize_medium_iita_holdout
+    role: holdout
+    variety: maize_medium
+    target: days_to_flowering
+    select: {obs_id_prefix: ["iita:M1301KBK:", "iita:M1312KBK:"]}
+    windows: *any_2013
+    why: >-
+      IITA late-maturing white lines and Striga-resistant hybrids 2013 at Kiboko (41 entries): independent trials
+      of later maize.
+
+  # ── sorghum ──────────────────────────────────────────────────────────────
+  - id: sorghum_gadam_flowering_train
+    role: train
+    variety: sorghum
+    target: days_to_flowering
+    location: *embu
+    observed:
+      source: "Shinda et al. 2021, J. Exp. Biol. Agric. Sci. 9(4):417-431, Table 2 (parental control, 3 reps)"
+      values:
+        - {entry: Gadam, days_to_flowering: 65.3}
+    windows: *embu_lr_2020
+    why: >-
+      Gadam, the early sorghum the class stands for, as a parental control at the University of Embu farm (trial
+      between November 2019 and September 2020; the evaluation taken as the 2020 Long Rains).
+
+  - id: sorghum_gadam_maturity_train
+    role: train
+    variety: sorghum
+    target: days_to_maturity
+    location: *embu
+    observed:
+      source: "Shinda et al. 2021, J. Exp. Biol. Agric. Sci. 9(4):417-431, Table 2 (parental control, 3 reps)"
+      values:
+        - {entry: Gadam, days_to_maturity: 97.7}
+    windows: *embu_lr_2020
+    why: Gadam's days to physiological maturity (black layer) in the same trial.
+
+  - id: sorghum_koima_maturity_holdout
+    role: holdout
+    variety: sorghum
+    target: days_to_maturity
+    select: {obs_id_prefix: "pub:koima2023_sorghum_kiboko_ithookwe:KALRO_Kiboko"}
+    windows: *koima
+    weak: true
+    why: >-
+      Koima et al. 2023 at Kiboko, 14 genotypes, maturity scored once at 105 days after sowing (a weak target):
+      the class at the set's site.
+
+  # ── yield checks ─────────────────────────────────────────────────────────
+  - id: maize_early_katumani_potential_check
+    role: check
+    variety: maize_early
+    target: yield
+    observed:
+      source: "Ngugi, Collins & Muchira 2013, Table 5 (Ypi, well watered)"
+      values:
+        - {entry: Local Katumani composite, yield_t_ha: 3.02}
+    sowing: {start: 2012-06-01, end: 2012-07-31, every_days: 14}
+    model: potential_irrigated
+    expect: upper_bound
+    why: >-
+      The well-watered yield of the Katumani check against the class's yield under full irrigation (the trial:
+      56,888 plants/ha, grain moisture not stated).
+
+  - id: maize_medium_duma43_potential_check
+    role: check
+    variety: maize_medium
+    target: yield
+    observed:
+      source: "Ngugi, Collins & Muchira 2013, Table 5 (Ypi, well watered)"
+      values:
+        - {entry: Duma 43, yield_t_ha: 7.76}
+    sowing: {start: 2012-06-01, end: 2012-07-31, every_days: 14}
+    model: potential_irrigated
+    expect: upper_bound
+    why: The well-watered yield of Duma 43 in the same trial against the class's yield under full irrigation.
+
+  - id: maize_iita_potential_check
+    role: check
+    variety: [maize_early, maize_medium]
+    target: yield
+    select: {obs_id_prefix: ["iita:M13-3KIB:", "iita:M13-4KIB:", "iita:M1301KBK:", "iita:M1312KBK:"]}
+    sowing: {start: 2013-06-01, end: 2013-07-31, every_days: 14}
+    model: potential_irrigated
+    expect: upper_bound
+    why: >-
+      The IITA 2013 trial yields (management and irrigation not given) against the classes' yield under full
+      irrigation (kiboko_v1's rainfed potential was cut short where the crop died).
+
+  - id: sorghum_yield_sr2020_check
+    role: check
+    variety: sorghum
+    target: yield
+    select: {obs_id_prefix: "pub:koima2023_sorghum_kiboko_ithookwe:KALRO_Kiboko"}
+    season_year: 2020
+    sowing: [fao-agricultural, rule1]
+    expect: upper_bound
+    why: >-
+      The Koima trial's yields (median 1.75, best 3.15 t/ha, anthracnose losses included) against the SR 2020
+      crop in the observed weather: the water-limited model should yield at least the trial median.
+
+  - id: maize_irrigated_np_excluded
+    role: excluded
+    select: {obs_id_prefix: "ksh:", site_id: kalro_kiboko_makueni_farm}
+    why: >-
+      Nitrogen and phosphorus trials (doi 10.5061/dryad.j3tx95xhc; doi 10.7910/DVN/SOAWL6): AquaCrop-OSPy has no
+      nutrient stress, so a fertilizer response cannot calibrate it.
