@@ -152,8 +152,8 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
     <div className="site relative w-full min-h-screen overflow-x-hidden overflow-y-auto touch-scroll">
       <header className="site-container site-topbar">
         <div className="site-brand">
-          <span className="site-brand-name">Seasonal Climate Forecast Dashboard</span>
-          <span className="site-brand-sub">ILRI Climate Services, in collaboration with ICPAC</span>
+          <span className="site-brand-name">Onset–Cessation–SL Forecast System (OCL-FS)</span>
+          <span className="site-brand-sub">Onset, cessation, LGP and crop forecasts for Kenya and Ethiopia: ILRI &amp; ICPAC</span>
         </div>
         <div className="site-topbar-actions">
           <button type="button" className="site-btn site-btn-quiet" onClick={() => setDarkMode(d => !d)}>
@@ -293,7 +293,7 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
           <div>
             <h2>How to cite</h2>
             <p>Demissie, T., Mersha, Y., et al. (2026). Operational Multi-Model Seasonal Climate Forecast System for Onset, Cessation, and Length of Growing Period in Eastern Africa (v{version}). ILRI / ICPAC.</p>
-            <p className="site-footer-version">Seasonal Climate Forecast Dashboard v{version}</p>
+            <p className="site-footer-version">OCL-FS v{version}</p>
           </div>
         </div>
       </footer>

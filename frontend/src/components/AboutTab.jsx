@@ -223,7 +223,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
       <header className="about-head">
         <p className="site-eyebrow">About</p>
         <h1>About the platform</h1>
-        <p className="about-lede">The Seasonal Climate Forecast Dashboard helps users explore the timing and uncertainty of rainfall seasons in Kenya and Ethiopia.</p>
+        <p className="about-lede">The Onset–Cessation–SL Forecast System (OCL-FS) helps users explore the timing and uncertainty of rainfall seasons in Kenya and Ethiopia.</p>
       </header>
       <div className="about-layout">
        <nav className="about-nav" aria-label="About sections">
