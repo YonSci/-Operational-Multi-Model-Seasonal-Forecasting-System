@@ -1,0 +1,77 @@
+# Calibration set kiboko_v3: the maize yield level. (Roles and targets as in kiboko_v1.yaml.)
+#
+# Starts from kiboko_v2's maize phenology (proposed: maturity_days 115 and 142) and fits the reference harvest
+# index HI0 so that medium maize under full irrigation yields what Duma 43 yielded well watered at KARI Kiboko
+# in 2012. Early maize takes the same HI0 (no well-watered yield of an early Kenyan variety under documented
+# management). Water productivity is AquaCrop's own: FAO's AquaCrop treats normalised water productivity as
+# conservative for a crop (maize 33.7 g/m2), varietal differences in yield being in the harvest index.
+#
+# Why HI0 and not the canopy: CCx is set from the plant density (varieties.yaml), and the trials give no canopy
+# or biomass to fit it to. Yield alone cannot separate biomass from harvest index: the fitted HI0 carries every
+# difference between the model's no-stress yield and the trial's (management, density, grain moisture).
+
+version: kiboko_v3
+created: 2026-11-06
+site: kalro_kiboko_makueni_farm
+base:
+  from: kiboko_v2
+  varieties:
+    maize_early: {maturity_days: 115}
+    maize_medium: {maturity_days: 142}
+fit:
+  parameter: HI0
+  range: [0.15, 0.60]
+  varieties: [maize_medium]
+  share: {maize_early: maize_medium}
+
+groups:
+  - id: maize_medium_duma43_yield_train
+    role: train
+    variety: maize_medium
+    target: yield
+    model: potential_irrigated
+    observed:
+      source: "Ngugi, Collins & Muchira 2013, Aust. J. Crop Sci. 7(13):2014-2020, Table 5 (Ypi, well watered, 3 reps)"
+      values:
+        - {entry: Duma 43, yield_t_ha: 7.76}
+    sowing: {start: 2012-06-01, end: 2012-07-31, every_days: 14}
+    crop_overrides: {PlantPop: 56888}
+    why: >-
+      Duma 43's yield under full irrigation in the KARI Kiboko 2012 dry season, run at the trial's density
+      (56,888 plants/ha). Grain moisture is not stated: if the yield is at 12.5 % moisture, the dry yield is
+      about 12 % lower.
+
+  - id: maize_early_katumani_yield_check
+    role: check
+    variety: maize_early
+    target: yield
+    model: potential_irrigated
+    observed:
+      source: "Ngugi, Collins & Muchira 2013, Table 5 (Ypi, well watered)"
+      values:
+        - {entry: Local Katumani composite, yield_t_ha: 3.02}
+    sowing: {start: 2012-06-01, end: 2012-07-31, every_days: 14}
+    crop_overrides: {PlantPop: 56888}
+    expect: upper_bound
+    why: >-
+      The local Katumani composite in the same trial: the early class with the shared HI0 against it (a local
+      check, not an improved early variety).
+
+  - id: maize_iita_yield_check
+    role: check
+    variety: [maize_early, maize_medium]
+    target: yield
+    model: potential_irrigated
+    select: {obs_id_prefix: ["iita:M13-3KIB:", "iita:M13-4KIB:", "iita:M1301KBK:", "iita:M1312KBK:"]}
+    sowing: {start: 2013-06-01, end: 2013-07-31, every_days: 14}
+    expect: upper_bound
+    why: >-
+      The IITA 2013 trial yields at Kiboko (median 4.5, best 7.4 t/ha; management and irrigation not given)
+      against the classes under full irrigation.
+
+  - id: maize_irrigated_np_excluded
+    role: excluded
+    select: {obs_id_prefix: "ksh:", site_id: kalro_kiboko_makueni_farm}
+    why: >-
+      Nitrogen and phosphorus trials (doi 10.5061/dryad.j3tx95xhc; doi 10.7910/DVN/SOAWL6): AquaCrop-OSPy has no
+      nutrient stress, so a fertilizer response cannot calibrate it.

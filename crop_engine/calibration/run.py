@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Calibration of the crop engine against a versioned calibration set (crop_engine/calibration/sets/<set>.yaml): the
-varieties' phenology fitted to the set's training observations, scored on its held-out ones, and its yield checks
-run in the observed weather of their seasons, before and after the fit.
+varieties' phenology (fit.parameter maturity_days) or an AquaCrop crop parameter (e.g. HI0, fitted to yields under
+full irrigation) fitted to the set's training observations, scored on its held-out ones, and its yield checks run
+before and after. A set may start from an earlier set's proposals (`base`); "after" is then the base and the fit.
 
 varieties.yaml is not changed: the fitted values are proposed (fitted_varieties.yaml) and adopted by hand, with the
 set's version cited, once the report has been reviewed.
@@ -178,6 +179,82 @@ def _with(v, ref, md=None):
     return v
 
 
+def _set_value(v, key, value):
+    """A variety with `key` set: maturity_days, or an AquaCrop crop parameter (in its `parameters`)."""
+    v = dict(v, parameters=dict(v.get("parameters") or {}))
+    if key == "maturity_days":
+        v["maturity_days"] = value
+    else:
+        v["parameters"][key] = value
+    return v
+
+
+def _value(v, key):
+    from aquacrop.entities.crop import crop_params
+    if key == "maturity_days":
+        return v["maturity_days"]
+    return (v.get("parameters") or {}).get(key, crop_params[v["aquacrop_crop"]][key])
+
+
+def based(cs, varieties):
+    """The varieties with the set's `base` applied (the proposals of the earlier set it starts from)."""
+    out = {k: dict(v) for k, v in varieties.items()}
+    for vk, kv in ((cs.get("base") or {}).get("varieties") or {}).items():
+        for k, x in kv.items():
+            out[vk] = _set_value(out[vk], k, x)
+    return out
+
+
+def _irrigated_runs(g, v, ref, temps_of):
+    """Yield under full irrigation at the group's location, every sowing date (the group's crop_overrides, e.g. the
+    trial's plant density, applied to the run only)."""
+    from crop_engine.calibration.potential import irrigated_potential
+    temps, lat = temps_of(g)
+    kw = dict(_with(v, ref)["kw"], **{k: float(x) for k, x in (g.get("crop_overrides") or {}).items()})
+    return {lab: irrigated_potential(v["aquacrop_crop"], kw, temps, p, lat) for lab, p in _plants(g["sowing"]).items()}
+
+
+def _median(runs, key="yield_t_ha"):
+    vals = [r.get(key) for r in runs.values() if r.get(key) is not None and r["status"] != "too_late"]
+    return round(float(np.median(vals)), 2) if vals else None
+
+
+def fit_yield(cs, rows, base, ref, temps_of):
+    """fit.parameter (an AquaCrop crop parameter) of each fitted variety, by bisection in fit.range, so that the
+    median yield under full irrigation of its training groups matches their observed median; fit.share gives another
+    variety the same value → (fitted {variety: value}, trace)."""
+    key = cs["fit"]["parameter"]
+    lo, hi = cs["fit"].get("range", [0.1, 0.7])
+    fitted, trace = {}, {}
+    for vk in cs["fit"]["varieties"]:
+        groups = [g for g in cs["groups"] if g["role"] == "train" and g.get("target") == "yield"
+                  and vk in _as_list(g["variety"])]
+        obs = [float(np.median(rows[g["id"]].grain_yield_dry_kg_ha.dropna().astype(float))) / 1000 for g in groups]
+
+        def err(x):
+            v = _set_value(base[vk], key, x)
+            return float(np.mean([_median(_irrigated_runs(g, v, ref, temps_of)) - o for g, o in zip(groups, obs)]))
+        a, b = lo, hi
+        ea, eb = err(a), err(b)
+        if ea * eb > 0:
+            raise ValueError(f"{vk}: no {key} in {lo}-{hi} matches the training yields (errors {ea:+.2f}, {eb:+.2f})")
+        for _ in range(12):
+            m = (a + b) / 2
+            em = err(m)
+            a, ea, b, eb = (a, ea, m, em) if ea * em <= 0 else (m, em, b, eb)
+        fitted[vk] = round((a + b) / 2, 3)
+        trace[vk] = {"parameter": key, "before": _value(base[vk], key), "after": fitted[vk],
+                     "groups": [g["id"] for g in groups], "observed": [round(o, 2) for o in obs],
+                     "model_before": round(err(_value(base[vk], key)) + float(np.mean(obs)), 2),
+                     "model_after": round(err(fitted[vk]) + float(np.mean(obs)), 2)}
+        print(f"  fit {vk} {key}: {trace[vk]['before']} -> {fitted[vk]} (yield {trace[vk]['model_before']} -> "
+              f"{trace[vk]['model_after']} vs observed {trace[vk]['observed']})")
+    for vk, src in (cs["fit"].get("share") or {}).items():
+        fitted[vk] = fitted[src]
+        trace[vk] = {"parameter": key, "before": _value(base[vk], key), "after": fitted[vk], "shared_from": src}
+    return fitted, trace
+
+
 def _plants(sow):
     return {f"{d:%d %b %Y}": d.date() for d in pd.date_range(sow["start"], sow["end"], freq=f"{sow.get('every_days', 7)}D")}
 
@@ -198,19 +275,15 @@ def _yield_runs_rainfed(g, v, plants_of, ctx):
     return runs
 
 
-def yield_checks(cs, rows, varieties, ref, fitted, inp, temps_of):
+def yield_checks(cs, rows, before, after, ref, inp, temps_of):
     """Each yield check, before and after the fit. model: yield (rainfed, observed weather of season_year; needs
     the engine's inputs), potential (AquaCrop's potential in that rainfed run) or potential_irrigated (full
     irrigation at the group's location, crop_engine.calibration.potential)."""
-    from crop_engine.calibration.potential import irrigated_potential
     out = []
-    for g in (g for g in cs["groups"] if g["role"] == "check" and g.get("target") == "yield"):
+    for g in (g for g in cs["groups"] if g["role"] != "excluded" and g.get("target") == "yield"):
         model = g.get("model", "yield")
         ctx = plants = None
-        if model == "potential_irrigated":
-            temps, lat = temps_of(g)
-            plants = _plants(g["sowing"])
-        else:
+        if model != "potential_irrigated":
             from crop_engine.data import soil as soil_mod
             from crop_engine.scenarios import planting as pl
             import onset_rules as orl
@@ -229,16 +302,16 @@ def yield_checks(cs, rows, varieties, ref, fitted, inp, temps_of):
                 plants = {r: (fao if r == "fao-agricultural" else
                               pl.observed_rule_date(rain[0], dates, pet[:, site.i, site.j], r)) for r in g["sowing"]}
         ob = rows[g["id"]].grain_yield_dry_kg_ha.dropna().astype(float).values / 1000
-        res = {"group": g["id"], "season_year": g.get("season_year"), "expect": g.get("expect"), "model": model,
+        res = {"group": g["id"], "role": g["role"], "season_year": g.get("season_year"), "expect": g.get("expect"), "model": model,
                "obs": {"n": int(len(ob)), "median": round(float(np.median(ob)), 2),
                        "p90": round(float(np.quantile(ob, 0.9)), 2), "max": round(float(ob.max()), 2)},
                "varieties": {}}
         for vk in _as_list(g["variety"]):
             per = {}
-            for when, md in (("before", None), ("after", fitted.get(vk))):
-                v = _with(varieties[vk], ref, md)
+            for when, V in (("before", before), ("after", after)):
+                v = _with(V.get(vk, before[vk]), ref)
                 if model == "potential_irrigated":
-                    runs = {lab: irrigated_potential(v["aquacrop_crop"], v["kw"], temps, p, lat) for lab, p in plants.items()}
+                    runs = _irrigated_runs(g, v, ref, temps_of)
                     key = "yield_t_ha"
                 else:
                     runs = _yield_runs_rainfed(g, v, plants, ctx)
@@ -254,14 +327,14 @@ def yield_checks(cs, rows, varieties, ref, fitted, inp, temps_of):
     return out
 
 
-def benchmark(cs, varieties, ref, fitted, inp, workers):
+def benchmark(cs, before, after, ref, inp, workers):
     from crop_engine import run_outlook as ro
     from crop_engine.data import soil as soil_mod
     rep = [(s, [s.id]) for s, _ in ro.cells(inp.sites) if s.id == cs["site"]]
     soils = {s.id: soil_mod.profile(s) for s, _ in rep}
     out = {}
-    for when in ("before", "after"):
-        vs = {vk: _with(varieties[vk], ref, fitted.get(vk) if when == "after" else None) for vk in fitted}
+    for when, V in (("before", before), ("after", after)):
+        vs = {vk: _with(V[vk], ref) for vk in after}
         b = ro.benchmark(inp, rep, vs, list(C.PLANTING_RULES), soils, workers)[cs["site"]]
         for vk, rs in b.items():
             for rk, r in rs.items():
@@ -285,18 +358,43 @@ def _fmt(x, nd=1):
 def report(cs, res):
     L = [f"# Calibration {cs['version']}: {cs['site']}", "",
          f"Run {res['run']} with {res['engine']}; observations {res['observations']}; temperatures ERA5-Land "
-         f"(site series to {res['temps_end']}). The set: `crop_engine/calibration/sets/{cs['version']}.yaml`.", "",
-         "## Phenology: the fit", "",
+         f"(site series to {res['temps_end']}). The set: `crop_engine/calibration/sets/{cs['version']}.yaml`.", ""]
+    if cs.get("base"):
+        L += [f"Starts from **{cs['base']['from']}**'s proposals: " + "; ".join(
+            f"{vk} " + ", ".join(f"{k} {x}" for k, x in kv.items()) for vk, kv in cs["base"]["varieties"].items())
+            + ' ("before" is varieties.yaml; "after" is these and the fit).', ""]
+    if res.get("yield_fit"):
+        L += ["## Yield level: the fit", "",
+              f"`{cs['fit']['parameter']}` fitted so the median yield under full irrigation (every sowing date of the "
+              "training groups) matches their observed yield.", "",
+              "| Variety | Before → after | Training groups | Observed (t/ha) | Model yield, before → after |",
+              "| :--- | ---: | :--- | ---: | ---: |"]
+        for vk, tr in res["yield_fit"].items():
+            if "shared_from" in tr:
+                L.append(f"| {vk} | {tr['before']} → **{tr['after']}** | the value of {tr['shared_from']} | | |")
+            else:
+                L.append(f"| {vk} | {tr['before']} → **{tr['after']}** | {', '.join(tr['groups'])} | "
+                         f"{', '.join(map(str, tr['observed']))} | {tr['model_before']} → {tr['model_after']} |")
+        L.append("")
+    if res.get("phenology"):
+        L += ["## Phenology: the fit", "",
          f"One parameter per variety, its `maturity_days` at {res['reference_tmean_c']} °C (every stage scaled "
          "together), fitted to the training trials' median days; the model's days are the median over every sowing "
          "date of the windows.", "",
          "| Variety | maturity_days before → after | days to maturity at the site, before → after |",
          "| :--- | ---: | ---: |"]
-    p = res["phenology"]
-    for vk, md in p["fitted_maturity_days"].items():
-        im = p["site_days_to_maturity"][vk]
-        L.append(f"| {vk} | {res['varieties'][vk]} → **{md}** | {_fmt(im['before'], 0)} → {_fmt(im['after'], 0)} |")
-    L += ["", "## Phenology: scores", "",
+        p = res["phenology"]
+        for vk, md in p["fitted_maturity_days"].items():
+            im = p["site_days_to_maturity"][vk]
+            L.append(f"| {vk} | {res['varieties'][vk]['maturity_days']} → **{md}** | {_fmt(im['before'], 0)} → "
+                     f"{_fmt(im['after'], 0)} |")
+        L += _phenology_scores(p)
+    L += _yield_and_benchmark(res)
+    return _groups_and_limits(cs, res, L)
+
+
+def _phenology_scores(p):
+    L = ["", "## Phenology: scores", "",
           "Bias: model median minus observed median (days); MAE: mean absolute difference of the entries from the "
           "model median; range: the model's over the sowing dates.", "",
           "| Group | Role | Target | n | Observed median (range) | Before: model (range), bias | "
@@ -310,14 +408,20 @@ def report(cs, res):
     L += ["", "By sowing window (model median days, after the fit):", ""]
     for s in p["scores"]:
         L.append(f"- {s['group']}: " + "; ".join(f"{k} {_fmt(v, 0)}" for k, v in s["after"]["by_window"].items()))
+    return L
+
+
+def _yield_and_benchmark(res):
+    L = []
     if res.get("yield_checks"):
-        L += ["", "## Yield checks (AquaCrop in the observed weather)", "",
-              "| Check | Variety | Observed median / p90 / max (t/ha) | Model before | Model after | Upper bound met (after) |",
-              "| :--- | :--- | ---: | ---: | ---: | :--- |"]
+        L += ["", "## Yields (AquaCrop in the observed weather, or under full irrigation)", "",
+              "| Group | Role | Variety | Observed median / p90 / max (t/ha) | Model before | Model after | "
+              "Upper bound met (after) |", "| :--- | :--- | :--- | ---: | ---: | ---: | :--- |"]
         for c in res["yield_checks"]:
             o = c["obs"]
             for vk, per in c["varieties"].items():
-                L.append(f"| {c['group']} ({c['model']}) | {vk} | {o['median']} / {o['p90']} / {o['max']} | "
+                L.append(f"| {c['group']} ({c['model']}) | {c.get('role', 'check')} | {vk} | "
+                         f"{o['median']} / {o['p90']} / {o['max']} | "
                          f"{_fmt(per['before']['model_median'], 2)} | {_fmt(per['after']['model_median'], 2)} | "
                          f"{per['after']['meets_expectation']} |")
         L += ["", "Runs (status, yield / potential t/ha), after the fit:", ""]
@@ -339,6 +443,10 @@ def report(cs, res):
                          f"{a['too_late']} | {b['died']} → {a['died']} | {_fmt(b['yield_if_sown_median'], 2)} → "
                          f"{_fmt(a['yield_if_sown_median'], 2)} | {_fmt(b['matured_median'], 2)} → "
                          f"{_fmt(a['matured_median'], 2)} |")
+    return L
+
+
+def _groups_and_limits(cs, res, L):
     L += ["", "## The groups", ""]
     for g in cs["groups"]:
         src = f" Source: {g['observed']['source']}." if "observed" in g else ""
@@ -353,6 +461,21 @@ def report(cs, res):
           "is not observed at Kiboko).",
           "- The fitted values are proposed, not adopted: varieties.yaml changes only by hand, citing this set."]
     return "\n".join(L) + "\n"
+
+
+def proposal(varieties, after):
+    """What the set proposes to change in varieties.yaml, per variety: {key: {value, was}}."""
+    out = {}
+    for vk, v in after.items():
+        d = {}
+        if v["maturity_days"] != varieties[vk]["maturity_days"]:
+            d["maturity_days"] = {"value": v["maturity_days"], "was": varieties[vk]["maturity_days"]}
+        for k, x in (v.get("parameters") or {}).items():
+            if (varieties[vk].get("parameters") or {}).get(k) != x:
+                d[k] = {"value": x, "was": _value(varieties[vk], k)}
+        if d:
+            out[vk] = d
+    return out
 
 
 def main():
@@ -377,20 +500,28 @@ def main():
     res = {"set": cs["version"], "run": f"{dt.datetime.now():%Y-%m-%d %H:%M}", "engine": f"AquaCrop-OSPy {version('aquacrop')}",
            "observations": f"{obs_path.name} ({dt.datetime.fromtimestamp(obs_path.stat().st_mtime):%Y-%m-%d})",
            "temps_end": f"{temps.index.max():%Y-%m-%d}", "reference_tmean_c": ref,
-           "varieties": {vk: varieties[vk]["maturity_days"] for vk in cs["fit"]["varieties"]},
+           "varieties": {vk: {"maturity_days": varieties[vk]["maturity_days"],
+                              "parameters": varieties[vk].get("parameters") or {}} for vk in varieties},
            "counts": {gid: int(len(r)) for gid, r in rows.items()}}
-    res["phenology"] = phenology(cs, rows, varieties, ref, temps_of)
-    fitted = res["phenology"]["fitted_maturity_days"]
-    rainfed = any(g["role"] == "check" and g.get("target") == "yield" and g.get("model") != "potential_irrigated"
+    param = cs["fit"].get("parameter", "maturity_days")
+    base = based(cs, varieties)
+    if param == "maturity_days":
+        res["phenology"] = phenology(cs, rows, base, ref, temps_of)
+        fitted = res["phenology"]["fitted_maturity_days"]
+    else:
+        fitted, res["yield_fit"] = fit_yield(cs, rows, base, ref, temps_of)
+    after = {vk: base[vk] for vk in base if base[vk] != varieties[vk]}
+    after.update({vk: _set_value(base[vk], param, x) for vk, x in fitted.items()})
+    rainfed = any(g["role"] != "excluded" and g.get("target") == "yield" and g.get("model") != "potential_irrigated"
                   for g in cs["groups"])
     inp = None
     if (rainfed and not a.no_yield) or a.benchmark:
         from crop_engine.data import weather as W
         inp = W.Inputs(refresh=False)
     if not a.no_yield:
-        res["yield_checks"] = yield_checks(cs, rows, varieties, ref, fitted, inp, temps_of)
+        res["yield_checks"] = yield_checks(cs, rows, varieties, after, ref, inp, temps_of)
     if a.benchmark:
-        res["benchmark"] = benchmark(cs, varieties, ref, fitted, inp, a.workers)
+        res["benchmark"] = benchmark(cs, varieties, after, ref, inp, a.workers)
 
     cs.pop("_site_lat", None)
     out = OUT / cs["version"]
@@ -399,10 +530,9 @@ def main():
     (out / "report.md").write_text(report(cs, res), encoding="utf-8")
     (out / "fitted_varieties.yaml").write_text(
         f"# Proposed by calibration set {cs['version']} ({res['run']}); adopt by hand into varieties.yaml.\n"
-        + yaml.safe_dump({vk: {"maturity_days": md, "was": varieties[vk]["maturity_days"]} for vk, md in fitted.items()},
-                         sort_keys=False), encoding="utf-8")
+        + yaml.safe_dump(proposal(varieties, after), sort_keys=False, allow_unicode=True), encoding="utf-8")
     print(f"calibration {cs['version']}: {out}")
-    for s in res["phenology"]["scores"]:
+    for s in (res.get("phenology") or {}).get("scores", []):
         print(f"  {s['group']:30s} {s['role']:8s} obs {s['before']['obs_median']:6.1f}  model {s['before']['model_median']:6.1f}"
               f" → {s['after']['model_median']:6.1f}  bias {s['before']['bias_days']:+6.1f} → {s['after']['bias_days']:+6.1f}")
 

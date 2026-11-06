@@ -234,6 +234,9 @@ not in the database (`observed`, with their source; obs_id `lit:<set>:<group>:<n
 `outputs/crop_engine/calibration/temps/`). Yield checks run AquaCrop in the observed weather of a season
 (`model: yield` or `potential`, as the benchmark) or **under full irrigation** (`model: potential_irrigated`,
 `calibration/potential.py`: net irrigation, no rain, Hargreaves ET0, a loam soil), for well-watered trials.
+`fit.parameter` is `maturity_days` (phenology) or an AquaCrop crop parameter such as `HI0`, fitted by bisection to
+the training groups' yields under full irrigation (`fit.share` gives another variety the same value). A set can
+start from an earlier set's proposals (`base`): "before" is then `varieties.yaml`, "after" the base and the fit.
 
 `python -m crop_engine.calibration.run --set <version> [--benchmark]` fits each variety's `maturity_days` (every
 phenological stage scaled together) to the training trials' median days to silking or maturity, in the site's
@@ -301,6 +304,31 @@ and the Koima sorghum trial.
 Status: proposed, not adopted (`outputs/crop_engine/calibration/kiboko_v2/`). Adopting maize_early 115 changes
 the published outlook (and rebuilds every crop result on the next daily update).
 
+### kiboko_v3 (November 2026): the maize yield level
+
+Starts from kiboko_v2's maize phenology and fits the reference harvest index **HI0** (water productivity stays
+AquaCrop's: FAO treats it as conservative for a crop) so that medium maize under full irrigation, at the trial's
+density, yields what **Duma 43** yielded well watered at Kiboko in 2012 (7.76 t/ha, Ngugi et al. 2013). Early
+maize takes the same value.
+
+| | HI0 | Full irrigation, Kiboko dry season: medium / early (t/ha) | Trials: Duma 43 / Katumani / IITA median, best |
+| :--- | ---: | ---: | ---: |
+| varieties.yaml | 0.48 | 9.9 / 7.7 | 7.76 / 3.02 / 4.5, 7.4 |
+| kiboko_v2 phenology | 0.48 | 11.5 / 9.4 | |
+| **kiboko_v3** | **0.324** | **7.75 / 6.5** | |
+
+- The fit leaves early maize at twice the Katumani check's well-watered yield (6.5 against 3.0) and above the IITA
+  early trials' median (4.5): a local composite in a breeding trial is not a high-input reference, so it is checked,
+  not fitted. An improved early variety's well-watered yield (KDV, DH series) would train the early class.
+- A harvest index of 0.32 is low for a hybrid under full irrigation; it also carries what the model cannot see in
+  the trial (fertilizer, grain moisture, plant stand). Yield alone cannot separate biomass from harvest index.
+- **Benchmark at Kiboko** (1993–2025, FAO agricultural onset; varieties.yaml → kiboko_v2 phenology and v3 HI0):
+  early maize fails in 42 → 52 % of seasons (yield below 0.5 t/ha), matured crops 4.8 → 5.3 t/ha; medium maize as in
+  kiboko_v2 (too late in 21 of 33 seasons with the 28 Feb season end).
+
+Status: proposed, not adopted (`outputs/crop_engine/calibration/kiboko_v3/fitted_varieties.yaml`): maize_early
+`maturity_days` 115 and `HI0` 0.324 can be adopted together; maize_medium waits for a season past 28 Feb.
+
 ## Testing
 
 `python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
@@ -316,8 +344,9 @@ Priorities after the November 2026 review (software MVP in place; the next miles
 
 - **P1 Calibration and independent validation**, Kiboko first (early maize and sorghum): versioned calibration
   sets, phenology fit, held-out scores and full-irrigation yield checks are in place (*Calibration sets*):
-  kiboko_v1 not adopted; kiboko_v2 fits the maize classes to Kenyan checks (proposed). Next: the yield level
-  (harvest index, water productivity) against the well-watered trials; then the other sites as trials are found.
+  kiboko_v1 not adopted; kiboko_v2 fits the maize phenology to Kenyan checks and kiboko_v3 the maize harvest index
+  to Duma 43 (both proposed). Next: adopt early maize (phenology and HI0 together); medium maize after the season
+  runs past 28 Feb; an improved early variety's well-watered yield; then the other sites as trials are found.
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
   weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
   beyond the onset, cessation, season length and FAO water balance forecasts?
