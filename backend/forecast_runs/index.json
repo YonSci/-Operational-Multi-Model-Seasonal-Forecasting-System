@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-04T14:19+03:00",
+ "updated": "2026-11-06T12:55+03:00",
  "runs": [
   {
    "source": "mr-ecmwf_ens_median",
@@ -2050,6 +2050,49 @@
    "file": "s2s-ecmwf_20261104.npz"
   },
   {
+   "source": "s2s-ecmwf",
+   "kind": "s2s",
+   "run": "2026-11-06",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-05"
+    },
+    {
+     "kind": "ens",
+     "label": "ECMWF ENS, run 2026-11-06",
+     "start": "2026-11-06",
+     "end": "2026-11-20"
+    },
+    {
+     "kind": "ext",
+     "label": "ECMWF extended range, run 2026-11-04",
+     "start": "2026-11-21",
+     "end": "2026-12-19"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-12-20",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "ENS: provisional (SEAS5 October-start quantile mapping for the same valid day); extended range: reforecast (7 reforecast model-version dates on disk)",
+   "created": "2026-11-06T12:54+03:00",
+   "model_label": "ECMWF ENS + extended range",
+   "members": "ensemble",
+   "file": "s2s-ecmwf_20261106.npz"
+  },
+  {
    "source": "s2s-gefs",
    "kind": "s2s",
    "run": "2026-10-31",
@@ -2196,6 +2239,43 @@
    "model_label": "NOAA GEFS 35-day",
    "members": "ensemble",
    "file": "s2s-gefs_20261103.npz"
+  },
+  {
+   "source": "s2s-gefs",
+   "kind": "s2s",
+   "run": "2026-11-05",
+   "obs_end": "2026-10-25",
+   "segments": [
+    {
+     "kind": "obs",
+     "label": "Observed rainfall (CHIRPS)",
+     "start": "2026-09-01",
+     "end": "2026-10-25"
+    },
+    {
+     "kind": "gap",
+     "label": "Weather forecast for the day (ECMWF extended range, day 1)",
+     "start": "2026-10-26",
+     "end": "2026-11-04"
+    },
+    {
+     "kind": "fc",
+     "label": "NOAA GEFS 35-day, run 2026-11-05",
+     "start": "2026-11-05",
+     "end": "2026-12-09"
+    },
+    {
+     "kind": "seas",
+     "label": "ECMWF SEAS5 seasonal forecast",
+     "start": "2026-12-10",
+     "end": "2026-12-31"
+    }
+   ],
+   "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)",
+   "created": "2026-11-06T12:55+03:00",
+   "model_label": "NOAA GEFS 35-day",
+   "members": "ensemble",
+   "file": "s2s-gefs_20261105.npz"
   }
  ]
 }
