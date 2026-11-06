@@ -228,7 +228,12 @@ A **calibration set** (`calibration/sets/<version>.yaml`) names the observations
 those **held out** to test them, those only **checked** against the model, and those **excluded**, each with the
 reason, and the sowing windows assumed where a trial gives no date. A set is not edited once reported: a change is
 a new version, so a fitted parameter can always be traced to its observations. An observation's value of a target
-is in one group only (`run.validate` refuses a set that breaks this).
+is in one group only (`run.validate` refuses a set that breaks this). A group can also carry **published values**
+not in the database (`observed`, with their source; obs_id `lit:<set>:<group>:<n>`) and a **location** of its own
+(a trial away from the site: its ERA5-Land temperatures are fetched once and cached in
+`outputs/crop_engine/calibration/temps/`). Yield checks run AquaCrop in the observed weather of a season
+(`model: yield` or `potential`, as the benchmark) or **under full irrigation** (`model: potential_irrigated`,
+`calibration/potential.py`: net irrigation, no rain, Hargreaves ET0, a loam soil), for well-watered trials.
 
 `python -m crop_engine.calibration.run --set <version> [--benchmark]` fits each variety's `maturity_days` (every
 phenological stage scaled together) to the training trials' median days to silking or maturity, in the site's
@@ -265,6 +270,37 @@ The yield checks were not informative: the Short Rains 2013 killed both maize cl
 AquaCrop's yield potential stops when the crop dies, so it is not a no-stress yield there. kiboko_v2 checks yield
 potential with full irrigation instead.
 
+### kiboko_v2 (November 2026): the Kenyan varieties train the classes
+
+Training: the **local Katumani composite** (maize_early) and **Duma 43** (maize_medium), checks of the KARI Kiboko
+2012 dry-season trial under full irrigation (Ngugi, Collins & Muchira 2013, *Aust. J. Crop Sci.* 7(13), Table 5:
+days to anthesis plus the anthesis–silking interval); **Gadam** at the University of Embu farm, 2020 (Shinda et al.
+2021, *J. Exp. Biol. Agric. Sci.* 9(4), Table 2: flowering and maturity). Held out: the IITA 2013 trials (kiboko_v1)
+and the Koima sorghum trial.
+
+| Variety | Training: observed → model now → fitted | `maturity_days` | Held out: bias now → fitted |
+| :--- | :--- | ---: | ---: |
+| maize_early | Katumani silking 53 → 41 → 53 days | 90 → 115 (100 days at Kiboko) | IITA early: −19 → **−8** days |
+| maize_medium | Duma 43 silking 64.7 → 55 → 65 | 120 → 142 (122 at Kiboko) | IITA late: −16.6 → **−6.6** |
+| sorghum | Gadam flowering 65.3 → 65 → 56; maturity 97.7 → 117 → 100 | 100 → 87 | Koima: −21 → −32 (weak) |
+
+- **Maize**: the fit matches the Kenyan checks at Kiboko and brings the independent IITA trials from 17–19 to
+  7–8 days, the remaining gap in the direction expected (IITA lines are later germplasm).
+- **Sorghum: the evidence conflicts, not fitted.** Gadam's flowering at Embu matches the current class, its
+  maturity needs a shorter one; with one parameter (AquaCrop's flowering-to-maturity ratio) both cannot be met,
+  and the Koima trial's single scoring date (105 days at the warmer Kiboko) contradicts both.
+- **Yield level**: the classes' yield under full irrigation (fitted: early 9.4, medium 11.3 t/ha) is three times
+  the Katumani check's well-watered yield (3.0) and above Duma 43's (7.8) and the IITA trials' (median 4.5, best
+  7.4): every upper-bound check passes, by far too much. The harvest index and water productivity need their own
+  calibration step.
+- **Benchmark at Kiboko** (1993–2025, FAO agricultural onset, before → after): early maize fails in 42 → 48 % of
+  seasons, none too late, matured crops 4.8 → 7.8 t/ha; **medium maize is too late in 21 of 33 seasons**: a crop
+  of 122 days sown in November matures in March, after the season's end on 28 Feb. Medium maize needs the season
+  past 28 Feb (P1 weather forcing) before its phenology can be adopted.
+
+Status: proposed, not adopted (`outputs/crop_engine/calibration/kiboko_v2/`). Adopting maize_early 115 changes
+the published outlook (and rebuilds every crop result on the next daily update).
+
 ## Testing
 
 `python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
@@ -279,9 +315,9 @@ the yield databases, the calibration sets and the phenology fit, and a **regress
 Priorities after the November 2026 review (software MVP in place; the next milestone is scientific credibility):
 
 - **P1 Calibration and independent validation**, Kiboko first (early maize and sorghum): versioned calibration
-  sets, phenology fit and held-out scores are in place (*Calibration sets*); kiboko_v1 was not adopted. Next:
-  kiboko_v2 with Kenyan dryland variety phenology and a full-irrigation yield-potential check; then the other sites
-  as trials are found.
+  sets, phenology fit, held-out scores and full-irrigation yield checks are in place (*Calibration sets*):
+  kiboko_v1 not adopted; kiboko_v2 fits the maize classes to Kenyan checks (proposed). Next: the yield level
+  (harvest index, water productivity) against the well-watered trials; then the other sites as trials are found.
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
   weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
   beyond the onset, cessation, season length and FAO water balance forecasts?
