@@ -28,7 +28,7 @@ OUTCOMES = [
     ("ok", "Matured", "Sown and reached maturity"),
     ("died", "Died before maturity", "Established, then died of water stress before maturity (yield so far counted)"),
     ("failed_establishment", "Failed to establish", "Died before its canopy reached 5 %: a false start, the seedlings dried out"),
-    ("too_late", "Too late to mature", "Sown too late to reach maturity by 28 Feb, the season's end (counted as no yield)"),
+    ("too_late", "Too late to mature", "Sown too late to reach maturity by 31 Mar, the season's end (counted as no yield)"),
     ("not_sown", "No sowing opportunity", "No onset by the rule's search end, 15 Jan (counted as no yield)"),
     ("error", "Model error", "AquaCrop failed for this member: no outcome, left out of every probability"),
 ]

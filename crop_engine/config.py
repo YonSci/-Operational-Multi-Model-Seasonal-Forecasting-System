@@ -18,7 +18,12 @@ VARIETIES_FILE = Path(__file__).with_name("varieties.yaml")
 DASHBOARD_OUT = BASE / "frontend" / "public" / "tracker" / "data" / "crop"   # Crop outlook tab (published daily)
 
 CAL_YEARS = (1993, 2016)                         # the platform's calibration years: terciles of the benchmark
-HIST_YEARS = (1993, 2025)                        # seasons with observed weather for the benchmark (season y: 1 Aug y – 28 Feb y+1)
+HIST_YEARS = (1993, 2025)                        # seasons with observed weather for the benchmark (season y: 1 Aug y – 31 Mar y+1)
+
+# The crop season: 1 Aug (the FAO water balance's start) to SEASON_END of the next year (month, day). Past the FAO
+# water balance's 28 Feb (its cessation search end), so a medium-maturity crop sown in November can mature; the
+# onset and cessation forecasts keep their own windows. March rain is climatological (data/weather.py).
+SEASON_END = (3, 31)
 
 # Planting rules: the platform's onset methods (forecast_runs.Methods keys) used as sowing dates
 PLANTING_RULES = {
@@ -28,7 +33,7 @@ PLANTING_RULES = {
 
 # Re-sowing after a failed establishment (the seedlings dried out after a false start): at the next day that meets
 # Agri rule 1's onset criteria after the crop died (by the rules' search end, 15 Jan), as a farmer re-sows after the
-# next good rain; at most RESOW_MAX times, and only while the variety can still mature by the season's end (28 Feb).
+# next good rain; at most RESOW_MAX times, and only while the variety can still mature by the season's end (SEASON_END).
 RESOW_RULE = 1
 RESOW_MAX = 1
 
