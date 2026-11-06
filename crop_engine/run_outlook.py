@@ -46,8 +46,8 @@ import onset_rules as orl  # noqa: E402
 
 ENGINE = f"AquaCrop-OSPy {version('aquacrop')}"
 CAVEATS = [
-    "Experimental: maize and sorghum have a first calibration against trials at Kiboko only; the crop forecasts have "
-    "not been verified against observed crop outcomes.",
+    "Experimental: early maize is calibrated against trials at Kiboko (phenology and harvest index), medium maize and "
+    "sorghum only set against them; the crop forecasts have not been verified against observed crop outcomes.",
     "Varieties are maturity classes (AquaCrop crop files with Kenyan plant densities), not calibrated cultivars.",
     "Yields are water-limited: no nutrient stress, pests, diseases or management losses; they are an upper bound for "
     "smallholder fields.",
