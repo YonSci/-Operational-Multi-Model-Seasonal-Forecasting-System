@@ -29,6 +29,7 @@ python -m crop_engine.run_outlook --climatology --force # rebuild the benchmark 
 python -m pytest crop_engine/tests                      # unit tests (synthetic data)
 python -m crop_engine.calibration.run --set kiboko_v1 --benchmark   # a calibration set (see Calibration sets)
 python -m crop_engine.run_scenarios                     # management scenarios of the seasonal run (see below)
+python -m crop_engine.hindcast --workers 3              # hindcast verification, 1993–2016 (see below)
 ```
 
 Outputs (not committed; `outputs/crop_engine/`): `weather/<run>.nc` (the daily inputs), `results/<run>.json` (every
@@ -88,6 +89,36 @@ management changes the crop moves little from day to day, so the daily update re
 time left (stopped at the limit, the previous scenarios kept). The tab shows them with the observations they were
 made from, and only while they match the seasonal run's configuration (`dashboard.write_scenarios`). Output (not
 committed): `outputs/crop_engine/scenarios/<run>.json`; the tab's copy `frontend/public/tracker/data/crop/scenarios.json`.
+
+## Hindcast verification (`crop_engine/hindcast.py`)
+
+Does the crop outlook tell good seasons from bad ones, and does it say more than the forecasts the platform already
+gives? The crop is grown in each past seasonal forecast (SEAS5 1 Oct runs, 25 members, 1993–2016) and scored
+against the same crop grown in that season's observed weather (the benchmark, `climatology.json`).
+
+The weather of a past forecast is what a forecast issued on 1 Oct of that year would have had: observed CHIRPS,
+temperature and ET0 to 30 Sep; SEAS5 member k bias-corrected to CHIRPS from 1 Oct to 28 Feb (the platform's own
+hindcast rain, `outputs/ecmwf_oct/ECMWF_bc_daily_all_years.nc` and the Jan–Feb extension); March from the observed
+March of another calibration year (never the same year); temperature and ET0 from 1 Oct the 1993–2016 day-of-year
+climatology. Each member is sown on its Agri rule 1 onset from the platform's hindcast onsets
+(`outputs/ecmwf_oct/icpac_rule1/`): the assembled rain reproduces those onsets exactly (checked: 150 of 150
+members at Kiboko and Kapiti in 1997, 2005 and 2010). The FAO agricultural onset has no 1 Oct hindcast on disk, so
+rule 1 only for now.
+
+Scores per site, crop and rule over the 24 years:
+
+| Score | What it says |
+|---|---|
+| `spearman` | rank correlation of the members' median yield with the observed-weather yield |
+| `rpss` | ranked probability skill score of the yield terciles (leave-one-out terciles of the observed-weather yields) against 1/3 each; not given where a third or more of the seasons failed |
+| `failure_bss`, `failure_auc` | Brier skill score of the chance of crop failure against the leave-one-out failure rate, and its ROC area |
+| baselines | the same correlation and ROC area for the platform's other forecasts of the season read as yield predictors: the members' median season length (Dunning LGP), Oct–Dec rain and rule 1 onset (later = worse) |
+
+The crop forecast adds information where its scores beat the baselines'. The reference is a simulation, so these
+scores measure how well the forecast weather reproduces the crop the model grows in the real weather, not yield
+accuracy; county yields (`crop_engine/yields`) are the next reference. About 14,000 member seasons (one to two
+hours on three workers); `--score-only` re-scores the saved members. Outputs (not committed):
+`outputs/crop_engine/verification/hindcast_members.json`, `hindcast_scores.json`.
 
 ## Inputs
 
@@ -380,8 +411,9 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   to Duma 43; both maize classes adopted (medium once the season ran to 31 Mar). Next: an improved early
   variety's well-watered yield; sorghum phenology; then the other sites as trials are found.
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
-  weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
-  beyond the onset, cessation, season length and FAO water balance forecasts?
+  weather of the same seasons (1993–2016) — in place for the 1 Oct SEAS5 runs and Agri rule 1 (*Hindcast
+  verification*). Next: the FAO agricultural onset (its 1 Oct hindcast onsets), county yields as a reference, and
+  the sub-seasonal reforecasts.
 - **P1 Weather forcing**: the season runs to 31 Mar with a declared climatological March (done). Next: forecast
   temperature and radiation (SEAS5) with source metadata per day; SEAS5 March rain (the October runs' lead days
   152–182, to download for 1993–2026 and bias-correct as January–February).
