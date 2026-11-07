@@ -28,6 +28,7 @@ python -m crop_engine.run_outlook --sources seasonal    # one run
 python -m crop_engine.run_outlook --climatology --force # rebuild the benchmark and every run
 python -m pytest crop_engine/tests                      # unit tests (synthetic data)
 python -m crop_engine.calibration.run --set kiboko_v1 --benchmark   # a calibration set (see Calibration sets)
+python -m crop_engine.run_scenarios                     # management scenarios of the seasonal run (see below)
 ```
 
 Outputs (not committed; `outputs/crop_engine/`): `weather/<run>.nc` (the daily inputs), `results/<run>.json` (every
@@ -60,8 +61,33 @@ not a crop site (the nearest site is shown, with its distance). It shows:
 - how the canopy develops: the sown crops' canopy cover week by week (median and 8 in 10 band) against the past
   seasons' median;
 - every forecast side by side for the same site and crop (sowing opportunity, yield and failure if sown, yield
-  without water stress), with the simulated past seasons and the measured trials as reference rows; each member's
-  outcome (re-sown members marked); and the inputs behind the result.
+  without water stress), with the simulated past seasons and the measured trials as reference rows;
+- the **management scenarios** of the seasonal forecast (below), next to the outlook itself;
+- each member's outcome (re-sown members marked); and the inputs behind the result.
+
+## Management scenarios (`crop_engine/scenarios/management.py`, `crop_engine/run_scenarios.py`)
+
+The seasonal run's crops grown again in the same weather members with one management choice changed, so the
+outlook can be read against what a farmer could do differently. Each scenario changes one thing of every member:
+
+| Group | Scenarios | What changes |
+|---|---|---|
+| Sowing date | 14 days earlier; 14 and 28 days later | each member's sowing date (the rule's onset) shifted; members with no onset stay unsown, a date past 31 Mar leaves no time to mature |
+| Calendar sowing | 15 Oct, 1 Nov, 15 Nov | every member sown on that date, onset or not (AquaCrop's germination still needs a wet topsoil) |
+| Plant density | × 0.67, × 1.2 | the variety's plant population. AquaCrop-OSPy derives only the initial canopy cover from it (CCo = population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated at Kiboko) does not change |
+| Initial soil water | wilting point, field capacity on 1 Aug | in place of the ERA5-Land plant-available water |
+
+Re-sowing after a failed establishment works as in the outlook, and the summaries are the outlook's (same
+benchmark), so each scenario reads directly against the outlook's own row ("baseline", copied from the run's
+results). The sowing dates are the run's own (`results/<run>.json`) and the weather its own file
+(`weather/<run>.nc`): the onset forecasts are not recomputed.
+
+All scenarios for every site, variety and rule are about 12,000 member seasons (~100 min on one worker), and how
+management changes the crop moves little from day to day, so the daily update refreshes them **weekly**:
+`crop_engine.run_all` runs `run_scenarios --max-age-days 7 --workers 2` after the forecast runs, in the crop step's
+time left (stopped at the limit, the previous scenarios kept). The tab shows them with the observations they were
+made from, and only while they match the seasonal run's configuration (`dashboard.write_scenarios`). Output (not
+committed): `outputs/crop_engine/scenarios/<run>.json`; the tab's copy `frontend/public/tracker/data/crop/scenarios.json`.
 
 ## Inputs
 
@@ -359,7 +385,9 @@ Priorities after the November 2026 review (software MVP in place; the next miles
 - **P1 Weather forcing**: the season runs to 31 Mar with a declared climatological March (done). Next: forecast
   temperature and radiation (SEAS5) with source metadata per day; SEAS5 March rain (the October runs' lead days
   152–182, to download for 1993–2026 and bias-correct as January–February).
-- **P1 Management scenarios**: sowing-date offsets and fixed dates, plant density, initial soil water.
+- **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
+  seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
+  irrigation and field-management options: mulch, bunds), where partners can say what is practised.
 - **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations — after AquaCrop's calibration.
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
   bulletins and gridded regional yield forecasts.

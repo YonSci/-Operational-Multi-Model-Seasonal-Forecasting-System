@@ -14,6 +14,9 @@ the latest result of each forecast source and of the benchmark, read by frontend
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
                     and every observed
                     season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
+  scenarios.json    the management scenarios of the latest seasonal run (crop_engine.run_scenarios), when made with
+                    that run's configuration (refreshed weekly: their meta gives the observations they used): per site,
+                    variety and rule, the outlook's summary then ("baseline") and each scenario's
 
 Older runs are removed, so the published folder holds one run per source.
 """
@@ -117,12 +120,35 @@ def write(log=print):
         "outcomes": [{"id": i, "label": a, "title": t} for i, a, t in OUTCOMES], "member_keys": list(MEMBER_KEYS),
         "observed_yields": observed_yields(),
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
-    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json"}
+    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json"}
     for p in C.DASHBOARD_OUT.glob("*.json"):
         if p.name not in keep:
             p.unlink()
+    write_scenarios(log)
     size = sum(p.stat().st_size for p in C.DASHBOARD_OUT.glob("*.json")) / 1024
     log(f"dashboard: {len(runs)} runs → {C.DASHBOARD_OUT.relative_to(C.BASE)} ({size:.0f} kB)")
+
+
+def write_scenarios(log=print):
+    """scenarios.json: the latest seasonal run's management scenarios, only when they were made with that run's
+    configuration (they may be from older observations: refreshed weekly); otherwise the file is removed, so the tab
+    never shows scenarios of another run or configuration."""
+    out = C.DASHBOARD_OUT / "scenarios.json"
+    idx = C.RESULTS_OUT / "index.json"
+    rid = next((r["id"] for r in json.loads(idx.read_text(encoding="utf-8"))["runs"] if r["source"] == "seasonal"),
+               None) if idx.exists() else None
+    src = C.OUT / "scenarios" / f"{rid}.json"
+    if rid and src.exists():
+        d = json.loads(src.read_text(encoding="utf-8"))
+        meta = json.loads((C.RESULTS_OUT / f"{rid}.json").read_text(encoding="utf-8"))["meta"]
+        if d["meta"].get("config_hash") == meta.get("config_hash"):
+            C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
+            _dump(out, d)
+            log(f"dashboard: scenarios of {rid} ({len(d['meta']['scenarios'])} scenarios)")
+            return True
+    if out.exists():
+        out.unlink()
+    return False
 
 
 if __name__ == "__main__":
