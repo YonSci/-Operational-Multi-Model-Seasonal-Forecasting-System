@@ -92,6 +92,21 @@ time left (stopped at the limit, the previous scenarios kept). The tab shows the
 made from, and only while they match the seasonal run's configuration (`dashboard.write_scenarios`). Output (not
 committed): `outputs/crop_engine/scenarios/<run>.json`; the tab's copy `frontend/public/tracker/data/crop/scenarios.json`.
 
+First run (1 Oct 2026 SEAS5 run, observations to 31 Oct; 528 runs in 17 min on six workers, the outlook reproduced
+within 0.011 t/ha). Early maize, Agri rule 1, median yield over all members (the outlook's in brackets):
+
+| Site | 14 d earlier | 14 d later | 1 Nov (all) | density × 0.67 / × 1.2 | dry / wet soil on 1 Aug |
+|---|---|---|---|---|---|
+| KALRO Kiboko (1.7) | 2.3 | 0.0 | 2.1 | 1.6 / 1.7 | 1.4 / 6.2 |
+| Genco Tana River (4.0) | 2.3 | 0.0 | 1.4 | 3.9 / 4.0 | 3.6 / 5.1 |
+| Kapiti (0.0; 4.7 if sown) | 0.3 | 0.0 | 5.6 | 0.0 / 0.0 | 0.0 / 7.2 |
+
+Sowing late costs most; density moves yields by about 0.1 t/ha (only the canopy's start changes in AquaCrop-OSPy);
+a soil at field capacity on 1 Aug raises the median by 1–7 t/ha, so the ERA5-Land starting water is one of the
+outlook's most sensitive inputs. At Kapiti most members sow late or not
+at all on the rule, so a calendar date sows a crop the rule does not: the rule waits for an onset that, in these
+members, comes late.
+
 ## Hindcast verification (`crop_engine/hindcast.py`)
 
 Does the crop outlook tell good seasons from bad ones, and does it say more than the forecasts the platform already

@@ -364,7 +364,12 @@ const countOutcomes = statuses => {
 
 // ── The tab ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // ── Management scenarios: the seasonal run's crops grown again with one choice changed ──────────────────────────
-const fmtDiff = (a, b) => a == null || b == null ? '' : Math.abs(a - b) < 0.05 ? ' (same)' : ` (${a > b ? '+' : '−'}${Math.abs(a - b).toFixed(1)})`
+// the change between two yields as shown (fmtT's one decimal), so 3.9 against 3.8 reads +0.1, never "same"
+const fmtDiff = (a, b) => {
+  if (a == null || b == null) return ''
+  const d = Math.round(Number(fmtT(a)) * 10) - Math.round(Number(fmtT(b)) * 10)
+  return d === 0 ? ' (same)' : ` (${d > 0 ? '+' : '−'}${(Math.abs(d) / 10).toFixed(1)})`
+}
 function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg }) {
   const sub = 'The seasonal forecast’s crops grown again in the same weather members with one management choice changed. '
             + 'The first row is the outlook above.'
