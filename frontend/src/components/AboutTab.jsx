@@ -9,6 +9,7 @@ const DOCS = {
   readme: { file: 'README.md',                           updated: '2026-11-03' },
   octRun: { file: 'ECMWF_SEAS5_OCTOBER_PIPELINE.md',     updated: '2026-10-28' },
   kiremt: { file: 'ECMWF_SEAS5_ETHIOPIA_KIREMT_PIPELINE.md', updated: '2026-09-17' },
+  crop:   { file: 'CROP_ENGINE.md',                      updated: '2026-11-06' },
 }
 const docUrl = (doc, anchor) => REPO_BLOB + doc.file + (anchor ? '#' + anchor : '')
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -1283,11 +1284,78 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                   <DocLink action="Read the method" title="Platform overview and scientific methodology" href={docUrl(DOCS.readme)} meta={docMeta(DOCS.readme)} />
                   <DocLink action="Read the method" title="FAO water balance" href={docUrl(DOCS.fao)} meta={docMeta(DOCS.fao)} />
                   <DocLink action="Read the method" title="Ethiopia Kiremt operational pipeline" href={docUrl(DOCS.kiremt)} meta={docMeta(DOCS.kiremt)} />
+                  <DocLink action="Read the method" title="Crop outlook engine (AquaCrop-OSPy)" href={docUrl(DOCS.crop)} meta={docMeta(DOCS.crop)} />
                   <DocLink action="View the scientific reference" title={DUNNING_REF} href={EXT.dunning} meta="doi.org/10.1002/2016JD025428" />
                 </DocLinks>
               </S>
             </div>
           </div>
+
+          <S title="Crop yield model: AquaCrop-OSPy 3.1.0" id="about-aquacrop" scope="Kenya · Short Rains crop outlook · registered sites · 1 Aug – 31 Mar · every forecast member">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
+              The crop outlook does not re-implement AquaCrop. For each site, variety, planting rule and forecast member, the crop engine prepares
+              the inputs, scales a few crop parameters and runs FAO’s AquaCrop through the open-source AquaCrop-OSPy 3.1.0 package. Every daily crop
+              and soil process below is computed by the package; page numbers refer to the FAO AquaCrop reference manual.
+            </p>
+
+            <h4 className="about-subhead">Inputs</h4>
+            <Tbl head={['Input', 'Value used']} rows={[
+              ['Weather', 'Daily minimum and maximum temperature, rain and reference evapotranspiration (ET0) of one member, 1 Aug to 31 Mar. ET0 is floored at 0.1 mm because AquaCrop divides by it.'],
+              ['Soil', 'Layers from texture (sand, clay, organic matter; SoilGrids) through the package’s pedotransfer functions.'],
+              ['Initial soil water', 'θ = θwp + f · (θfc − θwp) at every depth on 1 Aug, with f from the ERA5-Land soil water, as in the FAO water balance.'],
+              ['Crop', 'AquaCrop’s thermal-time crop files MaizeGDD, SorghumGDD and DryBeanGDD, with the adjustments below.'],
+              ['Management', 'Rain-fed: no irrigation, mulch or bunds, and no groundwater table.'],
+              ['CO₂', 'The package default: the Mauna Loa record and its projection, at the simulated year’s concentration.'],
+            ]}/>
+
+            <h4 className="about-subhead" style={{marginTop:24}}>Daily processes computed by AquaCrop</h4>
+            <Step n="1" title="Thermal time (GDD, method 3; pp. 19–20)"
+              eq={"Tx = min(max(Tmax, Tbase), Tupp)      Tn = min(Tmin, Tupp)\nGDD = max((Tx + Tn) / 2, Tbase) − Tbase"}
+              desc="Every crop stage (emergence, flowering, senescence, maturity) is a GDD threshold. Maize and sorghum: Tbase 8 °C, Tupp 30 °C; bean: 9 °C and 30 °C."/>
+            <Step n="2" title="Soil hydraulic properties (Saxton & Rawls 2006)"
+              eq={"λ = 1 / [(ln 1500 − ln 33) / (ln θfc − ln θwp)]\nKsat = 1930 · (θs − θfc)^(3 − λ) · 24        (mm/day)\nτ = 0.0866 · Ksat^0.35"}
+              desc="Wilting point θwp, field capacity θfc and saturation θs come from texture and organic matter; τ is the drainage coefficient."/>
+            <Step n="3" title="Drainage, runoff and infiltration"
+              eq={"Δθ/Δt = τ · (θs − θfc) · (e^(θ − θfc) − 1) / (e^(θs − θfc) − 1)"}
+              desc="Water above field capacity drains at this rate, capped by each layer’s Ksat. Surface runoff uses the USDA curve number (61 for these soils, adjusted daily for the wetness of the top 0.3 m); infiltration fills the profile from the top. Capillary rise is inactive without a groundwater table."/>
+            <Step n="4" title="Canopy cover (pp. 39–45)"
+              eq={"CCo = PlantPop × SeedSize × 10⁻⁸\nCC  = CCo · e^(CGC·t)                          while CC ≤ CCx / 2\nCC  = CCx − 0.25 · (CCx² / CCo) · e^(−CGC·t)      above CCx / 2\nCC  = CCact · [1 − 0.05 · (e^(3.33·CDC·t / (CCx + 2.29)) − 1)]      after senescence"}
+              desc="t is thermal time; CCact is the canopy reached before decline. Maize at 44,444 plants/ha starts at CCo ≈ 0.003. Water stress slows canopy expansion (Ks,exp) and brings senescence forward (Ks,sen)."/>
+            <Step n="5" title="Water stress coefficients (pp. 9–13)"
+              eq={"p    = p_std + 0.04 · (5 − ET0) · log10(10 − 9 · p_std)\nDrel = (Dr / TAW − p_up) / (p_lo − p_up)\nKs   = 1 − (e^(Drel · fshape) − 1) / (e^(fshape) − 1)"}
+              desc="Dr is the root-zone depletion and TAW the total available water. Separate thresholds give the coefficients for canopy expansion, stomatal closure, early senescence and pollination; the thresholds move with evaporative demand."/>
+            <Step n="6" title="Soil evaporation (pp. 68–80)"
+              eq={"EsPot = Kex · (1 − CC*) · ET0"}
+              desc="Reduced further under a dead or late canopy. Stage 1 is limited by energy until the readily evaporable water is used; in stage 2 evaporation falls with the relative wetness of the surface layer."/>
+            <Step n="7" title="Transpiration (pp. 82–91)"
+              eq={"TrPot = Kcb · CC* · ET0 · KsCold\nTr    = Σ compartments  Ks,sto · Sx · root fraction   (≤ TrPot)"}
+              desc="Kcb (1.05 for maize) declines with canopy age and with CO₂ above the reference. KsCold reduces transpiration on days with little thermal time. Actual transpiration is root uptake, compartment by compartment, reduced by stomatal water stress and by waterlogging."/>
+            <Step n="8" title="Biomass (pp. 98–108)"
+              eq={"dB = WP* · fCO2 · (Tr / ET0)"}
+              desc="AquaCrop’s core equation. WP* is the normalised water productivity (33.7 g/m² for maize and sorghum, 15 for bean), reduced during yield formation by WPy where the crop file sets it; fCO2 is the CO₂ fertilisation factor. A parallel no-stress biomass, from TrPot instead of Tr, gives the yield potential."/>
+            <Step n="9" title="Harvest index (pp. 110–126)"
+              eq={"HIref  = HIini · HI0 / (HIini + (HI0 − HIini) · e^(−k·t)),  then a linear rise to HI0\nHI_adj = f_pre · f_post · min(HIref, f_pol · HI0)"}
+              desc="HIref starts at the HIstart threshold. For grain crops it is adjusted for water stress before flowering (f_pre), for heat, cold or water stress at pollination (f_pol; maize: heat from 40 °C, cold below 10 °C), and for stress during grain filling (f_post)."/>
+            <Step n="10" title="Yield, roots and root-zone water"
+              eq={"Dry yield = B × HI_adj"}
+              desc="Yield potential is the same product with the no-stress biomass. Roots deepen from Zmin to Zmax with thermal time, more slowly under water stress, and the root-zone depletion and TAW are updated for the next day."/>
+
+            <h4 className="about-subhead">What the crop engine adds</h4>
+            <Step n="A" title="Phenology scaled to the variety’s maturity"
+              eq={"f = maturity_days × (21 − Tbase) / Maturity_GDD\nstage thresholds × f        CGC, CDC ÷ f"}
+              desc="The variety matures in its stated number of days at a mean of 21 °C, and the canopy keeps its shape. Early maize (115 days): f = 0.88; medium maize (142 days): 1.09; sorghum (100 days): 0.74; bean (75 days): 0.69. A warmer season accumulates thermal time faster, so the crop matures sooner."/>
+            <Step n="B" title="Calibrated parameters"
+              desc="Maize: plant population 44,444 per ha, CCx 0.75 and HI0 0.324, calibrated at KALRO Kiboko (AquaCrop’s defaults are 75,000, 0.96 and 0.48). Sorghum: 66,667 per ha, CCx 0.75, HI0 0.30. Bean: AquaCrop’s defaults apart from phenology."/>
+            <Step n="C" title="Outcome of each member"
+              desc="Before AquaCrop runs, thermal time from sowing to 31 Mar (the same method 3) must reach maturity, or the member counts as too late. After the run: ok when harvest falls within 3 days of the expected maturity; failed establishment when the crop died before its canopy reached 5 %; died otherwise. A stress day is one with transpiration below half its potential (with potential ≥ 0.5 mm). After a failed establishment the member is re-sown once at its next sowing opportunity, while the variety can still mature."/>
+
+            <h4 className="about-subhead">Not represented</h4>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
+              Irrigation, groundwater and capillary rise, field management (mulch, bunds), salinity and weeds are not used. Soil fertility stress is
+              not modelled by AquaCrop-OSPy 3.1.0; its effect is absorbed in the calibrated CCx and HI0. Radiation and humidity act only through ET0,
+              in the soil evaporation, transpiration and Tr/ET0 terms.
+            </p>
+          </S>
         </div>
       )}
        </article>
