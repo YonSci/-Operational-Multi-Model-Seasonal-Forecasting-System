@@ -25,11 +25,16 @@ def _file(path, year, warm=0.0, members=3):
 
 def test_temperature_bias_is_removed_and_the_anomaly_kept(tmp_path, monkeypatch):
     monkeypatch.setattr(s5, "DIR", tmp_path)
-    monkeypatch.setattr(C, "CAL_YEARS", (2001, 2004))
-    for y in range(2001, 2005):
+    monkeypatch.setattr(C, "CAL_YEARS", (2001, 2005))
+    monkeypatch.setattr(s5, "MIN_CAL_YEARS", 3)
+    for y in range(2001, 2004):                                                # 3 of the 5 calibration years
         _file(s5.path(y), y)
+    assert "missing" in s5.missing(2026)
     _file(s5.path(2026), 2026, warm=1.0)                                       # the run: 1 °C warmer than its hindcasts
-    assert s5.missing_years(2026) == [] and s5.missing_years(2027) == [2027]
+    assert s5.missing(2026) is None and s5.calibration_years() == [2001, 2002, 2003]
+    monkeypatch.setattr(s5, "MIN_CAL_YEARS", 4)
+    assert "3 of the calibration years" in s5.missing(2026)
+    monkeypatch.setattr(s5, "MIN_CAL_YEARS", 3)
     idx = pd.date_range("1993-01-01", "2027-06-30")
     temps = {s: pd.DataFrame({"tmax": 25.0, "tmin": 15.0}, index=idx) for s in SITES}   # ERA5-Land: 2 °C cooler
     rng = np.random.default_rng(0)
@@ -41,6 +46,7 @@ def test_temperature_bias_is_removed_and_the_anomaly_kept(tmp_path, monkeypatch)
     assert (s.tmin <= s.tmax).all()
     assert s.march.shape == (3, 31, 2) and (s.march >= 0).all() and len(s.march_dates) == 31
     assert (s.on(pd.DatetimeIndex(["2026-09-30", "2026-10-01", "2027-03-31"])) == [-1, 0, 181]).all()
+    assert "3 of the 5 calibration years" in s5.describe(s)
 
 
 def test_hargreaves_ratio():
