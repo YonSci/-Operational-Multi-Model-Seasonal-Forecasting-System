@@ -95,10 +95,9 @@ class Inputs:
 
     def _seas5(self):
         """The SEAS5 1 Oct run of the season year at the sites (temperature, March rain), or None and why not."""
-        gone = s5.missing_years(self.year)
-        if gone:
-            more = f" and {len(gone) - 1} more" if len(gone) > 1 else ""
-            return None, f"no SEAS5 temperature: the 182-day 1 Oct file of {gone[0]}{more} is missing ({s5.DIR})"
+        why = s5.missing(self.year)
+        if why:
+            return None, f"no SEAS5 temperature or March rain: {why} ({s5.DIR})"
         try:
             s = s5.Seas5(self.year, [x.id for x in self.sites], self.lat[self.ii], self.lon[self.jj], self.temps, self.hist)
         except Exception as exc:                                           # the climatological fallback stands

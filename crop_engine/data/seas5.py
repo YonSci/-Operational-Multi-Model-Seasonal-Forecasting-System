@@ -13,9 +13,12 @@ with mx2t24, mn2t24 (K, the 24 hours to the lead time) and tp (m, accumulated) f
 
 Each site takes the 1° cell nearest its 0.25° analysis cell (as onset_rules.jan_feb maps SEAS5 to the grid).
 
+Calibration years: those of 1993–2016 whose file is on disk, at least MIN_CAL_YEARS of them (the run's year is
+always needed); the corrections say how many they used.
+
 Temperature: mean-bias (delta) correction by lead day. For each site and lead day, the bias is the calibration
-years' (1993–2016) member mean minus the ERA5-Land site series on the same days, ±15-day smoothed; every member of
-the run has that bias subtracted. The forecast's anomaly and its member spread are kept; tmin is capped at tmax.
+years' member mean minus the ERA5-Land site series on the same days, ±15-day smoothed; every member of the run has
+that bias subtracted. The forecast's anomaly and its member spread are kept; tmin is capped at tmax.
 
 March rain: empirical quantile mapping per site and day, as the Agri rules' 1 Jan – 28 Feb (onset_rules.jan_feb):
 the CHIRPS pool is the calibration years' observed days within ±EXT_QM_WINDOW of the day, the SEAS5 pool the
@@ -31,6 +34,7 @@ from crop_engine import config as C
 DIR = C.BASE / "data" / "seasonal_downloads_ke" / "ecmwf_oct_182d"
 LEAD_DAYS = 182
 SMOOTH = 15                     # ± days of the temperature bias's running mean
+MIN_CAL_YEARS = 10              # calibration years needed (of 1993–2016) for the corrections
 NAMES = {"tmax": ("mx2t24", "tasmax", "maximum_2m_temperature_in_the_last_24_hours"),
          "tmin": ("mn2t24", "tasmin", "minimum_2m_temperature_in_the_last_24_hours"),
          "tp": ("tp", "total_precipitation")}
@@ -40,10 +44,19 @@ def path(year):
     return DIR / f"ecmwf_{year}10_d01.nc"
 
 
-def missing_years(year):
-    """Years whose file is missing: the calibration years and the run's year are all needed."""
-    need = list(range(C.CAL_YEARS[0], C.CAL_YEARS[1] + 1)) + [year]
-    return [y for y in need if not path(y).exists()]
+def calibration_years():
+    """The calibration years (config.CAL_YEARS) whose file is on disk."""
+    return [y for y in range(C.CAL_YEARS[0], C.CAL_YEARS[1] + 1) if path(y).exists()]
+
+
+def missing(year):
+    """Why the run of `year` cannot be corrected (None when it can): its file, or too few calibration years."""
+    if not path(year).exists():
+        return f"the 182-day 1 Oct {year} file is missing"
+    n = len(calibration_years())
+    if n < MIN_CAL_YEARS:
+        return f"{n} of the calibration years' files on disk (at least {MIN_CAL_YEARS} needed)"
+    return None
 
 
 def _var(ds, key):
@@ -95,7 +108,7 @@ class Seas5:
         import onset_rules as orl  # noqa: E402  (scripts/, on sys.path via config)
         import process_ecmwf_september as pes  # noqa: E402
         self.year, self.dates = year, lead_dates(year)
-        cal = range(C.CAL_YEARS[0], C.CAL_YEARS[1] + 1)
+        self.cal_years = cal = calibration_years()
         hind = {y: load(y, lats, lons) for y in cal}
         run = load(year, lats, lons)
         # temperature: hindcast member mean minus ERA5-Land on the same days, per lead day and site
@@ -142,7 +155,9 @@ def hargreaves_ratio(tmax, tmin, tmax_ref, tmin_ref, lo=0.7, hi=1.3):
 
 def describe(s, year=None):
     """One line for the logs and attrs."""
-    return (f"ECMWF SEAS5 1 Oct {year or s.year} ({s.n_members} members), temperature bias-corrected to ERA5-Land "
-            f"(calibration years {C.CAL_YEARS[0]}–{C.CAL_YEARS[1]}, by lead day), March rain quantile-mapped to CHIRPS")
+    n, all_ = len(s.cal_years), C.CAL_YEARS[1] - C.CAL_YEARS[0] + 1
+    return (f"ECMWF SEAS5 1 Oct {year or s.year} ({s.n_members} members), temperature bias-corrected to ERA5-Land by "
+            f"lead day and March rain quantile-mapped to CHIRPS, from {n} of the {all_} calibration years "
+            f"{C.CAL_YEARS[0]}–{C.CAL_YEARS[1]}")
 
 

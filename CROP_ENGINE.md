@@ -74,16 +74,19 @@ not a crop site (the nearest site is shown, with its distance). It shows:
 | Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then SEAS5 member k bias-corrected to ERA5-Land (`data/seas5.py`) | per member (`tmax_c (member, site, time)`); the 1993–2016 day-of-year climatology where neither is available |
 | ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day; no forecast radiation, humidity or wind |
 
-**SEAS5 for the crop weather** (`crop_engine/data/seas5.py`): the 1 Oct runs of 1993–2026 with daily maximum and
-minimum temperature and rain for 182 lead days (to 31 Mar), in `data/seasonal_downloads_ke/ecmwf_oct_182d/` (not
-committed; about 110 MB):
+**SEAS5 for the crop weather** (`crop_engine/data/seas5.py`): the 1 Oct runs of the calibration years 1993–2016
+and of the season year, with daily maximum and minimum temperature and rain for 182 lead days (to 31 Mar), in
+`data/seasonal_downloads_ke/ecmwf_oct_182d/` (not committed; about 3 MB a year). The corrections use the
+calibration years on disk, at least 10 (`MIN_CAL_YEARS`), and say how many; CDS serves these hindcasts slowly
+(hours per year) and rejects many requests at once, so download one year per request, a few at a time:
 
     python scripts/download_seasonal_forecasts_daily_c3s.py --models ecmwf --system ecmwf=51 --months 10 \
-        --year-start 1993 --year-end 2026 --leadtime-days 182 --north 5.5 --west 33 --south -5.5 --east 42.5 \
+        --year-start 1993 --year-end 2016 --leadtime-days 182 --north 5.5 --west 33 --south -5.5 --east 42.5 \
         --variables maximum_2m_temperature_in_the_last_24_hours minimum_2m_temperature_in_the_last_24_hours \
                     total_precipitation --outdir data/seasonal_downloads_ke/ecmwf_oct_182d
 
-Temperature is corrected for its mean bias by lead day: the calibration years' (1993–2016) member mean minus the
+(and the season year's, `--years 2026`). Temperature is corrected for its mean bias by lead day: the
+calibration years' member mean minus the
 site's ERA5-Land series on the same days, ±15-day smoothed, subtracted from every member, so the forecast's anomaly
 and member spread are kept. Member k of the temperature is member k of the rain from 1 Jan, so a dry member is also
 its own temperature's member. Each run's `meta.weather` says which March rain and temperature it used; when a file
