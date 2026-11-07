@@ -73,6 +73,9 @@ not a crop site (the nearest site is shown, with its distance). It shows:
 | Rain 1–31 Mar | SEAS5 member k (1 Oct run, lead days 152–182), quantile-mapped to CHIRPS per site and day (`data/seas5.py`) | without the 182-day SEAS5 files: a declared climatological ensemble, member k the observed CHIRPS March of 1994 + (k mod 24); observed seasons use their own March |
 | Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then SEAS5 member k bias-corrected to ERA5-Land (`data/seas5.py`) | per member (`tmax_c (member, site, time)`); the 1993–2016 day-of-year climatology where neither is available |
 | ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day; no forecast radiation, humidity or wind |
+| Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
+| Soil water on 1 Aug | ERA5-Land root-zone soil moisture, as the FAO water balance starts | |
+| Sowing date | Agri rule 1 onset; FAO agricultural onset | unchanged outputs of the platform's methods |
 
 **SEAS5 for the crop weather** (`crop_engine/data/seas5.py`): the 1 Oct runs of the calibration years 1993–2016
 and of the season year, with daily maximum and minimum temperature and rain for 182 lead days (to 31 Mar), in
@@ -85,18 +88,14 @@ calibration years on disk, at least 10 (`MIN_CAL_YEARS`), and say how many; CDS 
         --variables maximum_2m_temperature_in_the_last_24_hours minimum_2m_temperature_in_the_last_24_hours \
                     total_precipitation --outdir data/seasonal_downloads_ke/ecmwf_oct_182d
 
-(and the season year's, `--years 2026`). Temperature is corrected for its mean bias by lead day: the
-calibration years' member mean minus the
-site's ERA5-Land series on the same days, ±15-day smoothed, subtracted from every member, so the forecast's anomaly
-and member spread are kept. Member k of the temperature is member k of the rain from 1 Jan, so a dry member is also
+and the season year's file the same way (`--years 2026`). Temperature is corrected for its mean bias by lead day:
+the calibration years' member mean minus the site's ERA5-Land series on the same days, ±15-day smoothed, is
+subtracted from every member, so the forecast's anomaly and member spread are kept. Member k of the temperature is member k of the rain from 1 Jan, so a dry member is also
 its own temperature's member. Each run's `meta.weather` says which March rain and temperature it used; when a file
 is missing the engine falls back to climatology and says so.
-| Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
-| Soil water on 1 Aug | ERA5-Land root-zone soil moisture, as the FAO water balance starts | |
-| Sowing date | Agri rule 1 onset; FAO agricultural onset | unchanged outputs of the platform's methods |
 
 Every day carries its source (`precip_source`: obs_final, obs_prelim, gap, forecast, seasonal, climatology;
-`tmax_source`, `et0_source`: era5land, climatology), so a result can always be traced to what drove it.
+`tmax_source`, `et0_source`: era5land, climatology, seasonal), so a result can always be traced to what drove it.
 `crop_engine.data.weather.validate` checks each run's inputs (structure, no gaps, value ranges, Tmin ≤ Tmax,
 provenance codes) before any simulation.
 
