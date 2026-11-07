@@ -301,7 +301,7 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
                 ref[f"{v}_median"] = d.isoformat() if d else None
         entry = {"cell": [s.cell_lat, s.cell_lon], "soil_taw_100cm_mm": round(soil_mod.taw_mm(soils[s.id]), 0),
                  "topsoil": {"sand": soils[s.id][0].sand, "clay": soils[s.id][0].clay},
-                 "initial_water_fraction": round(float(frac[ids.index(s.id)]), 3),
+                 "initial_water_fraction": round(float(frac[ids.index(s.id)]), 6),   # exact enough to re-simulate (run_scenarios)
                  "fao_reference": {"agricultural": ref}, "results": {}}
         for sid in group:
             out_sites[sid] = {"name": next(x.name for x in inp.sites if x.id == sid), **entry}

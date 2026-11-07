@@ -119,3 +119,26 @@ def test_weekly_refresh_keeps_recent_scenarios_of_the_same_configuration(tmp_pat
     p.write_text(json.dumps(d))
     assert rs.run("seasonal_20261001", keys=["soil_dry"], workers=1, max_age_days=7) is None
     assert rs.run("seasonal_20261001", keys=["soil_dry"], workers=1) is not None        # without the limit: remade
+
+
+def test_soil_is_looked_up_at_the_runs_grid_cell(tmp_path, monkeypatch):
+    rs, res = _outlook_files(tmp_path, monkeypatch)
+    seen = []
+    monkeypatch.setattr(rs.soil_mod, "profile", lambda s: seen.append((s.cell_lat, s.cell_lon)) or LAYERS)
+    res["sites"][SITE.id]["cell"] = [-2.25, 37.75]
+    import xarray as xr
+    with xr.open_dataset(C.WEATHER_OUT / "seasonal_20261001.nc") as ds:
+        ds.load()
+        rs.base_tasks(res, ds, {"maize_early": dict(VARIETY, kw={})}, ["rule1"], [SITE.id])
+    assert seen == [(-2.25, 37.75)]
+
+
+def test_an_outlook_that_is_not_reproduced_stops_the_run(tmp_path, monkeypatch):
+    import pytest
+    rs, res = _outlook_files(tmp_path, monkeypatch)
+    for m in res["sites"][SITE.id]["results"]["maize_early"]["rule1"]["members"]:
+        m["yield_t_ha"] += 0.5
+    (C.RESULTS_OUT / "seasonal_20261001.json").write_text(json.dumps(res))
+    with pytest.raises(RuntimeError, match="not reproduced"):
+        rs.run("seasonal_20261001", keys=["soil_dry"], workers=1)
+    assert not (tmp_path / "scenarios" / "seasonal_20261001.json").exists()

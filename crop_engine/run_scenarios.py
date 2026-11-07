@@ -18,6 +18,7 @@ Usage:
   python -m crop_engine.run_scenarios --max-age-days 7 --workers 2          # the daily update (crop_engine.run_all)
 """
 import argparse
+import dataclasses
 import datetime as dt
 import hashlib
 import json
@@ -38,6 +39,7 @@ SCEN_OUT = C.OUT / "scenarios"
 SUMMARY_KEYS = ("yield_t_ha", "p_failure", "p_failure_if_sown", "p_establishment_failure", "p_sowing_opportunity",
                 "yield_if_sown_t_ha", "share", "planting", "harvest_median", "stress_days_median", "resown",
                 "vs_benchmark")
+REPRODUCE_TOL = 0.05      # t/ha: the outlook's member yields, re-simulated unchanged (AquaCrop moves ~0.01 t/ha with the 6th decimal of the initial water)
 
 
 def log(m):
@@ -74,7 +76,9 @@ def base_tasks(res, ds, varieties, rules, site_ids):
         k = list(ds.site.values).index(sid)
         rain = ds.precip_mm.isel(site=k).values
         resow = pl.sowing_opportunities(rain, dates)
-        layers = soil_mod.profile(sites[sid])
+        # the soil of the site's grid cell, as the outlook simulated it (a registered site alone has no cell)
+        lat, lon = s["cell"]
+        layers = soil_mod.profile(dataclasses.replace(sites[sid], cell_lat=lat, cell_lon=lon))
         for vk, rs in s["results"].items():
             if vk not in varieties:
                 continue
@@ -121,17 +125,28 @@ def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2,
         base = base_tasks(res, ds, varieties, rules, list(reps.values()))
     tasks, tkeys = [], []
     for key3, t in base:
+        tasks.append(t)                                          # the outlook itself, unchanged: the control
+        tkeys.append((*key3, None))
         for sk in keys:
             tasks.append(mg.apply(t, sk))
             tkeys.append((*key3, sk))
-    log(f"{rid}: {len(tasks)} scenario runs ({len(reps)} grid cells, {len(varieties)} varieties, {len(rules)} rules, "
+    log(f"{rid}: {len(tasks)} runs: {len(base)} of the outlook unchanged (the control) and the scenarios ({len(reps)} grid cells, {len(varieties)} varieties, {len(rules)} rules, "
         f"{len(keys)} scenarios, {len(base[0][1]['planting']) if base else 0} members)")
     t0 = time.time()
     outs = ro.run_tasks(tasks, workers)
-    out = {}
+    out, worst = {}, 0.0
     for (sid, vk, rk, sk), members in zip(tkeys, outs):
         for m in members:
             m.pop("_canopy", None)
+        if sk is None:
+            # the scenarios are only comparable with the outlook if its own crops are reproduced member by member
+            orig = res["sites"][sid]["results"][vk][rk]["members"]
+            diff = max(abs(a["yield_t_ha"] - b["yield_t_ha"]) for a, b in zip(orig, members))
+            worst = max(worst, diff)
+            if diff > REPRODUCE_TOL:
+                raise RuntimeError(f"{rid}: the outlook of {sid} {vk} {rk} is not reproduced (member yields differ by "
+                                   f"up to {diff:.2f} t/ha): scenarios not written")
+            continue
         summ = ro.summarize(members, varieties[vk], bench.get(sid, {}).get(vk, {}).get(rk))
         for gid in [x for x in wanted if cell_of[x] == cell_of[sid]]:
             entry = out.setdefault(gid, {"name": res["sites"][gid]["name"], "results": {}})
@@ -140,7 +155,7 @@ def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2,
             cell[sk] = compact(summ)
     meta = {"id": rid, "source": res["meta"]["source"], "model_label": res["meta"]["model_label"],
             "run": res["meta"]["run"], "obs_end": res["meta"]["obs_end"], "engine": res["meta"]["engine"],
-            "config_hash": res["meta"]["config_hash"], "scenario_hash": shash,
+            "config_hash": res["meta"]["config_hash"], "scenario_hash": shash, "baseline_reproduced_within_t_ha": round(worst, 3),
             "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
             "baseline": "the outlook: the planting rule's sowing date, the variety's plant density, ERA5-Land soil water on 1 Aug",
             "scenarios": {k: mg.describe(k) for k in keys},

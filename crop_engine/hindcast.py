@@ -158,7 +158,7 @@ def scores(fc, obs, thr):
     threshold → the scores (module doc)."""
     fc, obs = np.asarray(fc, float), np.asarray(obs, float)
     Y = len(obs)
-    out = {"n_years": Y, "spearman": _r(np.median(fc, axis=1), obs)}
+    out = {"n_years": Y, "n_success": int((obs >= thr).sum()), "spearman": _r(np.median(fc, axis=1), obs)}
     # terciles, leave-one-out; only where they separate yields (as the outlook: not when a third or more failed)
     t33, t67 = np.quantile(obs, [1 / 3, 2 / 3])
     if t33 >= thr and t67 > t33:
@@ -219,23 +219,35 @@ def score_all(members, bench, inp, varieties, years):
                 fc = np.array([r[:n] for r in rows])
                 obs = np.array([ro.effective_yield(bench[sid][vk][rk]["years"][str(y)]) for y in yy])
                 idx = [years.index(y) for y in yy]
+                # seasons sown (in the observed weather) before the forecast's 1 Oct start are known, not forecast:
+                # the scores are also given without them, for the forecast's own skill
+                first = [(bench[sid][vk][rk]["years"][str(y)].get("first_planting")
+                          or bench[sid][vk][rk]["years"][str(y)].get("planting")) for y in yy]
+                open_ = np.array([f is None or f >= f"{y}-10-01" for f, y in zip(first, yy)])
                 out.setdefault(sid, {}).setdefault(vk, {})[rk] = {
                     "years": yy, "observed_t_ha": obs.round(3).tolist(), "forecast_median_t_ha": np.median(fc, axis=1).round(3).tolist(),
                     "forecast_p_failure": (fc < thr).mean(axis=1).round(3).tolist(), "crop": scores(fc, obs, thr),
+                    "sown_before_oct": int((~open_).sum()), "sown_before_oct_success": int(((~open_) & (obs >= thr)).sum()),
+                    "crop_from_oct": scores(fc[open_], obs[open_], thr) if open_.sum() >= 8 else None,
+                    "baselines_from_oct": {name: baseline_scores(np.array(v)[idx][open_], sign, obs[open_], thr)
+                                           for name, (v, sign) in base[sid].items()} if open_.sum() >= 8 else None,
                     "baselines": {name: baseline_scores(np.array(v)[idx], sign, obs, thr) for name, (v, sign) in base[sid].items()}}
     return out
 
 
 def table(sc, log=log):
-    log(f"{'site':14s} {'crop':13s} {'rule':6s}  r_crop  rpss   bss   auc | r_lgp  r_rain r_onset | auc_lgp")
+    log(f"{'site':14s} {'crop':13s} {'rule':6s} ok/pre  r_crop  rpss   bss   auc | r_lgp  r_rain r_onset | auc_lgp || Oct+: r_crop r_lgp  auc auc_lgp")
     for sid, vs in sc.items():
         for vk, rs in vs.items():
             for rk, d in rs.items():
-                c, b = d["crop"], d["baselines"]
+                c, b, o = d["crop"], d["baselines"], d.get("crop_from_oct") or {}
+                ob = (d.get("baselines_from_oct") or {}).get("lgp_days", {})
                 f = lambda x: "  —  " if x is None else f"{x:+.2f}"
-                log(f"{sid[:14]:14s} {vk:13s} {rk:6s}  {f(c['spearman'])}  {f(c['rpss'])} {f(c['failure_bss'])} {f(c['failure_auc'])} | "
+                log(f"{sid[:14]:14s} {vk:13s} {rk:6s} {c['n_success']:2d}/{d.get('sown_before_oct_success', 0):<2d}  "
+                    f"{f(c['spearman'])}  {f(c['rpss'])} {f(c['failure_bss'])} {f(c['failure_auc'])} | "
                     f"{f(b['lgp_days']['spearman'])}  {f(b['rain_oct_dec_mm']['spearman'])}  {f(b['onset_doy']['spearman'])} | "
-                    f"{f(b['lgp_days']['failure_auc'])}")
+                    f"{f(b['lgp_days']['failure_auc'])}  ||       {f(o.get('spearman'))}  {f(ob.get('spearman'))} "
+                    f"{f(o.get('failure_auc'))} {f(ob.get('failure_auc'))}")
 
 
 def main():
