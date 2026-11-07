@@ -1,9 +1,9 @@
 product,label,last_day,days,days_missing,ond_zone_mean_mm,ond_zone_normal_mm,ond_zone_pct_normal,ond_zone_pct_onset_detected
-chirps,CHIRPS (final+prelim),2026-10-25,25,0,14.4,40.5,35.0,8.0
-arc2,ARC2 (NOAA CPC),2026-11-04,35,0,49.8,75.2,66.0,51.0
-tamsat,TAMSAT v3.1,2026-10-31,31,0,73.2,60.0,122.0,78.0
-pdirnow,PDIR-Now (UCI CHRS),2026-11-05,36,0,86.2,79.2,109.0,69.0
-imerg,IMERG Late (NASA),2026-11-04,35,0,91.6,75.2,122.0,68.0
-imerg_early,IMERG Early (NASA),2026-11-05,36,0,93.0,79.2,117.0,75.0
-imerg_gee,IMERG (Earth Engine),2026-11-04,34,1,87.5,73.1,120.0,72.0
-gsmap_gee,GSMaP Gauge (Earth Engine),2026-11-04,35,0,83.4,75.2,111.0,67.0
+chirps,CHIRPS (final+prelim),2026-10-31,31,0,40.6,60.0,68.0,53.0
+arc2,ARC2 (NOAA CPC),2026-11-05,36,0,50.3,79.2,64.0,49.0
+tamsat,TAMSAT v3.1,2026-11-05,36,0,75.1,79.2,95.0,77.0
+pdirnow,PDIR-Now (UCI CHRS),2026-11-06,37,0,87.2,82.7,105.0,66.0
+imerg,IMERG Late (NASA),2026-11-05,36,0,92.8,79.2,117.0,67.0
+imerg_early,IMERG Early (NASA),2026-11-06,37,0,94.7,82.7,114.0,73.0
+imerg_gee,IMERG (Earth Engine),2026-11-05,35,1,88.7,77.0,115.0,72.0
+gsmap_gee,GSMaP Gauge (Earth Engine),2026-11-05,36,0,83.6,79.2,106.0,67.0
