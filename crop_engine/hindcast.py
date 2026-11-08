@@ -12,7 +12,8 @@ Weather of a past forecast, member k (as a forecast issued on 1 Oct of year y wo
   1–31 Mar         climatological: the observed March of another calibration year (never year y)
   temperature and ET0 from 1 Oct: the 1993–2016 day-of-year climatology (as the outlook without SEAS5 temperature)
 With --temperature seas5 (as the outlook now runs), from 1 Oct: SEAS5 member k's temperature, bias-corrected to
-ERA5-Land with year y left out of the correction, the ET0 climatology scaled by it (Hargreaves ratio) and SEAS5
+ERA5-Land with year y left out of the correction, the ET0 climatology scaled by it (Hargreaves ratio, or the
+Penman-Monteith ratio with SEAS5 radiation, humidity and wind when their files are on disk) and SEAS5
 member k's March rain quantile-mapped to CHIRPS (crop_engine.data.seas5); only the years whose 182-day file is on
 disk. Its outputs carry the suffix _seas5t, and the run also scores the climatological-temperature members of the
 same years, so the two are compared on equal terms.
@@ -137,13 +138,20 @@ def season(inp, y, temperature="climatology"):
     M = rain.shape[0]
     tmax, tmin, et0 = (np.repeat(a[None], M, axis=0) for a in (tmax, tmin, et0))
     if temperature == "seas5":
-        S = s5.Seas5(y, [x.id for x in inp.sites], inp.lat[inp.ii], inp.lon[inp.jj], inp.temps, inp.hist, exclude=y)
+        S = s5.Seas5(y, [x.id for x in inp.sites], inp.lat[inp.ii], inp.lon[inp.jj], inp.temps, inp.hist, exclude=y,
+                     met=inp.met2)
         mk = np.arange(M) % S.n_members
         p = S.on(dates)
         use = fc & (p >= 0)
         fx = np.moveaxis(S.tmax[mk][:, p[use]], 1, 2)                   # (member, site, days)
         fn = np.minimum(np.moveaxis(S.tmin[mk][:, p[use]], 1, 2), fx)
-        et0[:, :, use] *= s5.hargreaves_ratio(fx, fn, tmax[:, :, use], tmin[:, :, use])
+        if S.met is not None:                                            # Penman-Monteith, as the outlook
+            w = {key: np.moveaxis(S.met[key][mk][:, p[use]], 1, 2) for key in s5.MET}
+            ref = {key: a[:, use] for key, a in inp.clim_weather(dates).items()}
+            ratio = inp.et0_pm_ratio({"tmax": fx, "tmin": fn, **w}, ref, dates[use], inp.radiation(dates)[2])
+        else:
+            ratio = s5.hargreaves_ratio(fx, fn, tmax[:, :, use], tmin[:, :, use])
+        et0[:, :, use] *= ratio
         tmax[:, :, use], tmin[:, :, use] = fx, fn
         pos = S.march_dates.get_indexer(dates[mar])
         if (pos >= 0).all():

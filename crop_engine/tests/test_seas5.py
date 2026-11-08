@@ -73,3 +73,55 @@ def test_a_past_run_leaves_its_own_year_out_of_the_correction(tmp_path, monkeypa
     monkeypatch.setattr(s5, "MIN_CAL_YEARS", 4)
     with pytest.raises(ValueError):
         s5.Seas5(2004, SITES, LATS, LONS, temps, hist, exclude=2004)
+
+
+def _met_file(path, year, scale=1.0, members=3):
+    rng = np.random.default_rng(year + 7)
+    n = s5.LEAD_DAYS
+    shape = (members, 1, n, len(LATS), len(LONS))
+    rad = np.full(shape, 25e6 * scale) * rng.uniform(0.9, 1.1, shape)             # J m-2 day-1: SEAS5 25 MJ
+    d2m = np.full(shape, 288.15) + rng.normal(0, 0.3, shape)                        # 15 °C dewpoint
+    u10 = np.full(shape, 3.0) + rng.normal(0, 0.2, shape)
+    dims = ("number", "forecast_reference_time", "forecast_period", "latitude", "longitude")
+    xr.Dataset({"ssrd": (dims, np.cumsum(rad, axis=2)), "d2m": (dims, d2m), "u10": (dims, u10), "v10": (dims, 0 * u10)},
+               coords={"number": np.arange(members), "forecast_reference_time": [pd.Timestamp(year, 10, 1)],
+                       "forecast_period": np.arange(1, n + 1), "latitude": LATS, "longitude": LONS}).to_netcdf(path)
+
+
+def test_radiation_humidity_wind_are_ratio_corrected_to_era5land(tmp_path, monkeypatch):
+    monkeypatch.setattr(s5, "DIR", tmp_path / "t")
+    monkeypatch.setattr(s5, "MET_DIR", tmp_path / "m")
+    (tmp_path / "t").mkdir()
+    (tmp_path / "m").mkdir()
+    monkeypatch.setattr(C, "CAL_YEARS", (2001, 2003))
+    monkeypatch.setattr(s5, "MIN_CAL_YEARS", 3)
+    for y in (2001, 2002, 2003, 2026):
+        _file(s5.path(y), y)
+        _met_file(s5.path(y, "met"), y, scale=1.1 if y == 2026 else 1.0)           # the run: 10 % sunnier
+    idx = pd.date_range("2000-01-01", "2027-06-30")
+    temps = {s: pd.DataFrame({"tmax": 27.0, "tmin": 17.0}, index=idx) for s in SITES}
+    hist = pd.DataFrame(1.0, index=idx, columns=SITES)
+    met = {s: pd.DataFrame({"rad_mj_m2": 20.0, "vap_hpa": 15.0, "wind2_ms": 1.5}, index=idx) for s in SITES}
+    no = s5.Seas5(2026, SITES, LATS, LONS, temps, hist)
+    assert no.met is None and "no ERA5-Land" in no.met_note and "ET0 scaled by temperature" in s5.describe(no)
+    out = s5.Seas5(2026, SITES, LATS, LONS, temps, hist, met=met)
+    assert out.met["rad"].shape == (3, s5.LEAD_DAYS, 2) and out.met_cal_years == [2001, 2002, 2003]
+    assert abs(float(out.met["rad"][:, 1:].mean()) - 22.0) < 0.3                   # 20 MJ × the run's 1.1
+    assert abs(float(out.met["vap"].mean()) - 15.0) < 0.3 and abs(float(out.met["wind2"].mean()) - 1.5) < 0.05
+    assert "Penman-Monteith" in s5.describe(out)
+
+
+def test_penman_monteith_ratio():
+    ref = {"tmax": 28.0, "tmin": 16.0, "vap": 15.0, "wind2": 1.8, "rad": 20.0}
+    r = lambda **kw: float(s5.pm_ratio({**ref, **kw}, ref, 90.0, -2.2, 300, 950.0))
+    assert r() == pytest.approx(1.0)
+    assert r(rad=24.0) > 1.0 and r(vap=20.0) < 1.0 and r(wind2=3.0) > 1.0 and r(tmax=31.0) > 1.0
+    assert r(rad=200.0) == 1.5                                                       # clipped
+
+
+def test_download_requests_and_order():
+    from crop_engine.data import seas5_download as sd
+    r = sd.request(2026, "met")
+    assert r["variable"] == s5.VARIABLES["met"] and r["month"] == "10" and r["day"] == "01"
+    assert len(r["leadtime_hour"]) == s5.LEAD_DAYS and r["leadtime_hour"][0] == "24"
+    assert sd.order(range(1993, 1998), {1993}) == [1997, 1995, 1994, 1996]

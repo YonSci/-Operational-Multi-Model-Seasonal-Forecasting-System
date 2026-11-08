@@ -216,8 +216,8 @@ warm season), not for skill it has shown here.
 | Rain 1 Jan – 28 Feb | SEAS5 member, quantile-mapped to CHIRPS (`onset_rules.EXT_CACHE`) | as the Agri rules |
 | Rain 1–31 Mar | SEAS5 member k (1 Oct run, lead days 152–182), quantile-mapped to CHIRPS per site and day (`data/seas5.py`) | without the 182-day SEAS5 files: a declared climatological ensemble, member k the observed CHIRPS March of 1994 + (k mod 24); observed seasons use their own March |
 | Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then SEAS5 member k bias-corrected to ERA5-Land (`data/seas5.py`) | per member (`tmax_c (member, site, time)`); the 1993–2016 day-of-year climatology where neither is available |
-| ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day; no forecast radiation, humidity or wind |
-| Solar radiation, vapour pressure, 2 m wind | ERA5-Land at the site's 0.1° cell (Google Earth Engine), then the 1993–2016 day-of-year climatology | for WOFOST; AquaCrop does not use them (its ET0 is the platform's). The same fields as the platform's ET0 (`scripts/fao_era5land_gee.py`): vapour pressure at the daily mean dewpoint, wind the mean of 00/06/12/18 UTC at 10 m taken to 2 m (FAO-56 Eq. 47). Left out of a run, with the reason in its `radiation` attribute, when Earth Engine has never been reached |
+| ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's FAO-56 Penman-Monteith ET0 over that of the climatological weather (0.5–1.5) when the SEAS5 radiation, humidity and wind files are on disk, else by its Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day |
+| Solar radiation, vapour pressure, 2 m wind | ERA5-Land at the site's 0.1° cell (Google Earth Engine), then SEAS5 member k ratio-corrected to ERA5-Land (`data/seas5.py`) when its files are on disk, else the 1993–2016 day-of-year climatology | per member (`(member, site, time)`); WOFOST's weather, and AquaCrop's through the ET0 ratio. The same fields as the platform's ET0 (`scripts/fao_era5land_gee.py`): vapour pressure at the daily mean dewpoint, wind the mean of 00/06/12/18 UTC at 10 m taken to 2 m (FAO-56 Eq. 47). Left out of a run, with the reason in its `radiation` attribute, when Earth Engine has never been reached |
 | Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
 | Soil water on 1 Aug | ERA5-Land root-zone soil moisture, as the FAO water balance starts | |
 | Sowing date | Agri rule 1 onset; FAO agricultural onset | unchanged outputs of the platform's methods |
@@ -247,8 +247,23 @@ November to March). Maize sown on 5 Nov in every member matures 4–9 days soone
 temperature; the early maize median moves from 2.20 to 2.59 t/ha at Kiboko and from 4.88 to 4.68 t/ha at Kapiti.
 In the hindcast verification SEAS5 temperature changes the skill very little (*Hindcast verification*).
 
+**SEAS5 radiation, humidity and wind** (`data/seas5.py`, `MET_DIR` = `data/seasonal_downloads_ke/ecmwf_oct_182d_met/`,
+not committed): the same 1 Oct runs with surface solar radiation, 2 m dewpoint and the 10 m wind components at
+24-hour lead steps, downloaded one year per CDS request after the temperature files, the season year first:
+
+    python -m crop_engine.data.seas5_download --kind met            # --after-pid N: wait for a running download
+
+Daily radiation comes from the accumulation, vapour pressure from the dewpoint (FAO-56 Eq. 14) and the 2 m wind
+from the 10 m speed (Eq. 47). The dewpoint and wind are the 00 UTC values, not daily means: the correction, a ratio
+per site and lead day (the smoothed ERA5-Land site mean of the calibration years over the smoothed member mean,
+0.5–2), absorbs that offset with the model's own, keeps every value positive and the forecast's anomaly and spread
+as fractions. With them each member's ET0 on SEAS5 days is the ET0 climatology times the ratio of FAO-56
+Penman-Monteith ET0 of the member's weather (its temperature, radiation, humidity and wind) to that of the
+climatological weather; the hindcast (`--temperature seas5`) does the same. Until at least 10 calibration years and
+the season year are on disk, the run says why not and keeps the Hargreaves ratio.
+
 Every day carries its source (`precip_source`: obs_final, obs_prelim, gap, forecast, seasonal, climatology;
-`tmax_source`, `et0_source`: era5land, climatology, seasonal; `rad_source`: era5land, climatology), so a
+`tmax_source`, `et0_source`, `rad_source`: era5land, climatology, seasonal), so a
 result can always be traced to what drove it.
 `crop_engine.data.weather.validate` checks each run's inputs (structure, no gaps, value ranges, Tmin ≤ Tmax,
 provenance codes) before any simulation.
@@ -538,7 +553,8 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   temperature (done): the same conclusion, and SEAS5 temperature changes the skill by less than its noise. Next:
   county yields as a reference, and the sub-seasonal reforecasts.
 - **P1 Weather forcing**: the season runs to 31 Mar; SEAS5 temperature per member and SEAS5 March rain (done).
-  Next: forecast radiation and humidity for ET0; temperature from the sub-seasonal models in their range.
+  SEAS5 radiation, humidity and wind for ET0 and WOFOST (in place; the downloads run after the temperature
+  files'). Next: temperature from the sub-seasonal models in their range.
 - **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
   seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
   irrigation and field-management options: mulch, bunds), where partners can say what is practised.
