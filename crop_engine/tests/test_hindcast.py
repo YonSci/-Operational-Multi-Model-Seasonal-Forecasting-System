@@ -59,3 +59,16 @@ def test_new_rules_are_merged_into_the_saved_members_and_compared():
     s = hc.compare(clim, seas, log=lambda m: None)
     assert s["spearman"] == {"n": 1, "mean_change": 0.1, "n_better": 1, "n_worse": 0}
     assert s["failure_auc"]["n_worse"] == 1 and s["oct_spearman"]["n"] == 0
+
+
+def test_county_scores_compare_forecast_benchmark_and_season_length_on_shared_years():
+    yrs = list(range(2001, 2011))
+    county = {y: 1.0 + 0.1 * k for k, y in enumerate(yrs)}               # rising county yields
+    d = {"years": yrs + [2011], "forecast_median_t_ha": [float(k) for k in range(11)],
+         "observed_t_ha": [float(10 - k) for k in range(11)], "lgp_median_days": [50.0 + k for k in range(11)]}
+    sc = {"a": {"maize_early": {"rule1": d}, "sorghum": {"rule1": d}}}
+    out = hc.county_scores(sc, {"a": county})
+    c = out["a"]["maize_early"]["rule1"]
+    assert c["years"] == yrs and c["forecast"] == 1.0 and c["benchmark"] == -1.0 and c["lgp"] == 1.0
+    assert "sorghum" not in out["a"]                                      # maize only
+    assert hc.county_scores(sc, {"a": {2001: 1.0, 2002: 2.0}}) == {}      # too few shared years
