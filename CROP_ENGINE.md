@@ -528,6 +528,58 @@ maize `maturity_days` 142 and `HI0` 0.324 once the crop season ran to 31 Mar. Ki
 seasons, died of water stress 21 → 22, too late 0 → 0 (21 with a 28 Feb end), failure 46 → 61 %, median yield
 1.05 → 0.4 t/ha: at Kiboko the longer crop is still growing after the Short Rains end.
 
+## Second engine: WOFOST (`crop_engine/adapters/wofost_adapter.py`)
+
+WOFOST 7.2 (PCSE 6.0.13, water-limited production with the classic water balance, `Wofost72_WLP_CWB`) runs on the
+same tasks as AquaCrop: the same weather members, soil profile, 1 Aug soil water, sowing dates and re-sowing, and
+it returns the same outcomes (ok, died, failed_establishment, too_late, not_sown, error), so either engine can run
+a forecast (`run_outlook.run_tasks(..., engine="wofost")`). It is not yet in the published outlook.
+
+- **Weather**: rain, Tmax, Tmin, and the solar radiation, vapour pressure and 2 m wind of the weather file
+  (ERA5-Land, then SEAS5 or climatology). Its transpiration is driven by ET0, which is the task's ET0 (the
+  platform's FAO-56 ET0, as AquaCrop's); PCSE's open-water and bare-soil evaporation (E0, ES0) are scaled by the
+  same day's ratio of that ET0 to PCSE's own, so both engines see the same evaporative demand.
+- **Crops**: the WOFOST library's tropical sets (Van Heemst 1988), `Maize_VanHeemst_1988` and
+  `Sorghum_VanHeemst_1988`. There is no dry-bean set, so the bean stays AquaCrop-only.
+- **Phenology**: TSUM1 and TSUM2 (their ratio kept) are scaled so the crop matures in the variety's
+  `maturity_days` at 21 °C, through the crop's own development-rate table. These are the targets AquaCrop's
+  phenology is scaled to, so the maize classes carry the Kiboko phenology calibration (kiboko_v2). The growth and
+  partitioning parameters are WOFOST's own: the yield level is **not calibrated** to the Kenyan trials.
+- **Soil**: one root zone, as the classic water balance has. Wilting point and field capacity are the SoilGrids
+  layers' values averaged over the top 100 cm; saturation and the percolation limits come from Saxton & Rawls
+  (2006); the rootable depth is the 200 cm profile; the initial water is the task's fraction of the available water.
+- **Outcomes**: WOFOST's crop survives drought (its leaves die back, its stems and pods keep an area), so it has no
+  establishment failure of its own. A crop that never reaches 5 % canopy cover (LAI 0.085) counts as a failed
+  establishment, and one whose leaves all die before development stage 1.9, or that matures with no grain, counts
+  as died.
+
+`python -m crop_engine.compare_engines` grows the benchmark's observed seasons (1993–2025, every site, both rules,
+sown and re-sown exactly as the benchmark) with WOFOST and compares the two engines season by season
+(`outputs/crop_engine/verification/engines.json`). First comparison (November 2026, 1,188 seasons, about two
+minutes):
+
+| Site | Early maize, FAO onset: median t/ha AquaCrop / WOFOST | failure rate | r (sown seasons) | Sorghum, FAO onset: median | failure rate |
+|---|---|---|---|---|---|
+| El Karama | 3.19 / 4.90 | 30 % / 3 % | 0.45 | 1.90 / 5.11 | 36 % / 3 % |
+| Genco Maralal | 3.15 / 2.24 | 30 % / 15 % | 0.31 | 1.62 / 2.92 | 36 % / 9 % |
+| Genco Tana River | 0.45 / 0.38 | 52 % / 52 % | 0.45 | 0.15 / 0.84 | 52 % / 46 % |
+| KALRO Kiboko | 0.80 / 1.68 | 48 % / 21 % | 0.70 | 0.92 / 1.65 | 48 % / 15 % |
+| Kapiti | 0.86 / 2.35 | 36 % / 24 % | 0.69 | 0.74 / 1.92 | 42 % / 24 % |
+| Livemo Memerush | 0.07 / 0.82 | 55 % / 42 % | 0.81 | 0.07 / 0.86 | 58 % / 33 % |
+
+- The engines agree on which seasons are good: the rank correlation of the sown seasons' yields is 0.40–0.87 in
+  most cells (0.04–0.38 in five: medium maize at El Karama and Genco Maralal, early maize at Genco Maralal, Genco
+  Tana River sorghum with the FAO onset), and they agree on failure or not in 61–100 % of seasons.
+- WOFOST fails less and yields more at most sites, because it has no seedling death: a dry spell after sowing,
+  which kills AquaCrop's seedlings, only slows WOFOST's crop. The difference is largest where false starts are
+  common (Kiboko, Kapiti, Livemo: failure rates 12–34 points lower with the FAO onset).
+- WOFOST's crops take longer (median 9–51 days more to harvest; part of that is AquaCrop's dead crops ending
+  early) and yield less at cool Genco Maralal (1,780 m), where its slower development pushes grain filling into
+  the dry season.
+- Neither engine is checked against measured yields here: the Kiboko trials (maize 4.5 t/ha median, well managed)
+  are not farmers' rain-fed seasons. WOFOST's yield level needs the same trial calibration AquaCrop had
+  (kiboko_v3) before its numbers are published; until then it shows how much the outlook depends on the model.
+
 ## Testing
 
 `python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
@@ -558,9 +610,9 @@ Priorities after the November 2026 review (software MVP in place; the next miles
 - **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
   seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
   irrigation and field-management options: mulch, bunds), where partners can say what is practised.
-- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations — after AquaCrop's calibration.
-  Its weather is in place: ERA5-Land solar radiation, vapour pressure and 2 m wind at every site, in each run's
-  weather file with their source per day (*Inputs*); a forecast of them waits on the SEAS5 radiation and humidity
-  downloads (P1 Weather forcing).
+- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations: the adapter and the engine
+  comparison are in place (*Second engine: WOFOST*; phenology on AquaCrop's calibrated targets). Next: its yield
+  level against the Kiboko trials (as kiboko_v3), then both engines in the published outlook, so the spread between
+  models is shown.
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
   bulletins and gridded regional yield forecasts.
