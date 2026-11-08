@@ -14,7 +14,8 @@ with mx2t24, mn2t24 (K, the 24 hours to the lead time) and tp (m, accumulated) f
 Each site takes the 1° cell nearest its 0.25° analysis cell (as onset_rules.jan_feb maps SEAS5 to the grid).
 
 Calibration years: those of 1993–2016 whose file is on disk, at least MIN_CAL_YEARS of them (the run's year is
-always needed); the corrections say how many they used.
+always needed); the corrections say how many they used. A past run (the hindcast verification) leaves its own
+year out of them (exclude=year), so its correction never sees the season it forecasts.
 
 Temperature: mean-bias (delta) correction by lead day. For each site and lead day, the bias is the calibration
 years' member mean minus the ERA5-Land site series on the same days, ±15-day smoothed; every member of the run has
@@ -24,6 +25,8 @@ March rain: empirical quantile mapping per site and day, as the Agri rules' 1 Ja
 the CHIRPS pool is the calibration years' observed days within ±EXT_QM_WINDOW of the day, the SEAS5 pool the
 calibration years' members on that lead day.
 """
+
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -90,6 +93,21 @@ def load(year, lats, lons):
             "rain": np.clip(rain[:, :LEAD_DAYS], 0, None)}
 
 
+def _load(year, lats, lons):
+    """load() of a year at the sites, kept while its file is unchanged: every hindcast year reads the same
+    calibration files. The arrays are shared: read them, never write to them."""
+    f = path(year)
+    return _load_kept(year, str(f), f.stat().st_mtime_ns, tuple(float(x) for x in lats), tuple(float(x) for x in lons))
+
+
+@lru_cache(maxsize=48)
+def _load_kept(year, where, mtime, lats, lons):
+    out = load(year, np.array(lats), np.array(lons))
+    for a in out.values():
+        a.flags.writeable = False
+    return out
+
+
 def _smooth(a, k=SMOOTH):
     """Running mean ±k days along axis 0, NaN-aware, shorter at the ends."""
     out = np.full_like(a, np.nan)
@@ -102,15 +120,18 @@ def _smooth(a, k=SMOOTH):
 class Seas5:
     """The run of `year` at the sites: bias-corrected tmax, tmin (member, lead day, site) and March rain."""
 
-    def __init__(self, year, sites, lats, lons, temps, hist):
+    def __init__(self, year, sites, lats, lons, temps, hist, exclude=None):
         """sites: ids; lats, lons: the sites' analysis cells; temps: {site id: ERA5-Land DataFrame tmax, tmin};
-        hist: DataFrame (date, site id) of observed CHIRPS v2 (weather.Inputs.hist)."""
+        hist: DataFrame (date, site id) of observed CHIRPS v2 (weather.Inputs.hist); exclude: a calibration year
+        left out of the corrections (a past run's own year)."""
         import onset_rules as orl  # noqa: E402  (scripts/, on sys.path via config)
         import process_ecmwf_september as pes  # noqa: E402
         self.year, self.dates = year, lead_dates(year)
-        self.cal_years = cal = calibration_years()
-        hind = {y: load(y, lats, lons) for y in cal}
-        run = load(year, lats, lons)
+        self.cal_years = cal = [y for y in calibration_years() if y != exclude]
+        if len(cal) < MIN_CAL_YEARS:
+            raise ValueError(f"{len(cal)} calibration years (at least {MIN_CAL_YEARS} needed)")
+        hind = {y: _load(y, lats, lons) for y in cal}
+        run = _load(year, lats, lons)
         # temperature: hindcast member mean minus ERA5-Land on the same days, per lead day and site
         self.bias = {}
         for key in ("tmax", "tmin"):
