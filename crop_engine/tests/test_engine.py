@@ -262,3 +262,16 @@ def test_regression_against_reference(name):
     for k in ("yield_t_ha", "potential_t_ha", "biomass_t_ha", "max_canopy"):
         assert r[k] == pytest.approx(ref[k], abs=0.02), (name, k)
     assert abs(r["stress_days"] - ref["stress_days"]) <= 1
+
+
+def test_the_run_file_is_released_so_the_daily_update_can_rewrite_it(tmp_path):
+    import xarray as xr
+    from crop_engine.data.weather import release_run_file
+    f = tmp_path / "ECMWF_bc_daily_all_years.nc"
+    xr.DataArray(np.ones((2, 3, 4), np.float32), dims=("year", "day", "lat"),
+                 coords={"year": [2025, 2026]}, name="pr").to_netcdf(f)
+    b = type("Blender", (), {})()
+    b.bc_all, b.year = xr.open_dataarray(f), 2026
+    release_run_file(b)
+    f.unlink()                                                          # Windows refuses this while the file is open
+    assert float(b.bc_all.sel(year=2026).sum()) == 12.0 and list(b.bc_all.year.values) == [2026]
