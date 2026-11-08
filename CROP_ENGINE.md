@@ -203,6 +203,15 @@ subtracted from every member, so the forecast's anomaly and member spread are ke
 its own temperature's member. Each run's `meta.weather` says which March rain and temperature it used; when a file
 is missing the engine falls back to climatology and says so.
 
+First check (8 Nov 2026, 13 of the 24 calibration years on disk): the SEAS5 bias against the sites' ERA5-Land is
+large but steady through the season (Kiboko Tmax −1.0 to −1.2 °C, Tmin −2.3 to −2.5 °C; Kapiti Tmax +2.8 to
++3.5 °C, Tmin +1.5 to +1.9 °C, October to March), which is what a lead-day mean correction removes. The 1 Oct 2026
+run is warmer than the 1993–2016 normal after correction (member median Tmax +0.2 to +1.1 °C, Tmin +1.1 to +2.0 °C,
+November to March). Maize sown on 5 Nov in every member matures 4–9 days sooner than with climatological
+temperature; the early maize median moves from 2.20 to 2.59 t/ha at Kiboko and from 4.88 to 4.68 t/ha at Kapiti.
+The hindcast verification still uses climatological temperature from 1 Oct, so SEAS5 temperature is not yet
+verified there.
+
 Every day carries its source (`precip_source`: obs_final, obs_prelim, gap, forecast, seasonal, climatology;
 `tmax_source`, `et0_source`: era5land, climatology, seasonal; `rad_source`: era5land, climatology), so a
 result can always be traced to what drove it.
