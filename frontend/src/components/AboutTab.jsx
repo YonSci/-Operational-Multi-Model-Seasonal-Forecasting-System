@@ -1,6 +1,7 @@
 import React, { Fragment, useEffect, useRef, useState } from 'react'
 import { Info, Database, CalendarRange, Map as MapIcon, ShieldCheck, FileCode2, ChevronRight, ExternalLink, Copy, Check } from 'lucide-react'
 import { version } from '../../package.json'
+import CropWorkflowDiagram from './CropWorkflowDiagram'
 
 // Public method documents (main branch). `updated` is the date of the last commit to each file on main.
 const REPO_BLOB = 'https://github.com/YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System/blob/main/'
@@ -1291,6 +1292,22 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             </div>
           </div>
 
+          <S title="Crop engine workflow" id="about-crop-workflow" scope="Kenya · Short Rains crop outlook · 6 monitored sites · maize, sorghum, bean · every forecast member">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 14px'}}>
+              The crop outlook grows each crop in every member of every forecast run, at every monitored site, sown by each planting rule. The steps
+              below run daily inside the platform’s update; the scenarios weekly; the calibration and the verification on demand, and their results
+              set the models’ parameters and say how far the outlook can be trusted.
+            </p>
+            <CropWorkflowDiagram />
+            <Tbl head={['Step', 'What happens', 'Code']} rows={[
+              ['1 Inputs', 'Observed CHIRPS v2 rain to the last day and the forecast run’s rain members (SEAS5 bias-corrected to CHIRPS, sub-seasonal and weather models joined in front of it); ERA5-Land temperature at the site (Open-Meteo) and its solar radiation, humidity and wind (Google Earth Engine); SoilGrids layers and the ERA5-Land soil water on 1 Aug; the sowing date of each member by Agri rule 1 and by the FAO agricultural onset.', 'crop_engine/data/'],
+              ['2 Crop weather', 'One daily file per run: 1 Aug – 31 Mar for every member, with the source of every day (observed, forecast, SEAS5, climatology). SEAS5 temperature, radiation, humidity and wind are corrected to the site’s ERA5-Land record; ET0 is the platform’s FAO-56 ET0, then its climatology scaled by each member’s weather. The file is checked (no gaps, value ranges, Tmin ≤ Tmax, source codes) before any crop runs.', 'data/weather.py, data/seas5.py'],
+              ['3 Crop models', 'AquaCrop-OSPy grows the published outlook; WOFOST 7.2 grows the same members as a second model, so the dependence on the model can be measured. A member sown on a false start is re-sown once at its next sowing opportunity.', 'adapters/aquacrop_adapter.py, adapters/wofost_adapter.py'],
+              ['4 Products', 'The Crop outlook tab: yields, chance of failure and sowing opportunity per site, crop and rule, against the same crop grown in the observed weather of 1993–2025. The management scenarios: the same members with one choice changed.', 'run_outlook.py, run_scenarios.py, dashboard.py'],
+              ['5 Calibration and verification', 'Calibration against trials at KALRO Kiboko (phenology, AquaCrop’s harvest index, WOFOST’s photosynthesis); the hindcast of the 1 Oct SEAS5 runs 1993–2016 against the observed-weather crop and the season-length forecast; county Short Rains maize yields; and AquaCrop against WOFOST on 1,188 observed seasons.', 'calibration/, hindcast.py, compare_engines.py'],
+            ]}/>
+          </S>
+
           <S title="Crop yield model: AquaCrop-OSPy 3.1.0" id="about-aquacrop" scope="Kenya · Short Rains crop outlook · registered sites · 1 Aug – 31 Mar · every forecast member">
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
               The crop outlook does not re-implement AquaCrop. For each site, variety, planting rule and forecast member, the crop engine prepares
@@ -1300,11 +1317,11 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
 
             <h4 className="about-subhead">Inputs</h4>
             <Tbl head={['Input', 'Value used']} rows={[
-              ['Weather', 'Daily minimum and maximum temperature, rain and reference evapotranspiration (ET0) of one member, 1 Aug to 31 Mar: ERA5-Land to its latest day, then the ECMWF SEAS5 temperature of that member, bias-corrected to ERA5-Land by lead day, with the ET0 climatology scaled by it (Hargreaves ratio). ET0 is floored at 0.1 mm because AquaCrop divides by it.'],
+              ['Weather', 'Daily minimum and maximum temperature, rain and reference evapotranspiration (ET0) of one member, 1 Aug to 31 Mar: ERA5-Land to its latest day, then the ECMWF SEAS5 temperature of that member, bias-corrected to ERA5-Land by lead day, with the ET0 climatology scaled by that member’s weather (see Crop weather below). ET0 is floored at 0.1 mm because AquaCrop divides by it.'],
               ['Soil', 'Layers from texture (sand, clay, organic matter; SoilGrids) through the package’s pedotransfer functions.'],
               ['Initial soil water', 'θ = θwp + f · (θfc − θwp) at every depth on 1 Aug, with f from the ERA5-Land soil water, as in the FAO water balance.'],
               ['Crop', 'AquaCrop’s thermal-time crop files MaizeGDD, SorghumGDD and DryBeanGDD, with the adjustments below.'],
-              ['Management', 'Rain-fed: no irrigation, mulch or bunds, and no groundwater table.'],
+              ['Management', 'The outlook is rain-fed, on bare soil without bunds and with no groundwater table. The management scenarios add supplementary or full irrigation, mulch and bunds through AquaCrop’s own irrigation and field-management options (see Management scenarios below).'],
               ['CO₂', 'The package default: the Mauna Loa record and its projection, at the simulated year’s concentration.'],
             ]}/>
 
@@ -1351,9 +1368,123 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
 
             <h4 className="about-subhead">Not represented</h4>
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
-              Irrigation, groundwater and capillary rise, field management (mulch, bunds), salinity and weeds are not used. Soil fertility stress is
-              not modelled by AquaCrop-OSPy 3.1.0; its effect is absorbed in the calibrated CCx and HI0. Radiation and humidity act only through ET0,
-              in the soil evaporation, transpiration and Tr/ET0 terms.
+              Groundwater and capillary rise, salinity and weeds are not used, and irrigation, mulch and bunds only in the scenarios. Soil fertility
+              stress is not modelled by AquaCrop-OSPy 3.1.0; its effect is absorbed in the calibrated CCx and HI0. Radiation and humidity act only
+              through ET0, in the soil evaporation, transpiration and Tr/ET0 terms.
+            </p>
+          </S>
+
+          <S title="Crop weather: SEAS5 temperature, radiation, humidity, wind and ET0" id="about-crop-weather" scope="Kenya · Short Rains crop outlook · ECMWF SEAS5 1 Oct runs · lead days 1–182 (1 Oct – 31 Mar)">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
+              After the last ERA5-Land day each member takes its own SEAS5 weather, corrected to the site’s ERA5-Land record over the calibration
+              years 1993–2016 (a past run leaves its own year out). Member k of the temperature, radiation, humidity and wind is member k of the rain,
+              so a dry member is also its own warm, sunny member.
+            </p>
+            <Step n="1" title="Temperature: mean bias by lead day"
+              eq={"bias(d, site) = S15[ mean_years( mean_members T_SEAS5 ) − T_ERA5-Land ](d)\nT_k(d) = T_SEAS5,k(d) − bias(d, site)        Tmin ≤ Tmax"}
+              desc="S15 is a ±15-day running mean over the lead days. The forecast’s anomaly and its member spread are kept. Kiboko: SEAS5 is 1.0–1.2 °C too cool in Tmax and 2.3–2.5 °C in Tmin; Kapiti 2.8–3.5 °C too warm in Tmax."/>
+            <Step n="2" title="Radiation, vapour pressure and wind: a ratio by lead day"
+              eq={"r(d, site) = S15[ mean_years X_ERA5-Land ](d) / S15[ mean_years mean_members X_SEAS5 ](d)      0.5 ≤ r ≤ 2\nX_k(d) = X_SEAS5,k(d) × r(d, site)"}
+              desc="X is the daily solar radiation (from the accumulated surface downward radiation), the vapour pressure at the 2 m dewpoint (FAO-56 Eq. 14) and the 2 m wind (10 m speed × 0.748, Eq. 47). The dewpoint and wind are 00 UTC values; the ratio absorbs that offset with the model’s own bias and keeps every value positive."/>
+            <Step n="3" title="ET0 on SEAS5 days"
+              eq={"ET0_k(d) = ET0_clim(d) × clip( PM(T_k, e_k, u2_k, Rs_k) / PM(T_clim, e_clim, u2_clim, Rs_clim), 0.5, 1.5 )\nwithout SEAS5 radiation:  ET0_k(d) = ET0_clim(d) × clip( HG(T_k) / HG(T_clim), 0.7, 1.3 )"}
+              desc="PM is FAO-56 Penman-Monteith (Eq. 6) and HG the Hargreaves equation (Eq. 52), in which the radiation cancels; ET0_clim is the platform’s ERA5-Land ET0 climatology for the season day. The ratio carries the member’s anomaly onto the platform’s own ET0, so the crop models and the FAO water balance see the same evaporative demand. Until at least 10 calibration years of SEAS5 radiation are on disk the run uses the Hargreaves ratio and says so."/>
+            <Step n="4" title="March rain"
+              desc="SEAS5 member k’s lead days 152–182, quantile-mapped to CHIRPS per site and day (the CHIRPS pool: the calibration years’ days within ±15 days), as the Agri rules’ January–February."/>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
+              The site series were checked against the platform’s ERA5-Land ET0: FAO-56 ET0 computed from them correlates 0.99–1.00 with it at
+              every site over 8,027 days, mean difference 0.08–0.22 mm/day (a 0.1° point against a 0.25° cell mean).
+            </p>
+          </S>
+
+          <S title="Second crop model: WOFOST 7.2 (PCSE 6.0.13)" id="about-wofost" scope="Kenya · Short Rains · maize and sorghum (WOFOST has no dry bean) · comparison with AquaCrop, not yet in the published outlook">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
+              WOFOST (Wageningen) is a light-driven crop model: growth comes from intercepted radiation and leaf photosynthesis, reduced by water
+              stress, where AquaCrop’s comes from transpired water. The crop engine runs the Python Crop Simulation Environment’s water-limited
+              WOFOST 7.2 with the classic water balance (Wofost72_WLP_CWB) on exactly AquaCrop’s inputs: the same members, soil, 1 Aug water,
+              sowing and re-sowing. Every daily process below is computed by PCSE.
+            </p>
+            <Step n="1" title="Development stage"
+              eq={"DVS: 0 at emergence (after TSUMEM °C·d above TBASEM), 1 at flowering, 2 at maturity\ndDVS/dt = DTSMTB(T) / TSUM1   (DVS < 1)        DTSMTB(T) / TSUM2   (DVS ≥ 1)"}
+              desc="DTSMTB is the crop’s effective-temperature table (maize: 0 °C·d below 8 °C, rising to 22 at 30 °C)."/>
+            <Step n="2" title="Gross assimilation"
+              eq={"A_leaf = AMAX · (1 − e^(−EFF · I_abs / AMAX))         I_abs: light absorbed per leaf layer\nA_gross = ∫ day ∫ canopy A_leaf  (3-point Gaussian over depth and hour, LAI and KDIF)  × Tmin and T reductions"}
+              desc="AMAX is AMAXTB(DVS) × AMAXTB_scale, the maximum leaf CO₂ assimilation; EFF the light-use efficiency of single leaves; direct and diffuse light come from the day’s solar radiation and the canopy’s extinction coefficient."/>
+            <Step n="3" title="Water limitation (classic water balance)"
+              eq={"TRAMX = CFET · ET0 · (1 − e^(−0.75 · KDIF · LAI))\nTRA = TRAMX · min(1, (SM − SMW) / ((1 − p) · (SMFCF − SMW)))      p from DEPNR and ET0\nA_gross,water = A_gross × TRA / TRAMX"}
+              desc="One root zone, deepening with the crop to its maximum rooting depth; soil evaporation from ES0 under the open canopy, percolation limited by SOPE and KSUB."/>
+            <Step n="4" title="Respiration, conversion and partitioning"
+              eq={"dW = CVF · (A_gross,water · 30/44 − R_m)          R_m: maintenance respiration of each organ, Q10 = 2\ndW_roots = FRTB(DVS) · dW,   rest above ground: leaves FLTB, stems FSTB, storage organs FOTB (DVS)"}
+              desc="CVF is the conversion efficiency of assimilates into dry matter. Leaf area grows with leaf weight (specific leaf area) and dies with age (SPAN) and water stress."/>
+            <Step n="5" title="Yield"
+              eq={"yield = TWSO   (total dry weight of storage organs at maturity)"}
+              desc="WOFOST has no harvest index: grain is what the partitioning puts into storage organs from flowering."/>
+
+            <h4 className="about-subhead">What the crop engine sets</h4>
+            <Tbl head={['', 'Value used']} rows={[
+              ['Crops', 'WOFOST’s tropical sets of Van Heemst (1988): Maize_VanHeemst_1988 and Sorghum_VanHeemst_1988. There is no dry-bean set, so the bean stays AquaCrop-only.'],
+              ['Phenology', 'TSUM1 and TSUM2 (their ratio kept) scaled so the variety matures in its stated days at 21 °C: AquaCrop’s calibrated targets, so the maize classes carry the Kiboko phenology calibration.'],
+              ['Yield level', 'Maize: AMAXTB × 0.511, so medium maize under full irrigation at Kiboko (sown every 14 days, 1 Jun – 31 Jul 2012) yields Duma 43’s 7.76 t/ha, the trial AquaCrop’s HI0 was fitted to. WOFOST’s own table gives 11.2 t/ha. Early maize shares the factor: 6.2 t/ha against the Katumani check’s 3.0 and the IITA 2013 median of 4.5 (upper bounds, as AquaCrop’s 6.5). Sorghum keeps WOFOST’s own table (no well-watered trial near the sites).'],
+              ['Evaporative demand', 'ET0 is the platform’s FAO-56 ET0, as AquaCrop’s; PCSE’s open-water and bare-soil evaporation (modified Penman E0, ES0) are scaled by the day’s ratio of that ET0 to PCSE’s own.'],
+              ['Soil', 'SoilGrids wilting point and field capacity averaged over the top 100 cm, saturation and conductivity (Saxton & Rawls 2006) for the percolation limits, the 200 cm profile as rooting limit, the ERA5-Land fraction of available water on 1 Aug.'],
+              ['Outcome', 'As AquaCrop’s. WOFOST’s crop survives drought (its leaves die back), so a crop that never reaches 5 % cover counts as failed establishment, one whose leaves all die before DVS 1.9, or that matures with no grain, as died.'],
+            ]}/>
+
+            <h4 className="about-subhead" style={{marginTop:24}}>AquaCrop and WOFOST on the same 1,188 observed seasons (1993–2025)</h4>
+            <Tbl head={['Site', 'Early maize: median t/ha, AquaCrop / WOFOST', 'Failure rate', 'r of sown seasons', 'Sorghum: median t/ha', 'Failure rate']} rows={[
+              ['El Karama', '3.19 / 2.94', '30 % / 9 %', '0.70', '1.90 / 5.11', '36 % / 3 %'],
+              ['Genco Maralal', '3.15 / 1.02', '30 % / 36 %', '0.47', '1.62 / 2.92', '36 % / 9 %'],
+              ['Genco Tana River', '0.45 / 0.21', '52 % / 64 %', '0.32', '0.15 / 0.84', '52 % / 46 %'],
+              ['KALRO Kiboko', '0.80 / 0.86', '48 % / 39 %', '0.78', '0.92 / 1.65', '48 % / 15 %'],
+              ['Kapiti', '0.86 / 0.96', '36 % / 36 %', '0.80', '0.74 / 1.92', '42 % / 24 %'],
+              ['Livemo Memerush', '0.07 / 0.40', '55 % / 55 %', '0.87', '0.07 / 0.86', '58 % / 33 %'],
+            ]}/>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'12px 0 0'}}>
+              FAO agricultural onset sowing, every season counted (a failure or no sowing as zero). With the maize yield level calibrated, the
+              two models agree on maize at most sites: the rank correlation of the sown seasons’ yields is 0.27–0.89 and they agree on failure or
+              not in 64–94 % of seasons. WOFOST yields less at cool Genco Maralal (1,780 m), where its slower development pushes grain filling
+              into the dry season, and more for sorghum, whose yield level is WOFOST’s own. Where AquaCrop’s seedlings die in a dry spell after
+              sowing, WOFOST’s crop only slows: that is most of the difference in failure rates.
+            </p>
+          </S>
+
+          <S title="Management scenarios" id="about-scenarios" scope="Kenya · Short Rains · seasonal (SEAS5) run · every site, crop, rule and member · refreshed weekly">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
+              The seasonal run’s crops are grown again in the same weather members with one choice changed. The outlook itself is re-simulated first,
+              unchanged, as a control: if any member’s yield differs from the outlook by more than 0.05 t/ha, the scenarios are not written.
+            </p>
+            <Tbl head={['Group', 'Scenarios', 'How AquaCrop applies it']} rows={[
+              ['Sowing date', '14 days earlier, 14 or 28 days later', 'Each member’s sowing date shifted; a member with no onset stays unsown.'],
+              ['Calendar sowing', '15 Oct, 1 Nov, 15 Nov', 'Every member sown on that date, rain or not.'],
+              ['Plant density', '× 0.67, × 1.2', 'AquaCrop-OSPy sets only the initial canopy from it (CCo = plant population × seed size); the maximum canopy calibrated at Kiboko does not change.'],
+              ['Initial soil water', 'Wilting point, field capacity on 1 Aug', 'In place of the ERA5-Land fraction.'],
+              ['Water management', 'Supplementary irrigation, up to 100 mm a season', 'IrrigationManagement method 1: irrigate whenever root-zone water falls below 30 % of its available water from sowing to flowering (SMT 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season, 75 % application efficiency (bucket, hose or furrow from a pan or tank).'],
+              ['', 'Full irrigation', 'Method 1 with SMT 70 % throughout and no seasonal cap: the yield with water no longer limiting.'],
+              ['', 'Mulch, 50 % residue cover', 'FieldMngt: mulches on 50 % of the surface, soil evaporation there × 0.5.'],
+              ['', 'Tied ridges or bunds, 15 cm', 'FieldMngt: bunds 0.15 m high; rain is held on the field instead of running off (water harvesting).'],
+            ]}/>
+            {/*SCENARIO_RESULTS*/}
+          </S>
+
+          <S title="Hindcast verification" id="about-crop-hindcast" scope="Kenya · Short Rains · ECMWF SEAS5 1 Oct runs, 25 members · 1993–2016 (county yields: maize, 1993–2025)">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
+              Does the crop outlook tell good seasons from bad ones, and does it say more than the season-length forecast the platform already gives?
+              Each past 1 Oct forecast is rebuilt as it would have been issued: observed weather to 30 Sep, then SEAS5 member k (rain bias-corrected
+              to CHIRPS), March from another year’s observed March, each member sown on its own forecast onset. Its crop is scored against the same
+              crop grown in that season’s observed weather.
+            </p>
+            <Step n="1" title="Scores"
+              eq={"r       = Spearman( median_k yield_k(y) ,  yield_observed weather(y) )      over the years y\nAUC     = ROC area of P(failure) for the observed-weather failures       failure: yield < 0.5 t/ha (bean 0.2)\nRPSS    = 1 − RPS / RPS_climatology        (leave-one-out terciles; not where a third of the seasons failed)"}
+              desc="The baselines are the same scores of the platform’s own season-length (LGP), Oct–Dec rain and onset forecasts read as yield predictors. Seasons already sown before 1 Oct are known, not forecast, so every score is also given over the seasons not sown by 1 Oct."/>
+            <Tbl head={['Question', 'Result']} rows={[
+              ['Agri rule 1 sowing, 1993–2016', 'Skilful for early maize, sorghum and bean at every site (r 0.13–0.70 over the seasons not sown by 1 Oct, failure ROC area 0.61–0.93), but on a par with the season-length forecast rather than better: better at El Karama and Genco Maralal, level at Kiboko and Kapiti, worse at Genco Tana River and Livemo.'],
+              ['FAO agricultural onset sowing', 'More seasons succeed (6–17 of 24), so medium maize can be scored. The same conclusion: Livemo early maize r 0.63 against 0.51 for season length, Kapiti bean 0.41 against 0.24; Genco Tana River 0.40 against 0.63, Kiboko 0.51 against 0.62.'],
+              ['SEAS5 temperature in place of climatology', 'Over 16 years and both rules (46 cells) the rank correlation changes by 0.0 on average (12 better, 12 worse) and the failure ROC area by +0.002: yield ranks follow the rain, not the temperature. SEAS5 temperature stays in the outlook for its effect on development.'],
+              ['County Short Rains maize yields, 1993–2025', 'HarvestStat county yields against the maize forecast, the observed-weather crop and the season-length forecast over 12–16 years. Genco Tana River: forecast r 0.68–0.69, better than season length (0.54–0.56) and the observed-weather crop (0.31–0.51), the only value clearly above noise. Kapiti 0.24–0.41, Livemo 0.13–0.23, Kiboko and El Karama about 0, for all three. A county average mixes sowing dates, varieties, soils and inputs one site’s crop does not have; sorghum and bean have at most two county Short Rains years.'],
+            ]}/>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'12px 0 0'}}>
+              With 24 seasons and 1–17 successes per cell, differences of 0.1–0.2 in r are within sampling noise. The reference is a simulation, so
+              these scores measure how well the forecast weather reproduces the crop the model grows in the real weather, not yield accuracy.
             </p>
           </S>
         </div>

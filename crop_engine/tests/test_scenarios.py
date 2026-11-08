@@ -142,3 +142,19 @@ def test_an_outlook_that_is_not_reproduced_stops_the_run(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="not reproduced"):
         rs.run("seasonal_20261001", keys=["soil_dry"], workers=1)
     assert not (tmp_path / "scenarios" / "seasonal_20261001.json").exists()
+
+
+def test_irrigation_and_field_management_reach_aquacrop():
+    """A dry season: supplementary irrigation (capped) and full irrigation raise the yield, mulch and bunds run."""
+    t = _task(weather(1, False), [D(2026, 10, 20)])
+    t["initial_frac"] = 0.6
+    base = aq.simulate(t)[0]
+    supp = aq.simulate(mg.apply(t, "irr_supplementary"))[0]
+    full = aq.simulate(mg.apply(t, "irr_full"))[0]
+    assert base["irrigation_mm"] == 0.0 and 0 < supp["irrigation_mm"] <= 100 / 0.75 + 1
+    assert full["irrigation_mm"] > supp["irrigation_mm"] and full["yield_t_ha"] >= supp["yield_t_ha"] >= base["yield_t_ha"]
+    assert full["status"] == "ok" and full["yield_t_ha"] > 0.8 * full["potential_t_ha"]
+    for k in ("mulch", "bunds"):
+        out = aq.simulate(mg.apply(t, k))[0]
+        assert out["status"] != "error" and out["irrigation_mm"] == 0.0
+    assert "irrigation" not in t and "field" not in t                                       # the base is not changed

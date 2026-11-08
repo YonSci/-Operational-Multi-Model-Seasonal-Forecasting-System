@@ -382,7 +382,11 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
   const groups = [...new Set(Object.values(meta.scenarios).map(s => s.group))]
   const row = (key, label, s, strong) => (
     <tr key={key}>
-      <td style={{ fontWeight: strong ? 600 : 400, color: strong ? 'var(--heading)' : undefined }}>{label}</td>
+      <td style={{ fontWeight: strong ? 600 : 400, color: strong ? 'var(--heading)' : undefined }}>
+        {label}
+        {s.irrigation_mm_median > 0 && <div style={{ fontSize: 12, color: 'var(--text-meta)' }}>
+          {Math.round(s.irrigation_mm_median)} mm of irrigation (median of the sown crops)</div>}
+      </td>
       <td>{s.planting?.p10 === s.planting?.p90 ? fmtDate(s.planting?.median) : `${fmtDate(s.planting?.p10)} – ${fmtDate(s.planting?.p90)}`}</td>
       <td>{pct(s.p_sowing_opportunity)}</td>
       <td>{s.yield_if_sown_t_ha?.median != null ? `${fmtT(s.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
@@ -414,7 +418,10 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         Median yield over all members counts a member with no crop as zero; in brackets, the change from the outlook. A shifted sowing
         keeps members with no sowing opportunity unsown; a calendar sowing sows every member on that date, rain or not. Plant density
         changes only how fast the canopy closes (AquaCrop-OSPy sets the initial canopy from it), not the maximum canopy calibrated at
-        Kiboko. Soil water on 1 Aug replaces the ERA5-Land value.
+        Kiboko. Soil water on 1 Aug replaces the ERA5-Land value. Supplementary irrigation waters the crop whenever its root zone
+        falls below 30 % of its available water from sowing to flowering, at most 100 mm a season at 75 % efficiency; full irrigation
+        keeps it above 70 % throughout, the yield with water no longer limiting. Mulch covers half the soil with residues, halving
+        evaporation there; tied ridges or bunds hold the rain on the field instead of letting it run off.
       </p>
     </Panel>
   )

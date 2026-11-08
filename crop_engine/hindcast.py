@@ -33,8 +33,17 @@ and the same correlation and ROC area for the platform's other forecasts of the 
 (baselines): the members' median season length (by the sowing rule's own method: the Agri rules' LGP for rule 1,
 the FAO water balance's for the FAO onset), Oct–Dec rain and the onset itself (later = worse).
 
-Outputs (not committed): outputs/crop_engine/verification/hindcast_members.json (every member's outcome) and
-hindcast_scores.json; a table in the log.
+County yields (`county`, maize only): where the site's county has HarvestStat Short Rains maize yields
+(outputs/crop_engine/yields/statistics.csv, from `python -m crop_engine.yields.build`) in at least MIN_COUNTY_YEARS
+of the hindcast years, the rank correlation of the forecast's median yield with the county yield, against the same
+for the observed-weather crop (the benchmark) and for the season-length forecast, over the same years. County yields
+are areal averages of farmers' fields, not a point crop: this asks whether the forecast tracks good and bad
+county seasons, not whether its yield level is right. Sorghum and bean have at most two county Short Rains years in
+1993–2016. Run over 1993–2025 (`--years 1993 2025`) for more overlap (2017–2023): those seasons are also outside
+the SEAS5 rain correction's calibration years.
+
+Outputs (not committed): outputs/crop_engine/verification/hindcast_members<tag>.json (every member's outcome) and
+hindcast_scores<tag>.json (`--tag`, after the temperature's suffix); a table in the log.
 
 Usage:
   python -m crop_engine.hindcast --workers 3                       # simulate and score (about 14,000 seasons)
@@ -72,6 +81,9 @@ ONSETS = {"rule1": FC_DIR / "icpac_rule1" / "ECMWF_onset_all_years.nc",
 LGP = {"rule1": FC_DIR / "ECMWF_lgp_days_all_years.nc",
        "fao-agricultural": FAO_RUN / "fao_wb_agricultural" / "ECMWF_lgp_all_years.nc"}
 TEMPERATURE = ("climatology", "seas5")
+YIELDS = C.OUT / "yields"                                          # crop_engine.yields.build
+MIN_COUNTY_YEARS = 6
+MAIZE = ("maize_early", "maize_medium")
 
 
 def suffix(temperature):
@@ -287,6 +299,7 @@ def score_all(members, bench, inp, varieties, years):
                 open_ = np.array([f is None or f >= f"{y}-10-01" for f, y in zip(first, yy)])
                 out.setdefault(sid, {}).setdefault(vk, {})[rk] = {
                     "years": yy, "observed_t_ha": obs.round(3).tolist(), "forecast_median_t_ha": np.median(fc, axis=1).round(3).tolist(),
+                    "lgp_median_days": np.array(base[sid, rk]["lgp_days"][0])[idx].round(1).tolist(),
                     "forecast_p_failure": (fc < thr).mean(axis=1).round(3).tolist(), "crop": scores(fc, obs, thr),
                     "sown_before_oct": int((~open_).sum()), "sown_before_oct_success": int(((~open_) & (obs >= thr)).sum()),
                     "crop_from_oct": scores(fc[open_], obs[open_], thr) if open_.sum() >= 8 else None,
@@ -294,6 +307,53 @@ def score_all(members, bench, inp, varieties, years):
                                            for name, (v, sign) in base[sid, rk].items()} if open_.sum() >= 8 else None,
                     "baselines": {name: baseline_scores(np.array(v)[idx], sign, obs, thr) for name, (v, sign) in base[sid, rk].items()}}
     return out
+
+
+def county_yields():
+    """{site id: {year: county Short Rains maize dry yield, t/ha}} (HarvestStat), or {} without the yield build."""
+    stats, sites = YIELDS / "statistics.csv", YIELDS / "sites.csv"
+    if not (stats.exists() and sites.exists()):
+        return {}
+    st = pd.read_csv(stats)
+    st = st[st.source.str.startswith("HarvestStat") & (st.season == "SR") & (st.crop == "maize")]
+    out = {}
+    for _, r in pd.read_csv(sites).iterrows():
+        c = st[st.admin_1 == r.county]
+        if len(c):
+            out[r.site_id] = {int(y): float(v) / 1000 for y, v in zip(c.year, c.yield_dry_kg_ha) if np.isfinite(v)}
+    return out
+
+
+def county_scores(sc, counties, min_years=MIN_COUNTY_YEARS):
+    """Per site, maize variety and rule: rank correlations with the county's Short Rains maize yields over the
+    shared years, of the forecast's median, of the observed-weather crop and of the season-length forecast."""
+    out = {}
+    for sid, vs in sc.items():
+        cy = counties.get(sid, {})
+        for vk in MAIZE:
+            for rk, d in vs.get(vk, {}).items():
+                yy = [y for y in d["years"] if y in cy]
+                if len(yy) < min_years:
+                    continue
+                i = [d["years"].index(y) for y in yy]
+                obs = [cy[y] for y in yy]
+                lgp = d.get("lgp_median_days")
+                out.setdefault(sid, {}).setdefault(vk, {})[rk] = {
+                    "years": yy, "county_t_ha": [round(v, 3) for v in obs],
+                    "forecast": _r(np.array(d["forecast_median_t_ha"])[i], obs),
+                    "benchmark": _r(np.array(d["observed_t_ha"])[i], obs),
+                    "lgp": _r(np.array(lgp)[i], obs) if lgp is not None else None}
+    return out
+
+
+def county_table(cs, log=log):
+    log(f"{'site':16s} {'crop':13s} {'rule':6s} years | r with county: forecast  benchmark  season length")
+    f = lambda x: "  —  " if x is None else f"{x:+.2f}"
+    for sid, vs in cs.items():
+        for vk, rs in vs.items():
+            for rk, d in rs.items():
+                log(f"{sid[:16]:16s} {vk:13s} {rk[:6]:6s} {len(d['years']):5d} |           {f(d['forecast'])}     "
+                    f"{f(d['benchmark'])}      {f(d['lgp'])}")
 
 
 def table(sc, log=log):
@@ -358,6 +418,7 @@ def main():
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--score-only", action="store_true", help="score the saved members, without simulating")
     ap.add_argument("--fao-onsets", action="store_true", help="compute the FAO onsets of the 1 Oct runs, then stop")
+    ap.add_argument("--tag", default="", help="suffix of the output files (e.g. _1993_2025), kept apart from the others")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -377,7 +438,7 @@ def main():
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
     rep_cells = [(s, g) for s, g in ro.cells(inp.sites) if not a.sites or s.id in a.sites]
     OUT.mkdir(parents=True, exist_ok=True)
-    sfx = suffix(a.temperature)
+    sfx = suffix(a.temperature) + a.tag
     mpath = OUT / f"hindcast_members{sfx}.json"
     saved = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else None
     if a.score_only:
@@ -394,7 +455,12 @@ def main():
            "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
            "reference": "the same crop grown in each season's observed weather (climatology.json)", "sites": sc}
     table(sc)
-    cpath = OUT / "hindcast_members.json"
+    counties = county_yields()
+    if counties:
+        out["county"] = county_scores(sc, counties)
+        log("county Short Rains maize yields (HarvestStat):")
+        county_table(out["county"])
+    cpath = OUT / f"hindcast_members{a.tag}.json"
     if a.temperature == "seas5" and cpath.exists():                     # the same years, climatological temperature
         clim_members = json.loads(cpath.read_text(encoding="utf-8"))["sites"]
         log(f"the same {len(years)} years with climatological temperature:")

@@ -64,3 +64,13 @@ def test_not_sown_and_too_late():
     t["planting"] = [None, dt.date(2027, 2, 20)]
     out = wf.simulate(t)
     assert out[0]["status"] == "not_sown" and out[1]["status"] == "too_late"
+
+
+def test_the_yield_factor_scales_leaf_photosynthesis_and_yield():
+    _, _, over, base = wf.phenology(dict(MAIZE, wofost={"AMAXTB_scale": 0.5}))
+    assert over["AMAXTB"][0::2] == base["AMAXTB"][0::2]                          # the development stages kept
+    assert over["AMAXTB"][1::2] == [v * 0.5 for v in base["AMAXTB"][1::2]]
+    assert "AMAXTB" not in wf.phenology(MAIZE)[2]                                # without it, WOFOST's own table
+    full = wf.simulate(task(40.0))[0]["yield_t_ha"]
+    half = wf.simulate(dict(task(40.0), variety=dict(MAIZE, wofost={"AMAXTB_scale": 0.5})))[0]["yield_t_ha"]
+    assert half < full

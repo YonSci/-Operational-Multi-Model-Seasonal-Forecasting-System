@@ -20,6 +20,11 @@
 #             maize 0.324 (calibration set kiboko_v3, below)
 # The bean keeps AquaCrop's defaults: no bean trials near the sites.
 #
+# `wofost`: the second engine's (adapters/wofost_adapter.py) parameters. Maize AMAXTB_scale 0.511 (crop_engine/
+# calibration/wofost.py): WOFOST's leaf photosynthesis table scaled so medium maize under full irrigation at Kiboko
+# yields Duma 43's 7.76 t/ha, as kiboko_v3 fitted AquaCrop's HI0; early maize shares it. Sorghum keeps WOFOST's own;
+# WOFOST has no dry bean.
+#
 # Maize is calibrated (crop_engine/calibration, CROP_ENGINE.md "Calibration sets"):
 #   early  maturity_days 115   kiboko_v2: the local Katumani composite's days to silking at KARI Kiboko (2012, well
 #                              watered; Ngugi et al. 2013), about 100 days to maturity at Kiboko; held-out IITA
@@ -41,6 +46,7 @@ varieties:
     maturity_days: 115          # kiboko_v2 (was 90)
     failure_t_ha: 0.5           # yield below this counts as a crop failure (grain, dry)
     parameters: {PlantPop: 44444, CCx: 0.75, HI0: 0.324}    # HI0: kiboko_v3 (AquaCrop's 0.48)
+    wofost: {AMAXTB_scale: 0.511}   # WOFOST's yield level: Duma 43 under full irrigation (calibration/wofost.py)
   maize_medium:
     label: Medium-maturing maize
     examples: Duma 43 / mid-altitude hybrid type
@@ -48,6 +54,7 @@ varieties:
     maturity_days: 142          # kiboko_v2 (was 120)
     failure_t_ha: 0.5
     parameters: {PlantPop: 44444, CCx: 0.75, HI0: 0.324}    # HI0: kiboko_v3 (AquaCrop's 0.48)
+    wofost: {AMAXTB_scale: 0.511}   # WOFOST's yield level: Duma 43 under full irrigation (calibration/wofost.py)
   sorghum:
     label: Sorghum
     examples: Gadam type

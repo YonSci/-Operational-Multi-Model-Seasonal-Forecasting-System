@@ -77,6 +77,14 @@ outlook can be read against what a farmer could do differently. Each scenario ch
 | Calendar sowing | 15 Oct, 1 Nov, 15 Nov | every member sown on that date, onset or not (AquaCrop's germination still needs a wet topsoil) |
 | Plant density | × 0.67, × 1.2 | the variety's plant population. AquaCrop-OSPy derives only the initial canopy cover from it (CCo = population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated at Kiboko) does not change |
 | Initial soil water | wilting point, field capacity on 1 Aug | in place of the ERA5-Land plant-available water |
+| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from sowing to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season, 75 % application efficiency (bucket, hose or furrow from a pan or tank) |
+| | full irrigation | method 1, 70 % throughout, no seasonal cap: the yield with water no longer limiting |
+| | mulch, 50 % residue cover | `FieldMngt`: mulches on 50 % of the surface, soil evaporation there × 0.5 |
+| | tied ridges / bunds, 15 cm | `FieldMngt`: bunds 0.15 m high, so rain is held on the field instead of running off (water harvesting) |
+
+Each member records the irrigation it received (`irrigation_mm`); the scenario summaries give the sown crops'
+median (`irrigation_mm_median`), shown under the scenario's name on the dashboard. The outlook itself stays
+rain-fed on bare, unbunded soil.
 
 Re-sowing after a failed establishment works as in the outlook, and the summaries are the outlook's (same
 benchmark), so each scenario reads directly against the outlook's own row ("baseline", copied from the run's
@@ -143,7 +151,7 @@ The crop forecast adds information where its scores beat the baselines'. The ref
 scores measure how well the forecast weather reproduces the crop the model grows in the real weather, not yield
 accuracy; county yields (`crop_engine/yields`) are the next reference. About 14,000 member seasons (one to two
 hours on three workers); `--score-only` re-scores the saved members. Outputs (not committed):
-`outputs/crop_engine/verification/hindcast_members.json`, `hindcast_scores.json`.
+`outputs/crop_engine/verification/hindcast_members.json`, `hindcast_scores.json` (`_seas5t` added with SEAS5 temperature, then the `--tag`).
 
 Seasons the observed-weather crop had already sown before 1 Oct (an August or September onset) are known when the
 forecast is issued, not forecast: the forecast sows them on the same observed date in the same observed weather.
@@ -196,6 +204,30 @@ At El Karama and Genco Maralal 12–14 of the successful seasons are sown in Aug
 few seasons to score from October (all-season r 0.8–0.96 there is flattered by those sowings). The conclusion is
 rule 1's: the crop forecast is skilful and about level with the season-length forecast (better at Livemo and for
 Kapiti's bean, worse at Genco Tana River and slightly at Kiboko).
+
+### County yields (November 2026, maize, 1 Oct runs, 1993–2025)
+
+The crop forecast against the county's measured Short Rains maize yields (HarvestStat Africa, dry t/ha): rank
+correlation over the years with both a forecast and a county yield, against the same for the crop grown in the
+observed weather and for the season-length forecast (`county` in the scores; run with `--years 1993 2025
+--varieties maize_early maize_medium --tag _1993_2025_maize`; 2017–2025 are outside the SEAS5 rain correction's
+calibration years). Sorghum and bean have at most two county Short Rains years and are not scored.
+
+| Site (county, years) | Forecast | Observed-weather crop | Season-length forecast |
+|---|---|---|---|
+| Genco Tana River (Tana River, 14) | **0.68–0.69** | 0.31–0.51 | 0.54–0.56 |
+| Kapiti (Machakos, 15) | 0.24–0.41 | 0.13–0.48 | 0.16–0.30 |
+| Livemo Memerush (Kajiado, 13) | 0.13–0.23 | −0.36 to 0.13 | 0.19–0.35 |
+| KALRO Kiboko (Makueni, 16) | −0.04 to 0.13 | −0.30 to 0.10 | 0.07–0.09 |
+| El Karama (Laikipia, 12) | −0.17 to 0.19 | −0.09 to 0.14 | −0.31 to 0.03 |
+| Genco Maralal (Samburu, 6) | −0.21 to 0.20 | −0.21 to 0.37 | −0.44 to 0.71 |
+
+(ranges over early and medium maize and both sowing rules.) Only Genco Tana River's 0.68 is clearly above the
+noise of 12–16 years (about 0.5 for 5 % significance), and there the crop forecast tracks the county's good and
+bad seasons better than both the season-length forecast and the observed-weather crop. Elsewhere none of the three
+tracks the county: a county average mixes sowing dates, varieties, soils and inputs a single site's crop does not
+have, and at Kiboko and El Karama the site's rain is not the county's. The forecast's median over 25 members can
+correlate better than the single observed-weather crop because it smooths out one season's sowing date.
 
 ### SEAS5 temperature (November 2026)
 
@@ -577,8 +609,42 @@ minutes):
   early) and yield less at cool Genco Maralal (1,780 m), where its slower development pushes grain filling into
   the dry season.
 - Neither engine is checked against measured yields here: the Kiboko trials (maize 4.5 t/ha median, well managed)
-  are not farmers' rain-fed seasons. WOFOST's yield level needs the same trial calibration AquaCrop had
-  (kiboko_v3) before its numbers are published; until then it shows how much the outlook depends on the model.
+  are not farmers' rain-fed seasons.
+
+### WOFOST's maize yield level (November 2026, `crop_engine/calibration/wofost.py`)
+
+As kiboko_v3 did for AquaCrop: medium maize under full irrigation (WOFOST's potential production, `Wofost72_PP`)
+at KARI Kiboko in the 2012 dry season, sown every 14 days from 1 Jun to 31 Jul, should yield Duma 43's 7.76 t/ha
+(Ngugi et al. 2013). WOFOST has no harvest index, so the fitted parameter is **AMAXTB_scale**, one factor on the
+light-saturated leaf photosynthesis table (a standard WOFOST calibration parameter); phenology stays on AquaCrop's
+calibrated targets.
+
+| | AMAXTB_scale | Full irrigation, Kiboko: medium / early maize (t/ha) | Trials: Duma 43 / Katumani / IITA median |
+| :--- | ---: | ---: | ---: |
+| WOFOST's table (Maize_VanHeemst_1988) | 1.0 | 11.2 / 10.0 | 7.76 / 3.02 / 4.5 |
+| **calibrated** | **0.511** | **7.78 / 6.2** (2013 sowings 6.1) | |
+
+Status: **adopted** (`varieties.yaml`, both maize classes: `wofost: {AMAXTB_scale: 0.511}`). Halving the leaf
+photosynthesis is not a physiological value: as AquaCrop's low HI0 (0.324), it carries everything the trial had and
+the model does not see (fertilizer, the trial's density, grain moisture). The early class shares it, as in
+kiboko_v3, and lands where AquaCrop's does (6.2 against 6.5 t/ha), both above the Katumani check. Sorghum keeps
+WOFOST's own table: no well-watered sorghum trial near the sites.
+
+The engine comparison with the calibrated maize (FAO onset, every season counted):
+
+| Site | Early maize: median t/ha AquaCrop / WOFOST | failure rate | r (sown seasons) | Sorghum: median t/ha (uncalibrated) | failure rate |
+|---|---|---|---|---|---|
+| El Karama | 3.19 / 2.94 | 30 % / 9 % | 0.70 | 1.90 / 5.11 | 36 % / 3 % |
+| Genco Maralal | 3.15 / 1.02 | 30 % / 36 % | 0.47 | 1.62 / 2.92 | 36 % / 9 % |
+| Genco Tana River | 0.45 / 0.21 | 52 % / 64 % | 0.32 | 0.15 / 0.84 | 52 % / 46 % |
+| KALRO Kiboko | 0.80 / 0.86 | 48 % / 39 % | 0.78 | 0.92 / 1.65 | 48 % / 15 % |
+| Kapiti | 0.86 / 0.96 | 36 % / 36 % | 0.80 | 0.74 / 1.92 | 42 % / 24 % |
+| Livemo Memerush | 0.07 / 0.40 | 55 % / 55 % | 0.87 | 0.07 / 0.86 | 58 % / 33 % |
+
+Maize now agrees between the engines at most sites (rank correlation of the sown seasons 0.27–0.89 over all maize
+cells, agreement on failure or not 64–94 %). The remaining differences are structural: AquaCrop's seedlings die in
+a dry spell after sowing and WOFOST's do not, and WOFOST develops more slowly at cool Genco Maralal (1,780 m), so
+its grain fills in the dry season. Both engines in the published outlook (the spread between models shown) is next.
 
 ## Testing
 
@@ -602,17 +668,17 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   weather of the same seasons (1993–2016) — in place for the 1 Oct SEAS5 runs and Agri rule 1 (*Hindcast
   verification*). First result: skilful, but on a par with the season-length forecast rather than better (better at
   El Karama and Genco Maralal, worse at Genco Tana River and Livemo). The FAO agricultural onset and SEAS5
-  temperature (done): the same conclusion, and SEAS5 temperature changes the skill by less than its noise. Next:
-  county yields as a reference, and the sub-seasonal reforecasts.
+  temperature (done): the same conclusion, and SEAS5 temperature changes the skill by less than its noise. County
+  Short Rains maize yields as a reference (done, 1993–2025: *Hindcast verification*). Next: the sub-seasonal
+  reforecasts.
 - **P1 Weather forcing**: the season runs to 31 Mar; SEAS5 temperature per member and SEAS5 March rain (done).
   SEAS5 radiation, humidity and wind for ET0 and WOFOST (in place; the downloads run after the temperature
   files'). Next: temperature from the sub-seasonal models in their range.
-- **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
-  seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
-  irrigation and field-management options: mulch, bunds), where partners can say what is practised.
-- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations: the adapter and the engine
-  comparison are in place (*Second engine: WOFOST*; phenology on AquaCrop's calibrated targets). Next: its yield
-  level against the Kiboko trials (as kiboko_v3), then both engines in the published outlook, so the spread between
-  models is shown.
+- **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, and
+  supplementary and full irrigation, mulch and bunds, for the seasonal run (done; *Management scenarios*). Next: the
+  amounts and practices partners say are used (water available per season, mulch cover, ridge height).
+- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations: the adapter, the engine
+  comparison and the maize yield level (calibrated to Duma 43, as kiboko_v3) are in place (*Second engine: WOFOST*).
+  Next: both engines in the published outlook, so the spread between models is shown; sorghum against a trial.
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
   bulletins and gridded regional yield forecasts.

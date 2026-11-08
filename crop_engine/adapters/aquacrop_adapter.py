@@ -21,6 +21,11 @@ re-sown crop's, with `sowings` and `first_planting` recording it.
 
 A simulated member also carries `_canopy`: its canopy cover (fraction) every CANOPY_STEP days from the season start,
 for the canopy bands of the summaries (run_outlook.canopy_band); it is not written to the results.
+
+Management (the scenarios, crop_engine.scenarios.management): task "irrigation" (AquaCrop-OSPy IrrigationManagement
+arguments, e.g. irrigation_method 1 with soil-moisture targets SMT per growth stage and a seasonal cap MaxIrrSeason)
+and task "field" (FieldMngt arguments: mulches, bunds). Without them the crop is rain-fed on bare, unbunded soil, as
+the outlook. A member records the irrigation it received (`irrigation_mm`, the season's net depth).
 """
 import datetime as dt
 import warnings
@@ -70,7 +75,7 @@ def make_soil(layers):
 
 def _sow(task, m, plant, dates, g):
     """One sowing of member m on `plant` → outcome dict (status, yield, dates, stress)."""
-    from aquacrop import AquaCropModel, Crop, InitialWaterContent
+    from aquacrop import AquaCropModel, Crop, FieldMngt, InitialWaterContent, IrrigationManagement
     r = dict(member=m + 1, planting=plant.isoformat(), status="not_sown", yield_t_ha=0.0, potential_t_ha=None,
              biomass_t_ha=None, harvest=None, max_canopy=None, stress_days=None, rain_mm=None, sources=None)
     k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])
@@ -87,7 +92,9 @@ def _sow(task, m, plant, dates, g):
             sim_start_time=f"{dates[0]:%Y/%m/%d}", sim_end_time=f"{dates[-1]:%Y/%m/%d}", weather_df=wdf,
             soil=make_soil(task["layers"]), crop=Crop(task["variety"]["aquacrop_crop"], planting_date=f"{plant:%m/%d}", **task["kw"]),
             initial_water_content=InitialWaterContent(wc_type="Pct", method="Depth", depth_layer=[0.05, 2.0],
-                                                      value=[100 * task["initial_frac"]] * 2))
+                                                      value=[100 * task["initial_frac"]] * 2),
+            irrigation_management=IrrigationManagement(**task["irrigation"]) if task.get("irrigation") else None,
+            field_management=FieldMngt(**task["field"]) if task.get("field") else None)
         model.run_model(till_termination=True)
         res = model.get_simulation_results()
         growth = model.get_crop_growth()
@@ -115,6 +122,7 @@ def _sow(task, m, plant, dates, g):
              biomass_t_ha=round(float(growth.biomass.values[: kh + 1].max()) / 100.0, 3),
              harvest=f"{harvest:%Y-%m-%d}", expected_maturity=f"{expected_maturity:%Y-%m-%d}",
              max_canopy=round(cc, 3), stress_days=int(stressed.sum()),
+             irrigation_mm=round(float(np.nansum(flux.IrrDay.values[: len(dates)][season])), 1) if "IrrDay" in flux else 0.0,
              rain_mm=round(float(task["rain"][m][season].sum()), 1), sources=src.tolist(),
              _canopy=ccs[::CANOPY_STEP])
     return r
