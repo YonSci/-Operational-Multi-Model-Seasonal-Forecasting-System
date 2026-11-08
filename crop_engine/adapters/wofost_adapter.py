@@ -14,7 +14,9 @@ Sorghum_VanHeemst_1988. WOFOST has no dry bean set: the bean is AquaCrop-only (a
 Phenology: TSUM1 and TSUM2 are scaled together (their ratio kept) so the crop matures in the variety's
 `maturity_days` at the varieties' reference temperature (21 °C), through the crop's own DTSMTB, with emergence
 from TSUMEM at TBASEM: the same targets AquaCrop's phenology is scaled to (the maize classes calibrated at Kiboko,
-varieties.yaml). Growth parameters are WOFOST's: the yield level is not calibrated to the Kenyan trials.
+varieties.yaml). Yield level: a variety's `wofost: {AMAXTB_scale: f}` multiplies the leaf photosynthesis table
+AMAXTB (maize fitted to Duma 43 under full irrigation at Kiboko: crop_engine/calibration/wofost.py); without it,
+WOFOST's own.
 
 Soil (one root zone, as the classic water balance): the SoilGrids layers' wilting point and field capacity averaged
 over the top 100 cm, saturation from Saxton & Rawls (2006) Eq. 2–5 and the saturated conductivity (Eq. 16)
@@ -49,8 +51,16 @@ def available(variety):
     return variety.get("aquacrop_crop") in CROPS
 
 
+def _quiet():
+    """PCSE logs every phenology change of every run to ~/.pcse/logs (and several worker processes then contend for
+    its log rotation): only warnings and errors are kept."""
+    import logging
+    logging.getLogger("pcse").setLevel(logging.WARNING)
+
+
 def _cropdata():
     """PCSE's WOFOST crop parameter library (downloaded once by PCSE, then read from its cache), per process."""
+    _quiet()
     if "p" not in _CROPDATA:
         from pcse.input import YAMLCropDataProvider
         from pcse.models import Wofost72_WLP_CWB
@@ -71,12 +81,16 @@ def phenology(variety, reference_tmean=REFERENCE_TMEAN):
     crop, name = CROPS[variety["aquacrop_crop"]]
     p = _cropdata()
     p.set_active_crop(crop, name)
-    base = {k: p[k] for k in ("TSUMEM", "TBASEM", "TEFFMX", "TSUM1", "TSUM2", "DTSMTB")}
+    base = {k: p[k] for k in ("TSUMEM", "TBASEM", "TEFFMX", "TSUM1", "TSUM2", "DTSMTB", "AMAXTB")}
     emerge_days = base["TSUMEM"] / max(min(reference_tmean, base["TEFFMX"]) - base["TBASEM"], 0.1)
     rate = float(_afgen(base["DTSMTB"], reference_tmean))
     total = max(variety["maturity_days"] - emerge_days, 10) * rate
     share = base["TSUM1"] / (base["TSUM1"] + base["TSUM2"])
     over = {"TSUM1": round(total * share, 1), "TSUM2": round(total * (1 - share), 1)}
+    scale = (variety.get("wofost") or {}).get("AMAXTB_scale")
+    if scale is not None:                                               # the yield level (calibration/wofost.py)
+        t = list(base["AMAXTB"])
+        over["AMAXTB"] = [v * scale if i % 2 else v for i, v in enumerate(t)]
     return crop, name, over, base
 
 
