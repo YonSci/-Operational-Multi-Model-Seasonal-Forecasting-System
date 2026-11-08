@@ -10,6 +10,10 @@ next year is a leap year).
   et0_mm (site, time)              FAO-56 reference evapotranspiration
   precip_source (time)             index into attrs["precip_sources"] (config.PRECIP_SOURCES)
   tmax_source, et0_source (site, time)  index into attrs["met_sources"] (config.MET_SOURCES)
+and, when the ERA5-Land site series are available (crop_engine.data.era5land.site_met; for WOFOST, not AquaCrop):
+  rad_mj_m2, vap_hpa, wind2_ms (site, time)  solar radiation, vapour pressure, 2 m wind speed
+  rad_source (site, time)          their source (one for the three), as tmax_source
+  elev_m (site)                    the elevation of the ERA5-Land cell (from its mean surface pressure)
 
 Rain of a forecast run, member k (the members of forecast_runs.py, so the onset dates the dashboard shows belong to
 exactly this rain):
@@ -22,7 +26,8 @@ exactly this rain):
                   skill five months ahead)
 Observed seasons (the benchmark) are observed CHIRPS throughout, March included.
 Temperature and ET0: ERA5-Land to its last day (temperature: Open-Meteo point series; ET0: the platform's ERA5-Land
-FAO-56 grid), then the 1993–2016 day-of-year climatology (ET0: by season day, to SEASON_END); no forecast
+FAO-56 grid), then the 1993–2016 day-of-year climatology (ET0: by season day, to SEASON_END); radiation, vapour
+pressure and wind likewise (ERA5-Land from Earth Engine, then their day-of-year climatology); no forecast
 temperature or radiation is used yet.
 """
 import datetime as dt
@@ -76,6 +81,14 @@ class Inputs:
         self.temps = {s.id: era5land.site_temperature(s, refresh=refresh) for s in self.sites}
         self.tclim = {s.id: (era5land.climatology(t.tmax), era5land.climatology(t.tmin)) for s, t in
                       ((s, self.temps[s.id]) for s in self.sites)}
+        try:                                                              # radiation, humidity, wind: optional
+            self.met2 = era5land.site_met(self.sites, refresh=refresh)
+            self.met2_clim = {sid: {v: era5land.climatology(df[v]) for v in era5land.MET} for sid, df in self.met2.items()}
+            self.met2_note = ""
+        except Exception as exc:
+            self.met2, self.met2_clim = None, None
+            self.met2_note = f"not available: {str(exc)[:200]}"
+            print(f"[{dt.datetime.now():%H:%M:%S}] crop weather: radiation, humidity and wind {self.met2_note}", flush=True)
         self.et0_clim = fw.et0_climatology(self.cfg, self.lat, self.lon, self.T)[:, self.ii, self.jj]  # (T, site)
         self.o26 = orl.obs_2026(self.lat, self.lon)[:, self.ii, self.jj]                           # (366, site)
         self.final_end = _last_time(orl.FINAL_2026) if orl.FINAL_2026.exists() else dt.date(self.year, 1, 1)
@@ -121,6 +134,31 @@ class Inputs:
         esrc = np.where(np.isfinite(e), C.MET_SOURCES.index("era5land"), C.MET_SOURCES.index("climatology")).astype(np.int8)
         return tmax, tmin, np.where(np.isfinite(e), e, clim).astype(np.float32), tsrc, esrc
 
+    def radiation(self, dates):
+        """{rad_mj_m2, vap_hpa, wind2_ms: (site, T)}, their source (site, T) and the cells' elevation (site,): ERA5-Land
+        where available, else the day-of-year climatology; None without the site series."""
+        if self.met2 is None:
+            return None
+        ns, T = len(self.sites), len(dates)
+        out = {v: np.empty((ns, T), np.float32) for v in era5land.MET}
+        src = np.zeros((ns, T), np.int8)
+        doy = era5land.doy_noleap(dates) - 1
+        elev = np.empty(ns, np.float32)
+        for k, s in enumerate(self.sites):
+            df = self.met2[s.id]
+            m = df.reindex(dates)
+            miss = m[era5land.MET].isna().any(axis=1).values
+            for v in era5land.MET:
+                out[v][k] = np.where(miss, self.met2_clim[s.id][v][doy], m[v].values)
+            src[k] = np.where(miss, C.MET_SOURCES.index("climatology"), C.MET_SOURCES.index("era5land"))
+            cal = df[(df.index.year >= C.CAL_YEARS[0]) & (df.index.year <= C.CAL_YEARS[1])]
+            elev[k] = fw.elevation_from_pressure(float(cal.sp_kpa.mean()))
+        return out, src, elev
+
+    def _extra(self, dates):
+        r = self.radiation(dates)
+        return r if r is not None else self.met2_note
+
     def initial_water(self, year):
         """Plant-available water on 1 Aug as a fraction of the FAO bucket's TAW (ERA5-Land root-zone soil moisture,
         as the FAO water balance starts), per site."""
@@ -163,7 +201,7 @@ class Inputs:
         src[mar] = C.PRECIP_SOURCES.index("climatology")
         tmax, tmin, et0, tsrc, esrc = self.met(y, dates)
         attrs = {**attrs, "season_year": y, "climatological_march_years": f"member k: CHIRPS March {cal[0] + 1}+(k mod {len(cal)})"}
-        return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs)
+        return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, self._extra(dates))
 
     # ── an observed season (benchmark) ───────────────────────────────────
     def observed(self, year):
@@ -173,10 +211,11 @@ class Inputs:
         tmax, tmin, et0, tsrc, esrc = self.met(year, dates)
         attrs = {"forecast_source": "observed", "model_label": "Observed weather (CHIRPS v2, ERA5-Land)", "season_year": year,
                  "run_date": "", "obs_end": "", "members_kind": "one observed season"}
-        return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs)
+        return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, self._extra(dates))
 
 
-def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs):
+def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs, extra=None):
+    """The crop-weather Dataset. extra: Inputs.radiation's (values, source, elevation), or a note why there are none."""
     site_coords = {"site": [s.id for s in sites], "site_name": ("site", [s.name for s in sites]),
                    "lat": ("site", [s.lat for s in sites]), "lon": ("site", [s.lon for s in sites]),
                    "cell_lat": ("site", [s.cell_lat for s in sites]), "cell_lon": ("site", [s.cell_lon for s in sites])}
@@ -188,6 +227,17 @@ def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs):
     ds["precip_mm"].attrs["units"] = "mm/day"
     ds["tmax_c"].attrs["units"] = ds["tmin_c"].attrs["units"] = "degC"
     ds["et0_mm"].attrs["units"] = "mm/day"
+    if isinstance(extra, tuple):
+        vals, rsrc, elev = extra
+        for v, units in (("rad_mj_m2", "MJ m-2 day-1"), ("vap_hpa", "hPa"), ("wind2_ms", "m/s")):
+            ds[v] = (("site", "time"), vals[v].astype(np.float32))
+            ds[v].attrs["units"] = units
+        ds["rad_source"] = (("site", "time"), rsrc)
+        ds = ds.assign_coords(elev_m=("site", np.asarray(elev, np.float32)))
+        attrs = {**attrs, "radiation": "ERA5-Land 0.1° cell of each site (Google Earth Engine): solar radiation, vapour "
+                                       "pressure at the dewpoint, 2 m wind (FAO-56 Eq. 47); rad_source per day"}
+    else:
+        attrs = {**attrs, "radiation": extra or "not available"}
     ds.attrs.update({
         "precip_sources": json.dumps(C.PRECIP_SOURCES), "met_sources": json.dumps(C.MET_SOURCES),
         "calibration": "CHIRPS v2 quantile mapping of SEAS5 (1993–2016); weather forecasts as in forecast_runs.py",
@@ -200,6 +250,7 @@ def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs):
 
 REQUIRED = {"precip_mm": ("member", "site", "time"), "tmax_c": ("site", "time"), "tmin_c": ("site", "time"),
             "et0_mm": ("site", "time"), "precip_source": ("time",), "tmax_source": ("site", "time"), "et0_source": ("site", "time")}
+OPTIONAL = {"rad_mj_m2": (0, 40), "vap_hpa": (0, 50), "wind2_ms": (0, 20)}     # all or none, with rad_source
 REQUIRED_ATTRS = ("forecast_source", "season_year", "precip_sources", "met_sources", "calibration", "spatial_resolution")
 
 
@@ -225,12 +276,24 @@ def validate(ds):
             p.append(f"{v}: {int(np.isnan(a).sum())} missing values")
         elif a.min() < lo or a.max() > hi:
             p.append(f"{v}: values outside {lo}–{hi} ({a.min():.1f}–{a.max():.1f})")
+    got = [v for v in (*OPTIONAL, "rad_source") if v in ds]
+    if got and len(got) < len(OPTIONAL) + 1:
+        p.append(f"radiation, humidity and wind incomplete: only {', '.join(got)}")
+    elif got:
+        for v, (lo, hi) in OPTIONAL.items():
+            a = ds[v].values
+            if ds[v].dims != ("site", "time"):
+                p.append(f"{v} dims {ds[v].dims} != ('site', 'time')")
+            elif np.isnan(a).any():
+                p.append(f"{v}: {int(np.isnan(a).sum())} missing values")
+            elif a.min() < lo or a.max() > hi:
+                p.append(f"{v}: values outside {lo}–{hi} ({a.min():.1f}–{a.max():.1f})")
     if (ds.tmin_c.values > ds.tmax_c.values + 1e-6).any():
         p.append("tmin above tmax")
     n_p, n_m = len(json.loads(ds.attrs["precip_sources"])), len(json.loads(ds.attrs["met_sources"]))
     if ds.precip_source.values.min() < 0 or ds.precip_source.values.max() >= n_p:
         p.append("precip_source codes out of range")
-    for v in ("tmax_source", "et0_source"):
+    for v in ("tmax_source", "et0_source") + (("rad_source",) if "rad_source" in ds else ()):
         if ds[v].values.min() < 0 or ds[v].values.max() >= n_m:
             p.append(f"{v} codes out of range")
     return p

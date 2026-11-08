@@ -181,14 +181,21 @@ the model in the observed weather, not measured yields.
 | Rain 1–31 Mar | climatological: member k takes the observed CHIRPS March of 1994 + (k mod 24) | a declared climatological ensemble: the SEAS5 October files on disk end on 28 Feb; observed seasons use their own March |
 | Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then the 1993–2016 day-of-year climatology | |
 | ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology | the same as the FAO water balance |
+| Solar radiation, vapour pressure, 2 m wind | ERA5-Land at the site's 0.1° cell (Google Earth Engine), then the 1993–2016 day-of-year climatology | for WOFOST; AquaCrop does not use them (its ET0 is the platform's). The same fields as the platform's ET0 (`scripts/fao_era5land_gee.py`): vapour pressure at the daily mean dewpoint, wind the mean of 00/06/12/18 UTC at 10 m taken to 2 m (FAO-56 Eq. 47). Left out of a run, with the reason in its `radiation` attribute, when Earth Engine has never been reached |
 | Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
 | Soil water on 1 Aug | ERA5-Land root-zone soil moisture, as the FAO water balance starts | |
 | Sowing date | Agri rule 1 onset; FAO agricultural onset | unchanged outputs of the platform's methods |
 
 Every day carries its source (`precip_source`: obs_final, obs_prelim, gap, forecast, seasonal, climatology;
-`tmax_source`, `et0_source`: era5land, climatology), so a result can always be traced to what drove it.
+`tmax_source`, `et0_source`, `rad_source`: era5land, climatology), so a result can always be traced to what drove it.
 `crop_engine.data.weather.validate` checks each run's inputs (structure, no gaps, value ranges, Tmin ≤ Tmax,
 provenance codes) before any simulation.
+
+`python -m crop_engine.data.met_check` checks the radiation, humidity and wind: FAO-56 ET0 computed from them
+and the site temperature against the platform's ET0 at the site's 0.25° cell. On 8,027 days of 1993–2025 (the
+platform's ET0 months) the correlation is 0.99–1.00 at every site and the mean difference 0.08–0.22 mm/day (a
+0.1° point against a 0.25° cell mean), so a second engine computing its own evaporation from them sees the same
+evaporative demand as AquaCrop and the FAO water balance.
 
 ## Varieties (`crop_engine/varieties.yaml`)
 
@@ -473,5 +480,8 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
   irrigation and field-management options: mulch, bunds), where partners can say what is practised.
 - **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations — after AquaCrop's calibration.
+  Its weather is in place: ERA5-Land solar radiation, vapour pressure and 2 m wind at every site, in each run's
+  weather file with their source per day (*Inputs*); a forecast of them waits on the SEAS5 radiation and humidity
+  downloads (P1 Weather forcing).
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
   bulletins and gridded regional yield forecasts.
