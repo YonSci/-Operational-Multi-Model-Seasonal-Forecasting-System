@@ -1,6 +1,7 @@
 """SEAS5 temperature and March rain for the crop weather (crop_engine.data.seas5), on synthetic files."""
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from crop_engine import config as C
@@ -53,3 +54,22 @@ def test_hargreaves_ratio():
     assert s5.hargreaves_ratio(30.0, 16.0, 30.0, 16.0) == 1.0
     assert s5.hargreaves_ratio(32.0, 17.0, 30.0, 16.0) > 1.0                   # warmer, wider range: more ET0
     assert s5.hargreaves_ratio(40.0, 5.0, 30.0, 25.0) == 1.3                   # clipped
+
+
+def test_a_past_run_leaves_its_own_year_out_of_the_correction(tmp_path, monkeypatch):
+    monkeypatch.setattr(s5, "DIR", tmp_path)
+    monkeypatch.setattr(C, "CAL_YEARS", (2001, 2004))
+    monkeypatch.setattr(s5, "MIN_CAL_YEARS", 3)
+    for y, warm in ((2001, 0.0), (2002, 0.0), (2003, 0.0), (2004, 3.0)):         # 2004: a 3 °C warmer season
+        _file(s5.path(y), y, warm=warm)
+    idx = pd.date_range("2000-01-01", "2005-06-30")
+    temps = {s: pd.DataFrame({"tmax": 27.0, "tmin": 17.0}, index=idx) for s in SITES}   # SEAS5 unbiased
+    hist = pd.DataFrame(1.0, index=idx, columns=SITES)
+    out = s5.Seas5(2004, SITES, LATS, LONS, temps, hist, exclude=2004)
+    assert out.cal_years == [2001, 2002, 2003]
+    assert abs(float(out.tmax.mean()) - 30.0) < 0.15                             # the warm anomaly is kept
+    inn = s5.Seas5(2004, SITES, LATS, LONS, temps, hist)                          # in-sample: part of it removed
+    assert float(inn.tmax.mean()) < float(out.tmax.mean()) - 0.5
+    monkeypatch.setattr(s5, "MIN_CAL_YEARS", 4)
+    with pytest.raises(ValueError):
+        s5.Seas5(2004, SITES, LATS, LONS, temps, hist, exclude=2004)

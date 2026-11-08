@@ -47,3 +47,15 @@ def test_assemble_rain_puts_each_source_in_its_days():
     assert r.shape == (M, S, T)
     assert (at(f"{y}-09-30") == 1).all() and (at(f"{y}-10-01") == 2).all() and (at(f"{y}-12-31") == 2).all()
     assert (at(f"{y + 1}-01-01") == 3).all() and (at(f"{y + 1}-02-28") == 3).all() and (at(f"{y + 1}-03-31") == 4).all()
+
+
+def test_new_rules_are_merged_into_the_saved_members_and_compared():
+    saved = {"a": {"maize": {"rule1": {"2001": [1]}}}}
+    merged = hc._merge(saved, {"a": {"maize": {"fao-agricultural": {"2001": [2]}}}, "b": {"maize": {"rule1": {}}}})
+    assert set(merged["a"]["maize"]) == {"rule1", "fao-agricultural"} and "b" in merged
+    d = lambda r, a, o: {"crop": {"spearman": r, "failure_auc": a}, "crop_from_oct": {"spearman": o}}
+    clim = {"a": {"maize": {"rule1": d(0.5, 0.7, 0.4)}}}
+    seas = {"a": {"maize": {"rule1": d(0.6, 0.65, None)}}}
+    s = hc.compare(clim, seas, log=lambda m: None)
+    assert s["spearman"] == {"n": 1, "mean_change": 0.1, "n_better": 1, "n_worse": 0}
+    assert s["failure_auc"]["n_worse"] == 1 and s["oct_spearman"]["n"] == 0
