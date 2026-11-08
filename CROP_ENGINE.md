@@ -119,8 +119,16 @@ hindcast rain, `outputs/ecmwf_oct/ECMWF_bc_daily_all_years.nc` and the Jan–Feb
 March of another calibration year (never the same year); temperature and ET0 from 1 Oct the 1993–2016 day-of-year
 climatology. Each member is sown on its Agri rule 1 onset from the platform's hindcast onsets
 (`outputs/ecmwf_oct/icpac_rule1/`): the assembled rain reproduces those onsets exactly (checked: 150 of 150
-members at Kiboko and Kapiti in 1997, 2005 and 2010). The FAO agricultural onset has no 1 Oct hindcast on disk, so
-rule 1 only for now.
+members at Kiboko and Kapiti in 1997, 2005 and 2010). The FAO agricultural onset rule sows each member on its FAO
+water-balance onset of the same 1 Oct run (observed CHIRPS v3 and ERA5-Land to 30 Sep, then the member), computed
+once by `python -m crop_engine.hindcast --fao-onsets` into `outputs/crop_engine/verification/fao_oct/` (its own
+folder: the platform's run folders are untouched).
+
+`--temperature seas5` runs the same hindcast with the weather the outlook now uses: SEAS5 member k's temperature
+from 1 Oct, bias-corrected to ERA5-Land with the season's own year left out of the correction, the ET0 climatology
+scaled by it, and SEAS5 March rain. Only the years whose 182-day SEAS5 file is on disk run (14–16 of 24 so far);
+the climatological-temperature members of the same years are scored alongside (`climatology_same_years`,
+`comparison` in `hindcast_scores_seas5t.json`), so the two are compared on equal terms.
 
 Scores per site, crop and rule over the 24 years:
 
@@ -129,7 +137,7 @@ Scores per site, crop and rule over the 24 years:
 | `spearman` | rank correlation of the members' median yield with the observed-weather yield |
 | `rpss` | ranked probability skill score of the yield terciles (leave-one-out terciles of the observed-weather yields) against 1/3 each; not given where a third or more of the seasons failed |
 | `failure_bss`, `failure_auc` | Brier skill score of the chance of crop failure against the leave-one-out failure rate, and its ROC area |
-| baselines | the same correlation and ROC area for the platform's other forecasts of the season read as yield predictors: the members' median season length (Dunning LGP), Oct–Dec rain and rule 1 onset (later = worse) |
+| baselines | the same correlation and ROC area for the platform's other forecasts of the season read as yield predictors: the members' median season length by the sowing rule's own method (the Agri rules' LGP for rule 1, the FAO water balance's for the FAO onset), Oct–Dec rain and the onset itself (later = worse) |
 
 The crop forecast adds information where its scores beat the baselines'. The reference is a simulation, so these
 scores measure how well the forecast weather reproduces the crop the model grows in the real weather, not yield
@@ -171,6 +179,34 @@ Rank correlation and failure ROC area over the seasons not sown by 1 Oct, crop f
 24 seasons and 1–17 successes per cell: differences of 0.1–0.2 in r are within sampling noise. The reference is
 the model in the observed weather, not measured yields.
 
+### The FAO agricultural onset (November 2026, 1 Oct runs, 1993–2016)
+
+The FAO onset sows more seasons that succeed (6–17 of 24 at every site but Kapiti's medium maize, against 1–17 by
+rule 1), so medium maize and some terciles (`rpss`) can now be scored. Over the seasons not sown by 1 Oct, against
+the FAO water balance's own season-length forecast:
+
+| Site | Early maize: r crop / LGP | AUC crop / LGP | Sorghum: r crop / LGP | Bean: r crop / LGP |
+|---|---|---|---|---|
+| Genco Tana River | 0.40 / **0.63** | 0.74 / 0.78 | 0.49 / **0.74** | 0.25 / 0.29 |
+| KALRO Kiboko | 0.51 / 0.62 | 0.80 / 0.85 | 0.51 / 0.63 | 0.42 / 0.42 |
+| Kapiti | 0.49 / 0.48 | 0.68 / 0.68 | 0.46 / 0.47 | **0.41** / 0.24 |
+| Livemo Memerush | **0.63** / 0.51 | **0.88** / 0.79 | 0.56 / 0.51 | 0.41 / 0.35 |
+
+At El Karama and Genco Maralal 12–14 of the successful seasons are sown in August or September, which leaves too
+few seasons to score from October (all-season r 0.8–0.96 there is flattered by those sowings). The conclusion is
+rule 1's: the crop forecast is skilful and about level with the season-length forecast (better at Livemo and for
+Kapiti's bean, worse at Genco Tana River and slightly at Kiboko).
+
+### SEAS5 temperature (November 2026)
+
+With SEAS5 temperature the scores barely move: over the 14 years with SEAS5 files (rule 1) the rank correlation
+changes by +0.007 on average (3 cells better, 2 worse of 23, the rest unchanged) and the failure ROC area by
++0.004; over 16 years (FAO onset) by +0.006 (9 better, 8 worse) and −0.002. Most cells are unchanged because yield
+ranks follow the rain (failures and sowing dates), not the temperature; the few that move go both ways by 0.05–0.2
+(El Karama sorghum and Genco Maralal early maize up, Livemo early maize down), within the noise of 14–16 seasons.
+SEAS5 temperature is kept in the outlook for its physical effect on development (it moves maturity by days in a
+warm season), not for skill it has shown here.
+
 ## Inputs
 
 | Input | Source | Notes |
@@ -209,8 +245,7 @@ large but steady through the season (Kiboko Tmax −1.0 to −1.2 °C, Tmin −2
 run is warmer than the 1993–2016 normal after correction (member median Tmax +0.2 to +1.1 °C, Tmin +1.1 to +2.0 °C,
 November to March). Maize sown on 5 Nov in every member matures 4–9 days sooner than with climatological
 temperature; the early maize median moves from 2.20 to 2.59 t/ha at Kiboko and from 4.88 to 4.68 t/ha at Kapiti.
-The hindcast verification still uses climatological temperature from 1 Oct, so SEAS5 temperature is not yet
-verified there.
+In the hindcast verification SEAS5 temperature changes the skill very little (*Hindcast verification*).
 
 Every day carries its source (`precip_source`: obs_final, obs_prelim, gap, forecast, seasonal, climatology;
 `tmax_source`, `et0_source`: era5land, climatology, seasonal; `rad_source`: era5land, climatology), so a
@@ -499,8 +534,9 @@ Priorities after the November 2026 review (software MVP in place; the next miles
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
   weather of the same seasons (1993–2016) — in place for the 1 Oct SEAS5 runs and Agri rule 1 (*Hindcast
   verification*). First result: skilful, but on a par with the season-length forecast rather than better (better at
-  El Karama and Genco Maralal, worse at Genco Tana River and Livemo). Next: the FAO agricultural onset (its 1 Oct
-  hindcast onsets), county yields as a reference, and the sub-seasonal reforecasts.
+  El Karama and Genco Maralal, worse at Genco Tana River and Livemo). The FAO agricultural onset and SEAS5
+  temperature (done): the same conclusion, and SEAS5 temperature changes the skill by less than its noise. Next:
+  county yields as a reference, and the sub-seasonal reforecasts.
 - **P1 Weather forcing**: the season runs to 31 Mar; SEAS5 temperature per member and SEAS5 March rain (done).
   Next: forecast radiation and humidity for ET0; temperature from the sub-seasonal models in their range.
 - **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
