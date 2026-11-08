@@ -70,11 +70,23 @@ def _last_time(path):
         return pd.Timestamp(ds.time.values[-1]).date()
 
 
+def release_run_file(b):
+    """Keep only the season year of the Blender's run file (outputs/ecmwf_oct_obs_latest/ECMWF_bc_daily_all_years.nc,
+    opened lazily) in memory and close the file. The daily update rewrites it, and Windows refuses to while any process
+    holds it open: a long crop-engine job (hindcast, calibration, scenarios) would otherwise make the update fail."""
+    da = getattr(b, "bc_all", None)
+    if da is None:
+        return
+    b.bc_all = da.sel(year=[b.year]).load()                              # what Blender.to_da needs later
+    da.close()
+
+
 class Inputs:
     """What every run shares: the grid, the sites' cells, observed rain, ET0, temperatures, the SEAS5 Jan–Feb members."""
 
     def __init__(self, sites=None, refresh=True, blender=None):
         self.b = blender or bs.Blender(C.BASE)
+        release_run_file(self.b)
         self.year, self.lat, self.lon = self.b.year, self.b.lat, self.b.lon
         self.cfg = fw.load_config()
         self.t0 = fw.season_days(self.cfg)[0]                               # 1 Aug
