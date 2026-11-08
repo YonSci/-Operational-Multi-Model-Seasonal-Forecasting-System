@@ -53,9 +53,10 @@ CAVEATS = [
     "smallholder fields.",
     "Past seasons are simulated: AquaCrop grown in the observed weather of 1993–2025, not measured yields.",
     "A crop season runs from 1 Aug to 31 Mar: a crop that cannot mature by 31 Mar is counted as too late.",
-    "Temperature and ET0 after the last ERA5-Land day are the 1993–2016 day-of-year climatology; 1 Jan – 28 Feb rain "
-    "is ECMWF SEAS5 (bias-corrected), as for the Agri rules; March rain is climatological (each member the observed "
-    "March of a past year), so a crop still growing in March is not forecast for that month.",
+    "After the last ERA5-Land day, temperature is ECMWF SEAS5 member by member, bias-corrected to ERA5-Land, and ET0 "
+    "the ERA5-Land climatology scaled by that temperature (Hargreaves); 1 Jan – 28 Feb rain is SEAS5 (bias-corrected), "
+    "as for the Agri rules, and March rain SEAS5 quantile-mapped to CHIRPS. Where the SEAS5 files are missing, "
+    "temperature is the 1993–2016 climatology and March rain the observed March of a past year (see each run's weather).",
     "Soil is the 0.25° SoilGrids average of the site's grid cell, not a field measurement.",
     "Deterministic weather models are the same forecast in every member: their spread comes from SEAS5 only.",
 ]
@@ -209,8 +210,8 @@ def benchmark(inp, rep_cells, varieties, rules, soils, workers):
                 plant = (pl.observed_rule_date(rain[0], dates, pet[:, s.i, s.j], rk) if rk.startswith("rule")
                          else fao[s.id].get(y))
                 for vk, v in varieties.items():
-                    tasks.append(dict(dates=dates.values, rain=rain, tmax=ds.tmax_c.values[k], tmin=ds.tmin_c.values[k],
-                                      et0=ds.et0_mm.values[k], source=ds.precip_source.values, planting=[plant],
+                    tasks.append(dict(dates=dates.values, rain=rain, tmax=ds.tmax_c.values[:, k], tmin=ds.tmin_c.values[:, k],
+                                      et0=ds.et0_mm.values[:, k], source=ds.precip_source.values, planting=[plant],
                                       resow=resow, variety=v,
                                       kw=v["kw"], layers=soils[s.id], initial_frac=float(frac[k])))
                     keys.append((s.id, vk, rk, y))
@@ -278,8 +279,8 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
         resow = pl.sowing_opportunities(ds.precip_mm.values[:, k], dates)
         for rk in rules:
             for vk, v in varieties.items():
-                tasks.append(dict(dates=dates.values, rain=ds.precip_mm.values[:, k], tmax=ds.tmax_c.values[k],
-                                  tmin=ds.tmin_c.values[k], et0=ds.et0_mm.values[k], source=ds.precip_source.values,
+                tasks.append(dict(dates=dates.values, rain=ds.precip_mm.values[:, k], tmax=ds.tmax_c.values[:, k],
+                                  tmin=ds.tmin_c.values[:, k], et0=ds.et0_mm.values[:, k], source=ds.precip_source.values,
                                   planting=plant[rk][s.id], resow=resow, variety=v, kw=v["kw"], layers=soils[s.id],
                                   initial_frac=float(frac[k])))
                 keys.append((s.id, vk, rk))
@@ -317,7 +318,8 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
             "varieties": {k: {x: v[x] for x in ("label", "examples", "maturity_days", "failure_t_ha", "aquacrop_crop")} |
                           {"phenology_scale": round(v["scale"], 3)} for k, v in varieties.items()},
             "planting_rules": {k: C.PLANTING_RULES[k]["label"] for k in rules}, "caveats": CAVEATS,
-            "weather_file": f"outputs/crop_engine/weather/{rid}.nc"}
+            "weather_file": f"outputs/crop_engine/weather/{rid}.nc",
+            "weather": {"march_rain": ds.attrs.get("march_rain"), "temperature": ds.attrs.get("temperature_forecast")}}
     C.RESULTS_OUT.mkdir(parents=True, exist_ok=True)
     (C.RESULTS_OUT / f"{rid}.json").write_text(json.dumps({"meta": meta, "sites": out_sites}, indent=1), encoding="utf-8")
     log(f"{rid}: {len(tasks) * P.shape[0]} member seasons in {time.time() - t0:.0f} s")

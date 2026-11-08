@@ -332,8 +332,8 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             <Tbl head={['Dataset','Used for','Resolution','Period']} rows={[
               ['CHIRPS v2 daily rainfall', 'Observed onset, cessation and season length; terciles; bias correction of the forecasts', '0.25°', '1981 on (Long Rains), 1993 on (other seasons)'],
               ['CHIRPS v3 daily rainfall', 'FAO water balance: observations, terciles and its own bias correction', '0.05°, averaged to 0.25°', '1993 on'],
-              ['ECMWF SEAS5 and C3S seasonal models', 'Seasonal forecasts and hindcasts (25 members for SEAS5)', 'Regridded to 0.25°', 'SEAS5 hindcasts from 1981 (Long Rains) or 1993; other C3S models from 1993'],
-              ['ERA5-Land', 'FAO-56 reference evapotranspiration (ET0) and starting soil moisture', '0.1°, averaged to 0.25°', '1993 on'],
+              ['ECMWF SEAS5 and C3S seasonal models', 'Seasonal forecasts and hindcasts (25 members for SEAS5); forecast temperature and March rain of the crop outlook (SEAS5 1 Oct runs to 31 Mar, bias-corrected to ERA5-Land and CHIRPS)', 'Regridded to 0.25°', 'SEAS5 hindcasts from 1981 (Long Rains) or 1993; other C3S models from 1993'],
+              ['ERA5-Land', 'FAO-56 reference evapotranspiration (ET0) and starting soil moisture; site temperature, solar radiation, humidity and wind of the crop outlook', '0.1°, averaged to 0.25° (crop sites: the 0.1° cell)', '1993 on'],
               ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
               ['Satellite rainfall and 10–15 day forecasts', 'Near real-time rainfall tracking at monitored sites; sub-seasonal and medium-range forecasts', 'Site', 'Current season'],
             ]}/>
@@ -1300,7 +1300,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
 
             <h4 className="about-subhead">Inputs</h4>
             <Tbl head={['Input', 'Value used']} rows={[
-              ['Weather', 'Daily minimum and maximum temperature, rain and reference evapotranspiration (ET0) of one member, 1 Aug to 31 Mar. ET0 is floored at 0.1 mm because AquaCrop divides by it.'],
+              ['Weather', 'Daily minimum and maximum temperature, rain and reference evapotranspiration (ET0) of one member, 1 Aug to 31 Mar: ERA5-Land to its latest day, then the ECMWF SEAS5 temperature of that member, bias-corrected to ERA5-Land by lead day, with the ET0 climatology scaled by it (Hargreaves ratio). ET0 is floored at 0.1 mm because AquaCrop divides by it.'],
               ['Soil', 'Layers from texture (sand, clay, organic matter; SoilGrids) through the package’s pedotransfer functions.'],
               ['Initial soil water', 'θ = θwp + f · (θfc − θwp) at every depth on 1 Aug, with f from the ERA5-Land soil water, as in the FAO water balance.'],
               ['Crop', 'AquaCrop’s thermal-time crop files MaizeGDD, SorghumGDD and DryBeanGDD, with the adjustments below.'],

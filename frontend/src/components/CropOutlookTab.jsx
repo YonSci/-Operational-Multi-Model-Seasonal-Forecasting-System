@@ -695,8 +695,11 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
               ['Forecast', `${runLabel(run)}; observations to ${fmtDate(run.obs_end)}`],
               ['Rainfall', [...(runQ.data?.meta?.segments ?? []).map((s, i) =>      // the crop season starts on 1 Aug
                               `${s.label} ${i === 0 && s.kind === 'obs' ? '1 Aug' : fmtDate(s.start)} – ${fmtDate(s.end)}`),
-                            'ECMWF SEAS5 1 Jan – 28 Feb', 'climatology 1–31 Mar (each member the observed March of a past year; the season ends on 31 Mar)'].join('; ')],
-              ['Temperature, ET0', 'ERA5-Land to its latest day, then the 1993–2016 average for the day of the year'],
+                            'ECMWF SEAS5 1 Jan – 28 Feb',
+                            `1–31 Mar: ${runQ.data?.meta?.weather?.march_rain ?? 'climatology (each member the observed March of a past year)'}; the season ends on 31 Mar`].join('; ')],
+              ['Temperature, ET0', (runQ.data?.meta?.weather?.temperature ?? '').startsWith('ECMWF')
+                ? 'ERA5-Land to its latest day, then ECMWF SEAS5 member by member, bias-corrected to ERA5-Land; ET0 the ERA5-Land climatology scaled by that temperature'
+                : 'ERA5-Land to its latest day, then the 1993–2016 average for the day of the year'],
               ['Site', `${site.name}, 0.25° grid cell ${site.cell?.join(', ')}`],
               ['Soil', `SoilGrids, ${site.topsoil?.sand}% sand and ${site.topsoil?.clay}% clay at the surface; ${site.soil_taw_100cm_mm} mm available water in the top metre`
                        + (res ? `; ${pct(res.initial_water_fraction)} of it on 1 Aug (ERA5-Land)` : '')],
