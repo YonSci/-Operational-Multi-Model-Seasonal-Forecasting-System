@@ -363,6 +363,63 @@ const countOutcomes = statuses => {
 }
 
 // ── The tab ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── Management scenarios: the seasonal run's crops grown again with one choice changed ──────────────────────────
+// the change between two yields as shown (fmtT's one decimal), so 3.9 against 3.8 reads +0.1, never "same"
+const fmtDiff = (a, b) => {
+  if (a == null || b == null) return ''
+  const d = Math.round(Number(fmtT(a)) * 10) - Math.round(Number(fmtT(b)) * 10)
+  return d === 0 ? ' (same)' : ` (${d > 0 ? '+' : '−'}${(Math.abs(d) / 10).toFixed(1)})`
+}
+function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg }) {
+  const sub = 'The seasonal forecast’s crops grown again in the same weather members with one management choice changed. '
+            + 'The first row is the outlook above.'
+  if (!seasonal) return <Panel title="Management scenarios" sub={sub}>{msg('Scenarios are made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
+  if (loading) return <Panel title="Management scenarios" sub={sub}>{msg('Loading…')}</Panel>
+  const cell = data?.sites?.[sid]?.results?.[vk]?.[rk]
+  if (!cell) return <Panel title="Management scenarios" sub={sub}>{msg(data ? 'No scenarios for this site, crop and rule yet.'
+                                                                             : 'The scenarios come with the next weekly crop run.')}</Panel>
+  const meta = data.meta, base = cell.baseline
+  const groups = [...new Set(Object.values(meta.scenarios).map(s => s.group))]
+  const row = (key, label, s, strong) => (
+    <tr key={key}>
+      <td style={{ fontWeight: strong ? 600 : 400, color: strong ? 'var(--heading)' : undefined }}>{label}</td>
+      <td>{s.planting?.p10 === s.planting?.p90 ? fmtDate(s.planting?.median) : `${fmtDate(s.planting?.p10)} – ${fmtDate(s.planting?.p90)}`}</td>
+      <td>{pct(s.p_sowing_opportunity)}</td>
+      <td>{s.yield_if_sown_t_ha?.median != null ? `${fmtT(s.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
+      <td>{s.yield_if_sown_t_ha?.median != null ? `${fmtT(s.yield_if_sown_t_ha.p10)}–${fmtT(s.yield_if_sown_t_ha.p90)} t/ha` : '—'}</td>
+      <td>{pct(s.p_failure_if_sown)}</td>
+      <td>{pct((s.share?.too_late ?? 0))}</td>
+      <td>{fmtT(s.yield_t_ha?.median)} t/ha{strong ? '' : fmtDiff(s.yield_t_ha?.median, base.yield_t_ha?.median)}</td>
+    </tr>
+  )
+  return (
+    <Panel title="Management scenarios"
+           sub={`${sub} Sowing rule: ${ruleLabel}. Made from observations to ${fmtDate(meta.obs_end)}, refreshed weekly.`}>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr><th>Scenario</th><th>Sowing (8 in 10)</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
+                <th>Failure if sown</th><th>Too late</th><th>Median yield, all members</th></tr>
+          </thead>
+          <tbody>
+            {row('baseline', 'As the outlook', base, true)}
+            {groups.map(g => [
+              <tr key={g}><td colSpan={8} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-meta)', paddingTop: 14 }}>{g}</td></tr>,
+              ...Object.entries(meta.scenarios).filter(([k, s]) => s.group === g && cell[k]).map(([k, s]) => row(k, s.label, cell[k], false)),
+            ])}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '8px 0 0', lineHeight: 1.5 }}>
+        Median yield over all members counts a member with no crop as zero; in brackets, the change from the outlook. A shifted sowing
+        keeps members with no sowing opportunity unsown; a calendar sowing sows every member on that date, rain or not. Plant density
+        changes only how fast the canopy closes (AquaCrop-OSPy sets the initial canopy from it), not the maximum canopy calibrated at
+        Kiboko. Soil water on 1 Aug replaces the ERA5-Land value.
+      </p>
+    </Panel>
+  )
+}
+
 // The dashboard's own choices (season, seasonal run, onset method, forecast type and model) set the defaults here; a
 // choice the crop outlook cannot follow is named in a notice, never replaced silently
 export default function CropOutlookTab({ country, selectedSite, season, initId, initLabel, onsetDef, onsetLabel,
@@ -398,6 +455,9 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const run = runs.find(r => r.id === runId) ?? mainRun ?? runs[0]
   const runQ = useQuery({ queryKey: ['crop-run', run?.id], enabled: !!run, staleTime: 30 * 60_000,
                           queryFn: () => getJSON(DATA + (run.file ?? run.source + '.json')) })
+  // management scenarios of the seasonal run (crop_engine/run_scenarios.py); absent until first made
+  const scenQ = useQuery({ queryKey: ['crop-scenarios'], staleTime: 30 * 60_000, retry: false,
+                           queryFn: () => getJSON(DATA + 'scenarios.json').catch(() => null) })
 
   const msg = t => <div className="flex items-center justify-center min-h-[300px] p-6 text-center" style={{ fontSize: 15, color: 'var(--text-meta)' }}>{t}</div>
   if (country !== 'kenya') return msg('The crop outlook covers the Kenya monitored sites for now. Switch the country to Kenya to see it.')
@@ -601,6 +661,11 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             </table>
           </div>
         </Panel>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <ScenarioPanel data={scenQ.data} loading={scenQ.isLoading} seasonal={run.source === 'seasonal'} sid={sid} vk={vk} rk={rk}
+                       ruleLabel={rules[rk]} msg={msg}/>
       </div>
 
       <div className="grid gap-4" style={{ marginTop: 18 }}>

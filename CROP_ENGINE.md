@@ -28,6 +28,8 @@ python -m crop_engine.run_outlook --sources seasonal    # one run
 python -m crop_engine.run_outlook --climatology --force # rebuild the benchmark and every run
 python -m pytest crop_engine/tests                      # unit tests (synthetic data)
 python -m crop_engine.calibration.run --set kiboko_v1 --benchmark   # a calibration set (see Calibration sets)
+python -m crop_engine.run_scenarios                     # management scenarios of the seasonal run (see below)
+python -m crop_engine.hindcast --workers 3              # hindcast verification, 1993–2016 (see below)
 ```
 
 Outputs (not committed; `outputs/crop_engine/`): `weather/<run>.nc` (the daily inputs), `results/<run>.json` (every
@@ -60,8 +62,114 @@ not a crop site (the nearest site is shown, with its distance). It shows:
 - how the canopy develops: the sown crops' canopy cover week by week (median and 8 in 10 band) against the past
   seasons' median;
 - every forecast side by side for the same site and crop (sowing opportunity, yield and failure if sown, yield
-  without water stress), with the simulated past seasons and the measured trials as reference rows; each member's
-  outcome (re-sown members marked); and the inputs behind the result.
+  without water stress), with the simulated past seasons and the measured trials as reference rows;
+- the **management scenarios** of the seasonal forecast (below), next to the outlook itself;
+- each member's outcome (re-sown members marked); and the inputs behind the result.
+
+## Management scenarios (`crop_engine/scenarios/management.py`, `crop_engine/run_scenarios.py`)
+
+The seasonal run's crops grown again in the same weather members with one management choice changed, so the
+outlook can be read against what a farmer could do differently. Each scenario changes one thing of every member:
+
+| Group | Scenarios | What changes |
+|---|---|---|
+| Sowing date | 14 days earlier; 14 and 28 days later | each member's sowing date (the rule's onset) shifted; members with no onset stay unsown, a date past 31 Mar leaves no time to mature |
+| Calendar sowing | 15 Oct, 1 Nov, 15 Nov | every member sown on that date, onset or not (AquaCrop's germination still needs a wet topsoil) |
+| Plant density | × 0.67, × 1.2 | the variety's plant population. AquaCrop-OSPy derives only the initial canopy cover from it (CCo = population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated at Kiboko) does not change |
+| Initial soil water | wilting point, field capacity on 1 Aug | in place of the ERA5-Land plant-available water |
+
+Re-sowing after a failed establishment works as in the outlook, and the summaries are the outlook's (same
+benchmark), so each scenario reads directly against the outlook's own row ("baseline", copied from the run's
+results). The sowing dates are the run's own (`results/<run>.json`) and the weather its own file
+(`weather/<run>.nc`): the onset forecasts are not recomputed. Each site is simulated on the soil of the grid cell
+the run records. As a control, the outlook's own crops are re-simulated unchanged with the scenarios: if any member's
+yield differs from the outlook's by more than 0.05 t/ha the run stops and writes nothing (`meta.baseline_reproduced_within_t_ha`).
+
+All scenarios for every site, variety and rule are about 12,000 member seasons (~100 min on one worker), and how
+management changes the crop moves little from day to day, so the daily update refreshes them **weekly**:
+`crop_engine.run_all` runs `run_scenarios --max-age-days 7 --workers 2` after the forecast runs, in the crop step's
+time left (stopped at the limit, the previous scenarios kept). The tab shows them with the observations they were
+made from, and only while they match the seasonal run's configuration (`dashboard.write_scenarios`). Output (not
+committed): `outputs/crop_engine/scenarios/<run>.json`; the tab's copy `frontend/public/tracker/data/crop/scenarios.json`.
+
+First run (1 Oct 2026 SEAS5 run, observations to 31 Oct; 528 runs in 17 min on six workers, the outlook reproduced
+within 0.011 t/ha). Early maize, Agri rule 1, median yield over all members (the outlook's in brackets):
+
+| Site | 14 d earlier | 14 d later | 1 Nov (all) | density × 0.67 / × 1.2 | dry / wet soil on 1 Aug |
+|---|---|---|---|---|---|
+| KALRO Kiboko (1.7) | 2.3 | 0.0 | 2.1 | 1.6 / 1.7 | 1.4 / 6.2 |
+| Genco Tana River (4.0) | 2.3 | 0.0 | 1.4 | 3.9 / 4.0 | 3.6 / 5.1 |
+| Kapiti (0.0; 4.7 if sown) | 0.3 | 0.0 | 5.6 | 0.0 / 0.0 | 0.0 / 7.2 |
+
+Sowing late costs most; density moves yields by about 0.1 t/ha (only the canopy's start changes in AquaCrop-OSPy);
+a soil at field capacity on 1 Aug raises the median by 1–7 t/ha, so the ERA5-Land starting water is one of the
+outlook's most sensitive inputs. At Kapiti most members sow late or not
+at all on the rule, so a calendar date sows a crop the rule does not: the rule waits for an onset that, in these
+members, comes late.
+
+## Hindcast verification (`crop_engine/hindcast.py`)
+
+Does the crop outlook tell good seasons from bad ones, and does it say more than the forecasts the platform already
+gives? The crop is grown in each past seasonal forecast (SEAS5 1 Oct runs, 25 members, 1993–2016) and scored
+against the same crop grown in that season's observed weather (the benchmark, `climatology.json`).
+
+The weather of a past forecast is what a forecast issued on 1 Oct of that year would have had: observed CHIRPS,
+temperature and ET0 to 30 Sep; SEAS5 member k bias-corrected to CHIRPS from 1 Oct to 28 Feb (the platform's own
+hindcast rain, `outputs/ecmwf_oct/ECMWF_bc_daily_all_years.nc` and the Jan–Feb extension); March from the observed
+March of another calibration year (never the same year); temperature and ET0 from 1 Oct the 1993–2016 day-of-year
+climatology. Each member is sown on its Agri rule 1 onset from the platform's hindcast onsets
+(`outputs/ecmwf_oct/icpac_rule1/`): the assembled rain reproduces those onsets exactly (checked: 150 of 150
+members at Kiboko and Kapiti in 1997, 2005 and 2010). The FAO agricultural onset has no 1 Oct hindcast on disk, so
+rule 1 only for now.
+
+Scores per site, crop and rule over the 24 years:
+
+| Score | What it says |
+|---|---|
+| `spearman` | rank correlation of the members' median yield with the observed-weather yield |
+| `rpss` | ranked probability skill score of the yield terciles (leave-one-out terciles of the observed-weather yields) against 1/3 each; not given where a third or more of the seasons failed |
+| `failure_bss`, `failure_auc` | Brier skill score of the chance of crop failure against the leave-one-out failure rate, and its ROC area |
+| baselines | the same correlation and ROC area for the platform's other forecasts of the season read as yield predictors: the members' median season length (Dunning LGP), Oct–Dec rain and rule 1 onset (later = worse) |
+
+The crop forecast adds information where its scores beat the baselines'. The reference is a simulation, so these
+scores measure how well the forecast weather reproduces the crop the model grows in the real weather, not yield
+accuracy; county yields (`crop_engine/yields`) are the next reference. About 14,000 member seasons (one to two
+hours on three workers); `--score-only` re-scores the saved members. Outputs (not committed):
+`outputs/crop_engine/verification/hindcast_members.json`, `hindcast_scores.json`.
+
+Seasons the observed-weather crop had already sown before 1 Oct (an August or September onset) are known when the
+forecast is issued, not forecast: the forecast sows them on the same observed date in the same observed weather.
+They count in the scores above, as they would for a user, but they flatter the forecast, so every cell also has
+`crop_from_oct` and `baselines_from_oct`: the same scores over the seasons not sown by 1 Oct only (at least 8),
+and `n_success` / `sown_before_oct_success`, how many seasons the observed-weather crop succeeded in and how many
+of those were sown before October.
+
+### First results (November 2026, 1 Oct runs, rule 1, 1993–2016)
+
+Rank correlation and failure ROC area over the seasons not sown by 1 Oct, crop forecast against the season-length
+(Dunning LGP) forecast scored over the same seasons; *ok* = seasons the observed-weather crop succeeded in (of 24):
+
+| Site | Early maize: r crop / LGP | AUC crop / LGP | ok | Sorghum: r crop / LGP | Bean: r crop / LGP |
+|---|---|---|---|---|---|
+| El Karama | **0.57** / 0.36 | 0.67 / 0.68 | 10 | **0.41** / 0.32 | 0.41 / 0.39 |
+| Genco Maralal | **0.45** / 0.21 | **0.93** / 0.70 | 4 | **0.74** / 0.48 | **0.76** / 0.63 |
+| Genco Tana River | 0.38 / **0.59** | 0.76 / 0.83 | 10 | 0.37 / **0.56** | 0.47 / **0.58** |
+| KALRO Kiboko | 0.70 / 0.64 | 0.90 / 0.93 | 6 | 0.70 / 0.64 | 0.56 / 0.55 |
+| Kapiti | 0.31 / 0.36 | 0.61 / 0.66 | 5 | 0.33 / 0.34 | 0.13 / **0.35** |
+| Livemo Memerush | 0.20 / **0.51** | 0.82 / 0.86 | 4 | 0.20 / **0.45** | 0.43 / **0.51** |
+
+- For early maize, sorghum and bean the crop forecasts are skilful (positive correlation, failure ROC area above
+  0.5 at every site), but they are not
+  generally better than the season-length forecast: better at El Karama and Genco Maralal, level at Kiboko and
+  Kapiti, worse at Genco Tana River and Livemo. Where they are worse, yield depends on rain the onset and season
+  length already capture, and the crop adds noise (sowing dates, a single soil).
+- Medium maize cannot be scored at most sites: it succeeds in 0–6 of 24 seasons in the observed weather (Kapiti
+  never), and the perfect scores at Genco Maralal come from its two successful seasons, both sown in August.
+- Terciles (`rpss`) are not scored anywhere but one cell: a third or more of the observed-weather seasons fail.
+- With all seasons counted, Genco Maralal and El Karama score higher (r 0.6–1.0) because of the August sowings.
+
+24 seasons and 1–17 successes per cell: differences of 0.1–0.2 in r are within sampling noise. The reference is
+the model in the observed weather, not measured yields.
 
 ## Inputs
 
@@ -354,12 +462,16 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   to Duma 43; both maize classes adopted (medium once the season ran to 31 Mar). Next: an improved early
   variety's well-watered yield; sorghum phenology; then the other sites as trials are found.
 - **P1 Hindcast verification**: crop forecasts from past forecast runs against the crops simulated in the observed
-  weather of the same seasons (1993–2016), and against county yields: does the crop simulation add information
-  beyond the onset, cessation, season length and FAO water balance forecasts?
+  weather of the same seasons (1993–2016) — in place for the 1 Oct SEAS5 runs and Agri rule 1 (*Hindcast
+  verification*). First result: skilful, but on a par with the season-length forecast rather than better (better at
+  El Karama and Genco Maralal, worse at Genco Tana River and Livemo). Next: the FAO agricultural onset (its 1 Oct
+  hindcast onsets), county yields as a reference, and the sub-seasonal reforecasts.
 - **P1 Weather forcing**: the season runs to 31 Mar with a declared climatological March (done). Next: forecast
   temperature and radiation (SEAS5) with source metadata per day; SEAS5 March rain (the October runs' lead days
   152–182, to download for 1993–2026 and bias-correct as January–February).
-- **P1 Management scenarios**: sowing-date offsets and fixed dates, plant density, initial soil water.
+- **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
+  seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
+  irrigation and field-management options: mulch, bunds), where partners can say what is practised.
 - **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations — after AquaCrop's calibration.
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
   bulletins and gridded regional yield forecasts.

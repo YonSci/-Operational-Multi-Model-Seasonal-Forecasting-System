@@ -56,6 +56,16 @@ def main():
         except subprocess.TimeoutExpired:                                # the child is killed; its previous results stay
             failed.append(s)
             print(f"crop: {s} stopped at the time limit", flush=True)
+    # management scenarios of the seasonal run in the time left (weekly; crop_engine.run_scenarios)
+    left = end - time.monotonic() if end else None
+    if "seasonal" in sources and "seasonal" not in failed and (left is None or left > 0):
+        cmd = [sys.executable, "-m", "crop_engine.run_scenarios", "--max-age-days", "7", "--workers",
+               str(max(a.workers, 2)), "--no-dashboard"]
+        try:
+            if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
+                print("crop: management scenarios failed; the previous ones kept", flush=True)
+        except subprocess.TimeoutExpired:
+            print("crop: management scenarios stopped at the time limit; the previous ones kept", flush=True)
     dashboard.write_index()
     dashboard.write()
     if failed:
