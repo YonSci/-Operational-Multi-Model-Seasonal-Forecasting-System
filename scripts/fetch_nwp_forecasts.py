@@ -35,9 +35,16 @@ API = "https://api.open-meteo.com/v1/forecast"
 BATCH = 50
 
 
+BOUNDARIES = [BASE / "outputs" / "dashboard" / "boundaries.json",          # the dashboard build, when built here
+              BASE / "frontend" / "public" / "tracker" / "data" / "boundaries.json"]   # the committed copy
+
+
 def kenya_points():
     from shapely.geometry import Point, shape
-    rows = json.loads((BASE / "outputs" / "dashboard" / "boundaries.json").read_text())
+    path = next((f for f in BOUNDARIES if f.exists()), None)
+    if path is None:
+        raise FileNotFoundError(f"no boundaries file: {', '.join(map(str, BOUNDARIES))}")
+    rows = json.loads(path.read_text(encoding="utf-8"))
     ke = [shape(r["geometry"]) for r in rows if r["level"] == "country"][0].buffer(0.3)
     lats = np.round(np.arange(-4.75, 5.26, 0.5), 2)
     lons = np.round(np.arange(33.75, 41.76, 0.5), 2)
