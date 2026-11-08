@@ -11,6 +11,14 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
                 (CCo = plant population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated
                 at Kiboko) does not change
   initial_frac  plant-available water on 1 Aug as a fraction of TAW, in place of the ERA5-Land value
+  irrigation    AquaCrop-OSPy IrrigationManagement: method 1 irrigates (up to MaxIrr mm a day, AppEff % of it
+                reaching the soil) whenever the root zone's water falls below SMT % of its available water, per
+                growth stage (emergence, canopy growth, maximum canopy and flowering, senescence), up to MaxIrrSeason
+                mm a season. Supplementary: 30 % from sowing to flowering, 100 mm a season at 75 % efficiency (bucket,
+                hose or furrow from a pan or tank); full: 70 % throughout, no cap (the water-unlimited yield)
+  field         AquaCrop-OSPy FieldMngt: mulches (mulch_pct % of the surface covered, soil evaporation there cut by
+                f_mulch: crop residues, 50 % cover), bunds (z_bund m high: rain held on the field instead of running
+                off, as tied ridges or zai pits do; 15 cm)
 Re-sowing after a failed establishment works as in the outlook.
 """
 import datetime as dt
@@ -29,8 +37,17 @@ SCENARIOS = {
     "density_high": dict(label="Plant density × 1.2", group="Plant density", density=1.2),
     "soil_dry": dict(label="Dry soil on 1 Aug (wilting point)", group="Initial soil water", initial_frac=0.0),
     "soil_wet": dict(label="Wet soil on 1 Aug (field capacity)", group="Initial soil water", initial_frac=1.0),
+    "irr_supplementary": dict(label="Supplementary irrigation, up to 100 mm a season", group="Water management",
+                              irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100,
+                                              AppEff=75)),
+    "irr_full": dict(label="Full irrigation (no water stress)", group="Water management",
+                     irrigation=dict(irrigation_method=1, SMT=[70, 70, 70, 70], MaxIrr=50)),
+    "mulch": dict(label="Mulch, 50 % residue cover", group="Water management",
+                  field=dict(mulches=True, mulch_pct=50, f_mulch=0.5)),
+    "bunds": dict(label="Tied ridges / bunds, 15 cm (runoff kept)", group="Water management",
+                  field=dict(bunds=True, z_bund=0.15)),
 }
-KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac")
+KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "irrigation", "field")
 
 
 def describe(key):
@@ -61,4 +78,7 @@ def apply(task, key):
         out["kw"] = dict(task["kw"], PlantPop=float(np.round(pop * scen["density"])))
     if "initial_frac" in scen:
         out["initial_frac"] = float(scen["initial_frac"])
+    for k in ("irrigation", "field"):
+        if k in scen:
+            out[k] = dict(scen[k])
     return out

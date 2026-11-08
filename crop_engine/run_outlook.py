@@ -185,7 +185,8 @@ def summarize(members, variety, bench=None):
          "resown": round(sum(1 for m in members if m.get("sowings", 0) > 1) / n, 3),
          "harvest_median": _date_q([m["harvest"] for m in sown], 0.5),
          "stress_days_median": _q([m["stress_days"] for m in sown], 0.5),
-         "rain_mm_median": _q([m["rain_mm"] for m in sown], 0.5)}
+         "rain_mm_median": _q([m["rain_mm"] for m in sown], 0.5),
+         "irrigation_mm_median": _q([m.get("irrigation_mm") or 0.0 for m in sown], 0.5)}
     if bench and bench.get("t33") is not None:
         s["vs_benchmark"] = {"benchmark_p_failure": bench["p_failure"], "benchmark_median": bench["median"],
                              **{f"benchmark_{k}": bench.get(k) for k in ("p_sowing_opportunity", "p_establishment_failure",

@@ -38,7 +38,7 @@ from crop_engine.scenarios import planting as pl
 SCEN_OUT = C.OUT / "scenarios"
 SUMMARY_KEYS = ("yield_t_ha", "p_failure", "p_failure_if_sown", "p_establishment_failure", "p_sowing_opportunity",
                 "yield_if_sown_t_ha", "share", "planting", "harvest_median", "stress_days_median", "resown",
-                "vs_benchmark")
+                "irrigation_mm_median", "vs_benchmark")
 REPRODUCE_TOL = 0.05      # t/ha: the outlook's member yields, re-simulated unchanged (AquaCrop moves ~0.01 t/ha with the 6th decimal of the initial water)
 
 
