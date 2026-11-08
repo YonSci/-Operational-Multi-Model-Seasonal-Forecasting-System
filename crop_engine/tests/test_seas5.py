@@ -120,6 +120,7 @@ def test_penman_monteith_ratio():
 
 
 def test_download_requests_and_order():
+    pytest.importorskip("cdsapi")                           # the platform's CDS downloader imports it (not in CI)
     from crop_engine.data import seas5_download as sd
     r = sd.request(2026, "met")
     assert r["variable"] == s5.VARIABLES["met"] and r["month"] == "10" and r["day"] == "01"
