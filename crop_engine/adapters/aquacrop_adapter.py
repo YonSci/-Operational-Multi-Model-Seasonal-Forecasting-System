@@ -24,7 +24,7 @@ for the canopy bands of the summaries (run_outlook.canopy_band); it is not writt
 
 Management (the scenarios, crop_engine.scenarios.management): task "irrigation" (AquaCrop-OSPy IrrigationManagement
 arguments, e.g. irrigation_method 1 with soil-moisture targets SMT per growth stage and a seasonal cap MaxIrrSeason)
-and task "field" (FieldMngt arguments: mulches, bunds). Without them the crop is rain-fed on bare, unbunded soil, as
+and task "field" (FieldMngt arguments: mulches, runoff inhibition). Without them the crop is rain-fed on bare soil, as
 the outlook. A member records the irrigation it received (`irrigation_mm`, the season's net depth).
 """
 import datetime as dt

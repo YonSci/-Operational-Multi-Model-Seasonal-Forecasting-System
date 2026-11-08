@@ -11,14 +11,18 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
                 (CCo = plant population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated
                 at Kiboko) does not change
   initial_frac  plant-available water on 1 Aug as a fraction of TAW, in place of the ERA5-Land value
-  irrigation    AquaCrop-OSPy IrrigationManagement: method 1 irrigates (up to MaxIrr mm a day, AppEff % of it
-                reaching the soil) whenever the root zone's water falls below SMT % of its available water, per
-                growth stage (emergence, canopy growth, maximum canopy and flowering, senescence), up to MaxIrrSeason
-                mm a season. Supplementary: 30 % from sowing to flowering, 100 mm a season at 75 % efficiency (bucket,
-                hose or furrow from a pan or tank); full: 70 % throughout, no cap (the water-unlimited yield)
+  irrigation    AquaCrop-OSPy IrrigationManagement: method 1 irrigates (up to MaxIrr mm a day) whenever the root
+                zone's water falls below SMT % of its available water, per growth stage (emergence, canopy growth,
+                maximum canopy and flowering, senescence), up to MaxIrrSeason mm a season. Supplementary: 30 % from
+                sowing to flowering, 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at
+                75 % efficiency); full: 70 % throughout, no cap (the water-unlimited yield). The efficiency is left
+                at 100 % (net water): in AquaCrop-OSPy 3.1.0 a lower AppEff together with a seasonal cap ended the
+                season of every Genco Tana River member early (all died in October), which no farmer's irrigation does
   field         AquaCrop-OSPy FieldMngt: mulches (mulch_pct % of the surface covered, soil evaporation there cut by
-                f_mulch: crop residues, 50 % cover), bunds (z_bund m high: rain held on the field instead of running
-                off, as tied ridges or zai pits do; 15 cm)
+                f_mulch: crop residues, 50 % cover); water harvesting as sr_inhb (surface runoff fully inhibited: the
+                rain infiltrates where it falls, as tied ridges or zai pits make it). Not AquaCrop's bunds: they pond
+                the rain on the whole field like a rice paddy, and the waterlogged topsoil stopped the crop in most
+                members at Kapiti, Kiboko and Livemo (canopy under 8 %), which is not what ridges do
 Re-sowing after a failed establishment works as in the outlook.
 """
 import datetime as dt
@@ -38,14 +42,13 @@ SCENARIOS = {
     "soil_dry": dict(label="Dry soil on 1 Aug (wilting point)", group="Initial soil water", initial_frac=0.0),
     "soil_wet": dict(label="Wet soil on 1 Aug (field capacity)", group="Initial soil water", initial_frac=1.0),
     "irr_supplementary": dict(label="Supplementary irrigation, up to 100 mm a season", group="Water management",
-                              irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100,
-                                              AppEff=75)),
+                              irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100)),
     "irr_full": dict(label="Full irrigation (no water stress)", group="Water management",
                      irrigation=dict(irrigation_method=1, SMT=[70, 70, 70, 70], MaxIrr=50)),
     "mulch": dict(label="Mulch, 50 % residue cover", group="Water management",
                   field=dict(mulches=True, mulch_pct=50, f_mulch=0.5)),
-    "bunds": dict(label="Tied ridges / bunds, 15 cm (runoff kept)", group="Water management",
-                  field=dict(bunds=True, z_bund=0.15)),
+    "ridges": dict(label="Tied ridges or pits (no surface runoff)", group="Water management",
+                   field=dict(sr_inhb=True)),
 }
 KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "irrigation", "field")
 
