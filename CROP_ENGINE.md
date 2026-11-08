@@ -216,8 +216,8 @@ warm season), not for skill it has shown here.
 | Rain 1 Jan – 28 Feb | SEAS5 member, quantile-mapped to CHIRPS (`onset_rules.EXT_CACHE`) | as the Agri rules |
 | Rain 1–31 Mar | SEAS5 member k (1 Oct run, lead days 152–182), quantile-mapped to CHIRPS per site and day (`data/seas5.py`) | without the 182-day SEAS5 files: a declared climatological ensemble, member k the observed CHIRPS March of 1994 + (k mod 24); observed seasons use their own March |
 | Tmax, Tmin | ERA5-Land at the site (Open-Meteo archive), then SEAS5 member k bias-corrected to ERA5-Land (`data/seas5.py`) | per member (`tmax_c (member, site, time)`); the 1993–2016 day-of-year climatology where neither is available |
-| ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day; no forecast radiation, humidity or wind |
-| Solar radiation, vapour pressure, 2 m wind | ERA5-Land at the site's 0.1° cell (Google Earth Engine), then the 1993–2016 day-of-year climatology | for WOFOST; AquaCrop does not use them (its ET0 is the platform's). The same fields as the platform's ET0 (`scripts/fao_era5land_gee.py`): vapour pressure at the daily mean dewpoint, wind the mean of 00/06/12/18 UTC at 10 m taken to 2 m (FAO-56 Eq. 47). Left out of a run, with the reason in its `radiation` attribute, when Earth Engine has never been reached |
+| ET0 | the platform's ERA5-Land FAO-56 ET0, then its climatology scaled by member k's FAO-56 Penman-Monteith ET0 over that of the climatological weather (0.5–1.5) when the SEAS5 radiation, humidity and wind files are on disk, else by its Hargreaves ET0 over the climatological temperatures' (0.7–1.3) | the same as the FAO water balance to its last day |
+| Solar radiation, vapour pressure, 2 m wind | ERA5-Land at the site's 0.1° cell (Google Earth Engine), then SEAS5 member k ratio-corrected to ERA5-Land (`data/seas5.py`) when its files are on disk, else the 1993–2016 day-of-year climatology | per member (`(member, site, time)`); WOFOST's weather, and AquaCrop's through the ET0 ratio. The same fields as the platform's ET0 (`scripts/fao_era5land_gee.py`): vapour pressure at the daily mean dewpoint, wind the mean of 00/06/12/18 UTC at 10 m taken to 2 m (FAO-56 Eq. 47). Left out of a run, with the reason in its `radiation` attribute, when Earth Engine has never been reached |
 | Soil | SoilGrids 2.0, six layers to 200 cm, at the site's 0.25° cell (sand, clay, organic matter) | AquaCrop's pedotransfer |
 | Soil water on 1 Aug | ERA5-Land root-zone soil moisture, as the FAO water balance starts | |
 | Sowing date | Agri rule 1 onset; FAO agricultural onset | unchanged outputs of the platform's methods |
@@ -247,8 +247,23 @@ November to March). Maize sown on 5 Nov in every member matures 4–9 days soone
 temperature; the early maize median moves from 2.20 to 2.59 t/ha at Kiboko and from 4.88 to 4.68 t/ha at Kapiti.
 In the hindcast verification SEAS5 temperature changes the skill very little (*Hindcast verification*).
 
+**SEAS5 radiation, humidity and wind** (`data/seas5.py`, `MET_DIR` = `data/seasonal_downloads_ke/ecmwf_oct_182d_met/`,
+not committed): the same 1 Oct runs with surface solar radiation, 2 m dewpoint and the 10 m wind components at
+24-hour lead steps, downloaded one year per CDS request after the temperature files, the season year first:
+
+    python -m crop_engine.data.seas5_download --kind met            # --after-pid N: wait for a running download
+
+Daily radiation comes from the accumulation, vapour pressure from the dewpoint (FAO-56 Eq. 14) and the 2 m wind
+from the 10 m speed (Eq. 47). The dewpoint and wind are the 00 UTC values, not daily means: the correction, a ratio
+per site and lead day (the smoothed ERA5-Land site mean of the calibration years over the smoothed member mean,
+0.5–2), absorbs that offset with the model's own, keeps every value positive and the forecast's anomaly and spread
+as fractions. With them each member's ET0 on SEAS5 days is the ET0 climatology times the ratio of FAO-56
+Penman-Monteith ET0 of the member's weather (its temperature, radiation, humidity and wind) to that of the
+climatological weather; the hindcast (`--temperature seas5`) does the same. Until at least 10 calibration years and
+the season year are on disk, the run says why not and keeps the Hargreaves ratio.
+
 Every day carries its source (`precip_source`: obs_final, obs_prelim, gap, forecast, seasonal, climatology;
-`tmax_source`, `et0_source`: era5land, climatology, seasonal; `rad_source`: era5land, climatology), so a
+`tmax_source`, `et0_source`, `rad_source`: era5land, climatology, seasonal), so a
 result can always be traced to what drove it.
 `crop_engine.data.weather.validate` checks each run's inputs (structure, no gaps, value ranges, Tmin ≤ Tmax,
 provenance codes) before any simulation.
@@ -513,6 +528,58 @@ maize `maturity_days` 142 and `HI0` 0.324 once the crop season ran to 31 Mar. Ki
 seasons, died of water stress 21 → 22, too late 0 → 0 (21 with a 28 Feb end), failure 46 → 61 %, median yield
 1.05 → 0.4 t/ha: at Kiboko the longer crop is still growing after the Short Rains end.
 
+## Second engine: WOFOST (`crop_engine/adapters/wofost_adapter.py`)
+
+WOFOST 7.2 (PCSE 6.0.13, water-limited production with the classic water balance, `Wofost72_WLP_CWB`) runs on the
+same tasks as AquaCrop: the same weather members, soil profile, 1 Aug soil water, sowing dates and re-sowing, and
+it returns the same outcomes (ok, died, failed_establishment, too_late, not_sown, error), so either engine can run
+a forecast (`run_outlook.run_tasks(..., engine="wofost")`). It is not yet in the published outlook.
+
+- **Weather**: rain, Tmax, Tmin, and the solar radiation, vapour pressure and 2 m wind of the weather file
+  (ERA5-Land, then SEAS5 or climatology). Its transpiration is driven by ET0, which is the task's ET0 (the
+  platform's FAO-56 ET0, as AquaCrop's); PCSE's open-water and bare-soil evaporation (E0, ES0) are scaled by the
+  same day's ratio of that ET0 to PCSE's own, so both engines see the same evaporative demand.
+- **Crops**: the WOFOST library's tropical sets (Van Heemst 1988), `Maize_VanHeemst_1988` and
+  `Sorghum_VanHeemst_1988`. There is no dry-bean set, so the bean stays AquaCrop-only.
+- **Phenology**: TSUM1 and TSUM2 (their ratio kept) are scaled so the crop matures in the variety's
+  `maturity_days` at 21 °C, through the crop's own development-rate table. These are the targets AquaCrop's
+  phenology is scaled to, so the maize classes carry the Kiboko phenology calibration (kiboko_v2). The growth and
+  partitioning parameters are WOFOST's own: the yield level is **not calibrated** to the Kenyan trials.
+- **Soil**: one root zone, as the classic water balance has. Wilting point and field capacity are the SoilGrids
+  layers' values averaged over the top 100 cm; saturation and the percolation limits come from Saxton & Rawls
+  (2006); the rootable depth is the 200 cm profile; the initial water is the task's fraction of the available water.
+- **Outcomes**: WOFOST's crop survives drought (its leaves die back, its stems and pods keep an area), so it has no
+  establishment failure of its own. A crop that never reaches 5 % canopy cover (LAI 0.085) counts as a failed
+  establishment, and one whose leaves all die before development stage 1.9, or that matures with no grain, counts
+  as died.
+
+`python -m crop_engine.compare_engines` grows the benchmark's observed seasons (1993–2025, every site, both rules,
+sown and re-sown exactly as the benchmark) with WOFOST and compares the two engines season by season
+(`outputs/crop_engine/verification/engines.json`). First comparison (November 2026, 1,188 seasons, about two
+minutes):
+
+| Site | Early maize, FAO onset: median t/ha AquaCrop / WOFOST | failure rate | r (sown seasons) | Sorghum, FAO onset: median | failure rate |
+|---|---|---|---|---|---|
+| El Karama | 3.19 / 4.90 | 30 % / 3 % | 0.45 | 1.90 / 5.11 | 36 % / 3 % |
+| Genco Maralal | 3.15 / 2.24 | 30 % / 15 % | 0.31 | 1.62 / 2.92 | 36 % / 9 % |
+| Genco Tana River | 0.45 / 0.38 | 52 % / 52 % | 0.45 | 0.15 / 0.84 | 52 % / 46 % |
+| KALRO Kiboko | 0.80 / 1.68 | 48 % / 21 % | 0.70 | 0.92 / 1.65 | 48 % / 15 % |
+| Kapiti | 0.86 / 2.35 | 36 % / 24 % | 0.69 | 0.74 / 1.92 | 42 % / 24 % |
+| Livemo Memerush | 0.07 / 0.82 | 55 % / 42 % | 0.81 | 0.07 / 0.86 | 58 % / 33 % |
+
+- The engines agree on which seasons are good: the rank correlation of the sown seasons' yields is 0.40–0.87 in
+  most cells (0.04–0.38 in five: medium maize at El Karama and Genco Maralal, early maize at Genco Maralal, Genco
+  Tana River sorghum with the FAO onset), and they agree on failure or not in 61–100 % of seasons.
+- WOFOST fails less and yields more at most sites, because it has no seedling death: a dry spell after sowing,
+  which kills AquaCrop's seedlings, only slows WOFOST's crop. The difference is largest where false starts are
+  common (Kiboko, Kapiti, Livemo: failure rates 12–34 points lower with the FAO onset).
+- WOFOST's crops take longer (median 9–51 days more to harvest; part of that is AquaCrop's dead crops ending
+  early) and yield less at cool Genco Maralal (1,780 m), where its slower development pushes grain filling into
+  the dry season.
+- Neither engine is checked against measured yields here: the Kiboko trials (maize 4.5 t/ha median, well managed)
+  are not farmers' rain-fed seasons. WOFOST's yield level needs the same trial calibration AquaCrop had
+  (kiboko_v3) before its numbers are published; until then it shows how much the outlook depends on the model.
+
 ## Testing
 
 `python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
@@ -538,13 +605,14 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   temperature (done): the same conclusion, and SEAS5 temperature changes the skill by less than its noise. Next:
   county yields as a reference, and the sub-seasonal reforecasts.
 - **P1 Weather forcing**: the season runs to 31 Mar; SEAS5 temperature per member and SEAS5 March rain (done).
-  Next: forecast radiation and humidity for ET0; temperature from the sub-seasonal models in their range.
+  SEAS5 radiation, humidity and wind for ET0 and WOFOST (in place; the downloads run after the temperature
+  files'). Next: temperature from the sub-seasonal models in their range.
 - **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, for the
   seasonal run (done; *Management scenarios*). Next: supplementary irrigation and water harvesting (AquaCrop-OSPy's
   irrigation and field-management options: mulch, bunds), where partners can say what is practised.
-- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations — after AquaCrop's calibration.
-  Its weather is in place: ERA5-Land solar radiation, vapour pressure and 2 m wind at every site, in each run's
-  weather file with their source per day (*Inputs*); a forecast of them waits on the SEAS5 radiation and humidity
-  downloads (P1 Weather forcing).
+- **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations: the adapter and the engine
+  comparison are in place (*Second engine: WOFOST*; phenology on AquaCrop's calibrated targets). Next: its yield
+  level against the Kiboko trials (as kiboko_v3), then both engines in the published outlook, so the spread between
+  models is shown.
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
   bulletins and gridded regional yield forecasts.

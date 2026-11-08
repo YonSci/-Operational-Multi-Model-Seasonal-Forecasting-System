@@ -11,7 +11,7 @@ next year is a leap year).
   precip_source (time)             index into attrs["precip_sources"] (config.PRECIP_SOURCES)
   tmax_source, et0_source (site, time)  index into attrs["met_sources"] (config.MET_SOURCES)
 and, when the ERA5-Land site series are available (crop_engine.data.era5land.site_met; for WOFOST, not AquaCrop):
-  rad_mj_m2, vap_hpa, wind2_ms (site, time)  solar radiation, vapour pressure, 2 m wind speed
+  rad_mj_m2, vap_hpa, wind2_ms (member, site, time)  solar radiation, vapour pressure, 2 m wind speed
   rad_source (site, time)          their source (one for the three), as tmax_source
   elev_m (site)                    the elevation of the ERA5-Land cell (from its mean surface pressure)
 
@@ -30,8 +30,10 @@ ERA5-Land (data/seas5.py) to 31 Mar; the 1993–2016 day-of-year climatology whe
 ET0: the platform's ERA5-Land FAO-56 grid to its last day, then its climatology by season day, scaled on SEAS5 days
 by member k's Hargreaves ET0 over that of the climatological temperatures (0.7–1.3): a warmer member with a wider
 daily range evaporates more. No forecast radiation, humidity or wind is used.
-Radiation, vapour pressure and wind (for WOFOST): ERA5-Land from Earth Engine to its last day, then their
-day-of-year climatology; no forecast of them yet.
+Radiation, vapour pressure and wind: ERA5-Land from Earth Engine to its last day, then SEAS5 member k ratio-corrected
+to ERA5-Land (data/seas5.py) when its radiation, humidity and wind files are on disk, else their day-of-year
+climatology. With them, ET0 on SEAS5 days is scaled by member k's FAO-56 Penman-Monteith ratio to the climatological
+weather in place of the Hargreaves ratio.
 """
 import datetime as dt
 import json
@@ -125,7 +127,8 @@ class Inputs:
         if why:
             return None, f"no SEAS5 temperature or March rain: {why} ({s5.DIR})"
         try:
-            s = s5.Seas5(self.year, [x.id for x in self.sites], self.lat[self.ii], self.lon[self.jj], self.temps, self.hist)
+            s = s5.Seas5(self.year, [x.id for x in self.sites], self.lat[self.ii], self.lon[self.jj], self.temps, self.hist,
+                         met=self.met2)
         except Exception as exc:                                           # the climatological fallback stands
             return None, f"no SEAS5 temperature: {type(exc).__name__}: {str(exc)[:160]}"
         return s, s5.describe(s)
@@ -187,6 +190,35 @@ class Inputs:
         r = self.radiation(dates)
         return r if r is not None else self.met2_note
 
+    def clim_weather(self, dates):
+        """The day-of-year climatology of tmax, tmin, vap, wind2, rad (site, T): the reference of pm_ratio."""
+        doy = era5land.doy_noleap(dates) - 1
+        out = {"tmax": np.stack([self.tclim[s.id][0][doy] for s in self.sites]),
+               "tmin": np.stack([np.minimum(self.tclim[s.id][1][doy], self.tclim[s.id][0][doy]) for s in self.sites])}
+        for key, col in s5.MET.items():
+            out[key] = np.stack([self.met2_clim[s.id][col][doy] for s in self.sites])
+        return out
+
+    def seas5_met(self, S, mk, p, extra, n_mem):
+        """extra with SEAS5 member k's radiation, vapour pressure and wind (member, site, T) on the days without
+        ERA5-Land, and those member arrays by SEAS5 key."""
+        vals, rsrc, elev = extra
+        use = (rsrc == C.MET_SOURCES.index("climatology")) & (p >= 0)[None, :]
+        k = np.where(p >= 0, p, 0)
+        out = {}
+        for key, col in s5.MET.items():
+            f = np.moveaxis(S.met[key][mk][:, k], 1, 2)
+            out[col] = np.where(use[None], f, np.repeat(vals[col][None], n_mem, axis=0)).astype(np.float32)
+        rsrc = np.where(use, C.MET_SOURCES.index("seasonal"), rsrc).astype(np.int8)
+        return (out, rsrc, elev), {key: out[col] for key, col in s5.MET.items()}
+
+    def et0_pm_ratio(self, member, ref, dates, elev):
+        """s5.pm_ratio at the sites: member, ref dicts of (member or 1, site, T) or (site, T) arrays."""
+        lat = np.array([s.lat for s in self.sites])[:, None]
+        z = np.asarray(elev, float)[:, None]
+        p_kpa = 101.3 * ((293.0 - 0.0065 * z) / 293.0) ** 5.26                       # FAO-56 Eq. 7
+        return s5.pm_ratio(member, ref, p_kpa, lat, pd.DatetimeIndex(dates).dayofyear.values[None, :], z)
+
     def initial_water(self, year):
         """Plant-available water on 1 Aug as a fraction of the FAO bucket's TAW (ERA5-Land root-zone soil moisture,
         as the FAO water balance starts), per site."""
@@ -238,6 +270,7 @@ class Inputs:
             attrs = {**attrs, "march_rain": f"climatology: member k takes CHIRPS March {cal[0] + 1}+(k mod {len(cal)})"}
         tmax, tmin, et0, tsrc, esrc = self.met(y, dates)
         tmax, tmin, et0 = (np.repeat(a[None], n_mem, axis=0) for a in (tmax, tmin, et0))
+        extra = self._extra(dates)
         if S is not None:                                                 # after ERA5-Land: SEAS5 member k
             p = S.on(dates)
             use = (tsrc == C.MET_SOURCES.index("climatology")) & (p >= 0)[None, :]          # (site, T)
@@ -245,14 +278,19 @@ class Inputs:
             fx = np.moveaxis(S.tmax[mk][:, k], 1, 2)                       # (member, site, T)
             fn = np.moveaxis(S.tmin[mk][:, k], 1, 2)
             on_e = use & (esrc == C.MET_SOURCES.index("climatology"))    # ET0 climatology on a SEAS5 day: scaled
-            ratio = s5.hargreaves_ratio(fx, fn, tmax, tmin)
+            if S.met is not None and isinstance(extra, tuple):           # Penman-Monteith with SEAS5 radiation etc.
+                extra, w = self.seas5_met(S, mk, p, extra, n_mem)
+                ratio = self.et0_pm_ratio({"tmax": fx, "tmin": np.minimum(fn, fx), **w}, self.clim_weather(dates),
+                                          dates, extra[2])
+            else:
+                ratio = s5.hargreaves_ratio(fx, fn, tmax, tmin)
             et0 = np.where(on_e[None], et0 * ratio, et0).astype(np.float32)
             tmax = np.where(use[None], fx, tmax).astype(np.float32)
             tmin = np.minimum(np.where(use[None], fn, tmin), tmax).astype(np.float32)
             tsrc = np.where(use, C.MET_SOURCES.index("seasonal"), tsrc).astype(np.int8)
             esrc = np.where(on_e, C.MET_SOURCES.index("seasonal"), esrc).astype(np.int8)
         attrs = {**attrs, "season_year": y, "temperature_forecast": self.seas5_note}
-        return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, self._extra(dates))
+        return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, extra)
 
     # ── an observed season (benchmark) ───────────────────────────────────
     def observed(self, year):
@@ -286,12 +324,16 @@ def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs, extr
     if isinstance(extra, tuple):
         vals, rsrc, elev = extra
         for v, units in (("rad_mj_m2", "MJ m-2 day-1"), ("vap_hpa", "hPa"), ("wind2_ms", "m/s")):
-            ds[v] = (("site", "time"), vals[v].astype(np.float32))
+            a = vals[v] if vals[v].ndim == 3 else np.broadcast_to(vals[v], (n, *vals[v].shape))
+            ds[v] = (("member", "site", "time"), a.astype(np.float32))
             ds[v].attrs["units"] = units
         ds["rad_source"] = (("site", "time"), rsrc)
         ds = ds.assign_coords(elev_m=("site", np.asarray(elev, np.float32)))
+        seas = (rsrc == C.MET_SOURCES.index("seasonal")).any()
         attrs = {**attrs, "radiation": "ERA5-Land 0.1° cell of each site (Google Earth Engine): solar radiation, vapour "
-                                       "pressure at the dewpoint, 2 m wind (FAO-56 Eq. 47); rad_source per day"}
+                                       "pressure at the dewpoint, 2 m wind (FAO-56 Eq. 47)"
+                                       + ("; then ECMWF SEAS5 member k, ratio-corrected to ERA5-Land" if seas else "")
+                                       + "; rad_source per day"}
     else:
         attrs = {**attrs, "radiation": extra or "not available"}
     ds.attrs.update({
@@ -339,8 +381,8 @@ def validate(ds):
     elif got:
         for v, (lo, hi) in OPTIONAL.items():
             a = ds[v].values
-            if ds[v].dims != ("site", "time"):
-                p.append(f"{v} dims {ds[v].dims} != ('site', 'time')")
+            if ds[v].dims != ("member", "site", "time"):
+                p.append(f"{v} dims {ds[v].dims} != ('member', 'site', 'time')")
             elif np.isnan(a).any():
                 p.append(f"{v}: {int(np.isnan(a).sum())} missing values")
             elif a.min() < lo or a.max() > hi:

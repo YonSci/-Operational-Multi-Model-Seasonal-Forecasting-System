@@ -96,11 +96,17 @@ def cells(sites):
     return [(g[0], [s.id for s in g]) for g in groups.values()]
 
 
-def run_tasks(tasks, workers):
+def run_tasks(tasks, workers, engine="aquacrop"):
+    """Simulate the tasks with AquaCrop (default) or WOFOST (adapters/wofost_adapter.py)."""
+    if engine == "wofost":
+        from crop_engine.adapters import wofost_adapter as wf
+        fn = wf.simulate
+    else:
+        fn = aq.simulate
     if workers <= 1:
-        return [aq.simulate(t) for t in tasks]
+        return [fn(t) for t in tasks]
     with ProcessPoolExecutor(workers) as ex:
-        return list(ex.map(aq.simulate, tasks, chunksize=1))
+        return list(ex.map(fn, tasks, chunksize=1))
 
 
 # ── summaries ───────────────────────────────────────────────────────────────

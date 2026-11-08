@@ -107,3 +107,18 @@ def test_dataset_without_them_is_valid_and_says_why():
 def test_contract_catches_bad_or_incomplete_radiation():
     assert any("rad_mj_m2: values outside" in p for p in validate(_ds(_extra(rad=55.0))))
     assert any("incomplete" in p for p in validate(_ds(_extra()).drop_vars("wind2_ms")))
+
+
+def test_seas5_members_fill_only_the_days_without_era5land():
+    from crop_engine.data import weather as W
+    inp = object.__new__(W.Inputs)
+    T, n = 10, 2
+    vals = {c: np.full((1, T), v, np.float32) for c, v in (("rad_mj_m2", 20.0), ("vap_hpa", 15.0), ("wind2_ms", 1.5))}
+    rsrc = np.zeros((1, T), np.int8)
+    rsrc[0, 6:] = 1                                                     # climatology from day 6
+    p = np.r_[-1, -1, -1, np.arange(7)]                                 # SEAS5 from day 3
+    S = type("S", (), {"met": {k: np.full((n, 7, 1), 30.0, np.float32) for k in ("rad", "vap", "wind2")}})()
+    (out, src, _), w = inp.seas5_met(S, np.arange(n), p, (vals, rsrc, np.array([950.0])), n)
+    assert out["rad_mj_m2"].shape == (n, 1, T) and (out["rad_mj_m2"][:, 0, :6] == 20).all()
+    assert (out["rad_mj_m2"][:, 0, 6:] == 30).all() and (src[0, 6:] == 2).all() and (src[0, :6] == 0).all()
+    assert w["rad"] is out["rad_mj_m2"]
