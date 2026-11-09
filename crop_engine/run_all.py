@@ -5,7 +5,7 @@ is released before the next, and this parent imports nothing heavy. The first ch
 tops up the ERA5-Land temperatures. Then the results index and the Crop outlook tab's data are rewritten.
 
 Used by the daily update (scripts/update_forecast.py):
-  python -m crop_engine.run_all --workers 1 --minutes 180
+  python -m crop_engine.run_all --workers 1 --minutes 240
   python -m crop_engine.run_all --sources seasonal s2s-ecmwf --force
 """
 import argparse
