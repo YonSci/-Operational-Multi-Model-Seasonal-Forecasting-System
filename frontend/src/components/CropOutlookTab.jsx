@@ -370,14 +370,33 @@ const fmtDiff = (a, b) => {
   const d = Math.round(Number(fmtT(a)) * 10) - Math.round(Number(fmtT(b)) * 10)
   return d === 0 ? ' (same)' : ` (${d > 0 ? '+' : '−'}${(Math.abs(d) / 10).toFixed(1)})`
 }
+// The scenario amounts are assumptions: farm managers at the sites are asked what is used there. PARTNER_FORM_URL is the
+// online form (Google Forms); empty, only the PDF of the questions is offered.
+const PARTNER_PDF = 'docs/crop_scenario_questions_for_partners.pdf'
+const PARTNER_FORM_URL = ''
+function PartnerAsk() {
+  const link = { color: 'var(--accent-text)', fontWeight: 600 }
+  return (
+    <div role="note" style={{ marginTop: 12, border: '1px solid var(--border-primary)', background: 'var(--bg-elevated)', borderRadius: 8,
+                              padding: '10px 14px', fontSize: 14, color: 'var(--text-body)', lineHeight: 1.55 }}>
+      <strong style={{ color: 'var(--heading)' }}>These amounts are our assumptions.</strong> Farm managers and agronomists at the
+      monitored sites: tell us how much water farmers near you can apply in a season, how much residue they leave and which ridges or
+      pits they use, and the scenarios will be set to match.{' '}
+      {PARTNER_FORM_URL && <><a href={PARTNER_FORM_URL} target="_blank" rel="noreferrer" style={link}>Answer the online form</a>{' or '}</>}
+      <a href={PARTNER_PDF} target="_blank" rel="noreferrer" style={link}>{PARTNER_FORM_URL ? 'download the questions (PDF)' : 'Download the questions (PDF)'}</a>
+      {PARTNER_FORM_URL ? '.' : ', fill in the table for your site and return it to the platform team.'}
+    </div>
+  )
+}
+
 function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg }) {
   const sub = 'The seasonal forecast’s crops grown again in the same weather members with one management choice changed. '
             + 'The first row is the outlook above.'
-  if (!seasonal) return <Panel title="Management scenarios" sub={sub}>{msg('Scenarios are made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
+  if (!seasonal) return <Panel title="Management scenarios" sub={sub}>{msg('Scenarios are made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}<PartnerAsk/></Panel>
   if (loading) return <Panel title="Management scenarios" sub={sub}>{msg('Loading…')}</Panel>
   const cell = data?.sites?.[sid]?.results?.[vk]?.[rk]
   if (!cell) return <Panel title="Management scenarios" sub={sub}>{msg(data ? 'No scenarios for this site, crop and rule yet.'
-                                                                             : 'The scenarios come with the next weekly crop run.')}</Panel>
+                                                                             : 'The scenarios come with the next weekly crop run.')}<PartnerAsk/></Panel>
   const meta = data.meta, base = cell.baseline
   const groups = [...new Set(Object.values(meta.scenarios).map(s => s.group))]
   const row = (key, label, s, strong) => (
@@ -423,6 +442,7 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
         covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
       </p>
+      <PartnerAsk/>
     </Panel>
   )
 }
