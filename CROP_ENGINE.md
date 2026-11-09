@@ -77,14 +77,31 @@ outlook can be read against what a farmer could do differently. Each scenario ch
 | Calendar sowing | 15 Oct, 1 Nov, 15 Nov | every member sown on that date, onset or not (AquaCrop's germination still needs a wet topsoil) |
 | Plant density | × 0.67, × 1.2 | the variety's plant population. AquaCrop-OSPy derives only the initial canopy cover from it (CCo = population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated at Kiboko) does not change |
 | Initial soil water | wilting point, field capacity on 1 Aug | in place of the ERA5-Land plant-available water |
-| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from sowing to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season, 75 % application efficiency (bucket, hose or furrow from a pan or tank) |
+| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from sowing to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency). The cap is on net water: with `AppEff` 75 and a cap, AquaCrop-OSPy 3.1.0 ended every Genco Tana River member's season early (all died in October) |
 | | full irrigation | method 1, 70 % throughout, no seasonal cap: the yield with water no longer limiting |
 | | mulch, 50 % residue cover | `FieldMngt`: mulches on 50 % of the surface, soil evaporation there × 0.5 |
-| | tied ridges / bunds, 15 cm | `FieldMngt`: bunds 0.15 m high, so rain is held on the field instead of running off (water harvesting) |
+| | tied ridges or pits (no surface runoff) | `FieldMngt(sr_inhb=True)`: surface runoff fully inhibited, the rain infiltrates where it falls, as tied ridges or zai pits make it. Not AquaCrop's bunds (`bunds`, `z_bund`): they pond the rain over the whole field like a rice paddy, and in the first run the waterlogged topsoil stopped the crop (canopy under 8 %) in most members at Kapiti, Kiboko and Livemo |
 
 Each member records the irrigation it received (`irrigation_mm`); the scenario summaries give the sown crops'
 median (`irrigation_mm_median`), shown under the scenario's name on the dashboard. The outlook itself stays
-rain-fed on bare, unbunded soil.
+rain-fed on bare soil with free runoff.
+
+First water-management results (early maize, FAO onset sowing, 1 Oct 2026 run with observations to 5 Nov; median
+yield over all members in t/ha, chance of failure in brackets; outlook re-simulated within 0.006 t/ha):
+
+| Site | Outlook (rain-fed) | Supplementary irrigation, 100 mm | Full irrigation (water applied) | Mulch | Tied ridges or pits |
+|---|---|---|---|---|---|
+| El Karama | 1.1 (40 %) | 5.3 (12 %) | 7.6 (0 %), 325 mm | 2.4 (28 %) | 1.6 (32 %) |
+| Genco Maralal | 0.0 (76 %) | 0.6 (48 %) | 7.4 (32 %), 414 mm | 0.0 (68 %) | 0.0 (68 %) |
+| Genco Tana River | 1.6 (0 %) | 1.9 (0 %) | 5.1 (0 %), 330 mm | 1.7 (0 %) | 1.8 (0 %) |
+| KALRO Kiboko | 3.2 (24 %) | 5.5 (8 %) | 5.9 (0 %), 205 mm | 4.3 (16 %) | 3.8 (20 %) |
+| Kapiti | 5.7 (12 %) | 7.5 (0 %) | 7.7 (0 %), 273 mm | 5.9 (8 %) | 6.2 (8 %) |
+| Livemo Memerush | 1.4 (44 %) | 4.9 (16 %) | 6.0 (0 %), 308 mm | 2.2 (44 %) | 1.7 (44 %) |
+
+100 mm of supplementary water raises early maize by 0.3–4.2 t/ha and cuts the chance of failure by up to 28 points in
+this season; the water-unlimited yield needs 205–414 mm. Mulch adds up to 1.3 t/ha and tied ridges up to 0.6. At
+Genco Maralal even full irrigation leaves a third of the members failing: the crop sown on the FAO onset there is
+too late or too cold, not too dry. These are one season's forecast, not general responses.
 
 Re-sowing after a failed establishment works as in the outlook, and the summaries are the outlook's (same
 benchmark), so each scenario reads directly against the outlook's own row ("baseline", copied from the run's
@@ -675,7 +692,7 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   SEAS5 radiation, humidity and wind for ET0 and WOFOST (in place; the downloads run after the temperature
   files'). Next: temperature from the sub-seasonal models in their range.
 - **P1 Management scenarios**: sowing-date offsets and calendar dates, plant density, initial soil water, and
-  supplementary and full irrigation, mulch and bunds, for the seasonal run (done; *Management scenarios*). Next: the
+  supplementary and full irrigation, mulch and tied ridges (no surface runoff), for the seasonal run (done; *Management scenarios*). Next: the
   amounts and practices partners say are used (water available per season, mulch cover, ridge height).
 - **P1 PCSE/WOFOST** as a second engine on the same weather, soil and observations: the adapter, the engine
   comparison and the maize yield level (calibrated to Duma 43, as kiboko_v3) are in place (*Second engine: WOFOST*).

@@ -1321,7 +1321,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['Soil', 'Layers from texture (sand, clay, organic matter; SoilGrids) through the package’s pedotransfer functions.'],
               ['Initial soil water', 'θ = θwp + f · (θfc − θwp) at every depth on 1 Aug, with f from the ERA5-Land soil water, as in the FAO water balance.'],
               ['Crop', 'AquaCrop’s thermal-time crop files MaizeGDD, SorghumGDD and DryBeanGDD, with the adjustments below.'],
-              ['Management', 'The outlook is rain-fed, on bare soil without bunds and with no groundwater table. The management scenarios add supplementary or full irrigation, mulch and bunds through AquaCrop’s own irrigation and field-management options (see Management scenarios below).'],
+              ['Management', 'The outlook is rain-fed, on bare soil with free surface runoff and no groundwater table. The management scenarios add supplementary or full irrigation, mulch and tied ridges (no surface runoff) through AquaCrop’s own irrigation and field-management options (see Management scenarios below).'],
               ['CO₂', 'The package default: the Mauna Loa record and its projection, at the simulated year’s concentration.'],
             ]}/>
 
@@ -1368,7 +1368,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
 
             <h4 className="about-subhead">Not represented</h4>
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
-              Groundwater and capillary rise, salinity and weeds are not used, and irrigation, mulch and bunds only in the scenarios. Soil fertility
+              Groundwater and capillary rise, salinity and weeds are not used, and irrigation, mulch and runoff control only in the scenarios. Soil fertility
               stress is not modelled by AquaCrop-OSPy 3.1.0; its effect is absorbed in the calibrated CCx and HI0. Radiation and humidity act only
               through ET0, in the soil evaporation, transpiration and Tr/ET0 terms.
             </p>
@@ -1458,12 +1458,27 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['Calendar sowing', '15 Oct, 1 Nov, 15 Nov', 'Every member sown on that date, rain or not.'],
               ['Plant density', '× 0.67, × 1.2', 'AquaCrop-OSPy sets only the initial canopy from it (CCo = plant population × seed size); the maximum canopy calibrated at Kiboko does not change.'],
               ['Initial soil water', 'Wilting point, field capacity on 1 Aug', 'In place of the ERA5-Land fraction.'],
-              ['Water management', 'Supplementary irrigation, up to 100 mm a season', 'IrrigationManagement method 1: irrigate whenever root-zone water falls below 30 % of its available water from sowing to flowering (SMT 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season, 75 % application efficiency (bucket, hose or furrow from a pan or tank).'],
+              ['Water management', 'Supplementary irrigation, up to 100 mm a season', 'IrrigationManagement method 1: irrigate whenever root-zone water falls below 30 % of its available water from sowing to flowering (SMT 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency). The cap is on net water: with a lower application efficiency and a cap, AquaCrop-OSPy 3.1.0 ended every Genco Tana River member’s season early.'],
               ['', 'Full irrigation', 'Method 1 with SMT 70 % throughout and no seasonal cap: the yield with water no longer limiting.'],
               ['', 'Mulch, 50 % residue cover', 'FieldMngt: mulches on 50 % of the surface, soil evaporation there × 0.5.'],
-              ['', 'Tied ridges or bunds, 15 cm', 'FieldMngt: bunds 0.15 m high; rain is held on the field instead of running off (water harvesting).'],
+              ['', 'Tied ridges or pits (no surface runoff)', 'FieldMngt with surface runoff fully inhibited: the rain infiltrates where it falls, as tied ridges or zai pits make it. Not AquaCrop’s bunds, which pond the rain over the whole field like a rice paddy: the waterlogged topsoil stopped most members’ crops at Kapiti, Kiboko and Livemo.'],
             ]}/>
-            {/*SCENARIO_RESULTS*/}
+            <h4 className="about-subhead" style={{marginTop:24}}>First results: early maize, FAO onset sowing, 1 Oct 2026 run (observations to 5 Nov)</h4>
+            <Tbl head={['Site', 'Outlook (rain-fed)', 'Supplementary irrigation, 100 mm', 'Full irrigation', 'Mulch', 'Tied ridges or pits']} rows={[
+              ['El Karama', '1.1 (40 %)', '5.3 (12 %)', '7.6 (0 %), 325 mm', '2.4 (28 %)', '1.6 (32 %)'],
+              ['Genco Maralal', '0.0 (76 %)', '0.6 (48 %)', '7.4 (32 %), 414 mm', '0.0 (68 %)', '0.0 (68 %)'],
+              ['Genco Tana River', '1.6 (0 %)', '1.9 (0 %)', '5.1 (0 %), 330 mm', '1.7 (0 %)', '1.8 (0 %)'],
+              ['KALRO Kiboko', '3.2 (24 %)', '5.5 (8 %)', '5.9 (0 %), 205 mm', '4.3 (16 %)', '3.8 (20 %)'],
+              ['Kapiti', '5.7 (12 %)', '7.5 (0 %)', '7.7 (0 %), 273 mm', '5.9 (8 %)', '6.2 (8 %)'],
+              ['Livemo Memerush', '1.4 (44 %)', '4.9 (16 %)', '6.0 (0 %), 308 mm', '2.2 (44 %)', '1.7 (44 %)'],
+            ]}/>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'12px 0 0'}}>
+              Median yield over all members in t/ha, with the chance of crop failure in brackets; full irrigation with the median water applied.
+              In this season 100 mm of supplementary water raises early maize by 0.3–4.2 t/ha and cuts the chance of failure by up to 28 points;
+              the water-unlimited yield needs 205–414 mm. Mulch adds up to 1.3 t/ha and tied ridges up to 0.6. At Genco Maralal even full
+              irrigation leaves a third of the members failing: there the crop sown on the FAO onset is too late or too cold, not too dry.
+              These are one season’s forecast, not general responses.
+            </p>
           </S>
 
           <S title="Hindcast verification" id="about-crop-hindcast" scope="Kenya · Short Rains · ECMWF SEAS5 1 Oct runs, 25 members · 1993–2016 (county yields: maize, 1993–2025)">

@@ -78,11 +78,11 @@ export default function CropWorkflowDiagram() {
           'every member, 1 Aug – 31 Mar', '', 'observed to the last day,', 'then the forecast run,', 'SEAS5 to 28 Feb, March', '',
           'ET0: the platform’s FAO-56,', 'then its climatology × the', 'member’s Penman-Monteith', 'ratio', '', 'the source of every day,', 'checked before any run']} />
 
-        <Box x={c3} y={top} w={bw} h={half} tone="model" strong title="AquaCrop-OSPy 3.1.0" lines={['the published outlook', 'canopy and water stress', 'biomass = WP* · Tr / ET0', 'yield = biomass × HI', 'irrigation, mulch, bunds', '(in the scenarios)']} />
+        <Box x={c3} y={top} w={bw} h={half} tone="model" strong title="AquaCrop-OSPy 3.1.0" lines={['the published outlook', 'canopy and water stress', 'biomass = WP* · Tr / ET0', 'yield = biomass × HI', 'irrigation, mulch, ridges', '(in the scenarios)']} />
         <Box x={c3} y={top + half + gap} w={bw} h={half} tone="model" title="WOFOST 7.2 (PCSE)" lines={['second model, compared', '(not yet published)', 'light interception and', 'photosynthesis (AMAX)', 'respiration, partitioning', 'yield = storage organs']} />
 
         <Box x={c4} y={top} w={220} h={half} tone="product" strong title="Crop outlook tab" lines={['per site, crop and rule:', 'yield (8 in 10 members)', 'chance of failure', 'sowing opportunity', 'against the observed-', 'weather crop 1993–2025']} />
-        <Box x={c4} y={top + half + gap} w={220} h={half} tone="product" title="Management scenarios" lines={['the same members,', 'one choice changed:', 'sowing date, density,', 'soil water on 1 Aug,', 'irrigation, mulch,', 'tied ridges or bunds']} />
+        <Box x={c4} y={top + half + gap} w={220} h={half} tone="product" title="Management scenarios" lines={['the same members,', 'one choice changed:', 'sowing date, density,', 'soil water on 1 Aug,', 'irrigation, mulch,', 'tied ridges or pits']} />
 
         {/* flows: inputs → weather → models → products */}
         {placed.map(b => <Arrow key={b.title} d={`M${c1 + bw} ${b.y + b.h / 2} L${c2 - 4} ${top + span / 2 + (b.y + b.h / 2 - top - span / 2) * 0.35}`} />)}

@@ -419,9 +419,9 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         keeps members with no sowing opportunity unsown; a calendar sowing sows every member on that date, rain or not. Plant density
         changes only how fast the canopy closes (AquaCrop-OSPy sets the initial canopy from it), not the maximum canopy calibrated at
         Kiboko. Soil water on 1 Aug replaces the ERA5-Land value. Supplementary irrigation waters the crop whenever its root zone
-        falls below 30 % of its available water from sowing to flowering, at most 100 mm a season at 75 % efficiency; full irrigation
-        keeps it above 70 % throughout, the yield with water no longer limiting. Mulch covers half the soil with residues, halving
-        evaporation there; tied ridges or bunds hold the rain on the field instead of letting it run off.
+        falls below 30 % of its available water from sowing to flowering, at most 100 mm a season reaching the soil (about 130 mm
+        drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
+        covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
       </p>
     </Panel>
   )

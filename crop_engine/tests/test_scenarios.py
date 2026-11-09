@@ -151,10 +151,10 @@ def test_irrigation_and_field_management_reach_aquacrop():
     base = aq.simulate(t)[0]
     supp = aq.simulate(mg.apply(t, "irr_supplementary"))[0]
     full = aq.simulate(mg.apply(t, "irr_full"))[0]
-    assert base["irrigation_mm"] == 0.0 and 0 < supp["irrigation_mm"] <= 100 / 0.75 + 1
+    assert base["irrigation_mm"] == 0.0 and 0 < supp["irrigation_mm"] <= 100 + 1
     assert full["irrigation_mm"] > supp["irrigation_mm"] and full["yield_t_ha"] >= supp["yield_t_ha"] >= base["yield_t_ha"]
     assert full["status"] == "ok" and full["yield_t_ha"] > 0.8 * full["potential_t_ha"]
-    for k in ("mulch", "bunds"):
+    for k in ("mulch", "ridges"):
         out = aq.simulate(mg.apply(t, k))[0]
         assert out["status"] != "error" and out["irrigation_mm"] == 0.0
     assert "irrigation" not in t and "field" not in t                                       # the base is not changed
