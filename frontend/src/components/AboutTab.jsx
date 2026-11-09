@@ -1511,6 +1511,12 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               irrigation leaves a third of the members failing: there the crop sown on the FAO onset is too late or too cold, not too dry.
               These are one season’s forecast, not general responses.
             </p>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'12px 0 0'}}>
+              The amounts (100 mm of water, half the soil under residues, no runoff from ridges) are the engine’s assumptions. A questionnaire
+              asks the managers of the six sites what farmers near them actually do, and the scenarios will be set to their answers:{' '}
+              <a href="docs/crop_scenario_questions_for_partners.pdf" target="_blank" rel="noreferrer" style={{color:'var(--accent-text)'}}>the questions (PDF)</a>,
+              also linked from the Crop outlook tab with the online form.
+            </p>
           </S>
 
           <S title="Hindcast verification" id="about-crop-hindcast" scope="Kenya · Short Rains · ECMWF SEAS5 1 Oct runs, 25 members · 1993–2016 (county yields: maize, 1993–2025)">
