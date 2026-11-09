@@ -14,7 +14,8 @@ Sorghum_VanHeemst_1988. WOFOST has no dry bean set: the bean is AquaCrop-only (a
 Phenology: TSUM1 and TSUM2 are scaled together (their ratio kept) so the crop matures in the variety's
 `maturity_days` at the varieties' reference temperature (21 °C), through the crop's own DTSMTB, with emergence
 from TSUMEM at TBASEM: the same targets AquaCrop's phenology is scaled to (the maize classes calibrated at Kiboko,
-varieties.yaml). Yield level: a variety's `wofost: {AMAXTB_scale: f}` multiplies the leaf photosynthesis table
+varieties.yaml). A variety's `flowering_days` (as AquaCrop's) sets TSUM1 apart: anthesis at that many days at the
+reference temperature, TSUM2 the rest to maturity. Yield level: a variety's `wofost: {AMAXTB_scale: f}` multiplies the leaf photosynthesis table
 AMAXTB (maize fitted to Duma 43 under full irrigation at Kiboko: crop_engine/calibration/wofost.py); without it,
 WOFOST's own.
 
@@ -86,6 +87,8 @@ def phenology(variety, reference_tmean=REFERENCE_TMEAN):
     rate = float(_afgen(base["DTSMTB"], reference_tmean))
     total = max(variety["maturity_days"] - emerge_days, 10) * rate
     share = base["TSUM1"] / (base["TSUM1"] + base["TSUM2"])
+    if variety.get("flowering_days"):                                   # anthesis set apart (varieties.yaml)
+        share = min(max((variety["flowering_days"] - emerge_days) * rate / total, 0.05), 0.95)
     over = {"TSUM1": round(total * share, 1), "TSUM2": round(total * (1 - share), 1)}
     scale = (variety.get("wofost") or {}).get("AMAXTB_scale")
     if scale is not None:                                               # the yield level (calibration/wofost.py)

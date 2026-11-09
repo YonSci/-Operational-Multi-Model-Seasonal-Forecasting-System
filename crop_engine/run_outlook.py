@@ -8,6 +8,13 @@ Runs: the seasonal forecast itself (ECMWF SEAS5, Oct 01 + latest observations) a
 sub-seasonal and medium-range model on disk (scripts/forecast_runs.py). A run whose results were made from the same
 observations and configuration is skipped.
 
+Second model: WOFOST 7.2 (adapters/wofost_adapter.py) grows the same members, sown on the same dates, for every
+variety with a WOFOST calibration in varieties.yaml (`wofost:`), when the run's weather has radiation, humidity and
+wind; its summary and members go beside AquaCrop's (results[variety][rule]["wofost"]), so the Crop outlook tab shows
+how far the two models agree. AquaCrop stays the published outlook; WOFOST has no observed-weather benchmark here
+(the engine comparison, compare_engines.py, sets the two against each other over 1993–2025). --no-wofost leaves
+it out.
+
 Outputs (not committed; outputs/crop_engine/):
   weather/<run id>.nc        the standard daily weather of the run (crop_engine.data.weather)
   results/<run id>.json      per site, variety and rule: every member's outcome and a summary
@@ -37,6 +44,7 @@ import yaml
 from crop_engine import config as C
 from crop_engine import dashboard
 from crop_engine.adapters import aquacrop_adapter as aq
+from crop_engine.adapters import wofost_adapter as wf
 from crop_engine.data import soil as soil_mod
 from crop_engine.data import weather as W
 from crop_engine.scenarios import planting as pl
@@ -45,6 +53,7 @@ import forecast_runs as fr  # noqa: E402
 import onset_rules as orl  # noqa: E402
 
 ENGINE = f"AquaCrop-OSPy {version('aquacrop')}"
+SECOND_ENGINE = f"WOFOST 7.2 (PCSE {version('pcse')}, Wofost72_WLP_CWB)"
 CAVEATS = [
     "Experimental: maize is calibrated against trials at Kiboko (phenology and harvest index), sorghum only set "
     "against them; the crop forecasts have not been verified against observed crop outcomes.",
@@ -53,11 +62,14 @@ CAVEATS = [
     "smallholder fields.",
     "Past seasons are simulated: AquaCrop grown in the observed weather of 1993–2025, not measured yields.",
     "A crop season runs from 1 Aug to 31 Mar: a crop that cannot mature by 31 Mar is counted as too late.",
-    "After the last ERA5-Land day, temperature is ECMWF SEAS5 member by member, bias-corrected to ERA5-Land, and ET0 "
+    "After the last ERA5-Land day, temperature is the sub-seasonal model's own in its range (ECMWF extended range or "
+    "GEFS runs, bias-corrected to ERA5-Land), then ECMWF SEAS5 member by member, bias-corrected to ERA5-Land, and ET0 "
     "the ERA5-Land climatology scaled by that temperature (Hargreaves); 1 Jan – 28 Feb rain is SEAS5 (bias-corrected), "
     "as for the Agri rules, and March rain SEAS5 quantile-mapped to CHIRPS. Where the SEAS5 files are missing, "
     "temperature is the 1993–2016 climatology and March rain the observed March of a past year (see each run's weather).",
     "Soil is the 0.25° SoilGrids average of the site's grid cell, not a field measurement.",
+    "A second crop model, WOFOST 7.2, grows the same maize and sorghum members on the same dates; where the two "
+    "disagree, the outlook depends on the model as much as on the weather.",
     "Deterministic weather models are the same forecast in every member: their spread comes from SEAS5 only.",
 ]
 
@@ -111,6 +123,8 @@ def run_tasks(tasks, workers, engine="aquacrop"):
 
 # ── summaries ───────────────────────────────────────────────────────────────
 def _q(a, q):
+    if isinstance(a, list):
+        a = [x for x in a if x is not None]                               # WOFOST has no potential yield or stress days
     return round(float(np.quantile(a, q)), 3) if len(a) else None
 
 
@@ -252,13 +266,43 @@ def forecast_runs_to_do(b, sources):
     return [t for t in todo if not sources or t[0] in sources]
 
 
-def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules, soils, bench, workers, chash):
+def wofost_varieties(varieties):
+    """The varieties WOFOST grows beside AquaCrop: a WOFOST crop set and a WOFOST calibration (varieties.yaml)."""
+    return [vk for vk, v in varieties.items() if wf.available(v) and v.get("wofost")]
+
+
+def run_wofost(ds, tasks, keys, rep_cells, inp, varieties, workers):
+    """WOFOST on the AquaCrop tasks of the WOFOST varieties → {(site, variety, rule): members}, or {} and why not."""
+    if "rad_mj_m2" not in ds:
+        return {}, f"no radiation, humidity or wind in the weather ({ds.attrs.get('radiation')})"
+    use = set(wofost_varieties(varieties))
+    if not use:
+        return {}, "no variety with a WOFOST calibration"
+    ids = [x.id for x in inp.sites]
+    cell = {s.id: s for s, _ in rep_cells}
+    wt, wk = [], []
+    for t, key in zip(tasks, keys):
+        sid, vk, _ = key
+        if vk not in use:
+            continue
+        k, s = ids.index(sid), cell[sid]
+        wt.append(dict(t, rad=ds.rad_mj_m2.values[:, k], vap=ds.vap_hpa.values[:, k], wind2=ds.wind2_ms.values[:, k],
+                       lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k])))
+        wk.append(key)
+    res = run_tasks(wt, workers, engine="wofost")
+    clean = lambda m: {k: v for k, v in m.items() if not k.startswith("_")}  # noqa: E731
+    return {key: [clean(m) for m in r] for key, r in zip(wk, res)}, ""
+
+
+def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules, soils, bench, workers, chash,
+            wofost=True):
     b = inp.b
     if source == "seasonal":
         P, segs = b.seas, [{"kind": "obs", "label": "Observed rainfall (CHIRPS)", "start": f"{b.win0}", "end": f"{b.obs_end}"},
                            {"kind": "seas", "label": "ECMWF SEAS5 seasonal forecast", "start": f"{b.obs_end + dt.timedelta(days=1)}",
                             "end": f"{b.last}"}]
         label, members = "ECMWF SEAS5 (Oct 01 + latest obs)", "ensemble (SEAS5)"
+        info = None
     else:
         got = fr.joined_rain(b, source, run, path, nwp_cache)
         if isinstance(got, str):
@@ -270,7 +314,10 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
     meth_res = meth.run(P, (P != b.seas).any(axis=(0, 2, 3)))
     attrs = {"forecast_source": source, "model_label": label, "run_date": f"{run}", "obs_end": f"{b.obs_end}",
              "members_kind": members, "segments": segs}
-    ds = inp.forecast(P, segs, attrs)
+    s2s, s2s_note = inp.s2s_temperature(source, info) if info else (None, "")
+    if s2s_note and s2s is None:
+        log(f"{rid}: {s2s_note}")
+    ds = inp.forecast(P, segs, attrs, s2s)
     problems = W.validate(ds)
     if problems:
         raise ValueError(f"{rid}: weather inputs invalid: {'; '.join(problems)}")
@@ -293,6 +340,10 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
                 keys.append((s.id, vk, rk))
     t0 = time.time()
     res = run_tasks(tasks, workers)
+    t_aq = time.time() - t0
+    wof, why = run_wofost(ds, tasks, keys, rep_cells, inp, varieties, workers) if wofost else ({}, "left out (--no-wofost)")
+    if why:
+        log(f"{rid}: WOFOST {why}")
     out_sites = {}
     fao_on = meth_res["fao-agricultural"]
     for s, group in rep_cells:
@@ -317,10 +368,16 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
         group = next(g for s, g in rep_cells if s.id == sid)
         summ = summarize(outcomes, varieties[vk], bench.get(sid, {}).get(vk, {}).get(rk))
         band = canopy_band(outcomes, f"{dates[0]:%Y-%m-%d}")
+        entry = {"summary": summ, "canopy": band, "members": outcomes}
+        if (sid, vk, rk) in wof:
+            w = wof[(sid, vk, rk)]
+            entry["wofost"] = {"summary": summarize(w, varieties[vk]), "members": w}
         for gid in group:
-            out_sites[gid]["results"].setdefault(vk, {})[rk] = {"summary": summ, "canopy": band, "members": outcomes}
+            out_sites[gid]["results"].setdefault(vk, {})[rk] = entry
     meta = {"id": rid, "source": source, "model_label": label, "run": f"{run}", "obs_end": f"{b.obs_end}",
             "members_kind": members, "segments": segs, "engine": ENGINE, "config_hash": chash,
+            "second_engine": ({"engine": SECOND_ENGINE, "varieties": sorted({vk for _, vk, _ in wof})} if wof
+                              else {"engine": SECOND_ENGINE, "varieties": [], "why_not": why}),
             "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
             "varieties": {k: {x: v[x] for x in ("label", "examples", "maturity_days", "failure_t_ha", "aquacrop_crop")} |
                           {"phenology_scale": round(v["scale"], 3)} for k, v in varieties.items()},
@@ -329,7 +386,8 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
             "weather": {"march_rain": ds.attrs.get("march_rain"), "temperature": ds.attrs.get("temperature_forecast")}}
     C.RESULTS_OUT.mkdir(parents=True, exist_ok=True)
     (C.RESULTS_OUT / f"{rid}.json").write_text(json.dumps({"meta": meta, "sites": out_sites}, indent=1), encoding="utf-8")
-    log(f"{rid}: {len(tasks) * P.shape[0]} member seasons in {time.time() - t0:.0f} s")
+    log(f"{rid}: {len(tasks) * P.shape[0]} member seasons in {t_aq:.0f} s"
+        + (f"; WOFOST {len(wof) * P.shape[0]} in {time.time() - t0 - t_aq:.0f} s" if wof else ""))
     return rid
 
 
@@ -362,6 +420,7 @@ def main():
     ap.add_argument("--no-refresh", action="store_true", help="do not top up the ERA5-Land temperature series")
     ap.add_argument("--list-sources", action="store_true", help="print the sources with a run on disk (JSON) and exit")
     ap.add_argument("--no-dashboard", action="store_true", help="do not rewrite the results index and the tab's data")
+    ap.add_argument("--no-wofost", action="store_true", help="AquaCrop only: no second model beside it")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -395,7 +454,7 @@ def main():
                 continue
         try:
             got = run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, a.rules, soils,
-                          bench["sites"], a.workers, chash)
+                          bench["sites"], a.workers, chash, wofost=not a.no_wofost)
             if got:
                 done.append(got)
         except Exception as exc:                                         # one run must not stop the others

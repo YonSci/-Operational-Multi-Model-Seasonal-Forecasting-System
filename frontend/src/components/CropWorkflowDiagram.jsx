@@ -42,7 +42,7 @@ export default function CropWorkflowDiagram() {
   // 1 inputs, stacked
   const inputs = [
     { title: 'Rain', lines: ['CHIRPS v2 observed', 'SEAS5, sub-seasonal and', 'weather-model members'] },
-    { title: 'Temperature, sun, air', lines: ['ERA5-Land at the site,', 'then SEAS5 bias-corrected', '(radiation, humidity, wind)'] },
+    { title: 'Temperature, sun, air', lines: ['ERA5-Land at the site, then', 'the sub-seasonal model’s,', 'then SEAS5 (bias-corrected)'] },
     { title: 'Soil', lines: ['SoilGrids layers to 200 cm', 'ERA5-Land water on 1 Aug'] },
     { title: 'Sowing date', lines: ['Agri rule 1 onset', 'FAO agricultural onset', 're-sown after a false start'] },
   ]
@@ -79,9 +79,9 @@ export default function CropWorkflowDiagram() {
           'ET0: the platform’s FAO-56,', 'then its climatology × the', 'member’s Penman-Monteith', 'ratio', '', 'the source of every day,', 'checked before any run']} />
 
         <Box x={c3} y={top} w={bw} h={half} tone="model" strong title="AquaCrop-OSPy 3.1.0" lines={['the published outlook', 'canopy and water stress', 'biomass = WP* · Tr / ET0', 'yield = biomass × HI', 'irrigation, mulch, ridges', '(in the scenarios)']} />
-        <Box x={c3} y={top + half + gap} w={bw} h={half} tone="model" title="WOFOST 7.2 (PCSE)" lines={['second model, compared', '(not yet published)', 'light interception and', 'photosynthesis (AMAX)', 'respiration, partitioning', 'yield = storage organs']} />
+        <Box x={c3} y={top + half + gap} w={bw} h={half} tone="model" title="WOFOST 7.2 (PCSE)" lines={['second model, shown', 'beside AquaCrop', '(maize and sorghum)', 'light interception and', 'photosynthesis (AMAX)', 'yield = storage organs']} />
 
-        <Box x={c4} y={top} w={220} h={half} tone="product" strong title="Crop outlook tab" lines={['per site, crop and rule:', 'yield (8 in 10 members)', 'chance of failure', 'sowing opportunity', 'against the observed-', 'weather crop 1993–2025']} />
+        <Box x={c4} y={top} w={220} h={half} tone="product" strong title="Crop outlook tab" lines={['per site, crop and rule:', 'yield (8 in 10 members)', 'chance of failure', 'both models side by side', 'against the observed-', 'weather crop 1993–2025']} />
         <Box x={c4} y={top + half + gap} w={220} h={half} tone="product" title="Management scenarios" lines={['the same members,', 'one choice changed:', 'sowing date, density,', 'soil water on 1 Aug,', 'irrigation, mulch,', 'tied ridges or pits']} />
 
         {/* flows: inputs → weather → models → products */}
@@ -90,13 +90,14 @@ export default function CropWorkflowDiagram() {
         <Arrow d={`M${c2 + 214} ${top + half + gap + half / 2} L${c3 - 4} ${top + half + gap + half / 2}`} />
         <Arrow d={`M${c3 + bw} ${top + half / 2} L${c4 - 4} ${top + half / 2}`} />
         <Arrow d={`M${c3 + bw} ${top + half - 20} L${c4 - 4} ${top + half + gap + 30}`} />
+        <Arrow d={`M${c3 + bw} ${top + half + gap + 30} L${c4 - 4} ${top + half - 20}`} />
 
         {/* 5 verification and calibration */}
         <Label x={c1} y={band - 14} weight={600} size={13}>5  VERIFICATION AND CALIBRATION</Label>
         <Box x={c1} y={band} w={235} h={bandH} tone="check" title="Hindcast 1993–2016" lines={['1 Oct SEAS5 runs, 25 members,', 'against the observed-weather', 'crop and the season-length', 'forecast; both sowing rules']} />
         <Box x={273} y={band} w={235} h={bandH} tone="check" title="County yields" lines={['HarvestStat Short Rains', 'maize, 1993–2025: forecast,', 'observed-weather crop and', 'season length against them']} />
         <Box x={526} y={band} w={235} h={bandH} tone="check" title="Engine comparison" lines={['AquaCrop against WOFOST', 'on 1,188 observed seasons:', 'rank agreement, failure,', 'days to harvest']} />
-        <Box x={779} y={band} w={241} h={bandH} tone="check" strong title="Calibration" lines={['KALRO Kiboko trials:', 'phenology (days to silking),', 'AquaCrop HI0, WOFOST', 'AMAXTB (Duma 43, irrigated)']} />
+        <Box x={779} y={band} w={241} h={bandH} tone="check" strong title="Calibration" lines={['Kiboko and Embu trials:', 'phenology, AquaCrop HI0;', 'WOFOST AMAXTB (maize: Duma', '43; sorghum: AquaCrop’s level)']} />
 
         <Arrow d={`M${c3 + 70} ${bottom + 4} L${c3 + 70} ${band - 4}`} />
         <Label x={c3 + 78} y={bottom + 34}>results</Label>
@@ -107,7 +108,7 @@ export default function CropWorkflowDiagram() {
           Daily: the weather, the outlook and both sowing rules for every forecast run. Weekly: the scenarios. On demand: the verification
         </Label>
         <Label x={c1} y={band + bandH + 50}>
-          and the calibration, whose parameters (dashed) go into the models. WOFOST runs the same members for comparison; it is not yet published.
+          and the calibration, whose parameters (dashed) go into the models. WOFOST grows the same maize and sorghum members, shown beside AquaCrop.
         </Label>
       </svg>
     </div>

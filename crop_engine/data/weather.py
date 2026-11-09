@@ -26,7 +26,9 @@ exactly this rain):
                   calibration year 1993 + (k mod 24)
 Observed seasons (the benchmark) are observed CHIRPS throughout, March included.
 Temperature: ERA5-Land at the site (Open-Meteo point series) to its last day, then SEAS5 member k bias-corrected to
-ERA5-Land (data/seas5.py) to 31 Mar; the 1993–2016 day-of-year climatology where neither is available.
+ERA5-Land (data/seas5.py) to 31 Mar; the 1993–2016 day-of-year climatology where neither is available. The s2s-ecmwf
+and s2s-gefs runs take their own model's temperature in its range first (data/s2s_temperature.py: the member paired
+with the rain, delta-corrected to ERA5-Land by lead day), with ET0 there scaled by its Hargreaves ratio; SEAS5 after.
 ET0: the platform's ERA5-Land FAO-56 grid to its last day, then its climatology by season day, scaled on SEAS5 days
 by member k's Hargreaves ET0 over that of the climatological temperatures (0.7–1.3): a warmer member with a wider
 daily range evaporates more. No forecast radiation, humidity or wind is used.
@@ -44,6 +46,7 @@ import xarray as xr
 
 from crop_engine import config as C
 from crop_engine.data import era5land
+from crop_engine.data import s2s_temperature as s2t
 from crop_engine.data import seas5 as s5
 from crop_engine.data import sites as sites_mod
 
@@ -227,9 +230,27 @@ class Inputs:
         with np.errstate(invalid="ignore", divide="ignore"):
             return np.clip(np.where(taw > 0, paw / taw, 0.0), 0, 1)
 
+    def s2s_temperature(self, source, info):
+        """(RunTemperature, the archive member of each rain member, the last forecast day) of an s2s run, or None,
+        and a note: the sub-seasonal model's own temperature for its days (data/s2s_temperature.py)."""
+        ids = [s.id for s in self.sites]
+        try:
+            if source == "s2s-ecmwf":       # the extended-range run the rain used; its members by archive position
+                t = s2t.RunTemperature("ecmwf", info["ext_run"], ids, self.temps)
+                pos, last = np.asarray(info["ext_members"], int), info["ext_days"][1]
+            elif source == "s2s-gefs":
+                t = s2t.RunTemperature("gefs", info["run"], ids, self.temps)
+                pos, last = np.asarray(info["members"], int), info["fc_days"][1]
+            else:
+                return None, ""
+        except Exception as exc:                                           # SEAS5 (or climatology) stands
+            return None, f"its own temperature not used ({type(exc).__name__}: {str(exc)[:160]})"
+        return (t, pos, pd.Timestamp(last)), t.describe()
+
     # ── a forecast run ────────────────────────────────────────────────────
-    def forecast(self, P, segments, attrs):
-        """Dataset of one forecast run: P (member, 1 Sep – 31 Dec, lat, lon) its joined rain, segments its sources."""
+    def forecast(self, P, segments, attrs, s2s=None):
+        """Dataset of one forecast run: P (member, 1 Sep – 31 Dec, lat, lon) its joined rain, segments its sources;
+        s2s: s2s_temperature's first value, the run's own model temperature in its range (before SEAS5)."""
         y = self.year
         dates = self.dates(y)
         n_mem, ns, T = P.shape[0], len(self.sites), len(dates)
@@ -269,6 +290,7 @@ class Inputs:
             src[mar] = C.PRECIP_SOURCES.index("climatology")
             attrs = {**attrs, "march_rain": f"climatology: member k takes CHIRPS March {cal[0] + 1}+(k mod {len(cal)})"}
         tmax, tmin, et0, tsrc, esrc = self.met(y, dates)
+        ref = (tmax.copy(), tmin.copy(), et0.copy(), tsrc.copy(), esrc.copy())   # ERA5-Land, else climatology
         tmax, tmin, et0 = (np.repeat(a[None], n_mem, axis=0) for a in (tmax, tmin, et0))
         extra = self._extra(dates)
         if S is not None:                                                 # after ERA5-Land: SEAS5 member k
@@ -289,7 +311,26 @@ class Inputs:
             tmin = np.minimum(np.where(use[None], fn, tmin), tmax).astype(np.float32)
             tsrc = np.where(use, C.MET_SOURCES.index("seasonal"), tsrc).astype(np.int8)
             esrc = np.where(on_e, C.MET_SOURCES.index("seasonal"), esrc).astype(np.int8)
-        attrs = {**attrs, "season_year": y, "temperature_forecast": self.seas5_note}
+        note = self.seas5_note
+        if s2s is not None:                                               # the run's own model, before SEAS5
+            t2, pos, last = s2s
+            rx, rn, re, rts, res = ref
+            p2 = t2.on(dates)
+            clim = C.MET_SOURCES.index("climatology")
+            use = (rts == clim) & ((p2 >= 0) & (dates <= last))[None, :]                     # (site, T)
+            k2 = np.where(p2 >= 0, p2, 0)
+            gx = np.moveaxis(t2.tmax[pos][:, k2], 1, 2)                     # (member, site, T)
+            gn = np.minimum(np.moveaxis(t2.tmin[pos][:, k2], 1, 2), gx)
+            on_e = use & (res == clim)
+            ratio = s5.hargreaves_ratio(gx, gn, rx[None], rn[None])
+            et0 = np.where(on_e[None], re[None] * ratio, et0).astype(np.float32)
+            tmax = np.where(use[None], gx, tmax).astype(np.float32)
+            tmin = np.minimum(np.where(use[None], gn, tmin), tmax).astype(np.float32)
+            fc = C.MET_SOURCES.index("forecast")
+            tsrc = np.where(use, fc, tsrc).astype(np.int8)
+            esrc = np.where(on_e, fc, esrc).astype(np.int8)
+            note = f"first {t2.describe()}; then {note}"
+        attrs = {**attrs, "season_year": y, "temperature_forecast": note}
         return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, extra)
 
     # ── an observed season (benchmark) ───────────────────────────────────

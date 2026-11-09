@@ -10,6 +10,8 @@ sub-seasonal data 48 h after the run, so the newest run is about two days old).
 Each run is saved as daily rainfall by valid date (mm/day; the archive's lead L is the mean rate over the previous
 24 h, i.e. the UTC day run date + L - 1), kept on its native 1.5° grid; blend_subseasonal.py maps it to 0.25°.
   → data/ecmwf_ext/ext_tp_<YYYYMMDD>_kenya.nc   (precip: member, time, lat, lon)
+and the run's daily maximum and minimum temperature at the crop engine's sites (its weather for the s2s-ecmwf runs):
+  → data/ecmwf_ext/ext_t2m_<YYYYMMDD>_sites.nc  (tmax, tmin: member, time, site; crop_engine/data/s2s_temperature.py)
 
 The latest run is always fetched; --days-back also fetches the runs of the previous days, which fill the days
 between the last observation and the newest forecasts. Runs already on disk are skipped.
@@ -68,6 +70,19 @@ def fetch(ds, init):
     return out
 
 
+def site_temperature(source, ds, inits):
+    """The runs' daily maximum and minimum temperature at the crop sites, for the crop engine's weather
+    (crop_engine/data/s2s_temperature.py); a failure is printed and never stops the rain."""
+    try:
+        if str(BASE_DIR) not in sys.path:
+            sys.path.insert(0, str(BASE_DIR))
+        from crop_engine.data import s2s_temperature as s2t
+    except Exception as exc:
+        print(f"  temperature at the crop sites: skipped ({type(exc).__name__}: {str(exc)[:160]})")
+        return
+    s2t.fetch_runs(source, ds, inits)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days-back", type=int, default=6, help="also fetch this many earlier daily runs (gap filling)")
@@ -82,6 +97,7 @@ def main():
             fetch(ds, init)
         except Exception as exc:                                   # a run still being ingested: skip it
             print(f"  {init:%Y-%m-%d}: skipped ({type(exc).__name__}: {str(exc)[:120]})")
+    site_temperature("ecmwf", ds, inits[-(a.days_back + 1):])
 
 
 if __name__ == "__main__":

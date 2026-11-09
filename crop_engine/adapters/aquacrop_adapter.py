@@ -43,12 +43,27 @@ PHENOLOGY = ("Emergence", "MaxRooting", "Senescence", "Maturity", "HIstart", "Fl
 def crop_parameters(variety, reference_tmean):
     """AquaCrop parameter overrides of a variety: GDD phenology scaled to its maturity days at reference_tmean,
     canopy growth / decline coefficients scaled inversely, then the variety's own `parameters` (calibrated values,
-    e.g. PlantPop, CCx, HI0, used as given) → (kwargs, scale factor)."""
+    e.g. PlantPop, CCx, HI0, used as given) → (kwargs, scale factor).
+
+    `flowering_days` (optional): days from sowing to flowering (AquaCrop's HIstart, the start of yield formation)
+    at reference_tmean, set apart from maturity: yield formation (YldForm) then runs from it to maturity (keeping
+    the crop file's gap between the two, scaled), and flowering's own duration is capped at it. Without it every
+    stage keeps the crop file's proportions (sorghum: flowering at 59 % of the maturity GDD)."""
     from aquacrop.entities.crop import crop_params
     p = crop_params[variety["aquacrop_crop"]]
     f = variety["maturity_days"] * (reference_tmean - p["Tbase"]) / p["Maturity"]
     kw = {k: float(p[k]) * f for k in PHENOLOGY}
     kw["CGC"], kw["CDC"] = float(p["CGC"]) / f, float(p["CDC"]) / f
+    if variety.get("flowering_days"):
+        fl = float(variety["flowering_days"]) * (reference_tmean - p["Tbase"])
+        if not kw["Emergence"] < fl < kw["Maturity"]:
+            raise ValueError(f"{variety.get('label', variety['aquacrop_crop'])}: flowering_days "
+                             f"{variety['flowering_days']} not between emergence and maturity")
+        gap = (float(p["Maturity"]) - float(p["HIstart"]) - float(p["YldForm"])) * f
+        kw["HIstart"] = fl
+        kw["YldForm"] = max(kw["Maturity"] - fl - gap, 1.0)
+        kw["Flowering"] = min(kw["Flowering"], kw["YldForm"])
+        kw["Senescence"] = min(max(kw["Senescence"], fl), kw["Maturity"])
     own = variety.get("parameters") or {}
     unknown = sorted(set(own) - set(p))
     if unknown:

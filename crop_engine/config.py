@@ -39,7 +39,8 @@ RESOW_MAX = 1
 
 # Per-day source of the rainfall (precip_source) and of temperature / ET0 (met_source)
 PRECIP_SOURCES = ["obs_final", "obs_prelim", "gap", "forecast", "seasonal", "climatology"]
-MET_SOURCES = ["era5land", "climatology", "seasonal"]           # seasonal: ECMWF SEAS5, bias-corrected
+MET_SOURCES = ["era5land", "climatology", "seasonal", "forecast"]   # seasonal: ECMWF SEAS5; forecast: the run's
+                                                                    # sub-seasonal model (both bias-corrected)
 
 # AquaCrop soil compartments: 2 m, finer near the surface (SoilGrids layers reach 200 cm)
 SOIL_DZ = [0.1] * 12 + [0.2] * 4

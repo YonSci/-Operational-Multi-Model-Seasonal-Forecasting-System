@@ -429,6 +429,54 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
 
 // The dashboard's own choices (season, seasonal run, onset method, forecast type and model) set the defaults here; a
 // choice the crop outlook cannot follow is named in a notice, never replaced silently
+// ── Two crop models on the same members: AquaCrop (published) and WOFOST (second model) ─────────────────────────────
+function EnginePanel({ aqua, wof, v, vk, why }) {
+  if (!wof) {
+    const reason = why ?? (cropOf(vk) === 'bean' ? 'WOFOST has no dry bean crop set, so the bean is grown by AquaCrop only.'
+      : 'This run was made before the second model was added, or without its radiation, humidity and wind.')
+    return <p style={{ fontSize: 14, color: 'var(--text-meta)', margin: 0, lineHeight: 1.55 }}>{reason}</p>
+  }
+  const thr = v.failure_t_ha
+  const ra = rates(aqua.map(m => ({ status: m[3], y: m[2] })), thr)
+  const rw = rates(wof.map(m => ({ status: m[3], y: m[2] })), thr)
+  const harvest = ms => median(ms.filter(m => SIMULATED.includes(m[3]) && m[1]).map(m => Date.parse(m[1])))
+  const pairs = aqua.map((m, i) => [m, wof[i]]).filter(([a, w]) => w && a[3] !== 'error' && w[3] !== 'error')
+  const agree = pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < thr) === (effYield(w[3], w[2]) < thr)).length / pairs.length : null
+  const d = rw.ySown.median != null && ra.ySown.median != null ? rw.ySown.median - ra.ySown.median : null
+  const rows = [['AquaCrop (the published outlook)', ra, harvest(aqua)], ['WOFOST (second model)', rw, harvest(wof)]]
+  const iso = t => t == null ? null : new Date(t).toISOString().slice(0, 10)
+  return (
+    <>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th>Crop model</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Failure if sown</th><th>Matured</th><th>Harvest</th></tr></thead>
+          <tbody>
+            {rows.map(([label, r, h]) => (
+              <tr key={label}>
+                <td style={{ fontWeight: 600, color: 'var(--heading)' }}>{label}</td>
+                <td>{r.nSown ? `${fmtT(r.ySown.median)} t/ha` : '—'}</td>
+                <td>{r.nSown ? `${fmtT(r.ySown.p10)}–${fmtT(r.ySown.p90)} t/ha` : '—'}</td>
+                <td>{pct(r.pFailSown)}</td>
+                <td>{pct(r.pOk)}</td>
+                <td>{fmtDate(iso(h))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
+        {d == null ? 'No sown crop to compare.'
+          : Math.abs(d) < 0.25 ? 'The two models give about the same yield for the sown crops. '
+          : `WOFOST’s median yield of the sown crops is ${fmtT(Math.abs(d))} t/ha ${d < 0 ? 'lower' : 'higher'} than AquaCrop’s. `}
+        {agree != null && `They agree on whether a member’s crop fails for ${pct(agree)} of the members. `}
+        Same weather, soil, starting water and sowing dates; only the crop model differs, so the gap between them is part of the
+        uncertainty the forecast does not show on its own. WOFOST’s maize yield level is calibrated to the same Kiboko trial as
+        AquaCrop’s, and its sorghum to AquaCrop’s own sorghum level; it has no dry bean.
+      </p>
+    </>
+  )
+}
+
 export default function CropOutlookTab({ country, selectedSite, season, initId, initLabel, onsetDef, onsetLabel,
                                          forecastType, mrfModel, s2sModel }) {
   const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000 })
@@ -477,6 +525,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const res = runQ.data?.sites?.[sid]
   const members = res?.results?.[vk]?.[rk]?.members ?? []
   const canopy = res?.results?.[vk]?.[rk]?.canopy
+  const wofMembers = res?.results?.[vk]?.[rk]?.wofost?.members
   const b = bench.data?.sites?.[sid]?.[vk]?.[rk]
   const fcY = members.filter(m => m[3] !== 'error').map(m => effYield(m[3], m[2]))
   const pastY = (b?.seasons ?? []).filter(s => s[4] !== 'error').map(s => effYield(s[4], s[3]))
@@ -512,6 +561,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         What each forecast means for a crop at the monitored sites: the AquaCrop crop model grown in the weather of every forecast
         member, sown on the platform’s onset date, and compared with the same crop simulated in the observed weather of {years[0]}–{years[1]}
         (simulated past seasons, not measured yields) and with the yields measured in field trials at the site, where there are any.
+        A second crop model, WOFOST, grows the same maize and sorghum members, to show how much the answer depends on the model.
       </p>
       <div role="note" style={{ marginTop: 12, background: 'var(--caution-bg)', color: 'var(--caution-text)', borderRadius: 8, padding: '10px 14px',
                                 fontSize: 14, lineHeight: 1.55, maxWidth: 860 }}>
@@ -598,6 +648,16 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
       </div>
 
       <div style={{ marginTop: 18 }}>
+        <Panel title="Two crop models, the same forecast"
+               sub="AquaCrop, the published outlook, and WOFOST 7.2 grown in the same members of this forecast, sown on the same dates.">
+          {runQ.isLoading ? msg('Loading…')
+            : members.length ? <EnginePanel aqua={members} wof={wofMembers} v={v} vk={vk}
+                                            why={runQ.data?.meta?.second_engine?.why_not && !wofMembers ? `No second model for this run: ${runQ.data.meta.second_engine.why_not}.` : null}/>
+            : msg('No members for this choice.')}
+        </Panel>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
         <Panel title="How the crop canopy develops"
                sub="Canopy cover of the sown crops week by week, from 1 Aug. It falls to zero as each crop is harvested or dies, so the median drops once about half the crops are done. Hover for values.">
           {runQ.isLoading ? msg('Loading…')
@@ -614,12 +674,13 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
-                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th></tr>
+                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th><th>WOFOST yield if sown</th></tr>
               </thead>
               <tbody>
                 {runs.map(r => {
                   const s = ix.summaries?.[r.id]?.[sid]?.[vk]?.[rk]
                   if (!s) return null
+                  const ws = ix.wofost?.[r.id]?.[sid]?.[vk]?.[rk]
                   const on = r.id === run.id
                   return (
                     <tr key={r.id} style={{ background: on ? 'var(--nav-active-bg)' : undefined }}>
@@ -638,6 +699,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                       <td>{s.potential_t_ha?.median != null ? `${fmtT(s.potential_t_ha.median)} t/ha` : '—'}</td>
                       <td>{pct(s.p_failure_if_sown)}</td>
                       <td>{pct(s.share.ok)}</td>
+                      <td>{ws?.yield_if_sown_t_ha?.median != null ? `${fmtT(ws.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
                     </tr>
                   )
                 })}
@@ -652,6 +714,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                     <td>{pastPotential != null ? `${fmtT(pastPotential)} t/ha` : '—'}</td>
                     <td>{pct(RB.pFailSown)}</td>
                     <td>{pct(RB.pOk)}</td>
+                    <td>—</td>
                   </tr>
                 )}
                 {measured.map(o => (
@@ -661,7 +724,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                     <td>—</td><td>—</td>
                     <td>{fmtT(o.median_t_ha)} t/ha</td>
                     <td>high-input {fmtT(o.p90_t_ha)} t/ha</td>
-                    <td>—</td><td>—</td><td>—</td>
+                    <td>—</td><td>—</td><td>—</td><td>—</td>
                   </tr>
                 ))}
               </tbody>
@@ -704,9 +767,15 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                               `${s.label} ${i === 0 && s.kind === 'obs' ? '1 Aug' : fmtDate(s.start)} – ${fmtDate(s.end)}`),
                             'ECMWF SEAS5 1 Jan – 28 Feb',
                             `1–31 Mar: ${runQ.data?.meta?.weather?.march_rain ?? 'climatology (each member the observed March of a past year)'}; the season ends on 31 Mar`].join('; ')],
-              ['Temperature, ET0', (runQ.data?.meta?.weather?.temperature ?? '').startsWith('ECMWF')
-                ? 'ERA5-Land to its latest day, then ECMWF SEAS5 member by member, bias-corrected to ERA5-Land; ET0 the ERA5-Land climatology scaled by that temperature'
-                : 'ERA5-Land to its latest day, then the 1993–2016 average for the day of the year'],
+              ['Temperature, ET0', (() => {
+                const t = runQ.data?.meta?.weather?.temperature ?? ''
+                const s2s = t.startsWith('first ') ? t.slice(6).split(', member')[0] : null
+                const seas = t.includes('ECMWF SEAS5') || t.startsWith('ECMWF')
+                return 'ERA5-Land to its latest day, then '
+                  + (s2s ? `the ${s2s} member paired with the rain, bias-corrected to ERA5-Land, to its last day, then ` : '')
+                  + (seas ? 'ECMWF SEAS5 member by member, bias-corrected to ERA5-Land; ET0 the ERA5-Land climatology scaled by that temperature'
+                          : 'the 1993–2016 average for the day of the year')
+              })()],
               ['Site', `${site.name}, 0.25° grid cell ${site.cell?.join(', ')}`],
               ['Soil', `SoilGrids, ${site.topsoil?.sand}% sand and ${site.topsoil?.clay}% clay at the surface; ${site.soil_taw_100cm_mm} mm available water in the top metre`
                        + (res ? `; ${pct(res.initial_water_fraction)} of it on 1 Aug (ERA5-Land)` : '')],
@@ -724,7 +793,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
           </ul>
           <p style={{ fontSize: 13.5, margin: '10px 0 0' }}>
             <a href={METHOD_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-text)' }}>Method: CROP_ENGINE.md</a>
-            <span style={{ color: 'var(--text-meta)' }}> · {ix.engine}</span>
+            <span style={{ color: 'var(--text-meta)' }}> · {ix.engine}{ix.second_engine ? ` · second model ${ix.second_engine}` : ''}</span>
           </p>
         </Panel>
       </div>

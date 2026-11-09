@@ -9,6 +9,9 @@ the latest result of each forecast source and of the benchmark, read by frontend
                     [planting, harvest, yield t/ha, outcome, water-stress days, season rain mm,
                     yield without water stress t/ha, sowings], and the canopy band (weekly canopy cover of the
                     simulated members from 1 Aug: median, 10th and 90th percentiles)
+  WOFOST, the second model, where the run has it (run_outlook.py): beside AquaCrop's, per site, variety and rule,
+  "wofost": its summary and members (as AquaCrop's) in <source>.json, and index.json "wofost": {run id: {site:
+  {variety: {rule: summary}}}} and "second_engine".
   index.json also carries the measured yields at each site (crop_engine/yields targets.csv, when built): the trials'
   median and high-input yields per site and crop, kept apart from the simulated past seasons.
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
@@ -83,21 +86,30 @@ def write(log=print):
         latest.setdefault(r["source"], r)
     runs = sorted(latest.values(), key=lambda r: (r["source"] != "seasonal", r["source"]))
     C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
-    meta0, sites, summaries = None, {}, {}
+    meta0, sites, summaries, wofost = None, {}, {}, {}
     for r in runs:
         d = json.loads((C.RESULTS_OUT / f"{r['id']}.json").read_text(encoding="utf-8"))
         meta0 = meta0 or d["meta"]
         summaries[r["id"]] = {sid: {vk: {rk: x["summary"] for rk, x in rs.items()} for vk, rs in s["results"].items()}
                               for sid, s in d["sites"].items()}
+        w = {sid: {vk: {rk: x["wofost"]["summary"] for rk, x in rs.items() if "wofost" in x}
+                   for vk, rs in s["results"].items()} for sid, s in d["sites"].items()}
+        w = {sid: {vk: rs for vk, rs in vs.items() if rs} for sid, vs in w.items()}
+        if any(w.values()):
+            wofost[r["id"]] = {sid: vs for sid, vs in w.items() if vs}
         out = {"meta": {k: d["meta"].get(k) for k in ("id", "source", "model_label", "run", "obs_end", "members_kind",
-                                                       "segments", "created", "engine", "weather")}, "sites": {}}
+                                                       "segments", "created", "engine", "weather", "second_engine")},
+               "sites": {}}
         for sid, s in d["sites"].items():
             sites.setdefault(sid, {"name": s["name"], "cell": s["cell"], "soil_taw_100cm_mm": s["soil_taw_100cm_mm"],
                                    "topsoil": {k: round(v) for k, v in s["topsoil"].items()}})
             out["sites"][sid] = {
                 "initial_water_fraction": s["initial_water_fraction"], "fao_reference": s["fao_reference"],
                 "results": {vk: {rk: {"summary": x["summary"], "canopy": x.get("canopy"),
-                                      "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["members"]]}
+                                      "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["members"]],
+                                      **({"wofost": {"summary": x["wofost"]["summary"],
+                                                     "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["wofost"]["members"]]}}
+                                         if "wofost" in x else {})}
                                  for rk, x in rs.items()} for vk, rs in s["results"].items()}}
         _dump(C.DASHBOARD_OUT / f"{r['source']}.json", out)
     if not meta0:
@@ -116,7 +128,8 @@ def write(log=print):
     _dump(C.DASHBOARD_OUT / "index.json", {
         "runs": [{**{k: r[k] for k in ("id", "source", "model_label", "run", "obs_end", "members_kind", "created")},
                   "file": f"{r['source']}.json"} for r in runs],
-        "summaries": summaries, "sites": sites, "varieties": meta0["varieties"], "planting_rules": meta0["planting_rules"],
+        "summaries": summaries, "wofost": wofost, "second_engine": meta0.get("second_engine", {}).get("engine"),
+        "sites": sites, "varieties": meta0["varieties"], "planting_rules": meta0["planting_rules"],
         "outcomes": [{"id": i, "label": a, "title": t} for i, a, t in OUTCOMES], "member_keys": list(MEMBER_KEYS),
         "observed_yields": observed_yields(),
         "caveats": meta0["caveats"], "engine": meta0["engine"]})

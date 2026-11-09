@@ -9,6 +9,8 @@ the 0.5° days 11–35 on the same 0.25° grid), from the dynamical.org archive 
 The archive's precipitation is the mean rate since the previous step (3-hourly to 240 h, 6-hourly after); each step's
 rain is put on the UTC day its period starts, giving daily rain by valid date (mm/day) for days 1–35.
   → data/gefs/gefs_tp_<YYYYMMDD>_kenya.nc   (precip: member, time, lat, lon)
+and the run's daily maximum and minimum temperature at the crop engine's sites (its weather for the s2s-gefs runs):
+  → data/gefs/gefs_t2m_<YYYYMMDD>_sites.nc  (tmax, tmin: member, time, site; crop_engine/data/s2s_temperature.py)
 
 The latest run is always fetched; --days-back also fetches the runs of the previous days. Runs already on disk are
 skipped, and runs older than --keep days are deleted (the forecast-run results keep what the platform needs).
@@ -81,6 +83,19 @@ def fetch(ds, init):
     return out
 
 
+def site_temperature(source, ds, inits):
+    """The runs' daily maximum and minimum temperature at the crop sites, for the crop engine's weather
+    (crop_engine/data/s2s_temperature.py); a failure is printed and never stops the rain."""
+    try:
+        if str(BASE_DIR) not in sys.path:
+            sys.path.insert(0, str(BASE_DIR))
+        from crop_engine.data import s2s_temperature as s2t
+    except Exception as exc:
+        print(f"  temperature at the crop sites: skipped ({type(exc).__name__}: {str(exc)[:160]})")
+        return
+    s2t.fetch_runs(source, ds, inits)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days-back", type=int, default=2, help="also fetch this many earlier daily runs")
@@ -96,8 +111,9 @@ def main():
             fetch(ds, init)
         except Exception as exc:                                   # a run still being ingested: skip it
             print(f"  {init:%Y-%m-%d}: skipped ({type(exc).__name__}: {str(exc)[:120]})")
+    site_temperature("gefs", ds, inits[-(a.days_back + 1):])
     cut = dt.date.today() - dt.timedelta(days=a.keep)
-    for p in OUT_DIR.glob("gefs_tp_*_kenya.nc"):
+    for p in [*OUT_DIR.glob("gefs_tp_*_kenya.nc"), *OUT_DIR.glob("gefs_t2m_*_sites.nc")]:
         if dt.datetime.strptime(p.stem.split("_")[2], "%Y%m%d").date() < cut:
             p.unlink()
 
