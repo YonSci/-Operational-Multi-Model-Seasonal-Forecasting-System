@@ -1011,6 +1011,14 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             return rs.length ? <optgroup key={k.id} label={k.label}>{rs.map(r => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}</optgroup> : null
           })}
         </Select>
+        {ix.bulletins?.[sid] && (
+          <a href={DATA + ix.bulletins[sid]} download={`crop_outlook_${sid}.pdf`} target="_blank" rel="noreferrer"
+             title="This site's crop outlook on one page: every crop, both models, the management choices, past skill"
+             style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--btn-primary)', color: '#fff',
+                      borderRadius: 8, padding: '7px 12px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', minHeight: 36 }}>
+            Download the crop bulletin (PDF)
+          </a>
+        )}
       </div>
       {notes.length > 0 && (
         <div role="status" style={{ margin: '-6px 0 16px', border: '1px solid var(--border-primary)', background: 'var(--bg-surface)', borderRadius: 8,

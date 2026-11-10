@@ -18,6 +18,7 @@ the latest result of each forecast source and of the benchmark, read by frontend
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
                     and every observed
                     season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
+  bulletins/        one crop bulletin PDF per crop site (write_bulletins; index.json "bulletins")
   skill.json        how well past crop forecasts did: the seasonal and sub-seasonal hindcast scores (write_skill)
   history.json      each outlook's summary on every day its run was rebuilt (write_history)
   scenarios.json    the management scenarios of the latest seasonal run (crop_engine.run_scenarios), when made with
@@ -174,6 +175,28 @@ def write_skill(current_config, log=print):
     return bool(out)
 
 
+def write_bulletins(log=print):
+    """bulletins/<site id>.pdf: the crop bulletin of every crop site (backend/bulletin_crop.py, the bulletin's crop page as
+    a small vector PDF), drawn from the data just written, listed in index.json ("bulletins") for the tab's download.
+    Never stops the dashboard: a failure leaves the tab without the download."""
+    import importlib
+    import sys
+    try:
+        sys.path.insert(0, str(C.BASE / "backend"))
+        bc = importlib.import_module("bulletin_crop")
+        bc.LOCAL, bc._CACHE = C.DASHBOARD_OUT.parent, {}               # the data just written (tracker/data/), not the cache
+        made = bc.site_pdfs(C.DASHBOARD_OUT / "bulletins", log=log)
+    except Exception as exc:
+        log(f"dashboard: crop bulletins not made ({type(exc).__name__}: {str(exc)[:160]})")
+        made = []
+    idx = C.DASHBOARD_OUT / "index.json"
+    ix = json.loads(idx.read_text(encoding="utf-8"))
+    ix["bulletins"] = {f[:-4]: f"bulletins/{f}" for f in made}
+    _dump(idx, ix)
+    if made:
+        log(f"dashboard: crop bulletins for {len(made)} sites")
+
+
 def write(log=print):
     idx = C.RESULTS_OUT / "index.json"
     if not idx.exists():
@@ -241,6 +264,7 @@ def write(log=print):
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
     write_history([(r, ch, summaries.get(r["id"], {}), wofost.get(r["id"])) for r, ch in hist], log)
     write_skill(chash0, log)
+    write_bulletins(log)
     keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json", "history.json", "skill.json"}
     for p in C.DASHBOARD_OUT.glob("*.json"):
         if p.name not in keep:

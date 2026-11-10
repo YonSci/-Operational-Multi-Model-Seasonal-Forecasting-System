@@ -5,6 +5,8 @@ page and the tab always agree.
 
   crop_page_png(lat, lon, out_dir)  → the page as a PNG (1650 px wide, as the bulletin), or None when no crop site is
                                       within MAX_KM or the crop data cannot be read
+  crop_page_pdf(lat, lon, path)     → the same page as a small vector PDF (the Crop outlook tab's download)
+  site_pdfs(out_dir)                → one PDF per crop site (crop_engine/dashboard.py, every daily update)
 
 Contents: the season at the site so far (rain since 1 Oct from the rainfall tracking table, soil water from the FAO
 water balance), the outlook for every crop (AquaCrop, the published outlook, and WOFOST, the second model, with the
@@ -177,12 +179,69 @@ def crop_page_png(lat, lon, out_dir, dpi=150):
     data = page_data(lat, lon)
     if not data or not data["crops"]:
         return None
+    plt = _plt()
+    fig, _ = _draw(data)
+    out = Path(out_dir) / f"crop_page_{data['sid']}.png"
+    fig.savefig(out, dpi=dpi, facecolor="white")
+    plt.close(fig)
+    _trim_bottom(out, keep_px=round(0.03 * PAGE_H * dpi))
+    return str(out)
+
+
+def crop_page_pdf(lat, lon, out_path):
+    """The crop page as a one-page vector PDF (small: text and lines, no image), cut to its content, or None."""
+    data = page_data(lat, lon)
+    if not data or not data["crops"]:
+        return None
+    plt = _plt()
+    from matplotlib.transforms import Bbox
+    fig, y_end = _draw(data)
+    bottom = max(0.0, (y_end - 0.03) * PAGE_H)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, format="pdf", facecolor="white", bbox_inches=Bbox([[0, bottom], [PAGE_W, PAGE_H]]),
+                metadata={"Title": f"Crop outlook, {data['site']['name']}", "Subject": "OCL-FS crop outlook (experimental)"})
+    plt.close(fig)
+    return str(out_path)
+
+
+def site_pdfs(out_dir, log=print):
+    """One crop bulletin PDF per crop site (<site id>.pdf in out_dir), from the published data; the others removed."""
+    ix = _read("crop/index.json") or {}
+    out_dir = Path(out_dir)
+    made = set()
+    for sid, site in (ix.get("sites") or {}).items():
+        if site.get("lat") is None:
+            continue
+        try:
+            if crop_page_pdf(site["lat"], site["lon"], out_dir / f"{sid}.pdf"):
+                made.add(f"{sid}.pdf")
+        except Exception as exc:                                        # one site never stops the others
+            log(f"crop bulletin: {sid} not made ({type(exc).__name__}: {str(exc)[:120]})")
+    for f in out_dir.glob("*.pdf") if out_dir.exists() else []:
+        if f.name not in made:
+            f.unlink()
+    return sorted(made)
+
+
+PAGE_W, PAGE_H = 11, 14.5
+
+
+def _plt():
+    """pyplot on the Agg backend (no display: the backend and the daily update)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    return plt
+
+
+def _draw(data):
+    """The page's figure and the lowest point drawn (a figure fraction)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     INK, MUTED, LINE, ACCENT, WARN = "#0f172a", "#475569", "#cbd5e1", "#1d4ed8", "#9a3412"
-    fig = plt.figure(figsize=(11, 14.5), facecolor="white")
+    fig = plt.figure(figsize=(PAGE_W, PAGE_H), facecolor="white")
     W = lambda s, n=118: textwrap.fill(s, n)                                           # noqa: E731
     y = 0.975
 
@@ -313,13 +372,8 @@ def crop_page_png(lat, lon, out_dir, dpi=150):
     y -= 0.016 * (len(W("Farm managers and agronomists at this site: tell us how much water, residue and ridging farmers use, and the "
                         "scenarios will be set to match:", 138).splitlines()) - 1)
     y -= 0.016
-    text(0.05, y, FORM_URL, fontsize=9.5, color=ACCENT)
-
-    out = Path(out_dir) / f"crop_page_{data['sid']}.png"
-    fig.savefig(out, dpi=dpi, facecolor="white")
-    plt.close(fig)
-    _trim_bottom(out, keep_px=round(0.03 * 14.5 * dpi))
-    return str(out)
+    text(0.05, y, FORM_URL, fontsize=9.5, color=ACCENT, url=FORM_URL)
+    return fig, y - 0.02
 
 
 def _trim_bottom(path, keep_px=60):

@@ -132,3 +132,24 @@ def test_bulletin_crop_page_only_near_a_crop_site(tmp_path, monkeypatch):
     from PIL import Image
     with Image.open(png) as im:
         assert im.width == 1650 and 600 < im.height < 2200
+
+
+def test_dashboard_makes_one_crop_bulletin_per_site(tmp_path, monkeypatch):
+    import pathlib
+    crop = tmp_path / "crop"
+    crop.mkdir()
+    summ = {"yield_if_sown_t_ha": {"median": 3.2, "p10": 0.0, "p90": 5.6}, "p_failure_if_sown": 0.24, "planting": {"median": "2026-10-29"}}
+    ix = {"runs": [{"id": "seasonal_20261001", "source": "seasonal", "run": "2026-10-01", "obs_end": "2026-11-05", "model_label": "ECMWF SEAS5"}],
+          "sites": {"kiboko": {"name": "KALRO Kiboko", "lat": -2.21, "lon": 37.72}, "nowhere": {"name": "No coordinates", "lat": None}},
+          "varieties": {"maize_early": {"label": "Early maize", "failure_t_ha": 0.5}},
+          "planting_rules": {"fao-agricultural": "FAO agricultural onset"},
+          "summaries": {"seasonal_20261001": {"kiboko": {"maize_early": {"fao-agricultural": summ}}}}}
+    (crop / "index.json").write_text(json.dumps(ix))
+    (crop / "bulletins").mkdir()
+    (crop / "bulletins" / "old_site.pdf").write_bytes(b"%PDF-")             # a site no longer in the outlook: removed
+    monkeypatch.setattr(C, "DASHBOARD_OUT", crop)
+    monkeypatch.setattr(C, "BASE", pathlib.Path(__file__).resolve().parents[2])
+    dashboard.write_bulletins(log=lambda m: None)
+    assert sorted(p.name for p in (crop / "bulletins").iterdir()) == ["kiboko.pdf"]
+    assert (crop / "bulletins" / "kiboko.pdf").read_bytes()[:5] == b"%PDF-"
+    assert json.loads((crop / "index.json").read_text(encoding="utf-8"))["bulletins"] == {"kiboko": "bulletins/kiboko.pdf"}
