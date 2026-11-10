@@ -28,7 +28,9 @@ Observed seasons (the benchmark) are observed CHIRPS throughout, March included.
 Temperature: ERA5-Land at the site (Open-Meteo point series) to its last day, then SEAS5 member k bias-corrected to
 ERA5-Land (data/seas5.py) to 31 Mar; the 1993–2016 day-of-year climatology where neither is available. The s2s-ecmwf
 and s2s-gefs runs take their own model's temperature in its range first (data/s2s_temperature.py: the member paired
-with the rain, delta-corrected to ERA5-Land by lead day), with ET0 there scaled by its Hargreaves ratio; SEAS5 after.
+with the rain, delta-corrected to ERA5-Land by lead day), and its radiation, humidity and wind (data/s2s_met.py,
+ratio-corrected) when on disk, with ET0 there scaled by its Penman-Monteith ratio (else its Hargreaves ratio); SEAS5
+after.
 ET0: the platform's ERA5-Land FAO-56 grid to its last day, then its climatology by season day, scaled on SEAS5 days
 by member k's Hargreaves ET0 over that of the climatological temperatures (0.7–1.3): a warmer member with a wider
 daily range evaporates more. No forecast radiation, humidity or wind is used.
@@ -46,6 +48,7 @@ import xarray as xr
 
 from crop_engine import config as C
 from crop_engine.data import era5land
+from crop_engine.data import s2s_met as s2m
 from crop_engine.data import s2s_temperature as s2t
 from crop_engine.data import seas5 as s5
 from crop_engine.data import sites as sites_mod
@@ -231,21 +234,29 @@ class Inputs:
             return np.clip(np.where(taw > 0, paw / taw, 0.0), 0, 1)
 
     def s2s_temperature(self, source, info):
-        """(RunTemperature, the archive member of each rain member, the last forecast day) of an s2s run, or None,
-        and a note: the sub-seasonal model's own temperature for its days (data/s2s_temperature.py)."""
+        """(RunTemperature, the archive member of each rain member, the last forecast day, RunMet or None) of an s2s
+        run, or None, and a note: the sub-seasonal model's own temperature for its days (data/s2s_temperature.py) and
+        its radiation, humidity and wind when their files and training runs are on disk (data/s2s_met.py)."""
         ids = [s.id for s in self.sites]
         try:
             if source == "s2s-ecmwf":       # the extended-range run the rain used; its members by archive position
-                t = s2t.RunTemperature("ecmwf", info["ext_run"], ids, self.temps)
+                key, run = "ecmwf", info["ext_run"]
                 pos, last = np.asarray(info["ext_members"], int), info["ext_days"][1]
             elif source == "s2s-gefs":
-                t = s2t.RunTemperature("gefs", info["run"], ids, self.temps)
+                key, run = "gefs", info["run"]
                 pos, last = np.asarray(info["members"], int), info["fc_days"][1]
             else:
                 return None, ""
+            t = s2t.RunTemperature(key, run, ids, self.temps)
         except Exception as exc:                                           # SEAS5 (or climatology) stands
             return None, f"its own temperature not used ({type(exc).__name__}: {str(exc)[:160]})"
-        return (t, pos, pd.Timestamp(last)), t.describe()
+        m, why = None, ""
+        if self.met2 is not None:
+            try:
+                m = s2m.RunMet(key, run, ids, self.met2)
+            except Exception as exc:                                       # temperature alone, Hargreaves ET0
+                why = f"; its radiation, humidity and wind not used ({type(exc).__name__}: {str(exc)[:120]})"
+        return (t, pos, pd.Timestamp(last), m), t.describe() + (f"; {m.describe()}" if m else why)
 
     # ── a forecast run ────────────────────────────────────────────────────
     def forecast(self, P, segments, attrs, s2s=None):
@@ -293,6 +304,7 @@ class Inputs:
         ref = (tmax.copy(), tmin.copy(), et0.copy(), tsrc.copy(), esrc.copy())   # ERA5-Land, else climatology
         tmax, tmin, et0 = (np.repeat(a[None], n_mem, axis=0) for a in (tmax, tmin, et0))
         extra = self._extra(dates)
+        rsrc0 = extra[1].copy() if isinstance(extra, tuple) else None    # ERA5-Land, else climatology
         if S is not None:                                                 # after ERA5-Land: SEAS5 member k
             p = S.on(dates)
             use = (tsrc == C.MET_SOURCES.index("climatology")) & (p >= 0)[None, :]          # (site, T)
@@ -313,7 +325,8 @@ class Inputs:
             esrc = np.where(on_e, C.MET_SOURCES.index("seasonal"), esrc).astype(np.int8)
         note = self.seas5_note
         if s2s is not None:                                               # the run's own model, before SEAS5
-            t2, pos, last = s2s
+            t2, pos, last, *more = s2s
+            m2 = more[0] if more else None
             rx, rn, re, rts, res = ref
             p2 = t2.on(dates)
             clim = C.MET_SOURCES.index("climatology")
@@ -323,10 +336,23 @@ class Inputs:
             gn = np.minimum(np.moveaxis(t2.tmin[pos][:, k2], 1, 2), gx)
             on_e = use & (res == clim)
             ratio = s5.hargreaves_ratio(gx, gn, rx[None], rn[None])
+            fc = C.MET_SOURCES.index("forecast")
+            if m2 is not None and isinstance(extra, tuple):                # its radiation, humidity and wind too
+                vals, rsrc, elev = extra
+                p3 = m2.on(dates)
+                usem = (rsrc0 == clim) & ((p3 >= 0) & (dates <= last))[None, :]
+                k3 = np.where(p3 >= 0, p3, 0)
+                new = {}
+                for key, col in s2m.KEYS.items():
+                    cur = vals[col] if vals[col].ndim == 3 else np.repeat(vals[col][None], n_mem, axis=0)
+                    new[col] = np.where(usem[None], np.moveaxis(m2.values[key][pos][:, k3], 1, 2), cur).astype(np.float32)
+                extra = (new, np.where(usem, fc, rsrc).astype(np.int8), elev)
+                pm = self.et0_pm_ratio({"tmax": gx, "tmin": gn, **{key: new[col] for key, col in s2m.KEYS.items()}},
+                                       self.clim_weather(dates), dates, elev)
+                ratio = np.where(usem[None], pm, ratio)
             et0 = np.where(on_e[None], re[None] * ratio, et0).astype(np.float32)
             tmax = np.where(use[None], gx, tmax).astype(np.float32)
             tmin = np.minimum(np.where(use[None], gn, tmin), tmax).astype(np.float32)
-            fc = C.MET_SOURCES.index("forecast")
             tsrc = np.where(use, fc, tsrc).astype(np.int8)
             esrc = np.where(on_e, fc, esrc).astype(np.int8)
             note = f"first {t2.describe()}; then {note}"
@@ -371,8 +397,10 @@ def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs, extr
         ds["rad_source"] = (("site", "time"), rsrc)
         ds = ds.assign_coords(elev_m=("site", np.asarray(elev, np.float32)))
         seas = (rsrc == C.MET_SOURCES.index("seasonal")).any()
+        s2s = (rsrc == C.MET_SOURCES.index("forecast")).any()
         attrs = {**attrs, "radiation": "ERA5-Land 0.1° cell of each site (Google Earth Engine): solar radiation, vapour "
                                        "pressure at the dewpoint, 2 m wind (FAO-56 Eq. 47)"
+                                       + ("; then the sub-seasonal model's member, ratio-corrected to ERA5-Land" if s2s else "")
                                        + ("; then ECMWF SEAS5 member k, ratio-corrected to ERA5-Land" if seas else "")
                                        + "; rad_source per day"}
     else:

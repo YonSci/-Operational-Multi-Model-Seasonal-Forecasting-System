@@ -11,7 +11,8 @@ the latest result of each forecast source and of the benchmark, read by frontend
                     simulated members from 1 Aug: median, 10th and 90th percentiles)
   WOFOST, the second model, where the run has it (run_outlook.py): beside AquaCrop's, per site, variety and rule,
   "wofost": its summary and members (as AquaCrop's) in <source>.json, and index.json "wofost": {run id: {site:
-  {variety: {rule: summary}}}} and "second_engine".
+  {variety: {rule: summary}}}} and "second_engine"; benchmark.json "wofost": WOFOST's own observed-weather
+  benchmark (climatology_wofost.json), as AquaCrop's, when built.
   index.json also carries the measured yields at each site (crop_engine/yields targets.csv, when built): the trials'
   median and high-input yields per site and crop, kept apart from the simulated past seasons.
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
@@ -118,13 +119,18 @@ def write(log=print):
     for sid, s in sites.items():
         s["lat"], s["lon"] = coords.get(sid, (None, None))
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
-    _dump(C.DASHBOARD_OUT / "benchmark.json", {
-        "years": bench["years"], "cal_years": bench["cal_years"],
-        "sites": {sid: {vk: {rk: {**{k: b.get(k) for k in BENCH_KEYS},
-                                  "seasons": [[int(y), v["planting"], v["harvest"], v["yield_t_ha"], v["status"],
-                                               v.get("potential_t_ha")]
-                                              for y, v in sorted(b["years"].items())]}
-                             for rk, b in rs.items()} for vk, rs in vs.items()} for sid, vs in bench["sites"].items()}})
+
+    def compact(sites_):
+        return {sid: {vk: {rk: {**{k: b.get(k) for k in BENCH_KEYS},
+                                "seasons": [[int(y), v["planting"], v["harvest"], v["yield_t_ha"], v["status"],
+                                             v.get("potential_t_ha")]
+                                            for y, v in sorted(b["years"].items())]}
+                           for rk, b in rs.items()} for vk, rs in vs.items()} for sid, vs in sites_.items()}
+    out_b = {"years": bench["years"], "cal_years": bench["cal_years"], "sites": compact(bench["sites"])}
+    wpath = C.OUT / "climatology_wofost.json"
+    if wpath.exists():
+        out_b["wofost"] = compact(json.loads(wpath.read_text(encoding="utf-8"))["sites"])
+    _dump(C.DASHBOARD_OUT / "benchmark.json", out_b)
     _dump(C.DASHBOARD_OUT / "index.json", {
         "runs": [{**{k: r[k] for k in ("id", "source", "model_label", "run", "obs_end", "members_kind", "created")},
                   "file": f"{r['source']}.json"} for r in runs],

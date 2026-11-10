@@ -1393,7 +1393,8 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               desc="SEAS5 member k’s lead days 152–182, quantile-mapped to CHIRPS per site and day (the CHIRPS pool: the calibration years’ days within ±15 days), as the Agri rules’ January–February."/>
             <Step n="5" title="Sub-seasonal temperature (s2s-ecmwf and s2s-gefs runs)"
               eq={"bias(L, site) = S3[ mean_runs( mean_members T_model ) − T_ERA5-Land ](L)        L: lead day\nT_k(d) = T_model,m(k)(d) − bias(d − run, site)        Tmin ≤ Tmax        then SEAS5 after the model’s last day"}
-              desc="T_model is the daily maximum or minimum of the ECMWF extended range (101 members to day 46, 1.5°) or GEFS (31 members to day 35, 0.25°) at the site’s nearest cell, from the same dynamical.org archives as the rain; m(k) is the member the rain join paired with rain member k. S3 is a ±3-day running mean over the lead. Training: 155 ECMWF runs (2026) and 171 GEFS runs (Aug–Dec 2020–2025). The biases are steady with lead: GEFS within 4 °C, ECMWF up to +11 °C at Genco Maralal, whose 1.5° cell lies far below the site. ET0 on these days: the climatology × the member’s Hargreaves ratio."/>
+              desc="T_model is the daily maximum or minimum of the ECMWF extended range (101 members to day 46, 1.5°) or GEFS (31 members to day 35, 0.25°) at the site’s nearest cell, from the same dynamical.org archives as the rain; m(k) is the member the rain join paired with rain member k. S3 is a ±3-day running mean over the lead. Training: 155 ECMWF runs (2026) and 171 GEFS runs (Aug–Dec 2020–2025). The biases are steady with lead: GEFS within 4 °C, ECMWF up to +11 °C at Genco Maralal, whose 1.5° cell lies far below the site. ET0 on these days: the climatology × the member’s Penman-Monteith ratio with its own radiation, humidity and wind (step 6), else its Hargreaves ratio."/>
+            
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
               The site series were checked against the platform’s ERA5-Land ET0: FAO-56 ET0 computed from them correlates 0.99–1.00 with it at
               every site over 8,027 days, mean difference 0.08–0.22 mm/day (a 0.1° point against a 0.25° cell mean).
@@ -1452,6 +1453,14 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               seedlings die in a dry spell after sowing, WOFOST’s crop only slows: that is most of the difference in failure rates.
             </p>
 
+            <h4 className="about-subhead" style={{marginTop:24}}>Water balance: WOFOST’s multi-layer balance, tested and not adopted</h4>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
+              WOFOST 7.3’s multi-layer water balance was run on the SoilGrids layers (each layer’s retention anchored at its own field capacity
+              and wilting point, Saxton & Rawls 2006) over the 1993–2025 seasons. It makes WOFOST’s maize drier than AquaCrop’s, failing in
+              70–85 % of the seasons at Kiboko, Kapiti and Livemo (AquaCrop 36–55 %, WOFOST’s one-zone balance 36–55 %), and leaves Tana River
+              as it was. The outlook keeps the one-zone balance; WOFOST 7.3 with it gives exactly 7.2’s results.
+            </p>
+
             <h4 className="about-subhead" style={{marginTop:24}}>Sorghum: flowering apart from maturity, tested and not adopted</h4>
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
               Both engines now accept a variety’s days to flowering apart from its days to maturity. Fitted to Gadam at the University of Embu farm
@@ -1474,9 +1483,11 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               FAO agricultural onset sowing; failure if sown is a yield below 0.5 t/ha. The two models agree within 0.3 t/ha on early maize at
               El Karama and Livemo and on sorghum at Kiboko and Kapiti, and WOFOST fails less almost everywhere, because its seedlings
               slow in a dry spell where AquaCrop’s die. At Genco Tana River WOFOST’s crops sown on 3 Sep hardly grow: the soil starts
-              almost dry (5 % of its available water on 1 Aug) and WOFOST’s single-layer water balance lets the seedlings stall, while
-              AquaCrop’s layered soil carries them on the onset rain. With rain every day the same WOFOST crop yields 3.8 t/ha. There,
-              this season, the outlook depends on the model.
+              almost dry (5 % of its available water on 1 Aug) and only 4 mm falls in the next 16 days; WOFOST’s stunted seedlings never
+              rebuild their leaf area, while AquaCrop’s canopy grows again with the rain. With rain every day the same WOFOST crop yields
+              3.8 t/ha. WOFOST’s multi-layer water balance does no better there. There, this season, the outlook depends on the model.
+              Each model also has its own simulated past seasons (WOFOST grown in the observed weather of 1993–2025), shown in the tab
+              beside AquaCrop’s.
             </p>
           </S>
 

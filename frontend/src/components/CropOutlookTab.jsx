@@ -31,6 +31,8 @@ html.light .crop-viz { --crop-fc:#2a78d6; --crop-o1:#104281; --crop-o2:#256abf; 
 .crop-viz select:focus-visible, .crop-viz button:focus-visible, .crop-viz summary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 .crop-table th, .crop-table td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border-primary); white-space:nowrap; }
 .crop-table th { font-size:13px; font-weight:600; color:var(--text-meta); }
+.crop-table.wrap th { white-space:normal; vertical-align:bottom; }
+.crop-table.wrap td:first-child { white-space:normal; min-width:200px; }
 .crop-table td { font-size:14px; color:var(--text-body); font-variant-numeric:tabular-nums; }
 `
 
@@ -397,7 +399,7 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
   const cell = data?.sites?.[sid]?.results?.[vk]?.[rk]
   if (!cell) return <Panel title="Management scenarios" sub={sub}>{msg(data ? 'No scenarios for this site, crop and rule yet.'
                                                                              : 'The scenarios come with the next weekly crop run.')}<PartnerAsk/></Panel>
-  const meta = data.meta, base = cell.baseline
+  const meta = data.meta, base = cell.baseline, baseW = cell.baseline_wofost
   const groups = [...new Set(Object.values(meta.scenarios).map(s => s.group))]
   const row = (key, label, s, strong) => (
     <tr key={key}>
@@ -413,21 +415,27 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
       <td>{pct(s.p_failure_if_sown)}</td>
       <td>{pct((s.share?.too_late ?? 0))}</td>
       <td>{fmtT(s.yield_t_ha?.median)} t/ha{strong ? '' : fmtDiff(s.yield_t_ha?.median, base.yield_t_ha?.median)}</td>
+      {baseW && <td>{(() => {
+        const w = strong ? baseW : s.wofost
+        if (!w) return '—'
+        return `${fmtT(w.yield_t_ha?.median)} t/ha${strong ? '' : fmtDiff(w.yield_t_ha?.median, baseW.yield_t_ha?.median)}`
+      })()}</td>}
     </tr>
   )
   return (
     <Panel title="Management scenarios"
            sub={`${sub} Sowing rule: ${ruleLabel}. Made from observations to ${fmtDate(meta.obs_end)}, refreshed weekly.`}>
       <div style={{ overflowX: 'auto' }}>
-        <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="crop-table wrap" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr><th>Scenario</th><th>Sowing (8 in 10)</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
-                <th>Failure if sown</th><th>Too late</th><th>Median yield, all members</th></tr>
+                <th>Failure if sown</th><th>Too late</th><th>Median yield, all members</th>
+                {baseW && <th>WOFOST: median yield, all members</th>}</tr>
           </thead>
           <tbody>
             {row('baseline', 'As the outlook', base, true)}
             {groups.map(g => [
-              <tr key={g}><td colSpan={8} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-meta)', paddingTop: 14 }}>{g}</td></tr>,
+              <tr key={g}><td colSpan={baseW ? 9 : 8} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-meta)', paddingTop: 14 }}>{g}</td></tr>,
               ...Object.entries(meta.scenarios).filter(([k, s]) => s.group === g && cell[k]).map(([k, s]) => row(k, s.label, cell[k], false)),
             ])}
           </tbody>
@@ -441,6 +449,8 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         falls below 30 % of its available water from sowing to flowering, at most 100 mm a season reaching the soil (about 130 mm
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
         covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
+        {baseW && <> The last column is WOFOST, the second crop model, grown with the same choice (plant density is AquaCrop’s
+        only: WOFOST has no plant population); where the two models agree on a practice’s gain, it depends less on the model.</>}
       </p>
       <PartnerAsk/>
     </Panel>
@@ -450,7 +460,7 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
 // The dashboard's own choices (season, seasonal run, onset method, forecast type and model) set the defaults here; a
 // choice the crop outlook cannot follow is named in a notice, never replaced silently
 // ── Two crop models on the same members: AquaCrop (published) and WOFOST (second model) ─────────────────────────────
-function EnginePanel({ aqua, wof, v, vk, why }) {
+function EnginePanel({ aqua, wof, v, vk, why, past, pastWof }) {
   if (!wof) {
     const reason = why ?? (cropOf(vk) === 'bean' ? 'WOFOST has no dry bean crop set, so the bean is grown by AquaCrop only.'
       : 'This run was made before the second model was added, or without its radiation, humidity and wind.')
@@ -464,6 +474,9 @@ function EnginePanel({ aqua, wof, v, vk, why }) {
   const agree = pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < thr) === (effYield(w[3], w[2]) < thr)).length / pairs.length : null
   const d = rw.ySown.median != null && ra.ySown.median != null ? rw.ySown.median - ra.ySown.median : null
   const rows = [['AquaCrop (the published outlook)', ra, harvest(aqua)], ['WOFOST (second model)', rw, harvest(wof)]]
+  const seasonRates = s => rates(s.map(x => ({ status: x[4], y: x[3] })), thr)
+  const pastRows = [past && ['AquaCrop, simulated past seasons', seasonRates(past), null],
+                    pastWof && ['WOFOST, simulated past seasons', seasonRates(pastWof), null]].filter(Boolean)
   const iso = t => t == null ? null : new Date(t).toISOString().slice(0, 10)
   return (
     <>
@@ -471,9 +484,9 @@ function EnginePanel({ aqua, wof, v, vk, why }) {
         <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th>Crop model</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Failure if sown</th><th>Matured</th><th>Harvest</th></tr></thead>
           <tbody>
-            {rows.map(([label, r, h]) => (
+            {[...rows, ...pastRows].map(([label, r, h], i) => (
               <tr key={label}>
-                <td style={{ fontWeight: 600, color: 'var(--heading)' }}>{label}</td>
+                <td style={{ fontWeight: i < 2 ? 600 : 400, color: i < 2 ? 'var(--heading)' : undefined }}>{label}</td>
                 <td>{r.nSown ? `${fmtT(r.ySown.median)} t/ha` : '—'}</td>
                 <td>{r.nSown ? `${fmtT(r.ySown.p10)}–${fmtT(r.ySown.p90)} t/ha` : '—'}</td>
                 <td>{pct(r.pFailSown)}</td>
@@ -489,6 +502,7 @@ function EnginePanel({ aqua, wof, v, vk, why }) {
           : Math.abs(d) < 0.25 ? 'The two models give about the same yield for the sown crops. '
           : `WOFOST’s median yield of the sown crops is ${fmtT(Math.abs(d))} t/ha ${d < 0 ? 'lower' : 'higher'} than AquaCrop’s. `}
         {agree != null && `They agree on whether a member’s crop fails for ${pct(agree)} of the members. `}
+        {pastRows.length === 2 && 'Each model is also grown in the observed weather of the same past seasons, so each forecast can be read against its own model’s normal. '}
         Same weather, soil, starting water and sowing dates; only the crop model differs, so the gap between them is part of the
         uncertainty the forecast does not show on its own. WOFOST’s maize yield level is calibrated to the same Kiboko trial as
         AquaCrop’s, and its sorghum to AquaCrop’s own sorghum level; it has no dry bean.
@@ -671,7 +685,8 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         <Panel title="Two crop models, the same forecast"
                sub="AquaCrop, the published outlook, and WOFOST 7.2 grown in the same members of this forecast, sown on the same dates.">
           {runQ.isLoading ? msg('Loading…')
-            : members.length ? <EnginePanel aqua={members} wof={wofMembers} v={v} vk={vk}
+            : members.length ? <EnginePanel aqua={members} wof={wofMembers} v={v} vk={vk} past={b?.seasons}
+                                            pastWof={bench.data?.wofost?.[sid]?.[vk]?.[rk]?.seasons}
                                             why={runQ.data?.meta?.second_engine?.why_not && !wofMembers ? `No second model for this run: ${runQ.data.meta.second_engine.why_not}.` : null}/>
             : msg('No members for this choice.')}
         </Panel>

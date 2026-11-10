@@ -11,6 +11,8 @@ rank correlation of the two engines' yields, their median days to harvest, and t
 trials where there are some (crop_engine/yields targets).
 
 Output (not committed): outputs/crop_engine/verification/engines.json and a table in the log.
+--water-balance mlwb runs WOFOST 7.3 with its multi-layer water balance (wofost_adapter) instead of 7.2's classic
+one, into verification/engines_mlwb.json.
 Usage: python -m crop_engine.compare_engines --workers 3 [--sites ...] [--varieties ...] [--years 1993 2025]
 """
 import argparse
@@ -38,7 +40,7 @@ def log(m):
     print(f"[{dt.datetime.now():%H:%M:%S}] engines: {m}", flush=True)
 
 
-def tasks_for(inp, years, rep_cells, varieties, rules, soils):
+def tasks_for(inp, years, rep_cells, varieties, rules, soils, water_balance="cwb"):
     """WOFOST tasks of the benchmark's observed seasons, sown exactly as the benchmark (run_outlook.benchmark)."""
     pet = orl.load_pet(inp.lat, inp.lon, orl.EXT_DAYS)
     fao = pl.observed_fao_dates([s for s, _ in rep_cells], years)
@@ -62,7 +64,7 @@ def tasks_for(inp, years, rep_cells, varieties, rules, soils):
                         et0=ds.et0_mm.values[:, k], source=ds.precip_source.values, planting=[plant], resow=resow,
                         variety=v, kw=v["kw"], layers=soils[s.id], initial_frac=float(frac[k]),
                         rad=ds.rad_mj_m2.values[:, k], vap=ds.vap_hpa.values[:, k], wind2=ds.wind2_ms.values[:, k],
-                        lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k])))
+                        lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k]), water_balance=water_balance))
                     keys.append((s.id, vk, rk, y))
     return tasks, keys
 
@@ -103,6 +105,7 @@ def main():
     ap.add_argument("--varieties", nargs="+")
     ap.add_argument("--rules", nargs="+", default=list(C.PLANTING_RULES))
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--water-balance", choices=["cwb", "cwb73", "mlwb"], default="cwb")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -116,7 +119,7 @@ def main():
     inp = W.Inputs(refresh=False)
     rep_cells = [(s, g) for s, g in ro.cells(inp.sites) if not a.sites or s.id in a.sites]
     soils = {s.id: soil_mod.profile(s) for s, _ in rep_cells}
-    tasks, keys = tasks_for(inp, years, rep_cells, varieties, a.rules, soils)
+    tasks, keys = tasks_for(inp, years, rep_cells, varieties, a.rules, soils, a.water_balance)
     log(f"{len(tasks)} observed seasons to simulate with WOFOST")
     t0 = time.time()
     res = ro.run_tasks(tasks, a.workers, engine="wofost")
@@ -140,9 +143,10 @@ def main():
                     f"{f(c['failure_rate']['aquacrop'])} {f(c['failure_rate']['wofost'])} | {f(c['agree_on_failure'])}  | "
                     f"{f(c['spearman_sown'])}  | {d['aquacrop'] or 0:4.0f} {d['wofost'] or 0:4.0f}")
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "engines.json").write_text(json.dumps({
+    (OUT / ("engines.json" if a.water_balance == "cwb" else f"engines_{a.water_balance}.json")).write_text(json.dumps({
         "years": years, "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
-        "aquacrop": "the benchmark (climatology.json)", "wofost": "Wofost72_WLP_CWB (PCSE), adapters/wofost_adapter.py",
+        "aquacrop": "the benchmark (climatology.json)", "wofost": {"cwb": "Wofost72_WLP_CWB", "cwb73": "Wofost73_WLP_CWB", "mlwb": "Wofost73_WLP_MLWB"}[a.water_balance]
+        + " (PCSE), adapters/wofost_adapter.py",
         "left_out": skipped, "sites": out, "wofost_seasons": wof}, indent=1), encoding="utf-8")
     return 0
 
