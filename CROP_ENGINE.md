@@ -124,6 +124,12 @@ It is drawn from the tab's own published data: the repository's `frontend/public
 the live platform's copy (`CROP_DATA_URL`). The page and the tab therefore always agree, and the Render backend,
 deployed without the frontend, can still draw it.
 
+**The crop bulletin download** (Crop outlook tab, "Download the crop bulletin (PDF)"): the same page for each crop site,
+made by every daily update from the data it has just written (`dashboard.write_bulletins` →
+`tracker/data/crop/bulletins/<site id>.pdf`, listed in `index.json` "bulletins"). It is a vector PDF of about 45 kB,
+with its text searchable and the partners' form link clickable. It is a static file, so it needs no backend; the
+button shows only when the site's file exists.
+
 From the rest of the platform:
 - **Forecast tab** (Kenya, Short Rains): a card above the charts gives the crop outlook at the map's location, or
   at the nearest crop site with its distance. It shows early maize, sown by the dashboard's sowing rule or else the
