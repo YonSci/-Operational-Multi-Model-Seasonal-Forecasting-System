@@ -1527,8 +1527,9 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'12px 0 0'}}>
               The amounts (100 mm of water, half the soil under residues, no runoff from ridges) are the engine’s assumptions. A questionnaire
               asks the managers of the six sites what farmers near them actually do, and the scenarios will be set to their answers:{' '}
+              <a href="https://docs.google.com/forms/d/e/1FAIpQLSeSm0ZhEjV3MhBCayBJEdrwtgLh2iBfyzd-b90o56vXo9B9vw/viewform" target="_blank" rel="noreferrer" style={{color:'var(--accent-text)'}}>the online form</a> or{' '}
               <a href="docs/crop_scenario_questions_for_partners.pdf" target="_blank" rel="noreferrer" style={{color:'var(--accent-text)'}}>the questions (PDF)</a>,
-              also linked from the Crop outlook tab with the online form.
+              both also linked from the Crop outlook tab.
             </p>
           </S>
 
