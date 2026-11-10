@@ -100,6 +100,34 @@ const useTrackerSites = () => useQuery({ queryKey: ['tracker-sites'], staleTime:
 const trackerRowOf = (rows, site) => rows?.find(r => r.site === site?.name)
   ?? rows?.find(r => site?.lat != null && km(+r.lat, +r.lon, site.lat, site.lon) <= SAME_SITE_KM)
 const num = v => (v === '' || v == null || !Number.isFinite(+v)) ? null : +v
+// The two crop models as a confidence signal, from their summaries of the same members (the same rule in the bulletin,
+// backend/bulletin_crop.py, and CROP_ENGINE.md): agree when the yields if sown are within AGREE_T t/ha and the chances
+// of failure if sown within AGREE_P; depend on the model when they differ by more than twice that; partly in between
+const AGREE_T = 1.0, AGREE_P = 0.15
+const AGREEMENT = {
+  agree: { short: 'agree', label: 'The two crop models agree', tone: 'ok' },
+  partly: { short: 'partly agree', label: 'The two crop models partly agree', tone: 'mid' },
+  differ: { short: 'depends on the model', label: 'The outcome depends on the crop model', tone: 'warn' },
+}
+function agreementOf(a, w) {
+  const ya = a?.yield_if_sown_t_ha?.median, yw = w?.yield_if_sown_t_ha?.median
+  const pa = a?.p_failure_if_sown, pw = w?.p_failure_if_sown
+  if (ya == null || yw == null || pa == null || pw == null) return null
+  const dY = yw - ya, dP = pw - pa
+  const level = Math.abs(dY) <= AGREE_T && Math.abs(dP) <= AGREE_P ? 'agree'
+    : Math.abs(dY) > 2 * AGREE_T || Math.abs(dP) > 2 * AGREE_P ? 'differ' : 'partly'
+  return { level, dY, dP, ...AGREEMENT[level] }
+}
+const TONE = { ok: { bg: 'var(--bg-surface)', fg: 'var(--heading)' }, mid: { bg: 'var(--bg-surface)', fg: 'var(--heading)' },
+               warn: { bg: 'var(--caution-bg)', fg: 'var(--caution-text)' } }
+const useSkill = () => useQuery({ queryKey: ['crop-skill'], staleTime: 30 * 60_000, retry: false,
+                                  queryFn: () => getJSON(DATA + 'skill.json').catch(() => null) })
+const r2 = v => v == null ? '—' : v.toFixed(2)
+const madeNote = (made, current) => {
+  if (!made) return ''
+  const old = made.config_hash && current && made.config_hash !== current
+  return `made ${fmtDate(made.created?.slice(0, 10))}${old ? ' with an earlier crop configuration than this outlook' : ''}`
+}
 const cropOf = vk => ['maize', 'sorghum', 'bean'].find(c => vk.startsWith(c)) ?? vk
 // the dashboard's onset methods that are also crop sowing rules (the others are climate onsets)
 const SOWING_RULE_OF = { r1: 'rule1', 'fao-agricultural': 'fao-agricultural' }
@@ -561,6 +589,122 @@ function HistoryPanel({ hist, loading, source, sid, vk, rk, thr, msg }) {
   )
 }
 
+// ── The two crop models as a confidence signal ───────────────────────────────────────────────────────────────────
+function ModelAgreement({ a, w, share, vk }) {
+  const g = agreementOf(a, w)
+  if (!g) return (
+    <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
+      {cropOf(vk) === 'bean' ? 'One crop model only: WOFOST has no dry bean, so there is no second opinion on this crop.'
+                             : 'No second crop model for this run, so there is no second opinion on it.'}
+    </p>)
+  const t = TONE[g.tone]
+  const yA = a.yield_if_sown_t_ha.median, yW = w.yield_if_sown_t_ha.median
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1"
+         style={{ marginTop: 10, background: t.bg, color: t.fg, border: '1px solid var(--border-primary)', borderRadius: 10, padding: '9px 14px',
+                  fontSize: 14, lineHeight: 1.5 }}>
+      <strong>{g.label}.</strong>
+      <span style={{ color: g.tone === 'warn' ? t.fg : 'var(--text-body)' }}>
+        Yield if sown {fmtT(yA)} t/ha (AquaCrop) and {fmtT(yW)} t/ha (WOFOST); failure if sown {pct(a.p_failure_if_sown)} and {pct(w.p_failure_if_sown)}
+        {share != null ? `; they agree on whether the crop fails in ${pct(share)} of the members` : ''}.
+        {g.level === 'differ' ? ' Read this outlook with care: the answer here rests on the model as much as on the forecast.'
+          : g.level === 'agree' ? ' The outcome rests less on the choice of model.' : ''}
+      </span>
+    </div>
+  )
+}
+
+// ── How well past forecasts did, for this site and crop (skill.json, crop_engine/dashboard.py write_skill) ──
+function SkillLine({ skill, source, sid, vk, rk }) {
+  if (source === 'seasonal') {
+    const c = skill?.seasonal?.sites?.[sid]?.[vk]?.[rk]
+    if (!c?.aquacrop) return null
+    const m = skill.seasonal.made ?? {}
+    const best = [['season length', c.lgp], ['Oct–Dec rain', c.rain], ['onset', c.onset]].filter(([, x]) => x?.r != null)
+    return (
+      <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '8px 0 0', lineHeight: 1.5 }}>
+        <strong style={{ color: 'var(--text-body)' }}>How past forecasts did</strong> (SEAS5 1 Oct, {m.aquacrop?.years?.join('–')}): rank correlation with
+        the crop grown in the observed weather {r2(c.aquacrop.r)} (AquaCrop){c.wofost ? `, ${r2(c.wofost.r)} (WOFOST)` : ''}, failure ROC area
+        {' '}{r2(c.aquacrop.auc)}{c.wofost ? ` / ${r2(c.wofost.auc)}` : ''}. The platform’s own forecasts read as yield predictors:
+        {' '}{best.map(([k, x]) => `${k} ${r2(x.r)}`).join(', ')}. 1 is a perfect ranking, 0 none; with {c.aquacrop.n} years a value is uncertain
+        by about ±0.2 ({madeNote(m.aquacrop, skill.seasonal.current_config)}; Forecast performance tab).
+      </p>)
+  }
+  if (source === 's2s-ecmwf' && rk === 'rule1') {
+    const c = skill?.s2s?.sites?.[sid]?.[vk]
+    if (!c) return null
+    return (
+      <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '8px 0 0', lineHeight: 1.5 }}>
+        <strong style={{ color: 'var(--text-body)' }}>How past forecasts did</strong> (ECMWF extended-range reforecasts {skill.s2s.years?.join('–')},
+        AquaCrop): rank correlation with the crop grown in the observed weather, observations only → with the forecast’s 46-day rain:
+        {' '}{Object.entries(c).map(([md, x]) => `${fmtDate('2026-' + md)} ${r2(x.reference?.r)} → ${r2(x.forecast?.r)}`).join('; ')}.
+      </p>)
+  }
+  return null
+}
+
+// ── The Forecast performance tab's card: crop skill at the crop site nearest the map's location ──────────────────────
+export function CropSkillPanel({ selectedSite, onOpen }) {
+  const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000, retry: false })
+  const sk = useSkill()
+  const ix = idx.data, skill = sk.data
+  if (!ix || !skill?.seasonal || !selectedSite || !Number.isFinite(+selectedSite.lat)) return null
+  const near = Object.keys(ix.sites ?? {}).filter(id => ix.sites[id].lat != null && skill.seasonal.sites?.[id])
+    .map(id => ({ id, d: km(+selectedSite.lat, +selectedSite.lon, ix.sites[id].lat, ix.sites[id].lon) })).sort((a, b) => a.d - b.d)[0]
+  if (!near) return null
+  const site = ix.sites[near.id], cells = skill.seasonal.sites[near.id], m = skill.seasonal.made ?? {}
+  const rows = ['maize_early', 'sorghum'].filter(vk => cells[vk]).flatMap(vk => Object.keys(ix.planting_rules ?? {})
+    .filter(rk => cells[vk][rk]).map(rk => ({ vk, rk, c: cells[vk][rk] })))
+  const s2s = skill.s2s?.sites?.[near.id]
+  const th = { padding: '6px 8px', textAlign: 'left', fontSize: 12.5, fontWeight: 600, color: 'var(--text-meta)', borderBottom: '1px solid var(--border-primary)', whiteSpace: 'nowrap' }
+  const td = { padding: '6px 8px', fontSize: 13.5, color: 'var(--text-body)', borderBottom: '1px solid var(--border-primary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
+  return (
+    <section style={{ margin: '12px 0 0', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 12, padding: '14px 16px', minWidth: 0 }}>
+      <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--heading)', margin: 0 }}>
+        Crop outlook: how past forecasts did at {site.name}{near.d > LINK_KM ? ` (nearest crop site, ${Math.round(near.d)} km away)` : ''}
+      </h3>
+      <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '4px 0 10px', lineHeight: 1.5 }}>
+        The 1 Oct SEAS5 forecasts of {m.aquacrop?.years?.join('–')} grown by each crop model, against the same model’s crop in the observed weather:
+        the rank correlation of the yields (1: a perfect ranking, 0: none) and the failure ROC area (0.5: no skill). Beside them, the
+        platform’s own season-length, Oct–Dec rain and onset forecasts read as yield predictors, scored the same way.
+      </p>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={th}>Crop, sowing rule</th><th style={th}>AquaCrop</th><th style={th}>WOFOST</th>
+            <th style={th}>Season length</th><th style={th}>Oct–Dec rain</th><th style={th}>Onset</th><th style={th}>Failure ROC, AquaCrop / WOFOST</th></tr></thead>
+          <tbody>
+            {rows.map(({ vk, rk, c }) => (
+              <tr key={vk + rk}>
+                <td style={{ ...td, whiteSpace: 'normal' }}>{ix.varieties?.[vk]?.label ?? vk}, {ix.planting_rules[rk]}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{r2(c.aquacrop?.r)}</td><td style={{ ...td, fontWeight: 600 }}>{r2(c.wofost?.r)}</td>
+                <td style={td}>{r2(c.lgp?.r)}</td><td style={td}>{r2(c.rain?.r)}</td><td style={td}>{r2(c.onset?.r)}</td>
+                <td style={td}>{r2(c.aquacrop?.auc)} / {r2(c.wofost?.auc)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {s2s && (
+        <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          Sub-seasonal (ECMWF extended-range reforecasts {skill.s2s.years?.join('–')}, early maize, rule 1), rank correlation, observations only → with
+          the forecast’s 46-day rain: {Object.entries(s2s.maize_early ?? {}).map(([md, x]) => `${fmtDate('2026-' + md)} ${r2(x.reference?.r)} → ${r2(x.forecast?.r)}`).join('; ')}.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2" style={{ marginTop: 10 }}>
+        <span style={{ fontSize: 12.5, color: 'var(--text-meta)', flex: '1 1 320px' }}>
+          Against the crop simulated in the observed weather, not measured yields; {rows[0]?.c?.aquacrop?.n ?? 24} years, so a value is uncertain by about ±0.2.
+          AquaCrop’s scores {madeNote(m.aquacrop, skill.seasonal.current_config)}; WOFOST’s {madeNote(m.wofost)}.
+        </span>
+        <button type="button" onClick={() => onOpen({ lat: site.lat, lon: site.lon, site_name: site.name })}
+                style={{ background: 'none', border: '1px solid var(--border-primary)', color: 'var(--accent-text)', borderRadius: 8, padding: '6px 12px',
+                         fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 34 }}>
+          Open the Crop outlook →
+        </button>
+      </div>
+    </section>
+  )
+}
+
 // ── The Forecast tab's card: the crop outlook at (or nearest to) the location on the map, and a way there ──────────
 export function CropSiteLink({ selectedSite, onsetDef, onOpen }) {
   const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000, retry: false })
@@ -581,7 +725,8 @@ export function CropSiteLink({ selectedSite, onsetDef, onOpen }) {
       <span style={{ flex: '1 1 420px', minWidth: 0 }}>
         <strong style={{ color: 'var(--heading)' }}>Crop outlook {here ? `at ${site.name}` : `(nearest crop site: ${site.name}, ${Math.round(near.d)} km away)`}:</strong>{' '}
         {sm ? <>{ix.varieties[vk].label.toLowerCase()} sown by {ix.planting_rules[rk]}, yield if sown {sm.yield_if_sown_t_ha ? `${fmtT(sm.yield_if_sown_t_ha.median)} t/ha` : '—'}
-              {w?.yield_if_sown_t_ha ? ` (WOFOST ${fmtT(w.yield_if_sown_t_ha.median)})` : ''}, failure if sown {pct(sm.p_failure_if_sown)} (seasonal forecast).</>
+              {w?.yield_if_sown_t_ha ? ` (WOFOST ${fmtT(w.yield_if_sown_t_ha.median)})` : ''}, failure if sown {pct(sm.p_failure_if_sown)} (seasonal forecast)
+              {agreementOf(sm, w) ? `; ${agreementOf(sm, w).label.charAt(0).toLowerCase() + agreementOf(sm, w).label.slice(1)}` : ''}.</>
             : 'not available for this site yet.'}
       </span>
       <button type="button" onClick={() => onOpen({ lat: site.lat, lon: site.lon, site_name: site.name })}
@@ -786,6 +931,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const histQ = useQuery({ queryKey: ['crop-history'], staleTime: 30 * 60_000, retry: false,
                            queryFn: () => getJSON(DATA + 'history.json').catch(() => null) })
   const trackerQ = useTrackerSites()
+  const skillQ = useSkill()
 
   const msg = t => <div className="flex items-center justify-center min-h-[300px] p-6 text-center" style={{ fontSize: 15, color: 'var(--text-meta)' }}>{t}</div>
   if (country !== 'kenya') return msg('The crop outlook covers the Kenya monitored sites for now. Switch the country to Kenya to see it.')
@@ -821,6 +967,11 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const vb = summary?.vs_benchmark ?? {}
   const wofR = wofMembers?.length ? rates(wofMembers.map(m => ({ status: m[3], y: m[2] })), v.failure_t_ha) : null
   const openTab = tab => onOpenTab?.(tab, { lat: site.lat, lon: site.lon, site_name: site.name })
+  const wSummary = ix.wofost?.[run.id]?.[sid]?.[vk]?.[rk]
+  const agreeShare = (() => {                                          // members on which both models give the same failure verdict
+    const pairs = (wofMembers ?? []).map((w, i) => [members[i], w]).filter(([a, w]) => a && w && a[3] !== 'error' && w[3] !== 'error')
+    return pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < v.failure_t_ha) === (effYield(w[3], w[2]) < v.failure_t_ha)).length / pairs.length : null
+  })()
   const years = bench.data?.years ?? [1993, 2025]
 
   return (
@@ -890,6 +1041,8 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                 sub={summary.stress_days_median != null ? <>Water-stress days: {Math.round(summary.stress_days_median)}. Season rain: {Math.round(summary.rain_mm_median)} mm (medians of sown crops)</> : 'No sown crop'}/>
         </div>
       )}
+      {summary && R && <ModelAgreement a={summary} w={wSummary} share={agreeShare} vk={vk}/>}
+      {summary && R && <SkillLine skill={skillQ.data} source={run.source} sid={sid} vk={vk} rk={rk}/>}
       {summary && R && (
         <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
           All {R.nValid} members, a member with no crop counted as no yield: median {fmtT(summary.yield_t_ha.median)} t/ha, chance of no crop
@@ -958,7 +1111,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
-                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th><th>WOFOST yield if sown</th></tr>
+                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th><th>WOFOST yield if sown</th><th>Crop models</th></tr>
               </thead>
               <tbody>
                 {runs.map(r => {
@@ -984,6 +1137,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                       <td>{pct(s.p_failure_if_sown)}</td>
                       <td>{pct(s.share.ok)}</td>
                       <td>{ws?.yield_if_sown_t_ha?.median != null ? `${fmtT(ws.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
+                      <td style={{ color: agreementOf(s, ws)?.tone === 'warn' ? 'var(--caution-text)' : undefined }}>{agreementOf(s, ws)?.short ?? '—'}</td>
                     </tr>
                   )
                 })}
@@ -998,7 +1152,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                     <td>{pastPotential != null ? `${fmtT(pastPotential)} t/ha` : '—'}</td>
                     <td>{pct(RB.pFailSown)}</td>
                     <td>{pct(RB.pOk)}</td>
-                    <td>—</td>
+                    <td>—</td><td>—</td>
                   </tr>
                 )}
                 {measured.map(o => (
@@ -1008,7 +1162,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                     <td>—</td><td>—</td>
                     <td>{fmtT(o.median_t_ha)} t/ha</td>
                     <td>high-input {fmtT(o.p90_t_ha)} t/ha</td>
-                    <td>—</td><td>—</td><td>—</td><td>—</td>
+                    <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
                   </tr>
                 ))}
               </tbody>

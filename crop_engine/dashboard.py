@@ -18,6 +18,7 @@ the latest result of each forecast source and of the benchmark, read by frontend
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
                     and every observed
                     season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
+  skill.json        how well past crop forecasts did: the seasonal and sub-seasonal hindcast scores (write_skill)
   history.json      each outlook's summary on every day its run was rebuilt (write_history)
   scenarios.json    the management scenarios of the latest seasonal run (crop_engine.run_scenarios), when made with
                     that run's configuration (refreshed weekly: their meta gives the observations they used): per site,
@@ -123,6 +124,56 @@ def write_history(entries, log=print):
     log(f"dashboard: outlook history, {', '.join(f'{k} {len(v)} days' for k, v in h['sources'].items())}")
 
 
+SKILL_FILES = {"aquacrop": "hindcast_scores.json", "wofost": "hindcast_scores_wofost.json"}   # 1 Oct SEAS5, climatological T
+BASELINES = {"lgp": "lgp_days", "rain": "rain_oct_dec_mm", "onset": "onset_doy"}
+
+
+def _score(c):
+    c = c or {}
+    r = lambda v: None if v is None else round(float(v), 2)                             # noqa: E731
+    return {"r": r(c.get("spearman")), "auc": r(c.get("failure_auc")), "bss": r(c.get("failure_bss")), "n": c.get("n_years")}
+
+
+def write_skill(current_config, log=print):
+    """skill.json: how well past crop forecasts did (crop_engine.hindcast, hindcast_s2s), compacted for the tab and the
+    Forecast performance tab. Seasonal: the 1 Oct SEAS5 forecasts of the hindcast years, AquaCrop and WOFOST each
+    against its own crop grown in the observed weather, and the platform's season-length, Oct-Dec rain and onset
+    forecasts read as yield predictors (the baselines). Sub-seasonal: the ECMWF extended-range reforecasts by start date,
+    observations only against the forecast's rain (and temperature). Each part says when it was made and whether with
+    the outlook's current crop configuration. Written only from the files on disk; absent ones are left out."""
+    V = C.OUT / "verification"
+    out = {}
+    seas = {}
+    for eng, f in SKILL_FILES.items():
+        path = V / f
+        if not path.exists():
+            continue
+        d = json.loads(path.read_text(encoding="utf-8"))
+        seas.setdefault("made", {})[eng] = {"created": d.get("created"), "config_hash": d.get("config_hash"),
+                                            "years": [d["years"][0], d["years"][-1]], "temperature": d.get("temperature")}
+        for sid, vs in d["sites"].items():
+            for vk, rs in vs.items():
+                for rk, c in rs.items():
+                    cell = seas.setdefault("sites", {}).setdefault(sid, {}).setdefault(vk, {}).setdefault(rk, {})
+                    cell[eng] = _score(c.get("crop"))
+                    if eng == "aquacrop":
+                        cell.update({k: _score(c.get("baselines", {}).get(b)) for k, b in BASELINES.items()})
+    if seas:
+        seas["current_config"] = current_config
+        out["seasonal"] = seas
+    path = V / "hindcast_s2s.json"
+    if path.exists():
+        d = json.loads(path.read_text(encoding="utf-8"))
+        out["s2s"] = {"created": d.get("created"), "config_hash": d.get("config_hash"), "current_config": current_config,
+                      "years": [d["years"][0], d["years"][-1]], "inits": d.get("inits"),
+                      "sites": {sid: {vk: {md: {k: _score(c.get(k)) for k in ("reference", "forecast", "forecast_t") if k in c}
+                                           for md, c in ms.items()} for vk, ms in vs.items()} for sid, vs in d["sites"].items()}}
+    if out:
+        _dump(C.DASHBOARD_OUT / "skill.json", out)
+        log(f"dashboard: crop skill ({', '.join(out)})")
+    return bool(out)
+
+
 def write(log=print):
     idx = C.RESULTS_OUT / "index.json"
     if not idx.exists():
@@ -132,11 +183,13 @@ def write(log=print):
         latest.setdefault(r["source"], r)
     runs = sorted(latest.values(), key=lambda r: (r["source"] != "seasonal", r["source"]))
     C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
-    meta0, sites, summaries, wofost, hist = None, {}, {}, {}, []
+    meta0, sites, summaries, wofost, hist, chash0 = None, {}, {}, {}, [], None
     for r in runs:
         d = json.loads((C.RESULTS_OUT / f"{r['id']}.json").read_text(encoding="utf-8"))
         meta0 = meta0 or d["meta"]
         hist.append((r, d["meta"].get("config_hash")))
+        if r["source"] == "seasonal":
+            chash0 = d["meta"].get("config_hash")
         summaries[r["id"]] = {sid: {vk: {rk: x["summary"] for rk, x in rs.items()} for vk, rs in s["results"].items()}
                               for sid, s in d["sites"].items()}
         w = {sid: {vk: {rk: x["wofost"]["summary"] for rk, x in rs.items() if "wofost" in x}
@@ -187,7 +240,8 @@ def write(log=print):
         "observed_yields": observed_yields(),
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
     write_history([(r, ch, summaries.get(r["id"], {}), wofost.get(r["id"])) for r, ch in hist], log)
-    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json", "history.json"}
+    write_skill(chash0, log)
+    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json", "history.json", "skill.json"}
     for p in C.DASHBOARD_OUT.glob("*.json"):
         if p.name not in keep:
             p.unlink()
