@@ -164,24 +164,28 @@ def update_forecast_runs(env):
     subprocess.run([PY, str(BASE_DIR / "scripts" / "forecast_runs.py")], check=True, env=env)
 
 
+CROP_MINUTES = 240   # the crop outlook's time limit (crop_engine.run_all --minutes)
+
+
 def update_crop_outlook(env):
     """Experimental crop outlook (crop_engine/, CROP_ENGINE.md): AquaCrop at the monitored sites for every forecast
     run → outputs/crop_engine/, and the Crop outlook tab's copy → frontend/public/tracker/data/crop/ (published). One
-    process per source, so memory is released between runs. Skipped when AquaCrop is not installed; at most 180 min;
+    process per source, so memory is released between runs. Skipped when AquaCrop is not installed; at most CROP_MINUTES;
     never stops the daily update."""
     import importlib.util
     if not importlib.util.find_spec("aquacrop"):
         log("crop outlook: AquaCrop not installed (pip install aquacrop); skipped")
         return
     try:
-        # run_all keeps the 180 min itself (it stops its own child); this outer limit is only a safety net.
-        # A full rebuild (new observations, or a changed configuration with its benchmark) is ~110 min with a 28 Feb season, ~140 min to 31 Mar
-        r = subprocess.run([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", "180"], cwd=BASE_DIR, env=env,
-                           timeout=190 * 60)
+        # run_all keeps CROP_MINUTES itself (it stops its own child); this outer limit is only a safety net.
+        # With WOFOST beside AquaCrop each run is ~11 min (AquaCrop ~5, WOFOST ~6), ~100 min for 9 runs; a benchmark
+        # rebuild adds ~20 min, and with little free memory a run can take ~26 min (9 Nov 2026: 3 runs left out at 180)
+        r = subprocess.run([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", str(CROP_MINUTES)], cwd=BASE_DIR,
+                           env=env, timeout=(CROP_MINUTES + 10) * 60)
         if r.returncode:
             log(f"crop outlook: some runs failed or were stopped (exit {r.returncode}); their previous results kept")
     except subprocess.TimeoutExpired:
-        log("crop outlook: took over 100 min; stopped, previous results kept")
+        log(f"crop outlook: took over {CROP_MINUTES + 10} min; stopped, previous results kept")
 
 
 def update_fao(env):
