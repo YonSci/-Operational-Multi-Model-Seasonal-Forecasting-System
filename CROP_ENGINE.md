@@ -89,6 +89,41 @@ not a crop site (the nearest site is shown, with its distance). It shows:
 - the **management scenarios** of the seasonal forecast (below), next to the outlook itself;
 - each member's outcome (re-sown members marked); and the inputs behind the result.
 
+**The two crop models as a confidence signal.** One rule, applied to the two models' summaries of the same members
+everywhere the platform shows the crop outlook (the tab's headline and its forecast table, the Forecast tab's card, the
+bulletin's crop page):
+- **agree**: the yields if sown are within 1 t/ha and the chances of failure if sown within 15 points;
+- **the outcome depends on the crop model**: either differs by more than twice that;
+- **partly agree**: in between.
+
+The tab's banner also gives the share of members on which both models reach the same failure verdict. Where the
+outcome depends on the model, the banner says so in the caution style: the answer there rests on the model as much as
+on the forecast. The constants are `AGREE_T`, `AGREE_P` in `CropOutlookTab.jsx` and `backend/bulletin_crop.py`.
+
+**How past forecasts did** (`skill.json`, `dashboard.write_skill`): the hindcast scores (*Hindcast verification*),
+compacted for the platform:
+- seasonal: AquaCrop and WOFOST each against its own crop in the observed weather, with the season-length, Oct–Dec
+  rain and onset forecasts as baselines;
+- sub-seasonal: observations only against the forecast's rain, and with its temperature.
+
+Each part records when it was made, and the tab says so when it was made with an earlier crop configuration than the
+outlook's. The tab gives a line under the headline for the chosen site, crop and rule. The **Forecast performance**
+tab (Kenya, Short Rains) ends with a card for the crop site nearest the map's location, beside the onset, cessation
+and LGP skill above it.
+
+**The bulletin's crop page** (`backend/bulletin_crop.py`): a Kenya Short Rains bulletin for a location within 25 km of
+a crop site gets a crop page. It is page 2 of the PDF, or is added below the PNG. `include_crop: false` in the request
+leaves it out. The page holds:
+- the season so far;
+- every crop's outlook, AquaCrop and WOFOST, with the simulated past seasons and the models' agreement;
+- what management could change, both models, with the largest gain short of full irrigation;
+- how past forecasts did;
+- the partners' form.
+
+It is drawn from the tab's own published data: the repository's `frontend/public/tracker/data/` when present, else
+the live platform's copy (`CROP_DATA_URL`). The page and the tab therefore always agree, and the Render backend,
+deployed without the frontend, can still draw it.
+
 From the rest of the platform:
 - **Forecast tab** (Kenya, Short Rains): a card above the charts gives the crop outlook at the map's location, or
   at the nearest crop site with its distance. It shows early maize, sown by the dashboard's sowing rule or else the

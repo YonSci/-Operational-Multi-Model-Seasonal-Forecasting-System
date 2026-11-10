@@ -49,6 +49,7 @@ class BulletinRequest(BaseModel):
     model_name: str = "ECMWF SEAS5"
     season: str = "long_rains"
     year: int = 2026
+    include_crop: bool = True      # Kenya Short Rains: the crop outlook page when a crop site is near (bulletin_crop.py)
 
 @router.post("/bulletin")
 def generate_bulletin(req: BulletinRequest):
@@ -181,12 +182,16 @@ def generate_bulletin(req: BulletinRequest):
                 raise HTTPException(500, f"Multi-model bulletin error: {e}\n{traceback.format_exc()}")
             fname_prefix = f"bulletin_mm_{safe}"
 
+        crop_png = _crop_page(req, tmpdir) if is_short and req.include_crop else None
         out_path  = png_path
         media     = "image/png"; suffix = ".png"
         if fmt == "pdf":
             out_path = png_path.replace(".png", ".pdf")
-            _png_to_pdf(png_path, out_path, site_name, dpi=100)
+            _png_to_pdf(png_path, out_path, site_name, dpi=100, extra=[crop_png] if crop_png else None)
             media = "application/pdf"; suffix = ".pdf"
+        elif crop_png:                                               # one image: the crop page below the bulletin
+            out_path = png_path.replace(".png", "_crop.png")
+            _crop_module().combine(png_path, crop_png, out_path)
 
         fname = f"{fname_prefix}_{season_tag}{suffix}"
         with open(out_path, "rb") as f: content = f.read()
@@ -206,23 +211,50 @@ def _has_cartopy():
     try: import cartopy; return True
     except ImportError: return False
 
-def _png_to_pdf(png_path, pdf_path, title, dpi=75):
+def _rgb(img):
+    from PIL import Image
+    if img.mode == "RGB":
+        return img
+    rgb = Image.new("RGB", img.size, (248, 250, 252))
+    if "A" in img.mode:
+        rgb.paste(img, mask=img.split()[3])
+    else:
+        rgb.paste(img)
+    return rgb
+
+
+def _png_to_pdf(png_path, pdf_path, title, dpi=75, extra=None):
+    """The bulletin PNG as a PDF; extra: further PNG pages (the crop page), at the same resolution."""
     import gc
     from PIL import Image
     try:
         with Image.open(png_path) as img:
-            if img.mode != "RGB":
-                rgb = Image.new("RGB", img.size, (248, 250, 252))
-                if "A" in img.mode:
-                    rgb.paste(img, mask=img.split()[3])
-                else:
-                    rgb.paste(img)
-                rgb.save(pdf_path, "PDF", resolution=float(dpi))
-            else:
-                img.save(pdf_path, "PDF", resolution=float(dpi))
+            more = [_rgb(Image.open(p)) for p in (extra or [])]
+            _rgb(img).save(pdf_path, "PDF", resolution=float(dpi), save_all=bool(more), append_images=more)
+            for m in more:
+                m.close()
     except Exception as exc:
         print(f"[bulletin] PDF export warning: {exc}")
     gc.collect()
+
+
+def _crop_module():
+    try:
+        import bulletin_crop
+    except ImportError:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        import bulletin_crop
+    return bulletin_crop
+
+
+def _crop_page(req, tmpdir):
+    """The crop outlook page (bulletin_crop.py) for a Kenya Short Rains bulletin, or None; never fails the bulletin."""
+    try:
+        return _crop_module().crop_page_png(float(req.lat), float(req.lon), tmpdir)
+    except Exception as exc:
+        print(f"[bulletin] crop page skipped: {type(exc).__name__}: {exc}")
+        return None
 
 
 @router.get("/export")

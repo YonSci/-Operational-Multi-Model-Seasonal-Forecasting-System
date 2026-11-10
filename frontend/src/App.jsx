@@ -13,7 +13,7 @@ import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satell
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
-import CropOutlookTab, { CropSiteLink } from './components/CropOutlookTab'
+import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropOutlookTab'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1324,7 +1324,7 @@ function ProbabilisticTab({pixelData,activeModels,selectedModel,setSelectedModel
 function ValidationTab({ pixelData, activeModels, validationData,
                           selectedModel, setSelectedModel, modelsData,
                           selectedYear,  setSelectedYear,
-                          country, selectedSeason, onSeasonChange, selectedInit }) {
+                          country, selectedSeason, onSeasonChange, selectedInit, cropSkill }) {
   const isSingle = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingle ? ['ECMWF SEAS5'] : (modelsData?.models ? Object.keys(modelsData.models) : [])
   const selStyle = FILTER_SELECT
@@ -1494,6 +1494,7 @@ function ValidationTab({ pixelData, activeModels, validationData,
           </div>
         )}
       </div>
+      {cropSkill}
     </div>
   )
 }
@@ -2989,7 +2990,11 @@ export default function App() {
               : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>)}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
-            {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
+            {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}
+                                              cropSkill={country==='kenya' && selectedSeason==='short_rains' && (
+                                                <CropSkillPanel selectedSite={selectedSite}
+                                                                onOpen={s => { useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab('crop') }}/>
+                                              )}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
             {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite} season={selectedSeason}
