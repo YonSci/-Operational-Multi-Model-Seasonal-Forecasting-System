@@ -375,7 +375,7 @@ const fmtDiff = (a, b) => {
 // The scenario amounts are assumptions: farm managers at the sites are asked what is used there. PARTNER_FORM_URL is the
 // online form (Google Forms); empty, only the PDF of the questions is offered.
 const PARTNER_PDF = 'docs/crop_scenario_questions_for_partners.pdf'
-const PARTNER_FORM_URL = ''
+const PARTNER_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeSm0ZhEjV3MhBCayBJEdrwtgLh2iBfyzd-b90o56vXo9B9vw/viewform'
 function PartnerAsk() {
   const link = { color: 'var(--accent-text)', fontWeight: 600 }
   return (
