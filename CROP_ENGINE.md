@@ -320,7 +320,40 @@ forecast's rain with climatological temperature ("forecast"), and its rain and t
 site, crop and start: the rank correlation of the members' median yield with the observed-weather yield, the failure
 Brier skill score and ROC area and the tercile RPSS, for each forecast and the reference, also over the years whose
 observed sowing falls on or after the start (the season still open). 6 sites × 2 crops × 3 starts × 20 years × 10
-members × 3 forecasts: 21,600 member seasons (`outputs/crop_engine/verification/hindcast_s2s.json`).
+members × 3 forecasts: 21,600 member seasons (`outputs/crop_engine/verification/hindcast_s2s.json`; about 70 minutes
+with 2 workers).
+
+Mean over the sites and crops, observations only / with the forecast's rain (rank correlation: the cells where the
+reference's median yield varies, 9 of 12; failure ROC area and Brier skill score: all 12):
+
+| Start | Rank correlation | Failure ROC area | Failure Brier skill score |
+|---|---|---|---|
+| 1 Oct | 0.27 / 0.36 | 0.70 / 0.71 | 0.15 / 0.21 |
+| 17 Oct | 0.28 / 0.56 | 0.70 / 0.78 | 0.16 / 0.27 |
+| 1 Nov | 0.41 / 0.54 | 0.77 / 0.76 | 0.22 / 0.21 |
+
+Rank correlation, observations only / forecast rain / forecast rain and temperature, at the sites where the forecast
+changes most (— where every observations-only member has the same median yield):
+
+| Site | Early maize, 1 Oct | 17 Oct | 1 Nov | Sorghum, 1 Oct | 17 Oct | 1 Nov |
+|---|---|---|---|---|---|---|
+| Genco Tana River | −0.15 / 0.66 / 0.70 | −0.14 / 0.69 / 0.69 | 0.34 / 0.68 / 0.67 | −0.08 / 0.58 / 0.62 | −0.07 / 0.65 / 0.65 | 0.39 / 0.62 / 0.61 |
+| KALRO Kiboko | −0.07 / −0.15 / −0.18 | −0.07 / 0.44 / 0.39 | 0.23 / 0.27 / 0.29 | −0.12 / −0.36 / −0.36 | −0.12 / 0.44 / 0.42 | 0.19 / 0.28 / 0.32 |
+| Livemo Memerush | — / 0.35 / 0.35 | — / 0.31 / 0.31 | — / 0.39 / 0.36 | — / 0.37 / 0.37 | — / 0.33 / 0.33 | — / 0.44 / 0.42 |
+| Kapiti | — / −0.19 / −0.24 | — / 0.49 / 0.34 | — / 0.24 / 0.19 | 0.20 / 0.13 / 0.10 | 0.20 / 0.40 / 0.43 | −0.06 / 0.12 / 0.06 |
+
+The 46-day rain improves the crop outlook where the season is decided in its window: the rank correlation is higher
+than with the observations alone in 15 of the 27 comparable cells (equal in 4, lower in 8) and the failure ROC area in
+20 of 36, most of all from the 17 Oct start (0.28 → 0.56) and at Genco Tana River, where the observations alone carry
+no signal (−0.15 → 0.66 on 1 Oct) and the 1 Oct and 17 Oct forecasts' failure ROC areas rise from 0.52–0.56 to
+0.78–0.85. It does worse where the outcome is mostly set by the soil water and the onset already observed: El Karama
+on 17 Oct, Genco Maralal and Kiboko on 1 Oct, and Kapiti, whose failure ROC area mostly falls, from 0.81–0.91
+with the observations alone to 0.47–0.83. By 1 Nov the observations alone catch up (0.41 against 0.54; ROC area
+equal). **Temperature adds almost nothing**: with the forecast's temperature as well as its rain, the rank
+correlation changes by 0.03 on average (at most 0.15, at Kapiti and Genco Maralal on 17 Oct, both lower) and the
+failure ROC area is the same (within 0.02) in 31 of 36 cells; 46 days of temperature anomaly move the season's heat
+units too little to change the yield ranking. These are AquaCrop's crops; 20 years and 10 members, so a cell's
+correlation is uncertain by about ±0.2.
 
 ### SEAS5 temperature (November 2026)
 
@@ -894,8 +927,8 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   El Karama and Genco Maralal, worse at Genco Tana River and Livemo). The FAO agricultural onset and SEAS5
   temperature (done): the same conclusion, and SEAS5 temperature changes the skill by less than its noise. County
   Short Rains maize yields as a reference (done, 1993–2025: *Hindcast verification*). WOFOST's hindcast against
-  its own benchmark and the sub-seasonal reforecasts (rain only) are in place (*Hindcast verification*). Next: the
-  sub-seasonal hindcast with temperature, once reforecast temperature is downloaded.
+  its own benchmark and the sub-seasonal reforecasts, with rain and temperature, are done (*Hindcast verification*):
+  the 46-day rain helps most from mid-October and at Genco Tana River, the temperature hardly at all.
 - **P1 Weather forcing**: the season runs to 31 Mar; SEAS5 temperature per member and SEAS5 March rain (done).
   SEAS5 radiation, humidity and wind for ET0 and WOFOST (in place; the downloads run after the temperature
   files'). Temperature from the sub-seasonal models in their range (done: ECMWF extended range and GEFS,
