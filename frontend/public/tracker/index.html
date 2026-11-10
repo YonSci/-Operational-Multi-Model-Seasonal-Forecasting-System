@@ -71,6 +71,7 @@
 .kt-ctx-i { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
 .kt-ctx-i .k { color: var(--color-fg-muted); }
 .kt-ctx-i .v { color: var(--kt-h); font-weight: 600; }
+.kt-ctx-link { margin-left: auto; font-weight: 600; white-space: nowrap; }
 .kt-ctx-site .v { font-size: var(--cds-font-size-body); }
 .kt-ctx-i .short { display: none; }
 @media (max-width: 40rem) { .kt-context { gap: 0 var(--cds-gap-md); } .kt-ctx-opt { display: none; } .kt-ctx-i .full { display: none; } .kt-ctx-i .short { display: inline; } .kt-ctx-site { flex: 1 1 100%; } }
@@ -937,6 +938,15 @@ document.querySelectorAll('.kt-toc a').forEach((a) => a.addEventListener('click'
   const both = (x) => (Array.isArray(x) ? [h('span', { class: 'full' }, x[0]), h('span', { class: 'short' }, x[1])] : x);
   const ctxItem = (k, v, cls) => h('span', { class: 'kt-ctx-i' + (cls ? ' ' + cls : '') }, k && h('span', { class: 'k' }, both(k)), h('span', { class: 'v' }, both(v)));
   const pc = (v) => (isFinite(KT.n(v)) ? KT.int(KT.n(v) * 100) + '%' : '—');
+  // the platform's Crop outlook for a station: the app around this page (only its address changes), else the live site
+  const APP = (() => {
+    try { if (window.parent !== window && window.parent.location.origin === window.location.origin) return new URL('../', window.location.href).href; } catch (e) { /* not the app */ }
+    return 'https://operational-multi-model-seasonal-fo.vercel.app/';
+  })();
+  const cropLink = (r) => (r && isFinite(KT.n(r.lat)) && isFinite(KT.n(r.lon))
+    ? h('a', { class: 'kt-ctx-link', target: '_top', href: `${APP}#/crop?country=kenya&season=short_rains&site=${(+r.lat).toFixed(3)},${(+r.lon).toFixed(3)}` },
+        'Crop outlook for this station →')
+    : null);
 
   const render = () => {
     const sites = KT.rows('sites');
@@ -958,7 +968,8 @@ document.querySelectorAll('.kt-toc a').forEach((a) => a.addEventListener('click'
       ctxItem('Country & season', `Kenya · Short Rains (OND) ${KT.YEAR}`, 'kt-ctx-opt'),
       ctxItem('Method', method),
       ctxItem(['Forecast run', 'Run'], run ? [KT.runLabel(run), KT.runShort(run)] : 'not available'),
-      ctxItem(['Observations to', 'Obs. to'], me ? KT.d(me.obs_through) : 'not available'));
+      ctxItem(['Observations to', 'Obs. to'], me ? KT.d(me.obs_through) : 'not available'),
+      ...[cropLink(me)].filter(Boolean));
 
     // ── 1. rainfall so far (CHIRPS at the station; other products as a range)
     let rain;

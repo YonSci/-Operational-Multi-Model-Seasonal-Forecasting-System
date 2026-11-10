@@ -51,6 +51,19 @@ notice whenever it cannot follow one: a seasonal run other than Oct 01 + latest 
 climate onset method (Dunning, rules 2–3), a forecast without a crop run, another season, or a map location that is
 not a crop site (the nearest site is shown, with its distance). It shows:
 
+- **the season at the site, step by step**: rain so far → soil water → sowing → crop growth → yield. Each step
+  takes its figure from where the platform shows it, and links there, so the tabs read as one chain:
+  1. **Rain so far**: CHIRPS since 1 Oct and its 1993–2016 normal, from the *Near real-time rainfall tracking*
+     tab's own station table (`tracker/data/sites.csv`). It links to that tab.
+  2. **Soil water**: the plant-available water (PAW/TAW) of the platform's FAO water balance on its last observed
+     day (`outputs/fao_wb/historical/daily_<year>.nc`; the run's `soil_water`), and the 1 Aug start. It links to the
+     Forecast tab.
+  3. **Sowing**: the rule's sowing dates and opportunity, and the FAO agricultural onset of the same forecast. It
+     links to the Forecast tab.
+  4. **Crop growth**: the canopy's peak and the harvest date. It scrolls to the canopy chart.
+  5. **Yield if sown**: AquaCrop's and WOFOST's yield and failure. It scrolls to the two-model panel.
+
+  "Open … →" in another tab sets the dashboard's site to the crop site, so the Forecast tab opens at that location;
 - headline figures, each against the **simulated past seasons** (AquaCrop in the observed weather of 1993–2025, not
   measured yields): the chance of a **sowing opportunity** under the rule (with the sowing dates and the share
   re-sown), the **yield if sown** (median, 8 in 10 sown crops, and the yields **measured** in trials at the site),
@@ -61,10 +74,28 @@ not a crop site (the nearest site is shown, with its distance). It shows:
 - what happens to the crop: matured, died before maturity, failed to establish, not grown;
 - how the canopy develops: the sown crops' canopy cover week by week (median and 8 in 10 band) against the past
   seasons' median;
+- **how this outlook has changed**:
+  - The outlook as made on each day its run was rebuilt (new observations, or a new crop model): AquaCrop's
+    yield if sown (median and 8 in 10 band) and failure if sown, with WOFOST's beside it.
+  - Data: `history.json`, written by `dashboard.write_history` for the seasonal and the two sub-seasonal
+    outlooks. It is one point per source and day, about 9 kB a day.
+  - It is kept in `outputs/crop_engine/history.json`, and its published copy restarts it on a new machine.
+  - Each point carries the configuration hash, and a change of it is drawn as "crop model updated", with the
+    lines broken there. A recalibration does not read as a change of forecast.
+  - The record starts with the first daily update that has this code (10 Nov 2026). The earlier days were made
+    by other model versions and are not reconstructed.
 - every forecast side by side for the same site and crop (sowing opportunity, yield and failure if sown, yield
   without water stress), with the simulated past seasons and the measured trials as reference rows;
 - the **management scenarios** of the seasonal forecast (below), next to the outlook itself;
 - each member's outcome (re-sown members marked); and the inputs behind the result.
+
+From the rest of the platform:
+- **Forecast tab** (Kenya, Short Rains): a card above the charts gives the crop outlook at the map's location, or
+  at the nearest crop site with its distance. It shows early maize, sown by the dashboard's sowing rule or else the
+  FAO agricultural onset, with yield and failure if sown for both models, and an "Open the Crop outlook →" button.
+- **Near real-time rainfall tracking**: the station bar links to the Crop outlook for the selected station
+  (`#/crop?country=kenya&season=short_rains&site=<lat>,<lon>`). Inside the app this changes only the address; opened
+  on its own, it points to the live platform.
 
 ## Management scenarios (`crop_engine/scenarios/management.py`, `crop_engine/run_scenarios.py`)
 

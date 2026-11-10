@@ -25,14 +25,16 @@ const STATUS_LABEL = { ok: 'Matured', died: 'Died before maturity', failed_estab
 
 const CSS = `
 .crop-viz { --crop-fc:#3987e5; --crop-o1:#b7d3f6; --crop-o2:#6da7ec; --crop-o3:#2a78d6; --crop-o4:#184f95;
-            --crop-ink1:#0f172a; --crop-ink2:#0f172a; --crop-ink3:#ffffff; --crop-ink4:#ffffff; }
+            --crop-ink1:#0f172a; --crop-ink2:#0f172a; --crop-ink3:#ffffff; --crop-ink4:#ffffff; --crop-wof:#d96a1f; }
 html.light .crop-viz { --crop-fc:#2a78d6; --crop-o1:#104281; --crop-o2:#256abf; --crop-o3:#5598e7; --crop-o4:#86b6ef;
-                       --crop-ink1:#ffffff; --crop-ink2:#ffffff; --crop-ink3:#0f172a; --crop-ink4:#0f172a; }
+                       --crop-ink1:#ffffff; --crop-ink2:#ffffff; --crop-ink3:#0f172a; --crop-ink4:#0f172a; --crop-wof:#c2560c; }
 .crop-viz select:focus-visible, .crop-viz button:focus-visible, .crop-viz summary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 .crop-table th, .crop-table td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border-primary); white-space:nowrap; }
 .crop-table th { font-size:13px; font-weight:600; color:var(--text-meta); }
 .crop-table.wrap th { white-space:normal; vertical-align:bottom; }
 .crop-table.wrap td:first-child { white-space:normal; min-width:200px; }
+.crop-step-link { background:none; border:0; padding:0; cursor:pointer; color:var(--accent-text); font-size:13px; font-weight:600; text-align:left; }
+.crop-step-link:hover { text-decoration:underline; }
 .crop-table td { font-size:14px; color:var(--text-body); font-variant-numeric:tabular-nums; }
 `
 
@@ -71,6 +73,33 @@ const km = (a, b, c, d) => {                                            // great
   return 2 * 6371 * Math.asin(Math.sqrt(x))
 }
 const SAME_SITE_KM = 2
+const LINK_KM = 25                                                     // the Forecast tab's card names a crop site within this
+const TRACKER_SITES = 'tracker/data/sites.csv'                         // Near real-time rainfall tracking: one row per station
+// RFC 4180 CSV (quoted fields may hold commas, e.g. "KALRO Kiboko, Makueni Farm") → [{ column: value }]
+function parseCSV(text) {
+  const rows = []
+  let row = [], f = '', q = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++ } else q = false } else f += c
+    } else if (c === '"') q = true
+    else if (c === ',') { row.push(f); f = '' }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++
+      row.push(f); rows.push(row); row = []; f = ''
+    } else f += c
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row) }
+  const [head, ...body] = rows.filter(r => r.length > 1 || r[0] !== '')
+  return head ? body.map(r => Object.fromEntries(head.map((h, i) => [h, r[i] ?? '']))) : []
+}
+const useTrackerSites = () => useQuery({ queryKey: ['tracker-sites'], staleTime: 30 * 60_000, retry: false,
+  queryFn: () => fetch(TRACKER_SITES).then(r => r.ok ? r.text() : '').then(parseCSV).catch(() => []) })
+// the tracker's row for a crop site: by name, else the station within SAME_SITE_KM
+const trackerRowOf = (rows, site) => rows?.find(r => r.site === site?.name)
+  ?? rows?.find(r => site?.lat != null && km(+r.lat, +r.lon, site.lat, site.lon) <= SAME_SITE_KM)
+const num = v => (v === '' || v == null || !Number.isFinite(+v)) ? null : +v
 const cropOf = vk => ['maize', 'sorghum', 'bean'].find(c => vk.startsWith(c)) ?? vk
 // the dashboard's onset methods that are also crop sowing rules (the others are climate onsets)
 const SOWING_RULE_OF = { r1: 'rule1', 'fao-agricultural': 'fao-agricultural' }
@@ -358,6 +387,212 @@ function CanopyChart({ fc, past, nMembers }) {
   )
 }
 
+// ── The season at this site, step by step ────────────────────────────────────────────────────────────────────────
+// Rain so far is the Near real-time rainfall tracking tab's own figure (tracker/data/sites.csv), the soil water the
+// FAO water balance's, sowing, canopy and yield this crop run's: each step reads as the tab it links to does
+function SeasonChain({ tr, sw, initial, summary, R, wofR, rk, ruleLabel, fao, canopy, onOpen }) {
+  const rain = num(tr?.rain_since_oct1_chirps_mm), normal = num(tr?.normal_same_days_mm), pn = num(tr?.pct_of_normal)
+  const peak = canopy?.median?.length ? canopy.median.reduce((a, v, i) => (v ?? -1) > (canopy.median[a] ?? -1) ? i : a, 0) : null
+  const peakDate = peak == null ? null : new Date(Date.parse(canopy.start + 'T00:00:00Z') + peak * (canopy.step_days ?? 7) * DAY).toISOString().slice(0, 10)
+  const go = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const pl = summary?.planting
+  const steps = [
+    { title: 'Rain so far', kind: 'Observed', value: rain != null ? `${Math.round(rain)} mm` : '—',
+      sub: rain != null ? `since 1 Oct, ${pn != null ? `${pn}% of normal` : ''}${normal != null ? ` (${Math.round(normal)} mm)` : ''}; CHIRPS to ${fmtDate(tr.through_chirps || tr.obs_through)}`
+                        : 'Not in the rainfall tracking data for this site.',
+      link: ['Rainfall tracking', () => onOpen('tracker')] },
+    { title: 'Soil water', kind: 'Observed', value: sw ? pct(sw.paw_fraction) : pct(initial),
+      sub: sw ? `of the available water on ${fmtDate(sw.date)} (FAO water balance); ${pct(initial)} on 1 Aug`
+              : 'of the available water on 1 Aug (ERA5-Land); the latest day comes with the next crop run',
+      link: ['FAO water balance', () => onOpen('forecast')] },
+    { title: 'Sowing', kind: 'Forecast', value: pl ? fmtDate(pl.median) : '—',
+      sub: pl ? `${ruleLabel}${pl.p10 !== pl.p90 ? `, 8 in 10 between ${fmtDate(pl.p10)} and ${fmtDate(pl.p90)}` : ''}; sowing opportunity ${pct(R?.pSowing)}`
+                + (fao?.onset_median && rk !== 'fao-agricultural' ? `. FAO agricultural onset of this forecast: ${fmtDate(fao.onset_median)}` : '')
+              : 'No sowing date for this choice.',
+      link: ['Onset forecast', () => onOpen('forecast')] },
+    { title: 'Crop growth', kind: 'Forecast', value: peak != null ? pct(canopy.median[peak]) : '—',
+      sub: peak != null ? `canopy cover at its peak, week of ${fmtDate(peakDate)}; harvest about ${fmtDate(summary?.harvest_median)}`
+                        : `harvest about ${fmtDate(summary?.harvest_median)}`,
+      link: ['Canopy chart', () => go('crop-canopy')] },
+    { title: 'Yield if sown', kind: 'Forecast', value: R?.nSown ? `${fmtT(R.ySown.median)} t/ha` : '—',
+      sub: `AquaCrop${wofR?.nSown ? `; WOFOST ${fmtT(wofR.ySown.median)} t/ha` : ''}. Failure if sown ${pct(R?.pFailSown)}${wofR?.nSown ? ` (WOFOST ${pct(wofR.pFailSown)})` : ''}`,
+      link: ['Two crop models', () => go('crop-models')] },
+  ]
+  return (
+    <section aria-label="The season at this site, step by step" style={{ marginBottom: 18 }}>
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--heading)', margin: '0 0 8px' }}>The season at this site, step by step</h3>
+      <ol className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {steps.map((st, i) => (
+          <li key={st.title} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 12, padding: '12px 14px',
+                                      minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-meta)' }}>
+              <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--btn-primary)' }}>{i + 1}</span>
+              <span>{st.title}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, borderRadius: 999, padding: '1px 8px',
+                             color: st.kind === 'Observed' ? 'var(--heading)' : 'var(--accent-text)',
+                             border: '1px solid var(--border-primary)' }}>{st.kind}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--heading)', fontVariantNumeric: 'tabular-nums' }}>{st.value}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-meta)', lineHeight: 1.45, flex: 1 }}>{st.sub}</div>
+            <button type="button" className="crop-step-link" onClick={st.link[1]}>{st.link[0]} →</button>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+// ── How the outlook has changed: one point per day its run was rebuilt (history.json, crop_engine/dashboard.py) ──
+function HistoryChart({ pts, kind, thr }) {
+  const [ref, w] = useWidth()
+  const [hi, setHi] = useState(null)
+  const H = 210, m = { l: 46, r: 18, t: 12, b: 34 }
+  const iw = Math.max(0, w - m.l - m.r), ih = H - m.t - m.b
+  const T = pts.map(p => Date.parse(p.date + 'T00:00:00Z'))
+  const t0 = Math.min(...T), t1 = Math.max(...T)
+  const xs = t => t1 > t0 ? m.l + (t - t0) / (t1 - t0) * iw : m.l + iw / 2
+  const yield_ = kind === 'yield'
+  const A = pts.map(p => yield_ ? p.v[0] : p.v[3]), W = pts.map(p => yield_ ? p.v[5] : p.v[6])
+  const lo = pts.map(p => yield_ ? p.v[1] : null), up = pts.map(p => yield_ ? p.v[2] : null)
+  const hiV = Math.max(...[...up, ...A, ...W].filter(v => v != null), 0.5)
+  const step = yield_ ? [0.5, 1, 2, 2.5, 5].find(x => hiV / x <= 4) ?? 5 : 0.25      // at most 5 round ticks
+  const top = yield_ ? Math.ceil(hiV / step) * step : 1
+  const ys = v => m.t + (1 - v / top) * ih
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => +(i * step).toFixed(2))
+  const fmt = v => v == null ? '—' : yield_ ? `${fmtT(v)} t/ha` : pct(v)
+  // a change of the crop model's configuration breaks the lines: the points before it are another model's
+  const segs = []
+  pts.forEach((p, i) => { if (!i || p.config !== pts[i - 1].config) segs.push([]); segs[segs.length - 1].push(i) })
+  const breaks = segs.slice(1).map(g => (xs(T[g[0] - 1]) + xs(T[g[0]])) / 2)
+  const path = (arr, idx) => idx.reduce((d, i) => arr[i] == null ? d : d + `${d ? 'L' : 'M'}${xs(T[i])},${ys(arr[i])}`, '')
+  const band = idx => {
+    const k = idx.filter(i => lo[i] != null && up[i] != null)
+    return k.length > 1 ? `M${k.map(i => `${xs(T[i])},${ys(up[i])}`).join('L')}L${k.reverse().map(i => `${xs(T[i])},${ys(lo[i])}`).join('L')}Z` : ''
+  }
+  const labelEvery = Math.max(1, Math.ceil(pts.length / Math.max(1, Math.floor(iw / 70))))
+  const move = e => {
+    const r = e.currentTarget.getBoundingClientRect(), x = e.clientX - r.left
+    let best = 0
+    T.forEach((t, i) => { if (Math.abs(xs(t) - x) < Math.abs(xs(T[best]) - x)) best = i })
+    setHi(best)
+  }
+  const title = yield_ ? 'Yield if sown (median of the sown crops)' : `Chance of crop failure if sown (yield below ${thr} t/ha)`
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth: 0 }}>
+      <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--heading)', margin: '0 0 6px' }}>{title}</h4>
+      {w > 0 && (
+        <svg width={w} height={H} role="img" style={{ display: 'block', touchAction: 'pan-y' }}
+             aria-label={`${title}, by the day the outlook was made: AquaCrop ${fmt(A[A.length - 1])}, WOFOST ${fmt(W[W.length - 1])} on ${fmtDate(pts[pts.length - 1].date)}`}
+             onPointerMove={move} onPointerLeave={() => setHi(null)}>
+          {ticks.map(v => (
+            <g key={v}>
+              <line x1={m.l} x2={m.l + iw} y1={ys(v)} y2={ys(v)} stroke="var(--chart-grid)"/>
+              <text x={m.l - 8} y={ys(v) + 4} fontSize="12" textAnchor="end" fill="var(--text-meta)">{yield_ ? v : `${v * 100}%`}</text>
+            </g>
+          ))}
+          {pts.map((p, i) => i % labelEvery === 0 && (
+            <text key={p.date} x={xs(T[i])} y={m.t + ih + 20} fontSize="12" textAnchor="middle" fill="var(--text-meta)">{fmtDate(p.date)}</text>
+          ))}
+          {breaks.map(x => (
+            <g key={x}>
+              <line x1={x} x2={x} y1={m.t} y2={m.t + ih} stroke="var(--text-meta)" strokeDasharray="3 3"/>
+              <text x={x + 4} y={m.t + 11} fontSize="11.5" fill="var(--text-meta)">crop model updated</text>
+            </g>
+          ))}
+          {segs.map(g => <path key={'b' + g[0]} d={band(g)} fill="var(--crop-fc)" opacity="0.16"/>)}
+          {segs.map(g => <path key={'w' + g[0]} d={path(W, g)} fill="none" stroke="var(--crop-wof)" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round"/>)}
+          {segs.map(g => <path key={'a' + g[0]} d={path(A, g)} fill="none" stroke="var(--crop-fc)" strokeWidth="2" strokeLinejoin="round"/>)}
+          {pts.map((p, i) => (
+            <g key={'p' + p.date}>
+              {W[i] != null && <rect x={xs(T[i]) - 4} y={ys(W[i]) - 4} width="8" height="8" fill="var(--crop-wof)" stroke="var(--bg-surface)" strokeWidth="2"/>}
+              {A[i] != null && <circle cx={xs(T[i])} cy={ys(A[i])} r={hi === i ? 6 : 4.5} fill="var(--crop-fc)" stroke="var(--bg-surface)" strokeWidth="2"/>}
+            </g>
+          ))}
+          {hi != null && <line x1={xs(T[hi])} x2={xs(T[hi])} y1={m.t} y2={m.t + ih} stroke="var(--text-meta)" pointerEvents="none"/>}
+        </svg>
+      )}
+      {hi != null && (
+        <div style={{ position: 'absolute', top: 34, left: Math.min(Math.max(xs(T[hi]) + 12, 0), Math.max(0, w - 240)), width: 228, pointerEvents: 'none',
+                      background: 'var(--chart-tooltip-bg)', border: '1px solid var(--border-primary)', borderRadius: 8, padding: '8px 10px',
+                      fontSize: 13, color: 'var(--text-body)', boxShadow: '0 4px 14px rgba(0,0,0,.18)' }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Outlook of {fmtDate(pts[hi].date)}</div>
+          <div style={{ color: 'var(--text-meta)', marginBottom: 4 }}>Observations to {fmtDate(pts[hi].obs)}</div>
+          <div className="flex justify-between gap-3"><span>AquaCrop</span><span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(A[hi])}</span></div>
+          {yield_ && lo[hi] != null && <div className="flex justify-between gap-3" style={{ color: 'var(--text-meta)' }}><span>8 in 10 sown crops</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtT(lo[hi])}–{fmtT(up[hi])} t/ha</span></div>}
+          <div className="flex justify-between gap-3"><span>WOFOST</span><span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(W[hi])}</span></div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HistoryPanel({ hist, loading, source, sid, vk, rk, thr, msg }) {
+  const pts = (hist?.sources?.[source] ?? []).map(e => ({ date: e.date, obs: e.obs_end, config: e.config, v: e.cells?.[sid]?.[vk]?.[rk] }))
+    .filter(p => p.v)
+  const sub = 'Each point is the outlook as made on that day, from the observations then available: how it has moved as the season '
+            + 'unfolds. A point is added each day the run is rebuilt (new observations or a new crop model).'
+  if (loading) return <Panel title="How this outlook has changed" sub={sub}>{msg('Loading…')}</Panel>
+  if (!pts.length) return <Panel title="How this outlook has changed" sub={sub}>{msg('The record of this outlook starts with the next daily update.')}</Panel>
+  return (
+    <Panel title="How this outlook has changed" sub={sub}>
+      <div className="flex flex-wrap gap-x-5 gap-y-1" style={{ fontSize: 13, color: 'var(--text-body)', marginBottom: 8 }}>
+        <span className="inline-flex items-center gap-2">
+          <svg width="22" height="12" aria-hidden="true"><rect x="1" y="2" width="20" height="8" rx="2" fill="var(--crop-fc)" opacity="0.2"/>
+            <line x1="1" x2="21" y1="6" y2="6" stroke="var(--crop-fc)" strokeWidth="2"/><circle cx="11" cy="6" r="3.5" fill="var(--crop-fc)"/></svg>
+          AquaCrop, the published outlook (band: 8 in 10 sown crops)
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <svg width="22" height="12" aria-hidden="true"><line x1="1" x2="21" y1="6" y2="6" stroke="var(--crop-wof)" strokeWidth="2" strokeDasharray="6 4"/>
+            <rect x="7.5" y="2.5" width="7" height="7" fill="var(--crop-wof)"/></svg>
+          WOFOST, the second model
+        </span>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <HistoryChart pts={pts} kind="yield" thr={thr}/>
+        <HistoryChart pts={pts} kind="fail" thr={thr}/>
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '8px 0 0', lineHeight: 1.5 }}>
+        {pts.length === 1 ? `Recorded from ${fmtDate(pts[0].date)}: one point so far.` : `${pts.length} outlooks, ${fmtDate(pts[0].date)} to ${fmtDate(pts[pts.length - 1].date)}.`}
+        {' '}A dashed vertical line marks a change of the crop model (calibration or configuration): the points before it are not comparable with those after.
+      </p>
+    </Panel>
+  )
+}
+
+// ── The Forecast tab's card: the crop outlook at (or nearest to) the location on the map, and a way there ──────────
+export function CropSiteLink({ selectedSite, onsetDef, onOpen }) {
+  const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000, retry: false })
+  const ix = idx.data
+  if (!ix || !selectedSite || !Number.isFinite(+selectedSite.lat)) return null
+  const near = Object.keys(ix.sites ?? {}).filter(id => ix.sites[id].lat != null)
+    .map(id => ({ id, d: km(+selectedSite.lat, +selectedSite.lon, ix.sites[id].lat, ix.sites[id].lon) })).sort((a, b) => a.d - b.d)[0]
+  if (!near) return null
+  const site = ix.sites[near.id], run = (ix.runs ?? []).find(r => r.source === 'seasonal')
+  const rk = ix.planting_rules?.[SOWING_RULE_OF[onsetDef]] ? SOWING_RULE_OF[onsetDef] : ix.planting_rules?.['fao-agricultural'] ? 'fao-agricultural' : Object.keys(ix.planting_rules ?? {})[0]
+  const vk = ix.varieties?.maize_early ? 'maize_early' : Object.keys(ix.varieties ?? {})[0]
+  const sm = ix.summaries?.[run?.id]?.[near.id]?.[vk]?.[rk], w = ix.wofost?.[run?.id]?.[near.id]?.[vk]?.[rk]
+  const here = near.d <= LINK_KM
+  return (
+    <div role="note" className="flex flex-wrap items-center gap-x-4 gap-y-2"
+         style={{ margin: '0 0 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 10,
+                  padding: '10px 14px', fontSize: 14, color: 'var(--text-body)', lineHeight: 1.5 }}>
+      <span style={{ flex: '1 1 420px', minWidth: 0 }}>
+        <strong style={{ color: 'var(--heading)' }}>Crop outlook {here ? `at ${site.name}` : `(nearest crop site: ${site.name}, ${Math.round(near.d)} km away)`}:</strong>{' '}
+        {sm ? <>{ix.varieties[vk].label.toLowerCase()} sown by {ix.planting_rules[rk]}, yield if sown {sm.yield_if_sown_t_ha ? `${fmtT(sm.yield_if_sown_t_ha.median)} t/ha` : '—'}
+              {w?.yield_if_sown_t_ha ? ` (WOFOST ${fmtT(w.yield_if_sown_t_ha.median)})` : ''}, failure if sown {pct(sm.p_failure_if_sown)} (seasonal forecast).</>
+            : 'not available for this site yet.'}
+      </span>
+      <button type="button" onClick={() => onOpen({ lat: site.lat, lon: site.lon, site_name: site.name })}
+              style={{ background: 'var(--btn-primary)', color: '#fff', border: 0, borderRadius: 8, padding: '7px 12px', fontSize: 13.5,
+                       fontWeight: 600, cursor: 'pointer', minHeight: 36 }}>
+        Open the Crop outlook →
+      </button>
+    </div>
+  )
+}
+
 const countOutcomes = statuses => {
   const raw = {}, counts = Object.fromEntries(GROUPS.map(g => [g.id, 0]))
   for (const s of statuses) { raw[s] = (raw[s] ?? 0) + 1; counts[groupOf(s)] += 1 }
@@ -512,7 +747,7 @@ function EnginePanel({ aqua, wof, v, vk, why, past, pastWof }) {
 }
 
 export default function CropOutlookTab({ country, selectedSite, season, initId, initLabel, onsetDef, onsetLabel,
-                                         forecastType, mrfModel, s2sModel }) {
+                                         forecastType, mrfModel, s2sModel, onOpenTab }) {
   const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000 })
   const bench = useQuery({ queryKey: ['crop-benchmark'], queryFn: () => getJSON(DATA + 'benchmark.json'), staleTime: 30 * 60_000 })
   const ix = idx.data
@@ -547,6 +782,10 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   // management scenarios of the seasonal run (crop_engine/run_scenarios.py); absent until first made
   const scenQ = useQuery({ queryKey: ['crop-scenarios'], staleTime: 30 * 60_000, retry: false,
                            queryFn: () => getJSON(DATA + 'scenarios.json').catch(() => null) })
+  // each outlook's summary on every day it was rebuilt (crop_engine/dashboard.py write_history); absent until first made
+  const histQ = useQuery({ queryKey: ['crop-history'], staleTime: 30 * 60_000, retry: false,
+                           queryFn: () => getJSON(DATA + 'history.json').catch(() => null) })
+  const trackerQ = useTrackerSites()
 
   const msg = t => <div className="flex items-center justify-center min-h-[300px] p-6 text-center" style={{ fontSize: 15, color: 'var(--text-meta)' }}>{t}</div>
   if (country !== 'kenya') return msg('The crop outlook covers the Kenya monitored sites for now. Switch the country to Kenya to see it.')
@@ -580,6 +819,8 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                + `${Object.values(rules).join(' or ')}. Shown: ${rules[rk]}.`)
   const pastPotential = median((b?.seasons ?? []).filter(s => SIMULATED.includes(s[4]) && s[5] != null).map(s => s[5]))
   const vb = summary?.vs_benchmark ?? {}
+  const wofR = wofMembers?.length ? rates(wofMembers.map(m => ({ status: m[3], y: m[2] })), v.failure_t_ha) : null
+  const openTab = tab => onOpenTab?.(tab, { lat: site.lat, lon: site.lon, site_name: site.name })
   const years = bench.data?.years ?? [1993, 2025]
 
   return (
@@ -627,6 +868,10 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         </div>
       )}
 
+      {summary && R && (
+        <SeasonChain tr={trackerRowOf(trackerQ.data, site)} sw={res?.soil_water} initial={res?.initial_water_fraction} summary={summary}
+                     R={R} wofR={wofR} rk={rk} ruleLabel={rules[rk]} fao={res?.fao_reference?.agricultural} canopy={canopy} onOpen={openTab}/>
+      )}
       {summary && R && (
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Sowing opportunity" value={pct(R.pSowing)}
@@ -681,7 +926,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         </Panel>
       </div>
 
-      <div style={{ marginTop: 18 }}>
+      <div id="crop-models" style={{ marginTop: 18, scrollMarginTop: 12 }}>
         <Panel title="Two crop models, the same forecast"
                sub="AquaCrop, the published outlook, and WOFOST 7.2 grown in the same members of this forecast, sown on the same dates.">
           {runQ.isLoading ? msg('Loading…')
@@ -692,7 +937,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         </Panel>
       </div>
 
-      <div style={{ marginTop: 18 }}>
+      <div id="crop-canopy" style={{ marginTop: 18, scrollMarginTop: 12 }}>
         <Panel title="How the crop canopy develops"
                sub="Canopy cover of the sown crops week by week, from 1 Aug. It falls to zero as each crop is harvested or dies, so the median drops once about half the crops are done. Hover for values.">
           {runQ.isLoading ? msg('Loading…')
@@ -701,6 +946,10 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                   : R?.nSown ? 'The canopy curve comes with the next crop run (this run was made before it was added).'
                   : 'No sown crop in this forecast: no canopy to show.')}
         </Panel>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <HistoryPanel hist={histQ.data} loading={histQ.isLoading} source={run.source} sid={sid} vk={vk} rk={rk} thr={v.failure_t_ha} msg={msg}/>
       </div>
 
       <div style={{ marginTop: 18 }}>

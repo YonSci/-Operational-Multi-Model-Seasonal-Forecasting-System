@@ -13,7 +13,7 @@ import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satell
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
-import CropOutlookTab from './components/CropOutlookTab'
+import CropOutlookTab, { CropSiteLink } from './components/CropOutlookTab'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -2973,6 +2973,10 @@ export default function App() {
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
+            {activeTab==='forecast' && country==='kenya' && selectedSeason==='short_rains' && (
+              <CropSiteLink selectedSite={selectedSite} onsetDef={onsetDef}
+                            onOpen={s => { useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab('crop') }}/>
+            )}
             {isJoined && (
               <div className="flex flex-col gap-2">
                 {isMedium && <MediumRangePanel models={mrfModels} isLoading={mrfLoading} isError={mrfError} modelId={mrfSel?.id} site={selectedSite} dark={darkMode}/>}
@@ -2991,7 +2995,8 @@ export default function App() {
             {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite} season={selectedSeason}
                                               initId={selectedInit} initLabel={SHORT_RAINS_INITS.find(i => i.init === selectedInit)?.initLabel}
                                               onsetDef={onsetDef} onsetLabel={(d => d && (d.group ? `${d.label} (${d.defLabel})` : d.label))(ONSET_DEFS.find(d => d.id === onsetDef))}
-                                              forecastType={forecastType} mrfModel={mrfModel} s2sModel={s2sModel}/>}
+                                              forecastType={forecastType} mrfModel={mrfModel} s2sModel={s2sModel}
+                                              onOpenTab={(tab, s) => { if (s) useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab(tab) }}/>}
             {activeTab==='tracker'       && (
               <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
                       style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>

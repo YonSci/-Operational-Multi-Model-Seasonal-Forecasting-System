@@ -379,6 +379,11 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
         log(f"{rid}: WOFOST {why}")
     out_sites = {}
     fao_on = meth_res["fao-agricultural"]
+    try:                                    # the FAO water balance's plant-available water now (the tab's season strip)
+        sw_now = dict(zip(ids, inp.soil_water_now(b.obs_end)))
+    except Exception as exc:                                   # never stops a run
+        log(f"{rid}: soil water now not read ({type(exc).__name__}: {str(exc)[:120]})")
+        sw_now = {}
     for s, group in rep_cells:
         # the FAO water balance's own agricultural onset / cessation / LGP for this run: the reference the crop
         # model is read against (medians over the members that have them)
@@ -395,6 +400,9 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
                  "topsoil": {"sand": soils[s.id][0].sand, "clay": soils[s.id][0].clay},
                  "initial_water_fraction": round(float(frac[ids.index(s.id)]), 6),   # exact enough to re-simulate (run_scenarios)
                  "fao_reference": {"agricultural": ref}, "results": {}}
+        if sw_now.get(s.id):
+            entry["soil_water"] = {"paw_fraction": round(sw_now[s.id][0], 3), "date": sw_now[s.id][1].isoformat(),
+                                   "source": "FAO water balance (CHIRPS v3, ERA5-Land ET0)"}
         for sid in group:
             out_sites[sid] = {"name": next(x.name for x in inp.sites if x.id == sid), **entry}
     for (sid, vk, rk), outcomes in zip(keys, res):

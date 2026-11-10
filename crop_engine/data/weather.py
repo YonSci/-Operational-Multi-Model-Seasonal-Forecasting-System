@@ -233,6 +233,23 @@ class Inputs:
         with np.errstate(invalid="ignore", divide="ignore"):
             return np.clip(np.where(taw > 0, paw / taw, 0.0), 0, 1)
 
+    def soil_water_now(self, until):
+        """[(PAW/TAW, date) or None per site]: the FAO water balance's plant-available water on its last observed day
+        up to `until` (outputs/fao_wb/historical/daily_<year>.nc, the bucket of the platform's FAO water balance)."""
+        f = fw.OUT_HIST / f"daily_{self.year}.nc"
+        if not f.exists():
+            return [None] * len(self.sites)
+        with xr.open_dataset(f) as ds:
+            p = ds["PAW_fraction"].sel(time=slice(None, str(until)))
+            p = p.sel(lat=xr.DataArray(self.lat[self.ii], dims="site"), lon=xr.DataArray(self.lon[self.jj], dims="site"),
+                      method="nearest")
+            a, t = p.values, pd.DatetimeIndex(p.time.values)
+        out = []
+        for k in range(len(self.sites)):
+            ok = np.flatnonzero(np.isfinite(a[:, k]))
+            out.append((float(np.clip(a[ok[-1], k], 0, 1)), t[ok[-1]].date()) if ok.size else None)
+        return out
+
     def s2s_temperature(self, source, info):
         """(RunTemperature, the archive member of each rain member, the last forecast day, RunMet or None) of an s2s
         run, or None, and a note: the sub-seasonal model's own temperature for its days (data/s2s_temperature.py) and

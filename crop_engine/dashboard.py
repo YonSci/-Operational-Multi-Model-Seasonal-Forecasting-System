@@ -18,6 +18,7 @@ the latest result of each forecast source and of the benchmark, read by frontend
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
                     and every observed
                     season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
+  history.json      each outlook's summary on every day its run was rebuilt (write_history)
   scenarios.json    the management scenarios of the latest seasonal run (crop_engine.run_scenarios), when made with
                     that run's configuration (refreshed weekly: their meta gives the observations they used): per site,
                     variety and rule, the outlook's summary then ("baseline") and each scenario's
@@ -78,6 +79,50 @@ def write_index():
     (C.RESULTS_OUT / "index.json").write_text(json.dumps({"runs": runs}, indent=1), encoding="utf-8")
 
 
+HISTORY_SOURCES = ("seasonal", "s2s-ecmwf", "s2s-gefs")     # the outlooks whose day-by-day change the tab shows
+HISTORY_KEYS = ["yield_if_sown_median", "yield_if_sown_p10", "yield_if_sown_p90", "p_failure_if_sown",
+                "p_sowing_opportunity", "wofost_yield_if_sown_median", "wofost_p_failure_if_sown"]
+
+
+def _hist_row(s, w):
+    y, wy = s.get("yield_if_sown_t_ha") or {}, (w or {}).get("yield_if_sown_t_ha") or {}
+    r = lambda v, n=2: None if v is None else round(float(v), n)                        # noqa: E731
+    return [r(y.get("median")), r(y.get("p10")), r(y.get("p90")), r(s.get("p_failure_if_sown"), 3),
+            r(s.get("p_sowing_opportunity"), 3), r(wy.get("median")), r((w or {}).get("p_failure_if_sown"), 3)]
+
+
+def write_history(entries, log=print):
+    """history.json: each outlook's summary on every day its run was rebuilt, so the tab can show how the outlook has
+    changed through the season. Kept in outputs/crop_engine/history.json (the tab's copy is rewritten from it; if it
+    is missing, it starts from the published copy). One point per source and day (the run's creation day); each
+    carries the configuration hash, so a change of the crop model is shown as such, not as a change of forecast."""
+    path, pub = C.OUT / "history.json", C.DASHBOARD_OUT / "history.json"
+    h = None
+    for f in (path, pub):
+        if h is None and f.exists():
+            try:
+                h = json.loads(f.read_text(encoding="utf-8"))
+            except ValueError:
+                h = None
+    if not h or h.get("keys") != HISTORY_KEYS:
+        h = {"keys": HISTORY_KEYS, "sources": {}}
+    n = 0
+    for r, chash, summ, wsumm in entries:
+        if r["source"] not in HISTORY_SOURCES:
+            continue
+        day = r["created"][:10]
+        cells = {sid: {vk: {rk: _hist_row(x, (((wsumm or {}).get(sid) or {}).get(vk) or {}).get(rk))
+                            for rk, x in rs.items()} for vk, rs in vs.items()} for sid, vs in summ.items()}
+        lst = [e for e in h["sources"].get(r["source"], []) if e["date"] != day]
+        lst.append({"date": day, "run": r["run"], "obs_end": r["obs_end"], "config": chash, "cells": cells})
+        h["sources"][r["source"]] = sorted(lst, key=lambda e: e["date"])
+        n += 1
+    C.OUT.mkdir(parents=True, exist_ok=True)
+    _dump(path, h)
+    _dump(pub, h)
+    log(f"dashboard: outlook history, {', '.join(f'{k} {len(v)} days' for k, v in h['sources'].items())}")
+
+
 def write(log=print):
     idx = C.RESULTS_OUT / "index.json"
     if not idx.exists():
@@ -87,10 +132,11 @@ def write(log=print):
         latest.setdefault(r["source"], r)
     runs = sorted(latest.values(), key=lambda r: (r["source"] != "seasonal", r["source"]))
     C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
-    meta0, sites, summaries, wofost = None, {}, {}, {}
+    meta0, sites, summaries, wofost, hist = None, {}, {}, {}, []
     for r in runs:
         d = json.loads((C.RESULTS_OUT / f"{r['id']}.json").read_text(encoding="utf-8"))
         meta0 = meta0 or d["meta"]
+        hist.append((r, d["meta"].get("config_hash")))
         summaries[r["id"]] = {sid: {vk: {rk: x["summary"] for rk, x in rs.items()} for vk, rs in s["results"].items()}
                               for sid, s in d["sites"].items()}
         w = {sid: {vk: {rk: x["wofost"]["summary"] for rk, x in rs.items() if "wofost" in x}
@@ -106,6 +152,7 @@ def write(log=print):
                                    "topsoil": {k: round(v) for k, v in s["topsoil"].items()}})
             out["sites"][sid] = {
                 "initial_water_fraction": s["initial_water_fraction"], "fao_reference": s["fao_reference"],
+                **({"soil_water": s["soil_water"]} if s.get("soil_water") else {}),
                 "results": {vk: {rk: {"summary": x["summary"], "canopy": x.get("canopy"),
                                       "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["members"]],
                                       **({"wofost": {"summary": x["wofost"]["summary"],
@@ -139,7 +186,8 @@ def write(log=print):
         "outcomes": [{"id": i, "label": a, "title": t} for i, a, t in OUTCOMES], "member_keys": list(MEMBER_KEYS),
         "observed_yields": observed_yields(),
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
-    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json"}
+    write_history([(r, ch, summaries.get(r["id"], {}), wofost.get(r["id"])) for r, ch in hist], log)
+    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json", "history.json"}
     for p in C.DASHBOARD_OUT.glob("*.json"):
         if p.name not in keep:
             p.unlink()
