@@ -34,6 +34,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import rasterio
+import rasterio.errors
 import xarray as xr
 from rasterio.io import MemoryFile
 from rasterio.windows import from_bounds
@@ -102,12 +103,26 @@ def read_final(day):
     return a
 
 
-def read_prelim(day):
-    """Kenya window of one preliminary 0.05° file over HTTP, averaged 5 × 5 → (42, 34) mm/day."""
+PRELIM_WORKERS = 2                                   # the CHC server answers bursts with HTTP 429
+
+
+def read_prelim(day, tries=5):
+    """Kenya window of one preliminary 0.05° file over HTTP, averaged 5 × 5 → (42, 34) mm/day, or None when the
+    server still refuses it after the retries. A rate-limited request (HTTP 429) comes back as an HTML page that GDAL
+    cannot open, so GDAL retries it itself (GDAL_HTTP_MAX_RETRY) and the whole read is retried after a pause."""
     url = f"/vsicurl/{CHC}/prelim/sat/{day.year}/chirps-v3.0.prelim.{day:%Y.%m.%d}.tif"
-    with rasterio.Env(GDAL_HTTP_MULTIRANGE="YES", GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES"):
-        with rasterio.open(url) as src:
-            a = src.read(1, window=from_bounds(*BOUNDS, src.transform)).astype(np.float32)
+    for i in range(tries):
+        try:
+            with rasterio.Env(GDAL_HTTP_MULTIRANGE="YES", GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES",
+                              GDAL_HTTP_MAX_RETRY="4", GDAL_HTTP_RETRY_DELAY="20"):
+                with rasterio.open(url) as src:
+                    a = src.read(1, window=from_bounds(*BOUNDS, src.transform)).astype(np.float32)
+            break
+        except rasterio.errors.RasterioIOError as exc:
+            if i == tries - 1:
+                log(f"  {day}: preliminary file not read after {tries} tries ({str(exc)[:80]})")
+                return None
+            __import__("time").sleep(60 * (i + 1))
     a[a < 0] = np.nan
     a = a[::-1].reshape(len(LAT), 5, len(LON), 5).mean(axis=(1, 3))
     return a
@@ -163,8 +178,11 @@ def build_year(year, workers):
         rest = [d for d in rest if f"chirps-v3.0.prelim.{d:%Y.%m.%d}.tif" in pre]
         if rest:
             log(f"  {year}: {len(rest)} preliminary day(s) {rest[0]} – {rest[-1]} (0.05° window over HTTP)")
-            with ThreadPoolExecutor(workers) as ex:
+            with ThreadPoolExecutor(min(workers, PRELIM_WORKERS)) as ex:
                 for d, a in zip(rest, ex.map(read_prelim, rest)):
+                    if a is None:                        # keep the record contiguous: stop at the first day missed
+                        log(f"  {year}: preliminary days from {d} left for the next run")
+                        break
                     arrs[d] = a; src[d] = "prelim sat p05→p25"
     days = sorted(d for d in src)
     if not days:
