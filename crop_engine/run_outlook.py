@@ -11,15 +11,16 @@ observations and configuration is skipped.
 Second model: WOFOST 7.2 (adapters/wofost_adapter.py) grows the same members, sown on the same dates, for every
 variety with a WOFOST calibration in varieties.yaml (`wofost:`), when the run's weather has radiation, humidity and
 wind; its summary and members go beside AquaCrop's (results[variety][rule]["wofost"]), so the Crop outlook tab shows
-how far the two models agree. AquaCrop stays the published outlook; WOFOST has no observed-weather benchmark here
-(the engine comparison, compare_engines.py, sets the two against each other over 1993–2025). --no-wofost leaves
-it out.
+how far the two models agree. AquaCrop stays the published outlook. WOFOST has its own observed-weather benchmark
+(climatology_wofost.json: the same observed seasons, sown as AquaCrop's benchmark, rebuilt when WOFOST's own
+configuration changes, wofost_hash), so its summaries carry their own normal range. --no-wofost leaves it out.
 
 Outputs (not committed; outputs/crop_engine/):
   weather/<run id>.nc        the standard daily weather of the run (crop_engine.data.weather)
   results/<run id>.json      per site, variety and rule: every member's outcome and a summary
   results/index.json         the runs, newest first
   climatology.json           the observed-weather benchmark (rebuilt when the configuration changes)
+  climatology_wofost.json    WOFOST's, for its varieties (rebuilt when WOFOST's configuration changes)
 and the Crop outlook tab's copy of the latest runs (frontend/public/tracker/data/crop/, crop_engine.dashboard).
 
 Usage:
@@ -96,6 +97,19 @@ def config_hash(rules, sites):
     h.update(ENGINE.encode())
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(aq.__file__).read_bytes())
+    h.update(Path(pl.__file__).read_bytes())
+    return h.hexdigest()[:12]
+
+
+def wofost_hash(rules, sites):
+    """Changes when the varieties, rules, sites, season end, PCSE or the WOFOST adapter change: WOFOST's benchmark is
+    rebuilt (AquaCrop's is not)."""
+    h = hashlib.sha1(C.VARIETIES_FILE.read_bytes())
+    h.update(json.dumps(sorted(rules)).encode())
+    h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
+    h.update(SECOND_ENGINE.encode())
+    h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
+    h.update(Path(wf.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
     return h.hexdigest()[:12]
 
@@ -240,6 +254,25 @@ def benchmark(inp, rep_cells, varieties, rules, soils, workers):
     t0 = time.time()
     res = run_tasks(tasks, workers)
     log(f"benchmark done in {time.time() - t0:.0f} s")
+    return bench_stats(res, keys, varieties, years)
+
+
+def wofost_benchmark(inp, rep_cells, varieties, rules, soils, workers):
+    """WOFOST's observed-weather benchmark: the same seasons and sowings as benchmark() (compare_engines.tasks_for),
+    for the WOFOST varieties."""
+    from crop_engine import compare_engines as ce
+    years = list(range(C.HIST_YEARS[0], C.HIST_YEARS[1] + 1))
+    use = {vk: varieties[vk] for vk in wofost_varieties(varieties)}
+    tasks, keys = ce.tasks_for(inp, years, rep_cells, use, rules, soils)
+    log(f"WOFOST benchmark: {len(tasks)} observed seasons to simulate")
+    t0 = time.time()
+    res = run_tasks(tasks, workers, engine="wofost")
+    log(f"WOFOST benchmark done in {time.time() - t0:.0f} s")
+    return bench_stats(res, keys, use, years)
+
+
+def bench_stats(res, keys, varieties, years):
+    """Outcomes of the observed seasons (keys: site, variety, rule, year) → the benchmark's per-cell statistics."""
     out, canopy = {}, {}
     for (sid, vk, rk, y), r in zip(keys, res):
         m = r[0]
@@ -295,7 +328,7 @@ def run_wofost(ds, tasks, keys, rep_cells, inp, varieties, workers):
 
 
 def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules, soils, bench, workers, chash,
-            wofost=True):
+            wofost=True, wbench=None):
     b = inp.b
     if source == "seasonal":
         P, segs = b.seas, [{"kind": "obs", "label": "Observed rainfall (CHIRPS)", "start": f"{b.win0}", "end": f"{b.obs_end}"},
@@ -371,7 +404,8 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
         entry = {"summary": summ, "canopy": band, "members": outcomes}
         if (sid, vk, rk) in wof:
             w = wof[(sid, vk, rk)]
-            entry["wofost"] = {"summary": summarize(w, varieties[vk]), "members": w}
+            wb = (wbench or {}).get(sid, {}).get(vk, {}).get(rk)
+            entry["wofost"] = {"summary": summarize(w, varieties[vk], wb), "members": w}
         for gid in group:
             out_sites[gid]["results"].setdefault(vk, {})[rk] = entry
     meta = {"id": rid, "source": source, "model_label": label, "run": f"{run}", "obs_end": f"{b.obs_end}",
@@ -441,6 +475,19 @@ def main():
                  "sites": benchmark(inp, rep_cells, varieties, a.rules, soils, a.workers)}
         C.OUT.mkdir(parents=True, exist_ok=True)
         bpath.write_text(json.dumps(bench, indent=1), encoding="utf-8")
+    wbench = None
+    if not a.no_wofost and wofost_varieties(varieties):
+        wpath, whash = C.OUT / "climatology_wofost.json", wofost_hash(a.rules, inp.sites)
+        wbench = json.loads(wpath.read_text(encoding="utf-8")) if wpath.exists() else None
+        if a.climatology or not wbench or wbench.get("config_hash") != whash:
+            try:
+                wbench = {"config_hash": whash, "engine": SECOND_ENGINE, "years": list(C.HIST_YEARS),
+                          "cal_years": list(C.CAL_YEARS),
+                          "sites": wofost_benchmark(inp, rep_cells, varieties, a.rules, soils, a.workers)}
+                wpath.write_text(json.dumps(wbench, indent=1), encoding="utf-8")
+            except Exception as exc:                                   # the outlook goes on without it
+                log(f"WOFOST benchmark failed ({type(exc).__name__}: {str(exc)[:200]}); WOFOST summaries without it")
+                wbench = None
     meth = fr.Methods(inp.year)
     nwp_cache = {}
     done = []
@@ -454,7 +501,8 @@ def main():
                 continue
         try:
             got = run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, a.rules, soils,
-                          bench["sites"], a.workers, chash, wofost=not a.no_wofost)
+                          bench["sites"], a.workers, chash, wofost=not a.no_wofost,
+                          wbench=(wbench or {}).get("sites"))
             if got:
                 done.append(got)
         except Exception as exc:                                         # one run must not stop the others

@@ -42,6 +42,11 @@ county seasons, not whether its yield level is right. Sorghum and bean have at m
 1993–2016. Run over 1993–2025 (`--years 1993 2025`) for more overlap (2017–2023): those seasons are also outside
 the SEAS5 rain correction's calibration years.
 
+WOFOST (`--engine wofost`): the same forecasts grown by WOFOST (its varieties: maize and sorghum), with the solar
+radiation, vapour pressure and wind observed (ERA5-Land) to 30 Sep, then their day-of-year climatology (SEAS5's, ratio-
+corrected without year y, with --temperature seas5 when its radiation files are on disk), scored against WOFOST's own
+observed-weather benchmark (climatology_wofost.json, built by run_outlook). Outputs carry the suffix _wofost.
+
 Outputs (not committed): outputs/crop_engine/verification/hindcast_members<tag>.json (every member's outcome) and
 hindcast_scores<tag>.json (`--tag`, after the temperature's suffix); a table in the log.
 
@@ -51,6 +56,7 @@ Usage:
   python -m crop_engine.hindcast --fao-onsets                      # the FAO onsets of the 1 Oct runs (once)
   python -m crop_engine.hindcast --temperature seas5 --workers 3   # SEAS5 temperature, compared with climatology
   python -m crop_engine.hindcast --sites kalro_kiboko_makueni_farm --varieties maize_early --years 2005 2010
+  python -m crop_engine.hindcast --engine wofost --workers 3       # WOFOST, against its own benchmark
 """
 import argparse
 import datetime as dt
@@ -127,9 +133,11 @@ def assemble_rain(obs, oct_dec, janfeb, march, dates, y):
     return rain
 
 
-def season(inp, y, temperature="climatology"):
+def season(inp, y, temperature="climatology", met_out=None):
     """The year-y forecast's weather at the sites: rain, tmax, tmin, et0 (member, site, T) and dates. temperature
-    "seas5": SEAS5 member k from 1 Oct (bias-corrected without year y) and its March rain (module doc)."""
+    "seas5": SEAS5 member k from 1 Oct (bias-corrected without year y) and its March rain (module doc). met_out (a
+    dict): filled with rad_mj_m2, vap_hpa, wind2_ms (member, site, T) and elev (site,) for WOFOST: ERA5-Land to 30 Sep,
+    then SEAS5 member k's (with temperature "seas5" and its radiation files), else the day-of-year climatology."""
     dates = inp.dates(y)
     obs = inp.observed_rain(dates)
     oct_dec = _grid(RAIN_OCT_DEC, y, inp.ii, inp.jj).astype(np.float32)         # (member, 92, site)
@@ -149,6 +157,18 @@ def season(inp, y, temperature="climatology"):
     et0[:, fc] = inp.et0_clim.T[:, fc]
     M = rain.shape[0]
     tmax, tmin, et0 = (np.repeat(a[None], M, axis=0) for a in (tmax, tmin, et0))
+    if met_out is not None:
+        r = inp.radiation(dates)
+        if r is None:
+            raise RuntimeError("no ERA5-Land radiation, humidity or wind at the sites (WOFOST needs them)")
+        vals, _, elev = r
+        doy = W.era5land.doy_noleap(dates[fc]) - 1
+        for col in vals:
+            v = vals[col].copy()
+            for k, s in enumerate(inp.sites):
+                v[k, fc] = inp.met2_clim[s.id][col][doy]
+            met_out[col] = np.repeat(v[None], M, axis=0).astype(np.float32)
+        met_out["elev"] = elev
     if temperature == "seas5":
         S = s5.Seas5(y, [x.id for x in inp.sites], inp.lat[inp.ii], inp.lon[inp.jj], inp.temps, inp.hist, exclude=y,
                      met=inp.met2)
@@ -159,6 +179,9 @@ def season(inp, y, temperature="climatology"):
         fn = np.minimum(np.moveaxis(S.tmin[mk][:, p[use]], 1, 2), fx)
         if S.met is not None:                                            # Penman-Monteith, as the outlook
             w = {key: np.moveaxis(S.met[key][mk][:, p[use]], 1, 2) for key in s5.MET}
+            if met_out is not None:
+                for key, col in s5.MET.items():
+                    met_out[col][:, :, use] = w[key]
             ref = {key: a[:, use] for key, a in inp.clim_weather(dates).items()}
             ratio = inp.et0_pm_ratio({"tmax": fx, "tmin": fn, **w}, ref, dates[use], inp.radiation(dates)[2])
         else:
@@ -177,11 +200,12 @@ def seas5_years(years):
     return [y for y in years if s5.path(y).exists() and len([c for c in cal if c != y]) >= s5.MIN_CAL_YEARS]
 
 
-def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperature="climatology"):
+def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperature="climatology", engine="aquacrop"):
     """Every member of every past forecast → {site: {variety: {rule: {year: [outcome, ...]}}}}."""
     tasks, keys = [], []
     for y in years:
-        rain, tmax, tmin, et0, dates = season(inp, y, temperature)
+        met = {} if engine == "wofost" else None
+        rain, tmax, tmin, et0, dates = season(inp, y, temperature, met)
         frac = inp.initial_water(y)
         src = np.full(len(dates), C.PRECIP_SOURCES.index("seasonal"), np.int8)
         for s, _ in rep_cells:
@@ -191,13 +215,17 @@ def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperatur
                 on = _grid(ONSETS[rk], y, np.array([s.i]), np.array([s.j]))[:, 0]
                 plant = [pl.doy_to_date(v, y) for v in on]
                 for vk, v in varieties.items():
-                    tasks.append(dict(dates=dates.values, rain=rain[:, k], tmax=tmax[:, k], tmin=tmin[:, k], et0=et0[:, k],
-                                      source=src, planting=plant, resow=resow, variety=v, kw=v["kw"],
-                                      layers=soils[s.id], initial_frac=float(frac[k])))
+                    t = dict(dates=dates.values, rain=rain[:, k], tmax=tmax[:, k], tmin=tmin[:, k], et0=et0[:, k],
+                             source=src, planting=plant, resow=resow, variety=v, kw=v["kw"],
+                             layers=soils[s.id], initial_frac=float(frac[k]))
+                    if met is not None:
+                        t.update(rad=met["rad_mj_m2"][:, k], vap=met["vap_hpa"][:, k], wind2=met["wind2_ms"][:, k],
+                                 lat=s.lat, lon=s.lon, elev=float(met["elev"][k]))
+                    tasks.append(t)
                     keys.append((s.id, vk, rk, y))
     log(f"{len(tasks)} forecasts to simulate ({len(tasks) * 25} member seasons)")
     t0 = time.time()
-    res = ro.run_tasks(tasks, workers)
+    res = ro.run_tasks(tasks, workers, engine=engine)
     log(f"simulated in {time.time() - t0:.0f} s")
     out = {}
     for (sid, vk, rk, y), members in zip(keys, res):
@@ -419,6 +447,8 @@ def main():
     ap.add_argument("--score-only", action="store_true", help="score the saved members, without simulating")
     ap.add_argument("--fao-onsets", action="store_true", help="compute the FAO onsets of the 1 Oct runs, then stop")
     ap.add_argument("--tag", default="", help="suffix of the output files (e.g. _1993_2025), kept apart from the others")
+    ap.add_argument("--engine", choices=["aquacrop", "wofost"], default="aquacrop",
+                    help="wofost: WOFOST's varieties against WOFOST's own benchmark (climatology_wofost.json)")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -436,16 +466,23 @@ def main():
     _, varieties = ro.load_varieties(a.varieties)
     inp = W.Inputs(refresh=False)
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
+    if a.engine == "wofost":
+        varieties = {vk: varieties[vk] for vk in ro.wofost_varieties(varieties)}
+        bp = C.OUT / "climatology_wofost.json"
+        if not bp.exists():
+            log("no WOFOST benchmark (climatology_wofost.json): run the outlook once with WOFOST")
+            return 1
+        bench = json.loads(bp.read_text(encoding="utf-8"))
     rep_cells = [(s, g) for s, g in ro.cells(inp.sites) if not a.sites or s.id in a.sites]
     OUT.mkdir(parents=True, exist_ok=True)
-    sfx = suffix(a.temperature) + a.tag
+    sfx = suffix(a.temperature) + ("_wofost" if a.engine == "wofost" else "") + a.tag
     mpath = OUT / f"hindcast_members{sfx}.json"
     saved = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else None
     if a.score_only:
         members, years = saved["sites"], saved["years"]
     else:
         soils = {s.id: soil_mod.profile(s) for s, _ in rep_cells}
-        members = simulate(inp, years, rep_cells, varieties, rules, soils, a.workers, a.temperature)
+        members = simulate(inp, years, rep_cells, varieties, rules, soils, a.workers, a.temperature, a.engine)
         if saved and saved["years"] == years and saved.get("config_hash") == bench.get("config_hash"):
             members = _merge(saved["sites"], members)                    # keep the other rules' members
         mpath.write_text(json.dumps({"years": years, "config_hash": bench.get("config_hash"),
@@ -453,14 +490,16 @@ def main():
     sc = score_all(members, bench["sites"], inp, varieties, years)
     out = {"years": years, "config_hash": bench.get("config_hash"), "temperature": a.temperature,
            "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
-           "reference": "the same crop grown in each season's observed weather (climatology.json)", "sites": sc}
+           "engine": a.engine,
+           "reference": "the same crop grown in each season's observed weather by the same model ("
+                        + ("climatology_wofost.json" if a.engine == "wofost" else "climatology.json") + ")", "sites": sc}
     table(sc)
     counties = county_yields()
     if counties:
         out["county"] = county_scores(sc, counties)
         log("county Short Rains maize yields (HarvestStat):")
         county_table(out["county"])
-    cpath = OUT / f"hindcast_members{a.tag}.json"
+    cpath = OUT / f"hindcast_members{'_wofost' if a.engine == 'wofost' else ''}{a.tag}.json"
     if a.temperature == "seas5" and cpath.exists():                     # the same years, climatological temperature
         clim_members = json.loads(cpath.read_text(encoding="utf-8"))["sites"]
         log(f"the same {len(years)} years with climatological temperature:")

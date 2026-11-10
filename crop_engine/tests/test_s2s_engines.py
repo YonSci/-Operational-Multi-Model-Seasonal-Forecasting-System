@@ -141,3 +141,78 @@ def test_dashboard_carries_the_second_model(tmp_path, monkeypatch):
     d = json.loads((C.DASHBOARD_OUT / "seasonal.json").read_text())["sites"]["test_site"]["results"]["maize_early"]["rule1"]
     w = dict(zip(idx["member_keys"], d["wofost"]["members"][0]))
     assert w["yield_t_ha"] == 1.0 and w["potential_t_ha"] is None and len(d["wofost"]["members"]) == 2
+
+
+# ── sub-seasonal radiation, humidity and wind ───────────────────────────────
+def test_daily_met_of_both_archives():
+    from crop_engine.data import s2s_met as sm
+    leads = pd.to_timedelta(np.arange(0, 4) * 24, unit="h").values                # ECMWF: daily leads
+    a = {"downward_short_wave_radiation_flux_surface": np.array([np.nan, 250, 200, 100], np.float32)[None, :, None],
+         "average_dew_point_temperature_2m": np.array([np.nan, 15, 15, 15], np.float32)[None, :, None],
+         "wind_u_10m": np.array([3, 3, 0, 0], np.float32)[None, :, None], "wind_v_10m": np.array([4, 4, 0, 0], np.float32)[None, :, None]}
+    m, dates = sm.daily_met("ecmwf", a, leads, pd.Timestamp("2026-11-01"))
+    assert m["rad"][0, :, 0] == pytest.approx([21.6, 17.28, 8.64])                 # W m-2 × 0.0864, lead L → day L − 1
+    assert m["vap"][0, 0, 0] == pytest.approx(17.05, abs=0.01)                      # e°(15 °C)
+    assert m["wind2"][0, :, 0] == pytest.approx([5 * 0.748, 2.5 * 0.748, 0.0])       # mean of the day's two 00 UTC winds
+    hours = np.arange(0, 25, 3)                                                    # GEFS: 3-hourly, one day
+    g = {"downward_short_wave_radiation_flux_surface": np.array([np.nan, 1, 0, 9, 400, 9, 600, 9, 0], np.float32)[None, :, None],
+         "relative_humidity_2m": np.full((1, 9, 1), 50, np.float32), "temperature_2m": np.full((1, 9, 1), 20, np.float32),
+         "wind_u_10m": np.full((1, 9, 1), 2, np.float32), "wind_v_10m": np.zeros((1, 9, 1), np.float32)}
+    m, _ = sm.daily_met("gefs", g, pd.to_timedelta(hours, unit="h").values, pd.Timestamp("2026-11-01"))
+    assert m["rad"][0, 0, 0] == pytest.approx((0 + 400 + 600 + 0) / 4 * 0.0864)    # the 6-hourly means only
+    assert m["vap"][0, 0, 0] == pytest.approx(0.5 * 6.108 * np.exp(17.27 * 20 / 257.3), rel=1e-4)
+    assert m["wind2"][0, 0, 0] == pytest.approx(2 * 0.748)
+
+
+# ── WOFOST's multi-layer water balance ──────────────────────────────────────
+def test_layer_curves_are_anchored_and_monotonic():
+    from crop_engine.adapters import wofost_adapter as wf
+    from crop_engine.data import soil
+    L = soil.Layer(0, 30, 45, 30, 1.5, 5, 0.30, 0.18)
+    sm, cond = wf.layer_curves(L)
+    pf, th, k = np.array(sm[0::2]), np.array(sm[1::2]), np.array(cond[1::2])
+    assert th[list(pf).index(wf.PF_FC)] == pytest.approx(0.30, abs=1e-4)
+    assert th[list(pf).index(wf.PF_WP)] == pytest.approx(0.18, abs=1e-4)
+    assert (np.diff(th) <= 1e-9).all() and (np.diff(k) <= 1e-9).all() and th[0] > 0.30
+
+
+def test_soil_profile_splits_a_layer_at_the_rooting_depth():
+    from crop_engine.adapters import wofost_adapter as wf
+    from crop_engine.tests.test_engine import LAYERS
+    soil_, site = wf.soil_profile(LAYERS, 0.5, split_at=[75])
+    th = [L["Thickness"] for L in soil_["SoilProfileDescription"]["SoilLayers"]]
+    assert np.cumsum(th).tolist() == [5, 15, 30, 60, 75, 100, 200]
+    paw = sum((L.theta_fc - L.theta_wp) * (L.bottom_cm - L.top_cm) for L in LAYERS)
+    assert site["WAV"] == pytest.approx(0.5 * paw) and soil_["RDMSOL"] == 200
+
+
+def test_wofost_benchmark_hash_ignores_aquacrop():
+    from crop_engine import run_outlook as ro
+    from crop_engine.data.sites import registered_sites
+    s = registered_sites()
+    assert ro.wofost_hash(["rule1"], s) == ro.wofost_hash(["rule1"], s) != ro.wofost_hash(["rule1", "fao-agricultural"], s)
+    assert ro.wofost_hash(["rule1"], s) != ro.config_hash(["rule1"], s)
+
+
+# ── WOFOST in the management scenarios ──────────────────────────────────────
+def test_wofost_management_mulch_and_ridges():
+    from crop_engine.adapters import wofost_adapter as wf
+    site = {"SSMAX": 0.0, "WAV": 5.0}
+    assert wf.management({"site": site}) == {}
+    m = wf.management({"site": site, "field": {"mulches": True, "mulch_pct": 50, "f_mulch": 0.5, "sr_inhb": True}})
+    assert m["es0_factor"] == pytest.approx(0.75)                # half the soil covered, half its evaporation there
+    assert m["site"] == {"SSMAX": 10.0, "WAV": 5.0} and site["SSMAX"] == 0.0     # the task's site left unchanged
+
+
+def test_wofost_scenarios_leave_out_plant_density(monkeypatch):
+    from crop_engine import run_scenarios as rs
+    from crop_engine.scenarios import management as mg
+    keys = ["sow_plus14", "density_low", "density_high", "irr_full", "mulch"]
+    varieties = {"maize_early": {}, "bean": {}}
+    monkeypatch.setattr(rs.ro, "wofost_varieties", lambda v: ["maize_early"])
+    without = {"sites": {"s": {"results": {"maize_early": {"rule1": {"summary": {}}}}}}}
+    assert rs.wofost_plan(without, varieties, keys) == (set(), [])             # no WOFOST results: AquaCrop only
+    with_w = {"sites": {"s": {"results": {"maize_early": {"rule1": {"summary": {}, "wofost": {}}}}}}}
+    vs, ks = rs.wofost_plan(with_w, varieties, keys)
+    assert vs == {"maize_early"} and ks == ["sow_plus14", "irr_full", "mulch"]
+    assert all("density" not in mg.SCENARIOS[k] for k in ks)

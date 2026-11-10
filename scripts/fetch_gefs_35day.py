@@ -10,6 +10,7 @@ The archive's precipitation is the mean rate since the previous step (3-hourly t
 rain is put on the UTC day its period starts, giving daily rain by valid date (mm/day) for days 1–35.
   → data/gefs/gefs_tp_<YYYYMMDD>_kenya.nc   (precip: member, time, lat, lon)
 and the run's daily maximum and minimum temperature at the crop engine's sites (its weather for the s2s-gefs runs):
+  → data/gefs/gefs_met_<YYYYMMDD>_sites.nc  (rad, vap, wind2: radiation, humidity, wind; crop_engine/data/s2s_met.py)
   → data/gefs/gefs_t2m_<YYYYMMDD>_sites.nc  (tmax, tmin: member, time, site; crop_engine/data/s2s_temperature.py)
 
 The latest run is always fetched; --days-back also fetches the runs of the previous days. Runs already on disk are
@@ -89,11 +90,13 @@ def site_temperature(source, ds, inits):
     try:
         if str(BASE_DIR) not in sys.path:
             sys.path.insert(0, str(BASE_DIR))
+        from crop_engine.data import s2s_met as s2m
         from crop_engine.data import s2s_temperature as s2t
     except Exception as exc:
         print(f"  temperature at the crop sites: skipped ({type(exc).__name__}: {str(exc)[:160]})")
         return
     s2t.fetch_runs(source, ds, inits)
+    s2m.fetch_runs(source, ds, inits)
 
 
 def main():
@@ -113,7 +116,7 @@ def main():
             print(f"  {init:%Y-%m-%d}: skipped ({type(exc).__name__}: {str(exc)[:120]})")
     site_temperature("gefs", ds, inits[-(a.days_back + 1):])
     cut = dt.date.today() - dt.timedelta(days=a.keep)
-    for p in [*OUT_DIR.glob("gefs_tp_*_kenya.nc"), *OUT_DIR.glob("gefs_t2m_*_sites.nc")]:
+    for p in [*OUT_DIR.glob("gefs_tp_*_kenya.nc"), *OUT_DIR.glob("gefs_t2m_*_sites.nc"), *OUT_DIR.glob("gefs_met_*_sites.nc")]:
         if dt.datetime.strptime(p.stem.split("_")[2], "%Y%m%d").date() < cut:
             p.unlink()
 
