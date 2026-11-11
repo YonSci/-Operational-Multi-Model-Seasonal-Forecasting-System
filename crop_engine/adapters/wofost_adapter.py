@@ -17,11 +17,13 @@ from TSUMEM at TBASEM: the same targets AquaCrop's phenology is scaled to (the m
 varieties.yaml). A variety's `flowering_days` (as AquaCrop's) sets TSUM1 apart: anthesis at that many days at the
 reference temperature, TSUM2 the rest to maturity. Yield level: a variety's `wofost: {AMAXTB_scale: f}` multiplies the leaf photosynthesis table
 AMAXTB (maize fitted to Duma 43 under full irrigation at Kiboko: crop_engine/calibration/wofost.py); without it,
-WOFOST's own.
+WOFOST's own. Rooting depth: a variety's `wofost: {RDMCR: cm}` sets the crop's maximum rooting depth (maize: the
+depth AquaCrop's Zmax is given, varieties.yaml); without it, the crop file's.
 
 Soil (one root zone, as the classic water balance): the SoilGrids layers' wilting point and field capacity averaged
-over the top 100 cm, saturation from Saxton & Rawls (2006) Eq. 2–5 and the saturated conductivity (Eq. 16)
-for the percolation limits (SOPE: top 100 cm, KSUB: below), the 200 cm profile as the rootable depth. Initial water:
+over the crop's maximum rooting depth (RDMCR), saturation from Saxton & Rawls (2006) Eq. 2–5 and the saturated
+conductivity (Eq. 16) for the percolation limits (SOPE: the rooted zone, KSUB: below), the 200 cm profile as the
+rootable depth. Initial water:
 the task's initial_frac of the available water over the profile (WAV), from 1 Aug, as AquaCrop.
 
 Outcome of a member: as aquacrop_adapter (ok, died, failed_establishment, too_late, not_sown, error), with
@@ -131,6 +133,9 @@ def phenology(variety, reference_tmean=REFERENCE_TMEAN):
     if scale is not None:                                               # the yield level (calibration/wofost.py)
         t = list(base["AMAXTB"])
         over["AMAXTB"] = [v * scale if i % 2 else v for i, v in enumerate(t)]
+    rdmcr = (variety.get("wofost") or {}).get("RDMCR")
+    if rdmcr is not None:                                               # the maximum rooting depth (varieties.yaml)
+        over["RDMCR"] = base["RDMCR"] = float(rdmcr)
     return crop, name, over, base
 
 
@@ -373,7 +378,7 @@ def prepare(task):
     if wb == "mlwb":
         soil, site = soil_profile(task["layers"], task["initial_frac"], split_at=[wof[3]["RDMCR"]])
     else:
-        soil, site = soil_parameters(task["layers"], task["initial_frac"])
+        soil, site = soil_parameters(task["layers"], task["initial_frac"], root_depth_cm=float(wof[3]["RDMCR"]))
     t = dict(task, wofost=wof, soil=soil, site=site)
     return dict(t, **management(t))
 

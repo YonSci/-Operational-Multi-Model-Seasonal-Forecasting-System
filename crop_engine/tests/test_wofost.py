@@ -74,3 +74,13 @@ def test_the_yield_factor_scales_leaf_photosynthesis_and_yield():
     full = wf.simulate(task(40.0))[0]["yield_t_ha"]
     half = wf.simulate(dict(task(40.0), variety=dict(MAIZE, wofost={"AMAXTB_scale": 0.5})))[0]["yield_t_ha"]
     assert half < full
+
+
+def test_the_variety_sets_the_rooting_depth_and_the_rooted_zone_soil():
+    _, _, over, base = wf.phenology(dict(MAIZE, wofost={"RDMCR": 150}))
+    assert over["RDMCR"] == base["RDMCR"] == 150.0
+    assert "RDMCR" not in wf.phenology(MAIZE)[2]                                 # without it, the crop file's
+    layers = LAYERS[:4] + [soil.Layer(60, 100, 50, 25, 1.5, 5, 0.30, 0.15), soil.Layer(100, 200, 50, 25, 1.5, 5, 0.34, 0.17)]
+    shallow = wf.prepare(dict(task(), layers=layers))["soil"]
+    deep = wf.prepare(dict(task(), layers=layers, variety=dict(MAIZE, wofost={"RDMCR": 150})))["soil"]
+    assert deep["SMFCF"] > shallow["SMFCF"]                                     # averaged over the deeper rooted zone
