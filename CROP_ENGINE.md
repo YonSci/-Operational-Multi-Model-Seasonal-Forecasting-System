@@ -814,8 +814,9 @@ shows both (*WOFOST in the published outlook*, below); AquaCrop stays the outloo
   phenology is scaled to, so the maize classes carry the Kiboko phenology calibration (kiboko_v2). The growth and
   partitioning parameters are WOFOST's own: the yield level is **not calibrated** to the Kenyan trials.
 - **Soil**: one root zone, as the classic water balance has. Wilting point and field capacity are the SoilGrids
-  layers' values averaged over the top 100 cm; saturation and the percolation limits come from Saxton & Rawls
-  (2006); the rootable depth is the 200 cm profile; the initial water is the task's fraction of the available water.
+  layers' values averaged over the crop's maximum rooting depth (maize 150 cm, as AquaCrop's: *Maize rooting
+  depth*, below); saturation and the percolation limits come from Saxton & Rawls (2006); the rootable depth is
+  the 200 cm profile; the initial water is the task's fraction of the available water.
 - **Outcomes**: WOFOST's crop survives drought (its leaves die back, its stems and pods keep an area), so it has no
   establishment failure of its own. A crop that never reaches 5 % canopy cover (LAI 0.085) counts as a failed
   establishment, and one whose leaves all die before development stage 1.9, or that matures with no grain, counts
@@ -881,6 +882,52 @@ Maize now agrees between the engines at most sites (rank correlation of the sown
 cells, agreement on failure or not 64–94 %). The remaining differences are structural: AquaCrop's seedlings die in
 a dry spell after sowing and WOFOST's do not, and WOFOST develops more slowly at cool Genco Maralal (1,780 m), so
 its grain fills in the dry season.
+
+### Maize rooting depth (November 2026)
+
+The two engines' maize had different maximum rooting depths: AquaCrop's MaizeGDD file 2.3 m, WOFOST's
+Maize_VanHeemst_1988 0.75 m. Where both crops matured, WOFOST's early maize yielded much less (Kapiti 2.9 against
+4.8 t/ha, El Karama 5.1 against 7.3). FAO-56 (Table 22) gives maize 1.0–1.7 m; both engines now use **1.5 m**
+(`varieties.yaml`, both maize classes: AquaCrop `Zmax: 1.5`, WOFOST `RDMCR: 150`), and WOFOST's soil is averaged
+over that depth. WOFOST's sorghum keeps its crop file's 1.5 m (AquaCrop's SorghumGDD 1.8 m: no change made).
+
+The depth was chosen on the observed seasons 1993–2025, all six sites, both maize classes, FAO onset sowing
+(396 seasons, each depth in each engine):
+
+| Early maize, median t/ha where both matured, AquaCrop / WOFOST | 2.3 / 0.75 m (before) | 1.5 / 1.5 m (adopted) | 1.2 / 1.2 m | 1.0 / 1.0 m |
+|---|---|---|---|---|
+| El Karama | 7.33 / 5.13 | 6.16 / 5.65 | 5.15 / 5.67 | 4.22 / 5.74 |
+| Genco Maralal | 6.89 / 2.41 | 4.82 / 3.24 | 3.81 / 3.25 | 3.20 / 3.05 |
+| Kapiti | 4.82 / 2.89 | 4.47 / 3.84 | 4.22 / 3.91 | 4.25 / 3.99 |
+| KALRO Kiboko | 5.25 / 1.86 | 5.32 / 1.86 | 5.34 / 1.86 | 5.00 / 1.86 |
+| Rank correlation with the county Short Rains maize yields (HarvestStat, 12–16 years a site, mean of 5 sites) | 0.11 / 0.06 | 0.13 / 0.06 | 0.12 / 0.06 | 0.11 / 0.05 |
+
+- A common 1.5 m cuts the engines' gap by two thirds or more at Kapiti, El Karama and Genco Maralal; medium
+  maize's gap halves (El Karama 8.67 / 2.77 → 6.68 / 3.77 t/ha). The county correlation does not tell the depths
+  apart.
+- Shallower roots cut AquaCrop's yields steeply at the cool, deep-soil sites (Genco Maralal early maize, every
+  season: 3.15 t/ha at 2.3 m, 1.17 at 1.5 m, 0.29 at 1.0 m) and change WOFOST's little: its roots grow 1.2 cm a
+  day from 10 cm, so they are under 1 m deep at flowering whatever the maximum.
+- Over every season, AquaCrop's early maize falls at El Karama (3.19 → 2.38 t/ha) and Genco Maralal (3.15 → 1.17;
+  failure rate 30 → 42 %); the other sites change by 0.03 t/ha or less. WOFOST's early maize rises at Genco Maralal
+  (1.02 → 1.64; failures 36 → 18 %) and Kapiti (0.96 → 1.08). The calibrations stand: under full irrigation the
+  rooting depth does not limit the crop (AquaCrop's medium maize at Kiboko, kiboko_v3's sowings: 7.75 t/ha at 2.3
+  and at 1.5 m; WOFOST's potential production has no water balance).
+
+**Kiboko's gap is WOFOST's soil evaporation, and it is left as it is.** Deeper roots do not move WOFOST's Kiboko
+maize (1.86 t/ha where both mature); halving its bare-soil evaporation (ES0) does (4.92, against AquaCrop's 5.32).
+The classic water balance takes soil evaporation from the whole root zone, which early in the season is the
+seedling's 10 cm; AquaCrop dries only a surface layer above the roots' water. The evidence does not support
+cutting it:
+- Halving ES0 lowers WOFOST's correlation with the county yields from 0.06 to −0.03 (Genco Maralal −0.19 →
+  −0.59, El Karama 0.06 → −0.15); a quarter less, to 0.00.
+- The Kiboko trials cannot decide it. Against the 2013 trials (season not recorded; compared with the Short
+  Rains), both engines' crops are far below them (IITA median 4.5 t/ha, the 0 N plots 1.76): AquaCrop's early
+  maize 1.50 t/ha (died), WOFOST's 0.84, and halving ES0 does not raise it (0.78). Kiboko is KALRO's
+  managed-drought station, and the trials' irrigation is not recorded, so they are not a rain-fed season to
+  calibrate the water balance on.
+The remaining Kiboko difference is structural, like AquaCrop's seedling death. WOFOST 7.3's multi-layer balance
+(`water_balance: mlwb`) takes soil evaporation from the top layer only and is the way to test it.
 
 ### Sorghum (November 2026, `crop_engine/calibration/sorghum.py`)
 

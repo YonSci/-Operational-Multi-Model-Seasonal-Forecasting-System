@@ -24,12 +24,12 @@
  "maize_early_wet_20oct": {
   "status": "died",
   "planting": "2026-10-20",
-  "harvest": "2027-01-23",
-  "yield_t_ha": 1.873,
-  "potential_t_ha": 3.509,
-  "biomass_t_ha": 10.488,
-  "max_canopy": 0.682,
-  "stress_days": 13,
+  "harvest": "2027-01-21",
+  "yield_t_ha": 1.61,
+  "potential_t_ha": 3.152,
+  "biomass_t_ha": 10.059,
+  "max_canopy": 0.692,
+  "stress_days": 15,
   "sowings": 1
  },
  "sorghum_wet_20oct": {
