@@ -916,8 +916,7 @@ The depth was chosen on the observed seasons 1993–2025, all six sites, both ma
 
 **Kiboko's gap is WOFOST's soil evaporation, and it is left as it is.** Deeper roots do not move WOFOST's Kiboko
 maize (1.86 t/ha where both mature); halving its bare-soil evaporation (ES0) does (4.92, against AquaCrop's 5.32).
-The classic water balance takes soil evaporation from the whole root zone, which early in the season is the
-seedling's 10 cm; AquaCrop dries only a surface layer above the roots' water. The evidence does not support
+The gap is how much water WOFOST's bare soil loses before the canopy closes, but the evidence does not support
 cutting it:
 - Halving ES0 lowers WOFOST's correlation with the county yields from 0.06 to −0.03 (Genco Maralal −0.19 →
   −0.59, El Karama 0.06 → −0.15); a quarter less, to 0.00.
@@ -926,8 +925,8 @@ cutting it:
   maize 1.50 t/ha (died), WOFOST's 0.84, and halving ES0 does not raise it (0.78). Kiboko is KALRO's
   managed-drought station, and the trials' irrigation is not recorded, so they are not a rain-fed season to
   calibrate the water balance on.
-The remaining Kiboko difference is structural, like AquaCrop's seedling death. WOFOST 7.3's multi-layer balance
-(`water_balance: mlwb`) takes soil evaporation from the top layer only and is the way to test it.
+The remaining Kiboko difference is structural, like AquaCrop's seedling death; WOFOST's multi-layer balance does
+not close it either (it makes Kiboko's maize drier still: *Water balance*, below).
 
 ### Sorghum (November 2026, `crop_engine/calibration/sorghum.py`)
 
