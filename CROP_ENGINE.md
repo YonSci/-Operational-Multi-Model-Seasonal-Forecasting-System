@@ -437,6 +437,80 @@ ranks follow the rain (failures and sowing dates), not the temperature; the few 
 SEAS5 temperature is kept in the outlook for its physical effect on development (it moves maturity by days in a
 warm season), not for skill it has shown here.
 
+## Gridded regional outlook (`crop_engine/grid.py`, pilot)
+
+The same AquaCrop crop on every 0.25° cell of the analysis grid that grows rainfed maize in the eastern Kenya Short
+Rains counties (Machakos, Makueni, Kitui, Kajiado, Embu, Tharaka Nithi, Meru, Taita Taveta): the season that
+matters there, and the counties with the longest HarvestStat Short Rains maize records (14–19 seasons since 1990).
+Early-maturing maize, sown at the FAO agricultural onset of each cell's forecast, in the members of the seasonal
+forecast (SEAS5 1 Oct + the latest observations). Run by the daily update after the site outlook and the
+scenarios (`crop_engine.run_all`), within the crop outlook's time limit; published as
+`tracker/data/crop/grid.json` and shown in the Crop outlook tab (*Maize across the eastern Kenya counties*).
+
+- **Cells**: MapSPAM 2020 rainfed maize harvested area (5 arc-min pixels) summed to the 0.25° cells, each pixel
+  given to its HarvestStat county by point in polygon; a cell is kept with at least 300 ha in the counties (97
+  cells, 99 % of the counties' rainfed maize area). A cell on a county border carries a weight for each county.
+- **Weather, soil, sowing**: as at a site (*Inputs*), at the cell: CHIRPS and the forecast's rain members, the
+  platform's ERA5-Land ET0 grid, the SoilGrids profile and the 1 Aug ERA5-Land root-zone water of the cell, the
+  cell's own FAO onset (forecast members; the FAO water balance's historical onset in past seasons). Temperature:
+  ERA5-Land averaged over the cell (`crop_engine/data/grid_temperature.py`: Earth Engine, the 0.05° samples of
+  the cell averaged 5 × 5, as the platform's ET0; `data/crop_engine/grid/era5land_t2m_<year>.nc`, the current
+  year topped up daily), then SEAS5 member k bias-corrected to it. A site takes its temperature at the point
+  (Open-Meteo): on the cells holding Kapiti, Kiboko and Livemo the cell mean differs from the site's by 0.4–0.7 °C
+  (warmer at Kapiti, cooler at the other two), with the same day-to-day variation (r 1.00). No radiation, humidity or wind
+  (AquaCrop needs none; no WOFOST on the grid).
+- **Normal**: the same crop in the observed weather of 1993–2025 per cell (`outputs/crop_engine/grid/
+  benchmark.json`, rebuilt when the varieties, the cells or the temperature files change).
+- **Counties**: the mean of the cells' yields weighted by the county's maize area in each, member by member for
+  the forecast and year by year for the normal, so a county's members keep the spatial pattern of their rain.
+- **Published**: per cell and county the expected (mean) yield as a percent of its 1993–2025 average, the chances
+  of a below- or above-normal yield (the normal's terciles of 1993–2016; none when a third or more of the normal
+  seasons failed, as at a site), the chance of crop failure (cells) and the share of the maize area that fails
+  (counties, the members' median). Yields are water-limited: the anomalies are meant, not the tonnes per hectare.
+
+Cost: the normal (97 cells × 33 seasons) takes 16 min with 2 worker processes and is made once per configuration;
+a forecast (97 cells × 25 members) 8–9 min; the temperature top-up about a minute of Earth Engine.
+
+### First results (November 2026, early maize, FAO onset)
+
+**County normals against HarvestStat** (rank correlation over the seasons with a reported Short Rains maize yield;
+detrended: Pearson after a linear trend is taken off both; about 0.5 is needed for 5 % significance over 11–16
+seasons):
+
+| County (seasons) | Grid | Detrended | The site's cell alone |
+|---|---|---|---|
+| Taita Taveta (14) | **+0.53** | **+0.51** | — |
+| Meru (11) | +0.59 | +0.12 | — |
+| Machakos (15) | +0.43 | +0.39 | +0.38 (Kapiti) |
+| Kitui (16) | +0.20 | +0.26 | — |
+| Tharaka Nithi (11) | +0.14 | +0.22 | — |
+| Kajiado (13) | +0.13 | +0.23 | +0.00 (Livemo) |
+| Makueni (16) | +0.07 | +0.03 | +0.10 (Kiboko) |
+| Embu (16) | +0.02 | +0.11 | — |
+
+The county average tracks the reported seasons better than a single site's cell in Kajiado and Machakos and no
+worse in Makueni, but only Taita Taveta is clearly above the noise (Meru's rank correlation is mostly a shared
+trend). Reported county yields carry what the model leaves out (fertiliser, varieties, area planted late, pests)
+and their own reporting noise; the grid is not yet evidence of county-scale skill, and the forecasts themselves
+are not verified (a hindcast of the grid, as `crop_engine/hindcast.py` does for the sites, is the next check:
+about 58 000 member seasons for 1993–2016, a night's run).
+
+**The 1 Oct 2026 forecast** (observations to 5 Nov): well above normal in the south-east, where most of the maize
+is (Makueni 187 %, Kitui 160 %, Machakos 157 %, Kajiado 159 % of the area-mean normal; below-normal chances
+4–12 %), close to normal in Embu and Tharaka Nithi, below in Meru (71 %, 84 % below normal). Where a cell holds a
+monitored site the two agree: Kiboko's cell 204 % of normal against the site's 202 % (crop failure 24 % in both),
+Kapiti's 219 % against 246 % (the cell 0.6 °C warmer).
+
+**Sowing into a long dry spell** (found here; the site outlook has it too). Meru's low numbers come from cells sown
+at a September FAO onset (from the observed rain) followed by four to six dry weeks: AquaCrop counts the crop's
+growing degree-days from the sowing date while no canopy grows, so the crop that emerges with the November rains
+reaches "maturity" after three months, with a harvest index of about 0.06; its yield without water stress is low
+too, and the run counts it as matured (its canopy reached 0.75), not as a failed establishment to be re-sown. Sown
+five days later into the same weather, the same cell yields 7.8 t/ha instead of 1.6. In this forecast 10 % of the
+grid's matured members (46 cells) and 14 % of the sites' have a harvest index below 0.15. It is an AquaCrop
+adapter matter, to be fixed for the sites and the grid together (counting establishment from emergence, or
+treating no emergence within a few weeks as a failed establishment, re-sown at the next opportunity).
+
 ## Inputs
 
 | Input | Source | Notes |
@@ -1016,4 +1090,6 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   WOFOST's own observed-weather benchmark and its hindcast skill (done). The multi-layer water balance was tested and
   not adopted (*Water balance*).
 - **P2**: DSSAT or SARRA-Py adapters where partner data support them; the Long Rains (MAM) and Ethiopia; crop
-  bulletins and gridded regional yield forecasts.
+  bulletins. Gridded regional yield forecasts: a pilot for the eastern Kenya Short Rains maize counties is in place
+  (*Gridded regional outlook*); next, a hindcast of the grid against HarvestStat, the AquaCrop dry-sowing fix, then
+  sorghum and the other Short Rains counties.
