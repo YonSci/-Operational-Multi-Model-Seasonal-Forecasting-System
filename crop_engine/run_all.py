@@ -2,7 +2,8 @@
 """
 Crop outlook for every source, each in its own process (crop_engine.run_outlook --sources <one>): the memory of a run
 is released before the next, and this parent imports nothing heavy. The first child also builds the benchmark and
-tops up the ERA5-Land temperatures. Then the results index and the Crop outlook tab's data are rewritten.
+tops up the ERA5-Land temperatures. Then, in the time left, the management scenarios (weekly) and the gridded regional
+outlook of the seasonal run (crop_engine/grid.py), and the results index and the Crop outlook tab's data are rewritten.
 
 Used by the daily update (scripts/update_forecast.py):
   python -m crop_engine.run_all --workers 1 --minutes 240
@@ -66,6 +67,16 @@ def main():
                 print("crop: management scenarios failed; the previous ones kept", flush=True)
         except subprocess.TimeoutExpired:
             print("crop: management scenarios stopped at the time limit; the previous ones kept", flush=True)
+    # the gridded regional outlook of the seasonal run in the time left (crop_engine/grid.py: it writes its own
+    # tab data, grid.json; its benchmark is rebuilt only when its configuration changes)
+    left = end - time.monotonic() if end else None
+    if "seasonal" in sources and "seasonal" not in failed and (left is None or left > 0):
+        cmd = [sys.executable, "-m", "crop_engine.grid", "--workers", str(max(a.workers, 2))]
+        try:
+            if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
+                print("crop: regional outlook failed; the previous one kept", flush=True)
+        except subprocess.TimeoutExpired:
+            print("crop: regional outlook stopped at the time limit; the previous one kept", flush=True)
     dashboard.write_index()
     dashboard.write()
     if failed:

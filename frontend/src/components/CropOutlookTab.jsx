@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import CropRegionalPanel from './CropRegionalPanel.jsx'
 
 // Crop outlook (experimental): AquaCrop grown in every member of each forecast run at the Kenya monitored sites, sown on
 // the platform's onset date, compared with the same crop in the observed seasons of 1993–2025 (crop_engine/,
@@ -1085,6 +1086,10 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             31 Mar (the season’s end), or no sowing opportunity by 15 Jan under this rule. Model errors are left out.
           </p>
         </Panel>
+      </div>
+
+      <div id="crop-regional" style={{ marginTop: 18, scrollMarginTop: 12 }}>
+        <CropRegionalPanel site={site}/>
       </div>
 
       <div id="crop-models" style={{ marginTop: 18, scrollMarginTop: 12 }}>

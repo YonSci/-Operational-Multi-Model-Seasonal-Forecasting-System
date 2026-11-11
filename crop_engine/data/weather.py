@@ -92,7 +92,10 @@ def release_run_file(b):
 class Inputs:
     """What every run shares: the grid, the sites' cells, observed rain, ET0, temperatures, the SEAS5 Jan–Feb members."""
 
-    def __init__(self, sites=None, refresh=True, blender=None):
+    def __init__(self, sites=None, refresh=True, blender=None, temps=None, with_met=True):
+        """temps: a function of the sites on the grid → {site id: DataFrame tmax, tmin by date} in place of the
+        ERA5-Land point series (the gridded crop outlook's cell means, data/grid_temperature.py); with_met=False:
+        no radiation, humidity or wind (AquaCrop needs none)."""
         self.b = blender or bs.Blender(C.BASE)
         release_run_file(self.b)
         self.year, self.lat, self.lon = self.b.year, self.b.lat, self.b.lon
@@ -102,13 +105,16 @@ class Inputs:
         self.sites = sites_mod.on_grid(sites or sites_mod.registered_sites(), self.lat, self.lon, self.b.lm)
         self.ii = np.array([s.i for s in self.sites])
         self.jj = np.array([s.j for s in self.sites])
-        self.temps = {s.id: era5land.site_temperature(s, refresh=refresh) for s in self.sites}
+        self.temps = (temps(self.sites) if temps else
+                      {s.id: era5land.site_temperature(s, refresh=refresh) for s in self.sites})
         self.tclim = {s.id: (era5land.climatology(t.tmax), era5land.climatology(t.tmin)) for s, t in
                       ((s, self.temps[s.id]) for s in self.sites)}
+        self.met2, self.met2_clim, self.met2_note = None, None, "not used (AquaCrop only)"
         try:                                                              # radiation, humidity, wind: optional
-            self.met2 = era5land.site_met(self.sites, refresh=refresh)
-            self.met2_clim = {sid: {v: era5land.climatology(df[v]) for v in era5land.MET} for sid, df in self.met2.items()}
-            self.met2_note = ""
+            if with_met:
+                self.met2 = era5land.site_met(self.sites, refresh=refresh)
+                self.met2_clim = {sid: {v: era5land.climatology(df[v]) for v in era5land.MET} for sid, df in self.met2.items()}
+                self.met2_note = ""
         except Exception as exc:
             self.met2, self.met2_clim = None, None
             self.met2_note = f"not available: {str(exc)[:200]}"
