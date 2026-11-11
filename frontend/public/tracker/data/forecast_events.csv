@@ -5,33 +5,3 @@ ecmwf_ens_median,ECMWF ENS median,direct,Genco LTD Tana River Farm,Genco LTD Tan
 ecmwf_ens_median,ECMWF ENS median,direct,"KALRO Kiboko, Makueni Farm","KALRO Kiboko, Makueni Farm",15,33.3,48.6,70.4,98.4,2026-11-12,1
 ecmwf_ens_median,ECMWF ENS median,direct,Kapiti Research Station Farm,Kapiti Research Station Farm,15,42.1,51.5,62.9,83.0,2026-11-10,1
 ecmwf_ens_median,ECMWF ENS median,direct,"LiveMo LTD, Memerush, Kajiado","LiveMo LTD, Memerush, Kajiado",15,38.6,48.5,61.2,80.0,2026-11-11,1
-ecmwf_ifs025,ECMWF IFS,direct,El Karama Sahiwals Farm,El Karama Sahiwals Farm,15,51.3,54.3,60.4,66.0,2026-11-10,1
-ecmwf_ifs025,ECMWF IFS,direct,Genco LTD Maralal Samburu Farm,Genco LTD Maralal Samburu Farm,15,91.4,97.2,101.4,113.9,2026-11-10,1
-ecmwf_ifs025,ECMWF IFS,direct,Genco LTD Tana River Farm,Genco LTD Tana River Farm,15,24.1,29.9,36.3,49.0,,0
-ecmwf_ifs025,ECMWF IFS,direct,"KALRO Kiboko, Makueni Farm","KALRO Kiboko, Makueni Farm",15,42.8,68.2,108.5,128.8,2026-11-10,1
-ecmwf_ifs025,ECMWF IFS,direct,Kapiti Research Station Farm,Kapiti Research Station Farm,15,40.3,50.3,57.6,69.9,2026-11-12,1
-ecmwf_ifs025,ECMWF IFS,direct,"LiveMo LTD, Memerush, Kajiado","LiveMo LTD, Memerush, Kajiado",15,56.5,67.9,76.4,86.1,2026-11-10,1
-gem_global,GDPS (ECCC),direct,El Karama Sahiwals Farm,El Karama Sahiwals Farm,10,19.4,27.2,52.8,52.8,2026-11-16,1
-gem_global,GDPS (ECCC),direct,Genco LTD Maralal Samburu Farm,Genco LTD Maralal Samburu Farm,10,30.2,30.6,30.8,30.8,2026-11-11,1
-gem_global,GDPS (ECCC),direct,Genco LTD Tana River Farm,Genco LTD Tana River Farm,10,93.8,99.1,134.8,134.8,2026-11-14,1
-gem_global,GDPS (ECCC),direct,"KALRO Kiboko, Makueni Farm","KALRO Kiboko, Makueni Farm",10,72.6,93.4,115.9,115.9,2026-11-12,1
-gem_global,GDPS (ECCC),direct,Kapiti Research Station Farm,Kapiti Research Station Farm,10,25.8,47.5,68.2,68.2,2026-11-14,1
-gem_global,GDPS (ECCC),direct,"LiveMo LTD, Memerush, Kajiado","LiveMo LTD, Memerush, Kajiado",10,28.2,34.4,76.1,76.1,2026-11-12,1
-gfs_global,GFS (NOAA),direct,El Karama Sahiwals Farm,El Karama Sahiwals Farm,16,35.9,40.8,42.0,51.9,2026-11-10,1
-gfs_global,GFS (NOAA),direct,Genco LTD Maralal Samburu Farm,Genco LTD Maralal Samburu Farm,16,77.7,92.7,93.3,95.2,2026-11-10,1
-gfs_global,GFS (NOAA),direct,Genco LTD Tana River Farm,Genco LTD Tana River Farm,16,27.8,30.7,41.4,59.4,2026-11-13,1
-gfs_global,GFS (NOAA),direct,"KALRO Kiboko, Makueni Farm","KALRO Kiboko, Makueni Farm",16,19.9,42.0,52.8,61.9,2026-11-13,1
-gfs_global,GFS (NOAA),direct,Kapiti Research Station Farm,Kapiti Research Station Farm,16,29.5,38.8,43.7,51.7,2026-11-13,1
-gfs_global,GFS (NOAA),direct,"LiveMo LTD, Memerush, Kajiado","LiveMo LTD, Memerush, Kajiado",16,21.8,38.8,53.2,58.9,2026-11-13,1
-icon_global,ICON (DWD),direct,El Karama Sahiwals Farm,El Karama Sahiwals Farm,7,25.0,27.1,27.1,27.1,,0
-icon_global,ICON (DWD),direct,Genco LTD Maralal Samburu Farm,Genco LTD Maralal Samburu Farm,7,62.6,64.1,64.1,64.1,2026-11-10,1
-icon_global,ICON (DWD),direct,Genco LTD Tana River Farm,Genco LTD Tana River Farm,7,16.7,25.6,25.6,25.6,,0
-icon_global,ICON (DWD),direct,"KALRO Kiboko, Makueni Farm","KALRO Kiboko, Makueni Farm",7,38.8,43.6,43.6,43.6,2026-11-12,1
-icon_global,ICON (DWD),direct,Kapiti Research Station Farm,Kapiti Research Station Farm,7,79.4,83.3,83.3,83.3,2026-11-11,1
-icon_global,ICON (DWD),direct,"LiveMo LTD, Memerush, Kajiado","LiveMo LTD, Memerush, Kajiado",7,46.4,48.8,48.8,48.8,2026-11-12,1
-ukmo_global_deterministic_10km,UKMO (Met Office),direct,El Karama Sahiwals Farm,El Karama Sahiwals Farm,7,52.4,52.9,52.9,52.9,2026-11-10,1
-ukmo_global_deterministic_10km,UKMO (Met Office),direct,Genco LTD Maralal Samburu Farm,Genco LTD Maralal Samburu Farm,7,64.8,69.7,69.7,69.7,2026-11-10,1
-ukmo_global_deterministic_10km,UKMO (Met Office),direct,Genco LTD Tana River Farm,Genco LTD Tana River Farm,7,13.5,23.7,23.7,23.7,2026-11-14,1
-ukmo_global_deterministic_10km,UKMO (Met Office),direct,"KALRO Kiboko, Makueni Farm","KALRO Kiboko, Makueni Farm",7,48.9,75.3,75.3,75.3,2026-11-13,1
-ukmo_global_deterministic_10km,UKMO (Met Office),direct,Kapiti Research Station Farm,Kapiti Research Station Farm,7,41.4,51.6,51.6,51.6,2026-11-10,1
-ukmo_global_deterministic_10km,UKMO (Met Office),direct,"LiveMo LTD, Memerush, Kajiado","LiveMo LTD, Memerush, Kajiado",7,81.0,95.1,95.1,95.1,2026-11-11,1
