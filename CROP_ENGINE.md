@@ -613,7 +613,8 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 - Sowing dates in cool sites (Kapiti, Maralal): the maturity classes are defined at 21 °C, so a medium maize or
   sorghum sown in November there needs more heat than the season gives before 31 Mar and is counted as too late.
 - Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
-- The forecast runs have not been verified for crop outcomes; the benchmark comparison is the first step (P3).
+- The crop forecasts are verified against the crop grown in the observed weather (*Hindcast verification*), and
+  against county yields only for their year-to-year ranking; no measured farm yields check their level.
 
 ## Yield data for calibration and validation (`crop_engine/yields/`)
 
