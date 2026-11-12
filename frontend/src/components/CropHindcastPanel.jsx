@@ -238,6 +238,7 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
   const overall = Object.keys(ENGINES).map(k => [k, median(all.map(c => c[k]?.all?.r)), median(all.map(c => c[k]?.all?.auc)),
                                                  all.filter(c => c[k]).length]).filter(x => x[3])
   const s2s = S2S_CROPS.includes(vk) && rk === 'rule1' ? skill?.s2s?.sites?.[sid]?.[vk] : null
+  const s2sD = S2S_CROPS.includes(vk) && rk === 'rule1' ? skill?.s2s_dssat?.sites?.[sid]?.[vk] : null
   const best = e ? PREDICTORS.map(([k]) => [IN_TEXT[k], e.baselines?.[k]]).filter(([, x]) => x?.r != null).sort((a, b) => b[1].r - a[1].r)[0] : null
   const verdict = !e?.all?.r || !best ? ''
     : e.all.r > best[1].r + 0.1 ? ` Here the crop model ranks the years better than ${best[0]} alone does.`
@@ -394,24 +395,25 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
         <>
           <H4>Sub-seasonal forecasts</H4>
           <Note style={{ marginTop: 0 }}>
-            ECMWF extended-range reforecasts {skill.s2s.years?.join('–')} (AquaCrop, {label(vk)}): from each start
+            ECMWF extended-range reforecasts {skill.s2s.years?.join('–')} ({label(vk)}): from each start
             date, the observed weather up to it and then other years’ weather (observations only), or the forecast’s 46 days of rain, or its rain and
             temperature, in between. Sown by {ix.planting_rules?.rule1 ?? 'rule 1'}, against the crop in the observed weather.
           </Note>
           <div style={{ overflowX: 'auto', marginTop: 6 }}>
             <table style={{ borderCollapse: 'collapse' }}>
-              <thead><tr><th style={th}>Start date</th><th style={th}>Observations only, r / ROC</th><th style={th}>With the forecast rain</th>
+              <thead><tr><th style={th}>Model</th><th style={th}>Start date</th><th style={th}>Observations only, r / ROC</th><th style={th}>With the forecast rain</th>
                 <th style={th}>With rain and temperature</th></tr></thead>
               <tbody>
-                {Object.entries(s2s).map(([md, x]) => (
-                  <tr key={md}><td style={td}>{fmtDate('2026-' + md)}</td>
+                {[['AquaCrop', s2s], ['DSSAT', s2sD]].filter(([, c]) => c).flatMap(([name, c]) => Object.entries(c).map(([md, x]) => (
+                  <tr key={name + md}><td style={td}>{name}</td><td style={td}>{fmtDate('2026-' + md)}</td>
                     {['reference', 'forecast', 'forecast_t'].map(k => <td key={k} style={td}>{x[k] ? `${r2(x[k].r)} / ${r2(x[k].auc)}` : '—'}</td>)}
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
-          <Note>The forecast helps where its column is higher than the observations-only one. These scores were {madeNote(skill.s2s, skill.s2s.current_config)}.</Note>
+          <Note>The forecast helps where its column is higher than the observations-only one. Each model against its own crop in the
+            observed weather. AquaCrop’s scores were {madeNote(skill.s2s, skill.s2s.current_config)}{s2sD ? `; DSSAT’s ${madeNote(skill.s2s_dssat)}` : ''}.</Note>
         </>
       )}
 

@@ -8,6 +8,10 @@ onset as the sowing date, the SoilGrids profile of the cell, the ERA5-Land root-
 temperature averaged over the cell (data/grid_temperature.py; the sites take theirs at the point), then SEAS5
 member k, bias-corrected to it. Its normal is the same crop grown in the observed weather of 1993–2025.
 
+DSSAT (where the variety has a DSSAT cultivar, unless --no-dssat) grows the same cells and members beside AquaCrop,
+with the cells' ERA5-Land solar radiation, humidity and wind (era5land.site_met at the cell centres, cached per
+cell), against its own normal (benchmark_dssat.json); published as cells_dssat and counties_dssat.
+
 Cells: MapSPAM 2020 rainfed maize harvested area (5 arc-min pixels) summed to the 0.25° cells, each pixel given to its
 HarvestStat county; a cell is kept when it holds at least MIN_HA in the counties. A county's yield is the mean of its
 cells' yields weighted by its maize area in each, member by member (a forecast) or year by year (its normal): the
@@ -22,7 +26,8 @@ the county (verify()).
 Outputs:
   outputs/crop_engine/grid/benchmark.json        the cells' observed-weather seasons (rebuilt when the
                                                  configuration or the cells change)
-  outputs/crop_engine/grid/<run id>.json         the forecast's members and summaries per cell
+  outputs/crop_engine/grid/benchmark_dssat.json  the same seasons grown by DSSAT
+  outputs/crop_engine/grid/<run id>.json         the forecast's members and summaries per cell (meta.dssat: DSSAT's)
   frontend/public/tracker/data/crop/grid.json    the Crop outlook tab's map and county table (published)
 
 Usage:
@@ -63,8 +68,9 @@ MIN_COUNTY_YEARS = 8
 CAVEATS = [
     "Pilot: the eastern Kenya Short Rains maize counties, early-maturing maize sown at the FAO agricultural onset "
     "of each cell's forecast.",
-    "Each 0.25° cell (about 28 km) is one AquaCrop field with the cell's average soil (SoilGrids), rain (CHIRPS and the "
-    "bias-corrected forecast) and temperature (ERA5-Land): not any farmer's field.",
+    "Each 0.25° cell (about 28 km) is one field, grown by AquaCrop and by DSSAT, with the cell's average soil "
+    "(SoilGrids), rain (CHIRPS and the bias-corrected forecast) and temperature (ERA5-Land; DSSAT also its radiation, "
+    "humidity and wind): not any farmer's field.",
     "Yields are water-limited, without nutrient stress, pests or management losses: read the percent of normal and "
     "the chances, not the tonnes per hectare.",
     "A county is the mean of its cells, weighted by their rainfed maize area (MapSPAM 2020).",
@@ -132,9 +138,11 @@ def as_sites(cells):
                            "kenya") for r in cells.itertuples()]
 
 
-def inputs(cells, refresh=True):
-    """weather.Inputs at the cells: their gridded ERA5-Land temperature, no radiation (AquaCrop only). Cells off the
-    forecast's land mask or without soil data are dropped (logged): returns (inputs, soils, the cells kept)."""
+def inputs(cells, refresh=True, with_met=False):
+    """weather.Inputs at the cells: their gridded ERA5-Land temperature, and with_met (DSSAT) their ERA5-Land solar
+    radiation, humidity and wind (era5land.site_met at the cells, fetched once from Earth Engine and cached per cell).
+    Cells off the forecast's land mask or without soil data are dropped (logged): returns (inputs, soils, the cells
+    kept)."""
     from crop_engine.data import weather as W
     if refresh:
         failed = gt.update()
@@ -159,7 +167,7 @@ def inputs(cells, refresh=True):
         except ValueError as exc:
             log(f"{s.id}: {exc}; left out")
     cells = cells.loc[ok].reset_index(drop=True)
-    inp = W.Inputs(sites=as_sites(cells), refresh=False, blender=b, temps=gt.cell_series, with_met=False)
+    inp = W.Inputs(sites=as_sites(cells), refresh=False, blender=b, temps=gt.cell_series, with_met=with_met)
     moved = [s.id for s in inp.sites if cell_id(s.cell_lat, s.cell_lon) != s.id]
     if moved:
         raise RuntimeError(f"cells moved to another grid cell: {moved[:5]}")
@@ -331,13 +339,45 @@ def benchmark(inp, soils, varieties, rules, workers, force=False):
     return b
 
 
+def dssat_benchmark(inp, soils, varieties, rules, workers, force=False):
+    """DSSAT's observed-weather benchmark of the cells (the same seasons and sowings as benchmark()), or None without
+    DSSAT or the cells' radiation, humidity and wind."""
+    from crop_engine import compare_engines as ce
+    use = {vk: varieties[vk] for vk in ro.dssat_varieties(varieties)}
+    if not use or inp.met2 is None:
+        return None
+    years = list(range(C.HIST_YEARS[0], C.HIST_YEARS[1] + 1))
+    h = hashlib.sha1((grid_hash(rules, use, inp.sites, inp.year) + ro.dssat_hash(rules, inp.sites)).encode()).hexdigest()[:12]
+    path = GRID_OUT / "benchmark_dssat.json"
+    if path.exists() and not force:
+        b = json.loads(path.read_text(encoding="utf-8"))
+        if b.get("config_hash") == h:
+            return b
+    rep = [(s, [s.id]) for s in inp.sites]
+    tasks, keys = ce.tasks_for(inp, years, rep, use, rules, soils)
+    tasks = [dict(t, potential=False) for t in tasks]
+    t0 = time.time()
+    cells = ro.bench_stats(ro.run_tasks(tasks, workers, engine="dssat"), keys, use, years)
+    for vs in cells.values():
+        for rs in vs.values():
+            for r in rs.values():
+                r.pop("canopy", None)
+    b = {"config_hash": h, "years": years, "cal_years": list(C.CAL_YEARS), "created": _now(), "engine": ro.THIRD_ENGINE,
+         "cells": cells}
+    GRID_OUT.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(b), encoding="utf-8")
+    log(f"DSSAT benchmark: {len(inp.sites)} cells in {time.time() - t0:.0f} s → {path}")
+    return b
+
+
 def _now():
     return dt.datetime.now().astimezone().isoformat(timespec="minutes")
 
 
-def seasonal_run(inp, soils, varieties, rules, bench, workers):
+def seasonal_run(inp, soils, varieties, rules, bench, workers, dbench=None):
     """The seasonal forecast (SEAS5 1 Oct + the latest observations) at the cells → {cell: {variety: {rule: members}}},
-    the summaries per cell and the run's description."""
+    the summaries per cell and the run's description; with DSSAT's benchmark (dbench), DSSAT grows the same members
+    too (meta "dssat": its members and summaries)."""
     import forecast_runs as fr  # noqa: E402  (scripts/, on sys.path via config)
     b = inp.b
     P = b.seas
@@ -369,6 +409,26 @@ def seasonal_run(inp, soils, varieties, rules, bench, workers):
     t0 = time.time()
     res = ro.run_tasks(tasks, workers)
     log(f"{rid}: {len(tasks) * P.shape[0]} member seasons at {len(inp.sites)} cells in {time.time() - t0:.0f} s")
+    dssat = None
+    if dbench is not None and "rad_mj_m2" in ds:
+        ids = [x.id for x in inp.sites]
+        dt_, dk = [], []
+        for t, key in zip(tasks, keys):
+            k = ids.index(key[0])
+            s = inp.sites[k]
+            dt_.append(dict(t, rad=ds.rad_mj_m2.values[:, k], vap=ds.vap_hpa.values[:, k], wind2=ds.wind2_ms.values[:, k],
+                            lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k]), potential=False))
+            dk.append(key)
+        t1 = time.time()
+        dres = ro.run_tasks(dt_, workers, engine="dssat")
+        dssat = {"members": {}, "summaries": {}}
+        for (cid, vk, rk), outcomes in zip(dk, dres):
+            for m in outcomes:
+                m.pop("_canopy", None)
+            dssat["members"].setdefault(cid, {}).setdefault(vk, {})[rk] = outcomes
+            dssat["summaries"].setdefault(cid, {}).setdefault(vk, {})[rk] = ro.summarize(
+                outcomes, varieties[vk], dbench["cells"][cid][vk][rk])
+        log(f"{rid}: DSSAT {len(dt_) * P.shape[0]} member seasons in {time.time() - t1:.0f} s")
     members, summ = {}, {}
     for (cid, vk, rk), outcomes in zip(keys, res):
         for m in outcomes:
@@ -378,7 +438,10 @@ def seasonal_run(inp, soils, varieties, rules, bench, workers):
                                                                        bench["cells"][cid][vk][rk])
     meta = {"id": rid, "source": "seasonal", "model_label": attrs["model_label"], "run": f"{b.lead0}",
             "obs_end": f"{b.obs_end}", "members": int(P.shape[0]), "engine": ro.ENGINE, "config_hash": bench["config_hash"],
-            "created": _now(), "march_rain": ds.attrs.get("march_rain"), "temperature": ds.attrs.get("temperature_forecast")}
+            "created": _now(), "march_rain": ds.attrs.get("march_rain"), "temperature": ds.attrs.get("temperature_forecast"),
+            "dssat_config_hash": (dbench or {}).get("config_hash")}
+    if dssat:
+        meta["dssat"] = dssat
     return members, summ, meta
 
 
@@ -403,11 +466,14 @@ def cell_rows(cells, summ, bench, vk, rk):
     return rows
 
 
-def publish(cells, summ, members, bench, meta, varieties, rules, counties, verification, outlines, dest=PUBLISHED):
+def publish(cells, summ, members, bench, meta, varieties, rules, counties, verification, outlines, dest=PUBLISHED,
+            dbench=None):
     vk, rk = next(iter(varieties)), rules[0]
     years = bench["years"]
     member_map = {cid: {vk: {rk: members[cid][vk][rk]}} for cid in members}
-    out = {"meta": {**meta, "variety": vk, "variety_label": varieties[vk]["label"], "rule": rk,
+    dss = meta.get("dssat")
+    meta = {k: v for k, v in meta.items() if k != "dssat"}
+    out = {"meta": {**meta, "variety": vk, "models": ["aquacrop"] + (["dssat"] if dss and dbench else []), "variety_label": varieties[vk]["label"], "rule": rk,
                     "rule_label": C.PLANTING_RULES[rk]["label"], "failure_t_ha": varieties[vk]["failure_t_ha"],
                     "cell_deg": 0.25, "counties": counties, "min_ha": MIN_HA,
                     "area_source": "MapSPAM 2020 V2r2 rainfed maize harvested area", "years": [years[0], years[-1]],
@@ -417,6 +483,13 @@ def publish(cells, summ, members, bench, meta, varieties, rules, counties, verif
                         for c, v in summarize_counties(member_map, bench["cells"], cells, varieties, vk, rk,
                                                        years).items()],
            "outlines": outlines}
+    if dss and dbench:                                                   # DSSAT's cells and counties, against its own normal
+        dmap = {cid: {vk: {rk: dss["members"][cid][vk][rk]}} for cid in dss["members"]}
+        out["cells_dssat"] = cell_rows(cells, dss["summaries"], dbench, vk, rk)
+        dv = verify(dbench["cells"], cells, vk, rk, dbench["years"])
+        out["counties_dssat"] = [{"name": c, **v, "verification": dv.get(c, {})}
+                                 for c, v in summarize_counties(dmap, dbench["cells"], cells, varieties, vk, rk,
+                                                                years).items()]
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part")
@@ -439,6 +512,7 @@ def main():
     ap.add_argument("--verify", action="store_true", help="print the county check against HarvestStat")
     ap.add_argument("--no-dashboard", action="store_true", help="do not write the tab's grid.json")
     ap.add_argument("--dashboard-file", default=str(PUBLISHED), help="where to write it (default: the tab's data)")
+    ap.add_argument("--no-dssat", action="store_true", help="AquaCrop only")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -448,9 +522,13 @@ def main():
     cells = crop_cells(a.counties, a.min_ha)
     log(f"{len(cells)} cells with at least {a.min_ha:.0f} ha of rainfed maize in {', '.join(a.counties)} "
         f"({cells.area_ha.sum():.0f} ha)")
-    inp, soils, cells = inputs(cells, refresh=not a.no_refresh)
+    use_dssat = not a.no_dssat and bool(ro.dssat_varieties(dict(varieties)))
+    inp, soils, cells = inputs(cells, refresh=not a.no_refresh, with_met=use_dssat)
     log(f"{len(inp.sites)} cells with weather and soil; observations to {inp.b.obs_end}")
     bench = benchmark(inp, soils, varieties, a.rules, a.workers, a.benchmark)
+    dbench = dssat_benchmark(inp, soils, varieties, a.rules, a.workers, a.benchmark) if use_dssat else None
+    if use_dssat and dbench is None:
+        log(f"DSSAT left out: {inp.met2_note or 'no DSSAT variety'}")
     vk, rk = a.varieties[0], a.rules[0]
     site_b = C.OUT / "climatology.json"
     v = verify(bench["cells"], cells, vk, rk, bench["years"],
@@ -461,18 +539,19 @@ def main():
     path = GRID_OUT / f"{rid}.json"
     if path.exists() and not a.force:
         old = json.loads(path.read_text(encoding="utf-8"))
-        if old["meta"].get("obs_end") == f"{inp.b.obs_end}" and old["meta"].get("config_hash") == bench["config_hash"]:
+        if (old["meta"].get("obs_end") == f"{inp.b.obs_end}" and old["meta"].get("config_hash") == bench["config_hash"]
+                and old["meta"].get("dssat_config_hash") == (dbench or {}).get("config_hash")):
             log(f"{rid}: already made from these observations")
             if not a.no_dashboard:
                 publish(cells, old["summaries"], old["members"], bench, old["meta"], varieties, a.rules, a.counties, v,
-                        county_outlines(a.counties), a.dashboard_file)
+                        county_outlines(a.counties), a.dashboard_file, dbench)
             return 0
-    members, summ, meta = seasonal_run(inp, soils, varieties, a.rules, bench, a.workers)
+    members, summ, meta = seasonal_run(inp, soils, varieties, a.rules, bench, a.workers, dbench)
     GRID_OUT.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"meta": meta, "summaries": summ, "members": members}), encoding="utf-8")
     if not a.no_dashboard:
         out = publish(cells, summ, members, bench, meta, varieties, a.rules, a.counties, v, county_outlines(a.counties),
-                      a.dashboard_file)
+                      a.dashboard_file, dbench)
         for c in out["counties"]:
             log(f"  {c['name']:14s} {c['pct_normal']}% of normal, below {c['p_below_normal']}, above "
                 f"{c['p_above_normal']}, failed area {c['failed_area_share_median']} "

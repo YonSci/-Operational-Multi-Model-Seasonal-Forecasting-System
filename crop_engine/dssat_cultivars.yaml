@@ -26,4 +26,24 @@ varieties:
 # what Kenyan maize nitrogen trials give against 60 kg N/ha (about 0.6) over the observed Short Rains 1993-2016 at
 # Kiboko and Kapiti. The SoilGrids carbon mineralises far more nitrogen than a cropped dryland field: at the fitted
 # 0.06, the lower bound of the fit, the ratio is still 0.67 (1.0 at the factor 1, no response to fertiliser at all).
-soil: {organic_n_factor: 0.06}
+soil:
+  organic_n_factor: 0.06
+  # a site's own measured fields replace the regional factor: site id → {organic_n_factor: f, source: "..."} (from a
+  # soil test's organic carbon and total nitrogen, or a nitrogen trial at the site; CROP_ENGINE.md "Questions for
+  # partners"). None yet.
+  sites: {}
+
+# The nitrogen levels of crop_engine/run_nitrogen.py: assumed rates until the sites' managers report theirs.
+# levels: kg N/ha of urea; split: (days after sowing, share) per AquaCrop crop key; sites: a site's reported practice,
+# site id → {rate_kg_ha: n, label: "...", source: "..."}, added to that site's levels as "reported". None yet.
+nitrogen:
+  assumed: "Assumed rates, until the sites' managers report theirs; urea, 40 % at sowing and 60 % 30 days after (the bean all at sowing)"
+  levels:
+    n0:  {label: "No fertiliser", rate_kg_ha: 0}
+    n25: {label: "25 kg N/ha (low)", rate_kg_ha: 25}
+    n50: {label: "50 kg N/ha (moderate)", rate_kg_ha: 50}
+  split:
+    MaizeGDD:   [[0, 0.4], [30, 0.6]]
+    SorghumGDD: [[0, 0.4], [30, 0.6]]
+    DryBeanGDD: [[0, 1.0]]
+  sites: {}

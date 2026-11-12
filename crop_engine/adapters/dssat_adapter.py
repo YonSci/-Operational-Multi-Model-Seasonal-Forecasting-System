@@ -49,7 +49,22 @@ Outcome of a member (as aquacrop_adapter: ok, died, failed_establishment, too_la
   died                  emerged and established, then no grain at maturity, or the crop died before it
   too_late              alive and not mature at the season's end (harvested there: the last weather day)
 Yield: DSSAT's harvested grain dry weight (HWAM, kg dm / ha) in t/ha; biomass CWAM; the canopy from the daily LAI
-(1 − exp(−0.6 LAI), reporting only). Re-sowing after a failed establishment as AquaCrop.
+(1 − exp(−0.6 LAI), reporting only). Re-sowing after a failed establishment as AquaCrop. The yield without water
+stress (potential_t_ha, task "potential", default on): the member's final sowing grown again with the water balance
+off. Water-stress days (stress_days): days from sowing to harvest whose water stress on photosynthesis (PlantGro
+WSPD, 1 − the root water uptake over the potential transpiration) is above STRESS_WSPD, i.e. the crop transpires
+less than half its potential: AquaCrop's definition (config.STRESS_RATIO).
+
+Management (the scenarios, crop_engine.scenarios.management), where DSSAT has the process:
+  density     task "kw" PlantPop (plants / ha) in place of the variety's
+  irrigation  task "irrigation" (AquaCrop's method 1 arguments): DSSAT's automatic irrigation (IRRIG A) whenever the
+              top IRR_DEPTH_CM falls below SMT % of its available water (the first stage's threshold), back to
+              field capacity, until maturity. DSSAT's automatic irrigation has no seasonal cap: a task with a
+              MaxIrrSeason cap is not represented (the supplementary scenario is AquaCrop's and WOFOST's only)
+  field       mulches: surface residue MULCH_KG_HA kg/ha left on the soil at the start (not incorporated), which
+              DSSAT's mulch module turns into a cover that cuts soil evaporation; sr_inhb (no surface runoff, tied
+              ridges or pits): the runoff curve number set to RIDGES_CN
+A member records the irrigation it received (irrigation_mm, IRCM).
 """
 import argparse
 import datetime as dt
@@ -59,6 +74,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -95,6 +111,11 @@ UREA = "FE005"
 NO_GERMINATION, GERMINATION_DAYS = "lack of germination", 15     # DSSAT's message and its limit (days after sowing)
 SOIL_PH = 6.5                    # SoilGrids pH is not in the profile; neutral (no effect while nitrogen is off)
 TIMEOUT_S = 600
+STRESS_WSPD = 0.5                 # PlantGro WSPD above this: transpiration below half its potential (a stress day)
+IRR_DEPTH_CM = 30                 # automatic irrigation: the managed depth
+MULCH_KG_HA = 3000                # the mulch scenario's surface residue (about half the soil covered by maize stover)
+RIDGES_CN = 35                    # the ridges scenario's runoff curve number (rain infiltrates where it falls)
+RETRIES = 3
 
 
 CULTIVARS_FILE = Path(__file__).resolve().parent.parent / "dssat_cultivars.yaml"
@@ -110,6 +131,20 @@ def soil_settings():
     """The soil settings of crop_engine/dssat_cultivars.yaml ("soil": organic_n_factor)."""
     import yaml
     return (yaml.safe_load(CULTIVARS_FILE.read_text(encoding="utf-8")) or {}).get("soil") or {}
+
+
+def nitrogen_settings():
+    """The nitrogen levels, split and sites' reported practice of crop_engine/dssat_cultivars.yaml ("nitrogen")."""
+    import yaml
+    return (yaml.safe_load(CULTIVARS_FILE.read_text(encoding="utf-8")) or {}).get("nitrogen") or {}
+
+
+def soil_factor(site_id=None):
+    """The factor on the soil's organic nitrogen for a site: its own measured value where there is one, else the
+    regional one (dssat_cultivars.yaml "soil")."""
+    soil = soil_settings()
+    own = ((soil.get("sites") or {}).get(site_id) or {}).get("organic_n_factor") if site_id else None
+    return float(own if own is not None else soil.get("organic_n_factor", 1.0))
 
 
 def attach(varieties):
@@ -212,7 +247,7 @@ def soil_layers(layers, root_depth_cm):
     return rows
 
 
-def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0):
+def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0, curve_number=None):
     """A DSSAT soil file (.SOL) with one profile (nitrogen: the layers' organic nitrogen, SLNI = SLOC / C_TO_N ×
     organic_n_factor)."""
     rows = soil_layers(layers, root_depth_cm)
@@ -221,7 +256,7 @@ def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_
     # surface: albedo, stage-1 evaporation limit (mm), drainage rate (fraction / day), runoff curve number
     slu1 = 6.0 if sand0 > 70 else 9.0 if top["SLCL"] < 35 else 12.0
     sldr = 0.6 if sand0 > 70 else 0.4 if top["SLCL"] < 35 else 0.25
-    slro = 70.0 if sand0 > 70 else 76.0 if top["SLCL"] < 35 else 82.0
+    slro = float(curve_number) if curve_number else 70.0 if sand0 > 70 else 76.0 if top["SLCL"] < 35 else 82.0
     out = ["*SOILS: crop engine (SoilGrids)", "",
            f"*{soil_id:10s}  SoilGrids   -99   {rows[-1]['SLB']:5d} crop engine SoilGrids profile",
            "@SITE        COUNTRY          LAT     LONG SCS FAMILY",
@@ -270,12 +305,14 @@ def _fit6(x):
 
 
 def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations, init_sh2o, ppop_m2, last_day,
-                    water=True, nitrogen=None):
+                    water=True, nitrogen=None, irrigation=None, mulch_kg_ha=0):
     """The FileX: one treatment per planting (member), each with its own field (weather station) and planting date;
     initial water at `start`; harvest at maturity, or on `last_day` when not mature by then. water False: no water
     balance (no water stress: the yield without water limitation, for the calibration). nitrogen: the nitrogen
     balance on, with urea applications {"rate_kg_ha", "split": [(days after sowing, share), ...]} (module doc)."""
     n = len(plantings)
+    auto_irr = bool(irrigation) and water
+    ithrl = int(round(float((irrigation or {}).get("SMT", [70])[0]))) if auto_irr else 50
     rate = float((nitrogen or {}).get("rate_kg_ha") or 0.0)
     mf = 1 if nitrogen and rate > 0 else 0
     out = [f"*EXP.DETAILS: {name}{crop} CROP ENGINE MEMBERS", "",
@@ -291,7 +328,8 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
         out.append(f"{k + 1:2d} CEFL{k + 1:04d} {st:8s}   -99     0 DR000     0     0 00000 -99    -99  {soil_id:10s} -99")
     out += ["", "*INITIAL CONDITIONS",
             "@C   PCR ICDAT  ICRT  ICND  ICRN  ICRE  ICWD ICRES ICREN ICREP ICRIP ICRID ICNAME",
-            f" 1    {crop} {yyddd(start)}   -99   -99     1     1   -99   -99   -99   -99   -99   -99 -99",
+            f" 1    {crop} {yyddd(start)}   -99   -99     1     1   -99"
+            + (f"{int(mulch_kg_ha):6d}   0.8     0     0     0 -99" if mulch_kg_ha else "   -99   -99   -99   -99   -99 -99"),
             "@C  ICBL  SH2O  SNH4  SNO3"]
     out += [f" 1{slb:6d}{sh2o:6.3f}{INIT_NH4 * (1 if slb <= 30 else 0.5):6.1f}{INIT_NO3 * (1 if slb <= 30 else 0.5):6.1f}"
             for slb, sh2o in init_sh2o]
@@ -315,7 +353,7 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
             "@N METHODS     WTHER INCON LIGHT EVAPO INFIL PHOTO HYDRO NSWIT MESOM MESEV MESOL",
             f" 1 ME              M     M     E     F     S     {PHOTO.get(crop, 'R')}     R     1     G     S     2",
             "@N MANAGEMENT  PLANT IRRIG FERTI RESID HARVS",
-            f" 1 MA              R     N     {'D' if mf else 'N'}     N     A",
+            f" 1 MA              R     {'A' if auto_irr else 'N'}     {'D' if mf else 'N'}     N     A",
             "@N OUTPUTS     FNAME OVVEW SUMRY FROPT GROUT CAOUT WAOUT NIOUT MIOUT DIOUT VBOSE CHOUT OPOUT FMOPT",
             " 1 OU              N     N     Y     1     Y     N     N     N     N     N     Y     N     N     A",
             "",
@@ -323,7 +361,7 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
             "@N PLANTING    PFRST PLAST PH2OL PH2OU PH2OD PSTMX PSTMN",
             f" 1 PL          {s} {yyddd(last_day)}    40   100    30    40    10",
             "@N IRRIGATION  IMDEP ITHRL ITHRU IROFF IMETH IRAMT IREFF",
-            " 1 IR             30    50   100 GS000 IR001    10     1",
+            f" 1 IR          {IRR_DEPTH_CM:5d}{ithrl:6d}   100 GS000 IR001    10     1",
             "@N NITROGEN    NMDEP NMTHR NAMNT NCODE NAOFF",
             " 1 NI             30    50    25 FE001 GS000",
             "@N RESIDUES    RIPCN RTIME RIDEP",
@@ -391,8 +429,8 @@ def read_summary(text):
 
 
 def read_plantgro(text):
-    """PlantGro.OUT → {treatment number: DataFrame (date, lai)}: each run's block starts with a "*RUN" line ending
-    with its treatment number, then the "@YEAR DOY ..." table."""
+    """PlantGro.OUT → {treatment number: DataFrame (date, lai, wspd)}: each run's block starts with a "*RUN" line
+    ending with its treatment number, then the "@YEAR DOY ..." table (wspd: the water stress on photosynthesis)."""
     import re
     runs, trno, cols = {}, None, None
     for ln in text.splitlines():
@@ -414,7 +452,9 @@ def read_plantgro(text):
             continue
         f = pd.DataFrame(rr)
         date = pd.to_datetime(f["YEAR"].astype(int).astype(str) + f["DOY"].astype(int).astype(str).str.zfill(3), format="%Y%j")
-        frames[k] = pd.DataFrame({"date": date, "lai": pd.to_numeric(f.get("LAID"), errors="coerce").fillna(0.0)})
+        frames[k] = pd.DataFrame({"date": date, "lai": pd.to_numeric(f.get("LAID"), errors="coerce").fillna(0.0),
+                                  "wspd": pd.to_numeric(f["WSPD"], errors="coerce").fillna(0.0) if "WSPD" in f
+                                  else np.zeros(len(f))})
     return frames
 
 
@@ -470,7 +510,7 @@ def _run_folder():
     return Path(tempfile.mkdtemp(prefix="r", dir=RUNS))
 
 
-def run_members(task, members, plantings):
+def run_members(task, members, plantings, water=None):
     """DSSAT for the given members (indices) sown on `plantings` → {member: (Summary row or None, LAI frame or None)}."""
     v = task["variety"]
     crop, model, cul_file, ext = CROPS[v["aquacrop_crop"]]
@@ -487,7 +527,8 @@ def run_members(task, members, plantings):
         soil_id = "CESOIL0001"
         nit = task.get("nitrogen")
         (folder / "SOIL.SOL").write_text(soil_file(soil_id, task["lat"], task.get("lon", 0.0), task["layers"], root,
-                                                   nitrogen=bool(nit), organic_n_factor=float((nit or {}).get("organic_n_factor", 1.0))),
+                                                   nitrogen=bool(nit), organic_n_factor=float((nit or {}).get("organic_n_factor", 1.0)),
+                                                   curve_number=RIDGES_CN if (task.get("field") or {}).get("sr_inhb") else None),
                                          encoding="ascii")
         stations = []
         for m in members:
@@ -499,12 +540,15 @@ def run_members(task, members, plantings):
         rows = soil_layers(task["layers"], root)
         frac = float(np.clip(task["initial_frac"], 0, 1))
         init = [(r["SLB"], r["SLLL"] + frac * (r["SDUL"] - r["SLLL"])) for r in rows]
-        ppop = float((v.get("parameters") or {}).get("PlantPop") or _default_pop(v["aquacrop_crop"])) / 10000.0
+        ppop = float((task.get("kw") or {}).get("PlantPop") or (v.get("parameters") or {}).get("PlantPop")
+                     or _default_pop(v["aquacrop_crop"])) / 10000.0
         last = dates[-2].date()
         fx = f"CE{dates[0].year % 100:02d}0001.{ext}"
         (folder / fx).write_text(experiment_file("CE000001", crop, cul_id, soil_id, dates[0].date(), plantings,
-                                                 stations, init, ppop, last, water=task.get("water", True),
-                                                 nitrogen=task.get("nitrogen")),
+                                                 stations, init, ppop, last,
+                                                 water=task.get("water", True) if water is None else water,
+                                                 nitrogen=task.get("nitrogen"), irrigation=task.get("irrigation"),
+                                                 mulch_kg_ha=MULCH_KG_HA if (task.get("field") or {}).get("mulches") else 0),
                                  encoding="ascii")
         (folder / "DSSATPRO.V48").write_text(run_profile(folder, crop, model), encoding="ascii")
         env = dict(os.environ, DSSAT_HOME=short_path(DATA) + os.sep)
@@ -531,9 +575,6 @@ def run_members(task, members, plantings):
     except Exception:
         shutil.rmtree(folder, ignore_errors=True)
         raise
-
-
-RETRIES = 2
 
 
 def _failed(row):
@@ -564,6 +605,10 @@ def _member(task, m, plant, row, lai, dates):
     k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])
     season = slice(max(k0, 0), kh + 1)
     r["rain_mm"] = round(float(np.asarray(task["rain"][m])[season].sum()), 1)
+    r["irrigation_mm"] = _num(row.get("IRCM")) or 0.0
+    if lai is not None and len(lai) and o["harvest"]:
+        w = lai[(lai.date >= pd.Timestamp(plant)) & (lai.date <= pd.Timestamp(o["harvest"]))]
+        r["stress_days"] = int((w.wspd > STRESS_WSPD).sum())
     r["sources"] = np.bincount(np.asarray(task["source"])[season].astype(int), minlength=6).tolist()
     canopy = np.zeros(len(dates), np.float32)
     if lai is not None and len(lai):
@@ -585,8 +630,12 @@ def simulate(task):
     res = {}
     if sown:
         got = run_members(task, sown, [task["planting"][m] for m in sown])
-        for _ in range(RETRIES):                                           # alone, in case one member stopped the run
-            for m in [m for m in sown if _failed(got[m][0])]:
+        for k in range(RETRIES):                                           # alone, in case one member stopped the run
+            bad = [m for m in sown if _failed(got[m][0])]
+            if not bad:
+                break
+            time.sleep(0.5 * (k + 1))                                      # the crashes come under load: a pause
+            for m in bad:
                 got.update(run_members(task, [m], [task["planting"][m]]))
         res = {m: _member(task, m, task["planting"][m], *got[m], dates) for m in sown}
     out = []
@@ -612,7 +661,22 @@ def simulate(task):
             r, sowings = dict(again, first_planting=plant.isoformat()), sowings + 1
         r["sowings"] = sowings
         out.append(r)
+    if task.get("potential", True) and task.get("water", True):
+        _potential(task, out)
     return out
+
+
+def _potential(task, out):
+    """Each simulated member's yield without water stress (module doc): its final sowing, the water balance off."""
+    sim = [k for k, r in enumerate(out) if r["status"] in ("ok", "died", "failed_establishment") and r.get("planting")]
+    if not sim:
+        return
+    plants = [dt.date.fromisoformat(out[k]["planting"]) for k in sim]
+    got = run_members(dict(task, irrigation=None), sim, plants, water=False)
+    for k in sim:
+        row = got[k][0]
+        if not _failed(row) and not row.get("_no_germination"):
+            out[k]["potential_t_ha"] = round((_num(row.get("HWAM")) or 0.0) / 1000.0, 3)
 
 
 def main():

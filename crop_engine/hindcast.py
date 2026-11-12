@@ -47,7 +47,9 @@ radiation, vapour pressure and wind observed (ERA5-Land) to 30 Sep, then their d
 corrected without year y, with --temperature seas5 when its radiation files are on disk), scored against WOFOST's own
 observed-weather benchmark (climatology_wofost.json, built by run_outlook). Outputs carry the suffix _wofost.
 DSSAT (`--engine dssat`): the same, for DSSAT's varieties (maize, sorghum and the bean), against DSSAT's own
-benchmark (climatology_dssat.json); outputs with the suffix _dssat.
+benchmark (climatology_dssat.json); outputs with the suffix _dssat. With --nitrogen LEVEL (a level of
+dssat_cultivars.yaml "nitrogen", e.g. n0), DSSAT's nitrogen balance on at that level, against the nitrogen-limited
+normal of the same level (climatology_dssat_n.json, crop_engine.run_nitrogen); suffix _dssat_<level>.
 
 Outputs (not committed): outputs/crop_engine/verification/hindcast_members<tag>.json (every member's outcome) and
 hindcast_scores<tag>.json (`--tag`, after the temperature's suffix); a table in the log.
@@ -203,7 +205,8 @@ def seas5_years(years):
     return [y for y in years if s5.path(y).exists() and len([c for c in cal if c != y]) >= s5.MIN_CAL_YEARS]
 
 
-def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperature="climatology", engine="aquacrop"):
+def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperature="climatology", engine="aquacrop",
+             nitrogen=None):
     """Every member of every past forecast → {site: {variety: {rule: {year: [outcome, ...]}}}}."""
     tasks, keys = [], []
     for y in years:
@@ -224,6 +227,8 @@ def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperatur
                     if met is not None:
                         t.update(rad=met["rad_mj_m2"][:, k], vap=met["vap_hpa"][:, k], wind2=met["wind2_ms"][:, k],
                                  lat=s.lat, lon=s.lon, elev=float(met["elev"][k]))
+                    if nitrogen is not None:                           # (site id, task) → the task at its level
+                        t = nitrogen(s.id, t)
                     tasks.append(t)
                     keys.append((s.id, vk, rk, y))
     log(f"{len(tasks)} forecasts to simulate ({len(tasks) * 25} member seasons)")
@@ -452,6 +457,7 @@ def main():
     ap.add_argument("--tag", default="", help="suffix of the output files (e.g. _1993_2025), kept apart from the others")
     ap.add_argument("--engine", choices=["aquacrop", "wofost", "dssat"], default="aquacrop",
                     help="wofost / dssat: that engine's varieties against its own benchmark (climatology_<engine>.json)")
+    ap.add_argument("--nitrogen", help="DSSAT with its nitrogen balance at this level (e.g. n0), against that level's normal")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -477,9 +483,24 @@ def main():
             log(f"no {a.engine} benchmark ({bp.name}): run the outlook once with it")
             return 1
         bench = json.loads(bp.read_text(encoding="utf-8"))
+    nit = None
+    if a.nitrogen:
+        from crop_engine import run_nitrogen as rn
+        if a.engine != "dssat":
+            log("--nitrogen needs --engine dssat")
+            return 1
+        npath = C.OUT / rn.NORMAL
+        if not npath.exists() or a.nitrogen not in json.loads(npath.read_text(encoding="utf-8"))["levels"]:
+            log(f"no nitrogen-limited normal at {a.nitrogen} ({rn.NORMAL}): run crop_engine.run_nitrogen once")
+            return 1
+        nb = json.loads(npath.read_text(encoding="utf-8"))
+        bench = {"config_hash": nb["config_hash"], "sites": nb["levels"][a.nitrogen]}
+        levels, split, reported, _ = rn.settings()
+        nit = lambda sid, t: dict(rn.with_nitrogen(t, sid, rn.site_levels(sid, levels, reported)[a.nitrogen], split),  # noqa: E731
+                                  potential=False)
     rep_cells = [(s, g) for s, g in ro.cells(inp.sites) if not a.sites or s.id in a.sites]
     OUT.mkdir(parents=True, exist_ok=True)
-    eng_sfx = f"_{a.engine}" if a.engine != "aquacrop" else ""
+    eng_sfx = (f"_{a.engine}" if a.engine != "aquacrop" else "") + (f"_{a.nitrogen}" if a.nitrogen else "")
     sfx = suffix(a.temperature) + eng_sfx + a.tag
     mpath = OUT / f"hindcast_members{sfx}.json"
     saved = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else None
@@ -487,7 +508,7 @@ def main():
         members, years = saved["sites"], saved["years"]
     else:
         soils = {s.id: soil_mod.profile(s) for s, _ in rep_cells}
-        members = simulate(inp, years, rep_cells, varieties, rules, soils, a.workers, a.temperature, a.engine)
+        members = simulate(inp, years, rep_cells, varieties, rules, soils, a.workers, a.temperature, a.engine, nit)
         if saved and saved["years"] == years and saved.get("config_hash") == bench.get("config_hash"):
             members = _merge(saved["sites"], members)                    # keep the other rules' members
         mpath.write_text(json.dumps({"years": years, "config_hash": bench.get("config_hash"),
@@ -497,7 +518,9 @@ def main():
            "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
            "engine": a.engine,
            "reference": "the same crop grown in each season's observed weather by the same model ("
-                        + (f"climatology_{a.engine}.json" if eng_sfx else "climatology.json") + ")", "sites": sc}
+                        + ("climatology_dssat_n.json, " + a.nitrogen if a.nitrogen
+                           else f"climatology_{a.engine}.json" if a.engine != "aquacrop" else "climatology.json") + ")",
+           "nitrogen": a.nitrogen, "sites": sc}
     table(sc)
     counties = county_yields()
     if counties:

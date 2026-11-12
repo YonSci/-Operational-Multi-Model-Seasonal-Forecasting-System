@@ -493,8 +493,9 @@ function HistoryChart({ pts, kind, thr }) {
   const xs = t => t1 > t0 ? m.l + (t - t0) / (t1 - t0) * iw : m.l + iw / 2
   const yield_ = kind === 'yield'
   const A = pts.map(p => yield_ ? p.v[0] : p.v[3]), W = pts.map(p => yield_ ? p.v[5] : p.v[6])
+  const D = pts.map(p => (yield_ ? p.v[7] : p.v[8]) ?? null)            // DSSAT (absent in the days before it)
   const lo = pts.map(p => yield_ ? p.v[1] : null), up = pts.map(p => yield_ ? p.v[2] : null)
-  const hiV = Math.max(...[...up, ...A, ...W].filter(v => v != null), 0.5)
+  const hiV = Math.max(...[...up, ...A, ...W, ...D].filter(v => v != null), 0.5)
   const step = yield_ ? [0.5, 1, 2, 2.5, 5].find(x => hiV / x <= 4) ?? 5 : 0.25      // at most 5 round ticks
   const top = yield_ ? Math.ceil(hiV / step) * step : 1
   const ys = v => m.t + (1 - v / top) * ih
@@ -522,7 +523,7 @@ function HistoryChart({ pts, kind, thr }) {
       <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--heading)', margin: '0 0 6px' }}>{title}</h4>
       {w > 0 && (
         <svg width={w} height={H} role="img" style={{ display: 'block', touchAction: 'pan-y' }}
-             aria-label={`${title}, by the day the outlook was made: AquaCrop ${fmt(A[A.length - 1])}, WOFOST ${fmt(W[W.length - 1])} on ${fmtDate(pts[pts.length - 1].date)}`}
+             aria-label={`${title}, by the day the outlook was made: AquaCrop ${fmt(A[A.length - 1])}, WOFOST ${fmt(W[W.length - 1])}, DSSAT ${fmt(D[D.length - 1])} on ${fmtDate(pts[pts.length - 1].date)}`}
              onPointerMove={move} onPointerLeave={() => setHi(null)}>
           {ticks.map(v => (
             <g key={v}>
@@ -541,10 +542,12 @@ function HistoryChart({ pts, kind, thr }) {
           ))}
           {segs.map(g => <path key={'b' + g[0]} d={band(g)} fill="var(--crop-fc)" opacity="0.16"/>)}
           {segs.map(g => <path key={'w' + g[0]} d={path(W, g)} fill="none" stroke="var(--crop-wof)" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round"/>)}
+          {segs.map(g => <path key={'d' + g[0]} d={path(D, g)} fill="none" stroke="var(--crop-dssat)" strokeWidth="2" strokeDasharray="2 3" strokeLinejoin="round"/>)}
           {segs.map(g => <path key={'a' + g[0]} d={path(A, g)} fill="none" stroke="var(--crop-fc)" strokeWidth="2" strokeLinejoin="round"/>)}
           {pts.map((p, i) => (
             <g key={'p' + p.date}>
               {W[i] != null && <rect x={xs(T[i]) - 4} y={ys(W[i]) - 4} width="8" height="8" fill="var(--crop-wof)" stroke="var(--bg-surface)" strokeWidth="2"/>}
+              {D[i] != null && <path d={`M${xs(T[i])},${ys(D[i]) - 5.5}l5.5,5.5l-5.5,5.5l-5.5,-5.5Z`} fill="var(--crop-dssat)" stroke="var(--bg-surface)" strokeWidth="2"/>}
               {A[i] != null && <circle cx={xs(T[i])} cy={ys(A[i])} r={hi === i ? 6 : 4.5} fill="var(--crop-fc)" stroke="var(--bg-surface)" strokeWidth="2"/>}
             </g>
           ))}
@@ -561,6 +564,7 @@ function HistoryChart({ pts, kind, thr }) {
           {yield_ && lo[hi] != null && <div className="flex justify-between gap-3" style={{ color: 'var(--text-meta)' }}><span>8 in 10 sown crops</span>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtT(lo[hi])}–{fmtT(up[hi])} t/ha</span></div>}
           <div className="flex justify-between gap-3"><span>WOFOST</span><span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(W[hi])}</span></div>
+          {D.some(v => v != null) && <div className="flex justify-between gap-3"><span>DSSAT</span><span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(D[hi])}</span></div>}
         </div>
       )}
     </div>
@@ -587,6 +591,13 @@ function HistoryPanel({ hist, loading, source, sid, vk, rk, thr, msg }) {
             <rect x="7.5" y="2.5" width="7" height="7" fill="var(--crop-wof)"/></svg>
           WOFOST, the second model
         </span>
+        {pts.some(p => p.v?.[7] != null) && (
+          <span className="inline-flex items-center gap-2">
+            <svg width="22" height="12" aria-hidden="true"><line x1="1" x2="21" y1="6" y2="6" stroke="var(--crop-dssat)" strokeWidth="2" strokeDasharray="2 3"/>
+              <path d="M11,1.5l4.5,4.5l-4.5,4.5l-4.5,-4.5Z" fill="var(--crop-dssat)"/></svg>
+            DSSAT, the third model
+          </span>
+        )}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <HistoryChart pts={pts} kind="yield" thr={thr}/>
@@ -797,7 +808,8 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
   const cell = data?.sites?.[sid]?.results?.[vk]?.[rk]
   if (!cell) return <Panel title="Management scenarios" sub={sub}>{msg(data ? 'No scenarios for this site, crop and rule yet.'
                                                                              : 'The scenarios come with the next weekly crop run.')}<PartnerAsk/></Panel>
-  const meta = data.meta, base = cell.baseline, baseW = cell.baseline_wofost
+  const meta = data.meta, base = cell.baseline, baseW = cell.baseline_wofost, baseD = cell.baseline_dssat
+  const extra = [['wofost', baseW, 'WOFOST'], ['dssat', baseD, 'DSSAT']].filter(([, b]) => b)
   const groups = [...new Set(Object.values(meta.scenarios).map(s => s.group))]
   const row = (key, label, s, strong) => (
     <tr key={key}>
@@ -813,11 +825,10 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
       <td>{pct(s.p_failure_if_sown)}</td>
       <td>{pct((s.share?.too_late ?? 0))}</td>
       <td>{fmtT(s.yield_t_ha?.median)} t/ha{strong ? '' : fmtDiff(s.yield_t_ha?.median, base.yield_t_ha?.median)}</td>
-      {baseW && <td>{(() => {
-        const w = strong ? baseW : s.wofost
-        if (!w) return '—'
-        return `${fmtT(w.yield_t_ha?.median)} t/ha${strong ? '' : fmtDiff(w.yield_t_ha?.median, baseW.yield_t_ha?.median)}`
-      })()}</td>}
+      {extra.map(([k, b]) => {
+        const w = strong ? b : s[k]
+        return <td key={k}>{w ? `${fmtT(w.yield_t_ha?.median)} t/ha${strong ? '' : fmtDiff(w.yield_t_ha?.median, b.yield_t_ha?.median)}` : '—'}</td>
+      })}
     </tr>
   )
   return (
@@ -828,12 +839,12 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
           <thead>
             <tr><th>Scenario</th><th>Sowing (8 in 10)</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
                 <th>Failure if sown</th><th>Too late</th><th>Median yield, all members</th>
-                {baseW && <th>WOFOST: median yield, all members</th>}</tr>
+                {extra.map(([k, , l]) => <th key={k}>{l}: median yield, all members</th>)}</tr>
           </thead>
           <tbody>
             {row('baseline', 'As the outlook', base, true)}
             {groups.map(g => [
-              <tr key={g}><td colSpan={baseW ? 9 : 8} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-meta)', paddingTop: 14 }}>{g}</td></tr>,
+              <tr key={g}><td colSpan={8 + extra.length} style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-meta)', paddingTop: 14 }}>{g}</td></tr>,
               ...Object.entries(meta.scenarios).filter(([k, s]) => s.group === g && cell[k]).map(([k, s]) => row(k, s.label, cell[k], false)),
             ])}
           </tbody>
@@ -847,8 +858,10 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         falls below 30 % of its available water from sowing to flowering, at most 100 mm a season reaching the soil (about 130 mm
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
         covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
-        {baseW && <> The last column is WOFOST, the second crop model, grown with the same choice (plant density is AquaCrop’s
-        only: WOFOST has no plant population); where the two models agree on a practice’s gain, it depends less on the model.</>}
+        {extra.length > 0 && <> The last {extra.length > 1 ? 'columns are' : 'column is'} {extra.map(([, , l]) => l).join(' and ')}, grown with
+        the same choice where the model has it: WOFOST has no plant population; DSSAT’s automatic irrigation has no seasonal cap (no
+        supplementary irrigation), its mulch is crop residue left on the soil and its ridges a low runoff curve number. Where the
+        models agree on a practice’s gain, it depends less on the model.</>}
       </p>
       <PartnerAsk/>
     </Panel>
