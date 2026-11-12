@@ -142,7 +142,7 @@ def test_hindcast_file_year_by_year(tmp_path, monkeypatch):
 def test_tab_data_cleanup_keeps_the_regional_and_hindcast_files():
     # dashboard.write removes every other .json of the folder as an older run's: grid.json (crop_engine/grid.py) was
     # removed so, right after it was written
-    assert {"grid.json", "hindcast.json", "skill.json"} <= dashboard.KEEP
+    assert {"grid.json", "hindcast.json", "skill.json", "nitrogen.json"} <= dashboard.KEEP
 
 
 def test_bulletin_crop_page_only_near_a_crop_site(tmp_path, monkeypatch):

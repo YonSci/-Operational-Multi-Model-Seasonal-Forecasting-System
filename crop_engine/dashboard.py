@@ -13,6 +13,8 @@ the latest result of each forecast source and of the benchmark, read by frontend
   "wofost": its summary and members (as AquaCrop's) in <source>.json, and index.json "wofost": {run id: {site:
   {variety: {rule: summary}}}} and "second_engine"; benchmark.json "wofost": WOFOST's own observed-weather
   benchmark (climatology_wofost.json), as AquaCrop's, when built.
+  DSSAT, the third model, the same way under "dssat": <source>.json entries, index.json "dssat" (run id → site →
+  variety → rule → summary) and "third_engine", benchmark.json "dssat" (climatology_dssat.json).
   index.json also carries the measured yields at each site (crop_engine/yields targets.csv, when built): the trials'
   median and high-input yields per site and crop, kept apart from the simulated past seasons.
   benchmark.json    per site, variety and rule: terciles, median, the outcome rates (as the summaries), canopy band
@@ -26,6 +28,8 @@ the latest result of each forecast source and of the benchmark, read by frontend
                     platform's season-length, Oct-Dec rain and onset forecasts scored as yield predictors, and the
                     check against county Short Rains maize yields (HarvestStat)
   grid.json         the gridded regional outlook (crop_engine/grid.py writes it; kept here)
+  nitrogen.json     DSSAT's nitrogen levels of the latest seasonal run (crop_engine.run_nitrogen), when made with that
+                    run's configuration and DSSAT's (write_nitrogen)
   history.json      each outlook's summary on every day its run was rebuilt (write_history)
   scenarios.json    the management scenarios of the latest seasonal run (crop_engine.run_scenarios), when made with
                     that run's configuration (refreshed weekly: their meta gives the observations they used): per site,
@@ -53,7 +57,7 @@ MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "ra
 
 # the files kept in the tab's data folder beside each source's latest run; any other .json there is an older run's
 KEEP = {"index.json", "benchmark.json", "scenarios.json", "history.json", "skill.json", "hindcast.json",
-        "grid.json"}                                                    # grid.json: written by crop_engine/grid.py
+        "grid.json", "nitrogen.json"}                                                    # grid.json: written by crop_engine/grid.py
 BENCH_KEYS = ("t33", "t67", "median", "cal_median", "p_failure", "p_sowing_opportunity", "p_establishment_failure",
               "p_failure_if_sown", "yield_if_sown_t_ha", "n_valid", "n_error", "n_sown", "canopy")
 
@@ -134,7 +138,8 @@ def write_history(entries, log=print):
     log(f"dashboard: outlook history, {', '.join(f'{k} {len(v)} days' for k, v in h['sources'].items())}")
 
 
-SKILL_FILES = {"aquacrop": "hindcast_scores.json", "wofost": "hindcast_scores_wofost.json"}   # 1 Oct SEAS5, climatological T
+SKILL_FILES = {"aquacrop": "hindcast_scores.json", "wofost": "hindcast_scores_wofost.json",   # 1 Oct SEAS5, climatological T
+               "dssat": "hindcast_scores_dssat.json"}
 BASELINES = {"lgp": "lgp_days", "rain": "rain_oct_dec_mm", "onset": "onset_doy"}
 
 
@@ -268,7 +273,7 @@ def write(log=print):
         latest.setdefault(r["source"], r)
     runs = sorted(latest.values(), key=lambda r: (r["source"] != "seasonal", r["source"]))
     C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
-    meta0, sites, summaries, wofost, hist, chash0 = None, {}, {}, {}, [], None
+    meta0, sites, summaries, wofost, dssat, hist, chash0 = None, {}, {}, {}, {}, [], None
     for r in runs:
         d = json.loads((C.RESULTS_OUT / f"{r['id']}.json").read_text(encoding="utf-8"))
         meta0 = meta0 or d["meta"]
@@ -277,13 +282,20 @@ def write(log=print):
             chash0 = d["meta"].get("config_hash")
         summaries[r["id"]] = {sid: {vk: {rk: x["summary"] for rk, x in rs.items()} for vk, rs in s["results"].items()}
                               for sid, s in d["sites"].items()}
+        for eng, store in (("dssat", dssat),):
+            e = {sid: {vk: {rk: x[eng]["summary"] for rk, x in rs.items() if eng in x}
+                       for vk, rs in s["results"].items()} for sid, s in d["sites"].items()}
+            e = {sid: {vk: rs for vk, rs in vs.items() if rs} for sid, vs in e.items()}
+            if any(e.values()):
+                store[r["id"]] = {sid: vs for sid, vs in e.items() if vs}
         w = {sid: {vk: {rk: x["wofost"]["summary"] for rk, x in rs.items() if "wofost" in x}
                    for vk, rs in s["results"].items()} for sid, s in d["sites"].items()}
         w = {sid: {vk: rs for vk, rs in vs.items() if rs} for sid, vs in w.items()}
         if any(w.values()):
             wofost[r["id"]] = {sid: vs for sid, vs in w.items() if vs}
         out = {"meta": {k: d["meta"].get(k) for k in ("id", "source", "model_label", "run", "obs_end", "members_kind",
-                                                       "segments", "created", "engine", "weather", "second_engine")},
+                                                       "segments", "created", "engine", "weather", "second_engine",
+                                                       "third_engine")},
                "sites": {}}
         for sid, s in d["sites"].items():
             sites.setdefault(sid, {"name": s["name"], "cell": s["cell"], "soil_taw_100cm_mm": s["soil_taw_100cm_mm"],
@@ -295,7 +307,10 @@ def write(log=print):
                                       "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["members"]],
                                       **({"wofost": {"summary": x["wofost"]["summary"],
                                                      "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["wofost"]["members"]]}}
-                                         if "wofost" in x else {})}
+                                         if "wofost" in x else {}),
+                                      **({"dssat": {"summary": x["dssat"]["summary"],
+                                                    "members": [[m.get(k) for k in MEMBER_KEYS] for m in x["dssat"]["members"]]}}
+                                         if "dssat" in x else {})}
                                  for rk, x in rs.items()} for vk, rs in s["results"].items()}}
         _dump(C.DASHBOARD_OUT / f"{r['source']}.json", out)
     if not meta0:
@@ -315,11 +330,15 @@ def write(log=print):
     wpath = C.OUT / "climatology_wofost.json"
     if wpath.exists():
         out_b["wofost"] = compact(json.loads(wpath.read_text(encoding="utf-8"))["sites"])
+    dpath = C.OUT / "climatology_dssat.json"
+    if dpath.exists():
+        out_b["dssat"] = compact(json.loads(dpath.read_text(encoding="utf-8"))["sites"])
     _dump(C.DASHBOARD_OUT / "benchmark.json", out_b)
     _dump(C.DASHBOARD_OUT / "index.json", {
         "runs": [{**{k: r[k] for k in ("id", "source", "model_label", "run", "obs_end", "members_kind", "created")},
                   "file": f"{r['source']}.json"} for r in runs],
         "summaries": summaries, "wofost": wofost, "second_engine": meta0.get("second_engine", {}).get("engine"),
+        "dssat": dssat, "third_engine": (meta0.get("third_engine") or {}).get("engine"),
         "sites": sites, "varieties": meta0["varieties"], "planting_rules": meta0["planting_rules"],
         "outcomes": [{"id": i, "label": a, "title": t} for i, a, t in OUTCOMES], "member_keys": list(MEMBER_KEYS),
         "observed_yields": observed_yields(),
@@ -333,6 +352,7 @@ def write(log=print):
         if p.name not in keep:
             p.unlink()
     write_scenarios(log)
+    write_nitrogen(log)
     size = sum(p.stat().st_size for p in C.DASHBOARD_OUT.glob("*.json")) / 1024
     log(f"dashboard: {len(runs)} runs → {C.DASHBOARD_OUT.relative_to(C.BASE)} ({size:.0f} kB)")
 
@@ -353,6 +373,28 @@ def write_scenarios(log=print):
             C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
             _dump(out, d)
             log(f"dashboard: scenarios of {rid} ({len(d['meta']['scenarios'])} scenarios)")
+            return True
+    if out.exists():
+        out.unlink()
+    return False
+
+
+def write_nitrogen(log=print):
+    """nitrogen.json: DSSAT's nitrogen levels of the latest seasonal run, only when made from that run's results with
+    its configuration and DSSAT's (run_nitrogen); otherwise the file is removed."""
+    out = C.DASHBOARD_OUT / "nitrogen.json"
+    idx = C.RESULTS_OUT / "index.json"
+    rid = next((r["id"] for r in json.loads(idx.read_text(encoding="utf-8"))["runs"] if r["source"] == "seasonal"),
+               None) if idx.exists() else None
+    src = C.OUT / "nitrogen" / f"{rid}.json"
+    if rid and src.exists():
+        d = json.loads(src.read_text(encoding="utf-8"))
+        meta = json.loads((C.RESULTS_OUT / f"{rid}.json").read_text(encoding="utf-8"))["meta"]
+        if (d["meta"].get("config_hash") == meta.get("config_hash")
+                and d["meta"].get("dssat_config_hash") == (meta.get("third_engine") or {}).get("config_hash")):
+            C.DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
+            _dump(out, d)
+            log(f"dashboard: nitrogen levels of {rid} ({', '.join(d['meta']['levels'])})")
             return True
     if out.exists():
         out.unlink()

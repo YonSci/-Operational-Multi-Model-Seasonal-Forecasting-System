@@ -174,3 +174,45 @@ def test_dssat_grows_a_watered_and_a_dry_member():
     assert wet["status"] == "ok" and wet["yield_t_ha"] > 2.0 and wet["harvest"] < "2027-03-01"
     assert dry["status"] in ("died", "failed_establishment") or dry["yield_t_ha"] < wet["yield_t_ha"] / 4
     assert wet["sowings"] == 1 and len(wet["_canopy"]) == len(range(0, T, ds.CANOPY_STEP))
+
+
+def test_nitrogen_files():
+    plant = [dt.date(2026, 10, 29)]
+    txt = ds.experiment_file("CE000001", "MZ", "KY0018", "CESOIL0001", dt.date(2026, 8, 1), plant, ["W0012602"],
+                             [(5, 0.2), (60, 0.21)], 4.4, dt.date(2027, 3, 30),
+                             nitrogen={"rate_kg_ha": 50, "split": [(0, 0.4), (30, 0.6)]})
+    lines = txt.splitlines()
+    head = lines[lines.index("@N R O C TNAME.................... CU FL SA IC MP MI MF MR MC MT ME MH SM")]
+    t1 = lines[lines.index(head) + 1]
+    assert t1[:_col(head, "MF") + 1].split()[-1] == "1" and t1[:_col(head, "MI") + 1].split()[-1] == "0"
+    assert " 1 OP              Y     Y     N" in txt and " 1 MA              R     N     D     N     A" in txt
+    fert = [ln for ln in lines if ln.startswith(" 1 ") and ds.UREA in ln]
+    assert [ln.split()[1] for ln in fert] == ["0", "30"] and [ln.split()[5] for ln in fert] == ["20", "30"]
+    ic = lines[lines.index("@C  ICBL  SH2O  SNH4  SNO3") + 1:][:2]
+    assert ic[0].split()[3:] == [f"{ds.INIT_NH4:.1f}", f"{ds.INIT_NO3:.1f}"] and float(ic[1].split()[4]) == ds.INIT_NO3 / 2
+    none = ds.experiment_file("CE000001", "BN", "IB0014", "CESOIL0001", dt.date(2026, 8, 1), plant, ["W0012602"],
+                              [(5, 0.2)], 13.2, dt.date(2027, 3, 30), nitrogen={"rate_kg_ha": 0})
+    assert " 1 OP              Y     Y     Y" in none and "*FERTILIZERS" not in none    # the bean fixes N; no urea
+    assert " 1 OP              Y     N     N" in ds.experiment_file(
+        "CE000001", "MZ", "KY0018", "CESOIL0001", dt.date(2026, 8, 1), plant, ["W0012602"], [(5, 0.2)], 4.4,
+        dt.date(2027, 3, 30))                                                 # water-limited: no nitrogen balance
+    sol = ds.soil_file("CESOIL0001", -2.21, 37.72, LAYERS, 150, nitrogen=True, organic_n_factor=0.5).splitlines()
+    head = next(ln for ln in sol if ln.startswith("@  SLB"))
+    r0 = sol[sol.index(head) + 1]
+    assert r0[:_col(head, "SLNI") + 1].split()[-1] == f"{2.0 / 1.724 / ds.C_TO_N * 0.5:.3f}"
+    plain = ds.soil_file("CESOIL0001", -2.21, 37.72, LAYERS, 150).splitlines()
+    assert plain[plain.index(head) + 1][:_col(head, "SLNI") + 1].split()[-1] == "-99"
+    assert 0 < ds.soil_settings()["organic_n_factor"] <= 1
+
+
+def test_dssat_hash_and_varieties(monkeypatch):
+    from crop_engine import run_outlook as ro
+    from crop_engine.data.sites import registered_sites
+    sites = registered_sites()
+    h = ro.dssat_hash(["rule1"], sites)
+    assert h == ro.dssat_hash(["rule1"], sites) and h != ro.dssat_hash(["rule1", "fao-agricultural"], sites)
+    _, vs = ro.load_varieties()
+    monkeypatch.setattr(ds, "installed", lambda: False)
+    assert ro.dssat_varieties(vs) == []                                    # not installed: no DSSAT variety
+    monkeypatch.setattr(ds, "installed", lambda: True)
+    assert set(ro.dssat_varieties(vs)) == {"maize_early", "maize_medium", "sorghum", "bean"}

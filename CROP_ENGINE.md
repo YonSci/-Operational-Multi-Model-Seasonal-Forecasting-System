@@ -1106,14 +1106,14 @@ The multi-layer balance makes WOFOST's maize drier, failing in 70–85 % of the 
 rank agreement with AquaCrop is about the same (0.22–0.84 against 0.28–0.87). **Not adopted**: the outlook keeps
 WOFOST 7.2's one-zone balance, which agrees better with AquaCrop on maize; the option stays for tests.
 
-## Third engine: DSSAT (`crop_engine/adapters/dssat_adapter.py`, in development)
+## Third engine: DSSAT (`crop_engine/adapters/dssat_adapter.py`)
 
 DSSAT CSM 4.8 runs on the same tasks as AquaCrop and WOFOST: the same weather members, soil profile, 1 Aug soil
 water, sowing dates and re-sowing, and it returns the same outcomes (`run_outlook.run_tasks(..., engine="dssat")`).
-It uses CERES-Maize, CERES-Sorghum and CROPGRO-Dry bean, so unlike WOFOST it grows the bean too. It is not in the
-published outlook yet: this stage installs it, calibrates it to the same targets as the other two engines and
-compares it with AquaCrop on the observed seasons. Production is water-limited (no nitrogen balance), as the other
-engines'; DSSAT's nitrogen balance, the reason to add it, is the next step.
+It uses CERES-Maize, CERES-Sorghum and CROPGRO-Dry bean, so unlike WOFOST it grows the bean too. Since November 2026
+it grows every forecast run's members beside AquaCrop and WOFOST, with its own observed-weather benchmark and
+hindcast, and the Crop outlook tab shows it (*DSSAT in the published outlook*, below). Its outlook is water-limited,
+as the other engines'; its nitrogen balance runs apart, weekly, at assumed fertiliser rates (*Nitrogen*, below).
 
 - **The program**: DSSAT's own model (`dscsm048.exe`, the open-source DSSAT CSM 4.8 build), not a
   re-implementation. `python -m crop_engine.adapters.dssat_adapter --install` puts it and DSSAT's standard data
@@ -1190,11 +1190,15 @@ FAO agricultural onset; a failure or no sowing counts as no yield:
 - **DSSAT fails less** (12 points less than AquaCrop at the median, up to 33), as WOFOST does: its seedlings die
   only when the seed does not germinate within 15 days of sowing, so a dry spell after emergence slows the crop
   but does not kill it. That is AquaCrop's most common failure at Kiboko, Kapiti and Livemo.
-- **Early maize yields most in DSSAT**, three to four times AquaCrop's at Kiboko, Kapiti and Genco Maralal. Part is
-  the failures above. Part is the yield level: early maize takes medium maize's G2, G3 factor, and its
-  no-water-stress yield at Kiboko (4.8–5.0 t/ha) is well above the Local Katumani composite's 3.02 t/ha in the
-  same trial. Fitting early maize to that trial is the first thing to revisit. Medium maize, fitted to its own
-  trial, is close to the others (Kiboko 0.71 against AquaCrop's 0.39 and WOFOST's 0.65 t/ha).
+- **Early maize yields most in DSSAT**, three to four times AquaCrop's at Kiboko, Kapiti and Genco Maralal, and the
+  yield level is not why: with no water stress at Kiboko DSSAT's early maize yields 5.0 t/ha, below AquaCrop's 6.5
+  and WOFOST's 6.2 (kiboko_v3, *WOFOST's maize yield level*; all three take medium maize's factor and are checked,
+  not fitted, against the Local Katumani composite's 3.02, which kiboko_v3 judged no high-input reference), so it
+  is not refitted. The difference is how the crop dies (early maize, both rules, every site): in the 76 seasons
+  both engines mature, they yield alike (median 4.93 and 4.85 t/ha); in 169 seasons AquaCrop's crop dies before
+  maturity (its canopy lost to a long dry spell: median 0.56 t/ha) where DSSAT's survives with a smaller yield
+  (2.45 t/ha), and in 29 more AquaCrop's seedlings die where DSSAT's crop goes on (1.41 t/ha). Medium maize is
+  close to the others (Kiboko 0.71 against AquaCrop's 0.39 and WOFOST's 0.65 t/ha).
 - **DSSAT's crops take longer**: 18 days more to harvest at the median, partly because AquaCrop's dead crops end
   early, and for sorghum partly its slower phenology (above).
 - **Bean**: DSSAT's CROPGRO bean (yield level not calibrated) and AquaCrop's default bean give medians within about 0.5 t/ha of each other;
@@ -1204,9 +1208,71 @@ FAO agricultural onset; a failure or no sowing counts as no yield:
   seasons, and none of them repeats when run again. A crashed member is retried alone twice; one that still fails
   is an error, left out of every figure as AquaCrop's are. The last comparison had none.
 
-Neither the comparison nor the calibration tests DSSAT against farmers' yields: the next stages are DSSAT's
-observed-weather benchmark and hindcast (its skill against its own crop and against the county yields), its place
-in the published outlook beside WOFOST, and its nitrogen balance with the fertiliser rates partners report.
+### DSSAT in the published outlook (November 2026)
+
+`run_outlook` grows every forecast run's members with DSSAT beside AquaCrop and WOFOST, for the varieties with a
+DSSAT cultivar (all four), when DSSAT is installed and the weather has radiation, humidity and wind: each result's
+`dssat` (summary and members), with DSSAT's own observed-weather benchmark (`climatology_dssat.json`: the same
+seasons and sowings as AquaCrop's, rebuilt when DSSAT's configuration changes, `run_outlook.dssat_hash`: the
+varieties, `dssat_cultivars.yaml`, the rules, sites, season end, DSSAT's build and the adapter). A run made without
+DSSAT, or with another DSSAT configuration, is made again once (`meta.third_engine.config_hash`); AquaCrop's and
+WOFOST's benchmarks are not rebuilt (DSSAT's cultivars are kept out of `varieties.yaml` for that). `--no-dssat`
+leaves it out; on a machine without DSSAT it is left out with the reason in the run's meta. Cost, the 1 Oct
+seasonal run (1,200 member seasons, two workers): AquaCrop 164 s, WOFOST 71 s, DSSAT 113 s; the benchmark 232 s.
+DSSAT's run folders go to `data/crop_engine/dssat/run` (or `CROP_ENGINE_DSSAT_RUNS`, a short path) and are removed
+after each task.
+
+The tab: *Three crop models, the same forecast* gives each model's yield if sown, spread, failure, maturity and
+harvest, and each in the observed weather of the past seasons; the model-agreement line compares AquaCrop with
+each other model of the crop and reports the weakest agreement (for the bean, AquaCrop and DSSAT only); the season
+strip, the table of every forecast, the skill line and the hindcast section carry DSSAT beside WOFOST. DSSAT's
+colour is a green (`--crop-dssat`, `#2fa87c` dark, `#14855c` light), checked against AquaCrop's blue and WOFOST's
+orange for colour-vision deficiency and contrast in both themes. The crop bulletin (`backend/bulletin_crop.py`)
+still compares AquaCrop with WOFOST only.
+
+### DSSAT's hindcast (November 2026, `crop_engine.hindcast --engine dssat`)
+
+The 1 Oct SEAS5 forecasts of 1993–2016 grown by DSSAT and scored against DSSAT's own crop in the observed weather
+(`hindcast_scores_dssat.json`; 28,800 member seasons in 31 minutes with three workers). Medians over every site,
+crop and rule:
+
+| | Rank correlation | Failure ROC area | Failure Brier skill |
+|---|---|---|---|
+| AquaCrop (47 cells) | 0.51 | 0.82 | 0.30 |
+| WOFOST (35 cells: maize and sorghum) | 0.58 | 0.79 | 0.27 |
+| DSSAT (48 cells: with the bean) | 0.58 | 0.84 | 0.26 |
+
+On maize and sorghum alone DSSAT's are 0.58 and 0.86 (AquaCrop 0.56, 0.83), and its bean's rank correlation is
+0.59: DSSAT's forecast skill is on a par with the other two, with the best failure ROC area. Against the county
+Short Rains maize yields it does no better than they do: +0.35 to +0.45 at Genco Tana River, negative at Kiboko
+(−0.27 to −0.49) and Livemo (−0.34 to −0.52), about 0 at Kapiti for early maize (+0.42 for medium maize, FAO onset).
+
+### Nitrogen (DSSAT, November 2026, `crop_engine/run_nitrogen.py`)
+
+With a task's `nitrogen` the adapter turns DSSAT's nitrogen balance on (NITRO Y; the bean's fixation too): urea at
+days after sowing (FERTI D; maize and sorghum 40 % at sowing and 60 % at 30 days, the bean all at sowing), the
+soil's organic nitrogen from its organic carbon (C : N 10) times `organic_n_factor`, and 3 ppm nitrate and 1 ppm
+ammonium at the start (1 Aug) in the top 30 cm, half that below. `run_nitrogen` grows the latest seasonal run's
+members again at **no fertiliser, 25 and 50 kg N/ha** (assumed rates until the sites' managers report theirs),
+beside DSSAT's water-limited outlook, weekly from `run_all` (the tab's *Nitrogen (DSSAT)*; `nitrogen.json`; about
+8 minutes with two workers).
+
+**The soil's nitrogen** (`calibration/dssat.py --nitrogen`). With the SoilGrids organic carbon as it is, DSSAT
+mineralises so much nitrogen that maize without fertiliser yields as much as with 60 kg N/ha (the ratio 1.00 over
+the observed Short Rains 1993–2016 at Kiboko and Kapiti; 162 kg/ha of mineral nitrogen left at harvest in a Kapiti
+season), which cropped dryland fields do not. The trials of the yields database give about 0.6 (the yield without
+nitrogen over the yield with 45–75 kg N/ha: the median of 24 Kenyan trial-seasons 0.63, the 8 in the east 0.64, the
+dryland Short Rains seasons of Machang'a 2005 and 2006 and Machakos 2015 0.57–0.59). The factor on the organic
+nitrogen gives 1.00 at 1, 0.89 at 0.25, 0.74 at 0.12 and **0.67 at 0.06**, the fit's lower bound, adopted
+(`dssat_cultivars.yaml` `soil`): below it the starting mineral nitrogen sets the floor. A first, regional
+calibration: it says DSSAT's organic matter, started from SoilGrids carbon, is far more active than these fields',
+and the fields themselves are not measured. The Machakos 2015 trial nearest the sites (sown 4 Aug into dry soil:
+DSSAT's crop does not establish) could not be grown as reported.
+
+First result (the 1 Oct 2026 forecast, FAO onset): early maize at Kiboko yields if sown 2.5 t/ha without
+fertiliser, 3.5 with 25 and 4.3 with 50 kg N/ha, against 4.7 with no nitrogen limit; sorghum 1.2, 1.8, 2.5 against
+2.7; the bean, which fixes its nitrogen, 1.42 to 1.51 against 1.54. Kapiti is alike (maize 2.7, 3.8, 4.6 against
+5.3). The chance of failure does not change with nitrogen: in these models a failure is a water failure.
 
 ## Testing
 
@@ -1251,9 +1317,10 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   AquaCrop's) are in place, and both engines are in the published outlook (done, *WOFOST in the published outlook*).
   WOFOST's own observed-weather benchmark and its hindcast skill (done). The multi-layer water balance was tested and
   not adopted (*Water balance*).
-- **P2**: DSSAT as a third engine: the adapter, its calibration and the comparison with AquaCrop are in place
-  (*Third engine: DSSAT*); next its benchmark and hindcast, the outlook, and its nitrogen balance. SARRA-Py where
-  partner data support it; the Long Rains (MAM) and Ethiopia; crop
+- **P2**: DSSAT as a third engine is in place: the adapter, its calibration, its benchmark, hindcast and outlook,
+  and its nitrogen levels at assumed rates (*Third engine: DSSAT*); next, the partners' fertiliser rates, a soil
+  nitrogen calibration on the sites' own fields, and DSSAT in the crop bulletin. SARRA-Py where partner data support
+  it; the Long Rains (MAM) and Ethiopia; crop
   bulletins. Gridded regional yield forecasts: a pilot for the eastern Kenya Short Rains maize counties is in place
   (*Gridded regional outlook*); next, a hindcast of the grid against HarvestStat, the AquaCrop dry-sowing fix, then
   sorghum and the other Short Rains counties.

@@ -15,12 +15,19 @@ how far the two models agree. AquaCrop stays the published outlook. WOFOST has i
 (climatology_wofost.json: the same observed seasons, sown as AquaCrop's benchmark, rebuilt when WOFOST's own
 configuration changes, wofost_hash), so its summaries carry their own normal range. --no-wofost leaves it out.
 
+Third model: DSSAT CSM 4.8 (adapters/dssat_adapter.py) grows the same members on the same dates, for every variety
+with a DSSAT cultivar (crop_engine/dssat_cultivars.yaml), when DSSAT is installed and the weather has radiation,
+humidity and wind: results[variety][rule]["dssat"], beside WOFOST's, with its own observed-weather benchmark
+(climatology_dssat.json, rebuilt when DSSAT's configuration changes, dssat_hash). A run made before DSSAT was
+there, or with another DSSAT configuration, is made again (meta "third_engine"). --no-dssat leaves it out.
+
 Outputs (not committed; outputs/crop_engine/):
   weather/<run id>.nc        the standard daily weather of the run (crop_engine.data.weather)
   results/<run id>.json      per site, variety and rule: every member's outcome and a summary
   results/index.json         the runs, newest first
   climatology.json           the observed-weather benchmark (rebuilt when the configuration changes)
   climatology_wofost.json    WOFOST's, for its varieties (rebuilt when WOFOST's configuration changes)
+  climatology_dssat.json     DSSAT's, for its varieties (rebuilt when DSSAT's configuration changes)
 and the Crop outlook tab's copy of the latest runs (frontend/public/tracker/data/crop/, crop_engine.dashboard).
 
 Usage:
@@ -45,6 +52,7 @@ import yaml
 from crop_engine import config as C
 from crop_engine import dashboard
 from crop_engine.adapters import aquacrop_adapter as aq
+from crop_engine.adapters import dssat_adapter as dsa
 from crop_engine.adapters import wofost_adapter as wf
 from crop_engine.data import soil as soil_mod
 from crop_engine.data import weather as W
@@ -55,6 +63,7 @@ import onset_rules as orl  # noqa: E402
 
 ENGINE = f"AquaCrop-OSPy {version('aquacrop')}"
 SECOND_ENGINE = f"WOFOST 7.2 (PCSE {version('pcse')}, Wofost72_WLP_CWB)"
+THIRD_ENGINE = f"DSSAT CSM 4.8 (CERES-Maize, CERES-Sorghum, CROPGRO-Dry bean; DSSATTools {dsa.WHEEL['version']} build)"
 CAVEATS = [
     "Experimental: maize is calibrated against trials at Kiboko (phenology and harvest index), sorghum only set "
     "against them; the crop forecasts have not been verified against observed crop outcomes.",
@@ -69,8 +78,8 @@ CAVEATS = [
     "as for the Agri rules, and March rain SEAS5 quantile-mapped to CHIRPS. Where the SEAS5 files are missing, "
     "temperature is the 1993–2016 climatology and March rain the observed March of a past year (see each run's weather).",
     "Soil is the 0.25° SoilGrids average of the site's grid cell, not a field measurement.",
-    "A second crop model, WOFOST 7.2, grows the same maize and sorghum members on the same dates; where the two "
-    "disagree, the outlook depends on the model as much as on the weather.",
+    "Two more crop models grow the same members on the same dates: WOFOST 7.2 (maize and sorghum) and DSSAT 4.8 "
+    "(maize, sorghum and the bean); where they disagree, the outlook depends on the model as much as on the weather.",
     "Deterministic weather models are the same forecast in every member: their spread comes from SEAS5 only.",
 ]
 
@@ -114,6 +123,26 @@ def wofost_hash(rules, sites):
     return h.hexdigest()[:12]
 
 
+def dssat_hash(rules, sites):
+    """Changes when the varieties, DSSAT's cultivars, rules, sites, season end, DSSAT's build or the DSSAT adapter
+    change: DSSAT's benchmark and runs are rebuilt (AquaCrop's and WOFOST's are not)."""
+    h = hashlib.sha1(C.VARIETIES_FILE.read_bytes())
+    h.update(dsa.CULTIVARS_FILE.read_bytes())
+    h.update(json.dumps(sorted(rules)).encode())
+    h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
+    h.update(THIRD_ENGINE.encode())
+    h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
+    h.update(Path(dsa.__file__).read_bytes())
+    h.update(Path(pl.__file__).read_bytes())
+    return h.hexdigest()[:12]
+
+
+def dssat_varieties(varieties):
+    """The varieties DSSAT grows beside AquaCrop: a DSSAT cultivar (dssat_cultivars.yaml), DSSAT installed."""
+    dsa.attach(varieties)
+    return [vk for vk, v in varieties.items() if dsa.available(v)]
+
+
 def cells(sites):
     """[(representative site, [site ids sharing its grid cell])]: each cell is simulated once."""
     groups = {}
@@ -125,10 +154,8 @@ def cells(sites):
 def run_tasks(tasks, workers, engine="aquacrop"):
     """Simulate the tasks with AquaCrop (default), WOFOST (adapters/wofost_adapter.py) or DSSAT (dssat_adapter.py)."""
     if engine == "wofost":
-        from crop_engine.adapters import wofost_adapter as wf
         fn = wf.simulate
     elif engine == "dssat":
-        from crop_engine.adapters import dssat_adapter as dsa
         fn = dsa.simulate
     else:
         fn = aq.simulate
@@ -274,6 +301,19 @@ def wofost_benchmark(inp, rep_cells, varieties, rules, soils, workers):
     return bench_stats(res, keys, use, years)
 
 
+def dssat_benchmark(inp, rep_cells, varieties, rules, soils, workers):
+    """DSSAT's observed-weather benchmark: the same seasons and sowings as benchmark(), for the DSSAT varieties."""
+    from crop_engine import compare_engines as ce
+    years = list(range(C.HIST_YEARS[0], C.HIST_YEARS[1] + 1))
+    use = {vk: varieties[vk] for vk in dssat_varieties(varieties)}
+    tasks, keys = ce.tasks_for(inp, years, rep_cells, use, rules, soils)
+    log(f"DSSAT benchmark: {len(tasks)} observed seasons to simulate")
+    t0 = time.time()
+    res = run_tasks(tasks, workers, engine="dssat")
+    log(f"DSSAT benchmark done in {time.time() - t0:.0f} s")
+    return bench_stats(res, keys, use, years)
+
+
 def bench_stats(res, keys, varieties, years):
     """Outcomes of the observed seasons (keys: site, variety, rule, year) → the benchmark's per-cell statistics."""
     out, canopy = {}, {}
@@ -309,11 +349,24 @@ def wofost_varieties(varieties):
 
 def run_wofost(ds, tasks, keys, rep_cells, inp, varieties, workers):
     """WOFOST on the AquaCrop tasks of the WOFOST varieties → {(site, variety, rule): members}, or {} and why not."""
+    return run_engine("wofost", ds, tasks, keys, rep_cells, inp, varieties, workers)
+
+
+def run_dssat(ds, tasks, keys, rep_cells, inp, varieties, workers):
+    """DSSAT on the AquaCrop tasks of the DSSAT varieties → {(site, variety, rule): members}, or {} and why not."""
+    if not dsa.installed():
+        return {}, "not installed (python -m crop_engine.adapters.dssat_adapter --install)"
+    return run_engine("dssat", ds, tasks, keys, rep_cells, inp, varieties, workers)
+
+
+def run_engine(engine, ds, tasks, keys, rep_cells, inp, varieties, workers):
+    """A second or third engine on the AquaCrop tasks of its varieties, with the weather's radiation, humidity and
+    wind → {(site, variety, rule): members}, or {} and why not."""
     if "rad_mj_m2" not in ds:
         return {}, f"no radiation, humidity or wind in the weather ({ds.attrs.get('radiation')})"
-    use = set(wofost_varieties(varieties))
+    use = set(wofost_varieties(varieties) if engine == "wofost" else dssat_varieties(varieties))
     if not use:
-        return {}, "no variety with a WOFOST calibration"
+        return {}, f"no variety with a {'WOFOST calibration' if engine == 'wofost' else 'DSSAT cultivar'}"
     ids = [x.id for x in inp.sites]
     cell = {s.id: s for s, _ in rep_cells}
     wt, wk = [], []
@@ -325,13 +378,13 @@ def run_wofost(ds, tasks, keys, rep_cells, inp, varieties, workers):
         wt.append(dict(t, rad=ds.rad_mj_m2.values[:, k], vap=ds.vap_hpa.values[:, k], wind2=ds.wind2_ms.values[:, k],
                        lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k])))
         wk.append(key)
-    res = run_tasks(wt, workers, engine="wofost")
+    res = run_tasks(wt, workers, engine=engine)
     clean = lambda m: {k: v for k, v in m.items() if not k.startswith("_")}  # noqa: E731
     return {key: [clean(m) for m in r] for key, r in zip(wk, res)}, ""
 
 
 def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules, soils, bench, workers, chash,
-            wofost=True, wbench=None):
+            wofost=True, wbench=None, dssat=True, dbench=None, dhash=None):
     b = inp.b
     if source == "seasonal":
         P, segs = b.seas, [{"kind": "obs", "label": "Observed rainfall (CHIRPS)", "start": f"{b.win0}", "end": f"{b.obs_end}"},
@@ -380,6 +433,11 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
     wof, why = run_wofost(ds, tasks, keys, rep_cells, inp, varieties, workers) if wofost else ({}, "left out (--no-wofost)")
     if why:
         log(f"{rid}: WOFOST {why}")
+    t_w = time.time()
+    dss, why_d = run_dssat(ds, tasks, keys, rep_cells, inp, varieties, workers) if dssat else ({}, "left out (--no-dssat)")
+    if why_d:
+        log(f"{rid}: DSSAT {why_d}")
+    t_d = time.time() - t_w
     out_sites = {}
     fao_on = meth_res["fao-agricultural"]
     try:                                    # the FAO water balance's plant-available water now (the tab's season strip)
@@ -417,12 +475,19 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
             w = wof[(sid, vk, rk)]
             wb = (wbench or {}).get(sid, {}).get(vk, {}).get(rk)
             entry["wofost"] = {"summary": summarize(w, varieties[vk], wb), "members": w}
+        if (sid, vk, rk) in dss:
+            d = dss[(sid, vk, rk)]
+            db = (dbench or {}).get(sid, {}).get(vk, {}).get(rk)
+            entry["dssat"] = {"summary": summarize(d, varieties[vk], db), "members": d}
         for gid in group:
             out_sites[gid]["results"].setdefault(vk, {})[rk] = entry
     meta = {"id": rid, "source": source, "model_label": label, "run": f"{run}", "obs_end": f"{b.obs_end}",
             "members_kind": members, "segments": segs, "engine": ENGINE, "config_hash": chash,
             "second_engine": ({"engine": SECOND_ENGINE, "varieties": sorted({vk for _, vk, _ in wof})} if wof
                               else {"engine": SECOND_ENGINE, "varieties": [], "why_not": why}),
+            "third_engine": ({"engine": THIRD_ENGINE, "varieties": sorted({vk for _, vk, _ in dss}), "config_hash": dhash}
+                             if dss else {"engine": THIRD_ENGINE, "varieties": [], "why_not": why_d,
+                                          "config_hash": dhash if dssat else None}),
             "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
             "varieties": {k: {x: v[x] for x in ("label", "examples", "maturity_days", "failure_t_ha", "aquacrop_crop")} |
                           {"phenology_scale": round(v["scale"], 3)} for k, v in varieties.items()},
@@ -432,7 +497,8 @@ def run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, rules
     C.RESULTS_OUT.mkdir(parents=True, exist_ok=True)
     (C.RESULTS_OUT / f"{rid}.json").write_text(json.dumps({"meta": meta, "sites": out_sites}, indent=1), encoding="utf-8")
     log(f"{rid}: {len(tasks) * P.shape[0]} member seasons in {t_aq:.0f} s"
-        + (f"; WOFOST {len(wof) * P.shape[0]} in {time.time() - t0 - t_aq:.0f} s" if wof else ""))
+        + (f"; WOFOST {len(wof) * P.shape[0]} in {t_w - t0 - t_aq:.0f} s" if wof else "")
+        + (f"; DSSAT {len(dss) * P.shape[0]} in {t_d:.0f} s" if dss else ""))
     return rid
 
 
@@ -465,7 +531,8 @@ def main():
     ap.add_argument("--no-refresh", action="store_true", help="do not top up the ERA5-Land temperature series")
     ap.add_argument("--list-sources", action="store_true", help="print the sources with a run on disk (JSON) and exit")
     ap.add_argument("--no-dashboard", action="store_true", help="do not rewrite the results index and the tab's data")
-    ap.add_argument("--no-wofost", action="store_true", help="AquaCrop only: no second model beside it")
+    ap.add_argument("--no-wofost", action="store_true", help="no WOFOST beside AquaCrop")
+    ap.add_argument("--no-dssat", action="store_true", help="no DSSAT beside AquaCrop")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -499,6 +566,20 @@ def main():
             except Exception as exc:                                   # the outlook goes on without it
                 log(f"WOFOST benchmark failed ({type(exc).__name__}: {str(exc)[:200]}); WOFOST summaries without it")
                 wbench = None
+    dbench, dhash = None, None
+    use_dssat = not a.no_dssat and bool(dssat_varieties(varieties))
+    if use_dssat:
+        dpath, dhash = C.OUT / "climatology_dssat.json", dssat_hash(a.rules, inp.sites)
+        dbench = json.loads(dpath.read_text(encoding="utf-8")) if dpath.exists() else None
+        if a.climatology or not dbench or dbench.get("config_hash") != dhash:
+            try:
+                dbench = {"config_hash": dhash, "engine": THIRD_ENGINE, "years": list(C.HIST_YEARS),
+                          "cal_years": list(C.CAL_YEARS),
+                          "sites": dssat_benchmark(inp, rep_cells, varieties, a.rules, soils, a.workers)}
+                dpath.write_text(json.dumps(dbench, indent=1), encoding="utf-8")
+            except Exception as exc:                                   # the outlook goes on without it
+                log(f"DSSAT benchmark failed ({type(exc).__name__}: {str(exc)[:200]}); DSSAT summaries without it")
+                dbench = None
     meth = fr.Methods(inp.year)
     nwp_cache = {}
     done = []
@@ -507,13 +588,15 @@ def main():
         p = C.RESULTS_OUT / f"{rid}.json"
         if p.exists() and not a.force:
             meta = json.loads(p.read_text(encoding="utf-8"))["meta"]
-            if meta.get("obs_end") == f"{inp.b.obs_end}" and meta.get("config_hash") == chash:
+            same_dssat = not use_dssat or (meta.get("third_engine") or {}).get("config_hash") == dhash
+            if meta.get("obs_end") == f"{inp.b.obs_end}" and meta.get("config_hash") == chash and same_dssat:
                 log(f"{rid}: already made from these observations; skipped")
                 continue
         try:
             got = run_one(inp, meth, source, run, path, nwp_cache, rep_cells, varieties, a.rules, soils,
                           bench["sites"], a.workers, chash, wofost=not a.no_wofost,
-                          wbench=(wbench or {}).get("sites"))
+                          wbench=(wbench or {}).get("sites"), dssat=use_dssat, dbench=(dbench or {}).get("sites"),
+                          dhash=dhash)
             if got:
                 done.append(got)
         except Exception as exc:                                         # one run must not stop the others

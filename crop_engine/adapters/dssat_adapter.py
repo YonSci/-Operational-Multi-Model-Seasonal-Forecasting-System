@@ -13,7 +13,12 @@ pointing to the standard data; `dscsm048.exe A <FileX>` runs every treatment and
 read back. A member DSSAT could not run is retried alone, then reported as an error.
 
 Production: water-limited (WATER Y, NITRO N), as AquaCrop's and WOFOST's: no nitrogen, phosphorus, pest or disease
-limitation. DSSAT's nitrogen balance (NITRO Y with fertiliser) is the next step (CROP_ENGINE.md).
+limitation. With a task's "nitrogen" ({"rate_kg_ha": N, "split": [(days after sowing, share), ...]}: crop_engine.
+run_nitrogen) DSSAT's nitrogen balance is on (NITRO Y; the bean's fixation too, SYMBI Y): urea at those days after
+sowing (FERTI D), the soil's organic nitrogen from its organic carbon (SLNI = SLOC / C_TO_N × the nitrogen's
+"organic_n_factor": a cropped field's depleted organic nitrogen, calibration/dssat.py --nitrogen), its mineral nitrogen
+at the start INIT_NO3 / INIT_NH4 ppm in the top 30 cm and half that below, mineralised through the season by DSSAT's
+CERES-Godwin soil organic matter module; no residues, phosphorus or potassium.
 
 Weather (one file per member): the task's rain, Tmax, Tmin, solar radiation, vapour pressure and 2 m wind; DSSAT's
 own FAO-56 Penman-Monteith reference ET (EVAPO F) from them, so its demand follows the same ERA5-Land / SEAS5
@@ -69,7 +74,7 @@ WHEEL = {"name": "DSSATTools", "version": "3.0.2",
 HOME = C.CACHE / "dssat"
 EXE = HOME / "bin" / ("dscsm048.exe" if os.name == "nt" else "dscsm048")
 DATA = HOME / "Data"
-RUNS = HOME / "run"
+RUNS = Path(os.environ.get("CROP_ENGINE_DSSAT_RUNS") or HOME / "run")   # each task's folder (removed after it)
 
 # AquaCrop crop → DSSAT crop code, its model and cultivar file
 CROPS = {"MaizeGDD": ("MZ", "MZCER048", "MZCER048.CUL", "MZX"),
@@ -84,6 +89,9 @@ ESTABLISHED_LAI = -np.log(1 - 0.05) / K_EXT
 NO_GRAIN_T_HA = 0.01
 CANOPY_STEP = 7
 ROW_CM, DEPTH_CM = 75, 5
+C_TO_N = 10.0                     # soil organic C : N (the soil's organic nitrogen, with nitrogen on)
+INIT_NO3, INIT_NH4 = 3.0, 1.0     # ppm mineral N at the start (1 Aug), top 30 cm (half below): a dry-season low
+UREA = "FE005"
 NO_GERMINATION, GERMINATION_DAYS = "lack of germination", 15     # DSSAT's message and its limit (days after sowing)
 SOIL_PH = 6.5                    # SoilGrids pH is not in the profile; neutral (no effect while nitrogen is off)
 TIMEOUT_S = 600
@@ -96,6 +104,12 @@ def cultivars():
     """{variety key: {cultivar: DSSAT cultivar id, coefficient: value, ...}} (crop_engine/dssat_cultivars.yaml)."""
     import yaml
     return (yaml.safe_load(CULTIVARS_FILE.read_text(encoding="utf-8")) or {}).get("varieties") or {}
+
+
+def soil_settings():
+    """The soil settings of crop_engine/dssat_cultivars.yaml ("soil": organic_n_factor)."""
+    import yaml
+    return (yaml.safe_load(CULTIVARS_FILE.read_text(encoding="utf-8")) or {}).get("soil") or {}
 
 
 def attach(varieties):
@@ -198,8 +212,9 @@ def soil_layers(layers, root_depth_cm):
     return rows
 
 
-def soil_file(soil_id, lat, lon, layers, root_depth_cm):
-    """A DSSAT soil file (.SOL) with one profile."""
+def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0):
+    """A DSSAT soil file (.SOL) with one profile (nitrogen: the layers' organic nitrogen, SLNI = SLOC / C_TO_N ×
+    organic_n_factor)."""
     rows = soil_layers(layers, root_depth_cm)
     top = rows[0]
     sand0 = 100 - top["SLCL"] - top["SLSI"]
@@ -217,7 +232,7 @@ def soil_file(soil_id, lat, lon, layers, root_depth_cm):
     for r in rows:
         out.append(f"{r['SLB']:6d}   -99{r['SLLL']:6.3f}{r['SDUL']:6.3f}{r['SSAT']:6.3f}{r['SRGF']:6.3f}{r['SSKS']:6.2f}"
                    f"{r['SBDM']:6.2f}{r['SLOC']:6.2f}{r['SLCL']:6.1f}{r['SLSI']:6.1f}{r['SLCF']:6.1f}"
-                   f"   -99{SOIL_PH:6.1f}   -99   -99   -99")
+                   + (f"{r['SLOC'] / C_TO_N * organic_n_factor:6.3f}" if nitrogen else "   -99") + f"{SOIL_PH:6.1f}   -99   -99   -99")
     return "\n".join(out) + "\n"
 
 
@@ -255,16 +270,20 @@ def _fit6(x):
 
 
 def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations, init_sh2o, ppop_m2, last_day,
-                    water=True):
+                    water=True, nitrogen=None):
     """The FileX: one treatment per planting (member), each with its own field (weather station) and planting date;
     initial water at `start`; harvest at maturity, or on `last_day` when not mature by then. water False: no water
-    balance (no water stress: the yield without water limitation, for the calibration)."""
+    balance (no water stress: the yield without water limitation, for the calibration). nitrogen: the nitrogen
+    balance on, with urea applications {"rate_kg_ha", "split": [(days after sowing, share), ...]} (module doc)."""
     n = len(plantings)
+    rate = float((nitrogen or {}).get("rate_kg_ha") or 0.0)
+    mf = 1 if nitrogen and rate > 0 else 0
     out = [f"*EXP.DETAILS: {name}{crop} CROP ENGINE MEMBERS", "",
            "*TREATMENTS                        -------------FACTOR LEVELS------------",
            "@N R O C TNAME.................... CU FL SA IC MP MI MF MR MC MT ME MH SM"]
     for k in range(n):
-        out.append(f"{k + 1:2d} 1 0 0 {'M' + str(k + 1):25s}{1:3d}{k + 1:3d}{0:3d}{1:3d}{k + 1:3d}" + f"{0:3d}" * 7 + f"{1:3d}")
+        out.append(f"{k + 1:2d} 1 0 0 {'M' + str(k + 1):25s}{1:3d}{k + 1:3d}{0:3d}{1:3d}{k + 1:3d}{0:3d}{mf:3d}"
+                   + f"{0:3d}" * 5 + f"{1:3d}")
     out += ["", "*CULTIVARS", "@C CR INGENO CNAME", f" 1 {crop} {cultivar_id:6s} {CUSTOM_NAME if cultivar_id == CUSTOM_ID else cultivar_id}",
             "", "*FIELDS",
             "@L ID_FIELD WSTA....  FLSA  FLOB  FLDT  FLDD  FLDS  FLST SLTX  SLDP  ID_SOIL    FLNAME"]
@@ -274,22 +293,29 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
             "@C   PCR ICDAT  ICRT  ICND  ICRN  ICRE  ICWD ICRES ICREN ICREP ICRIP ICRID ICNAME",
             f" 1    {crop} {yyddd(start)}   -99   -99     1     1   -99   -99   -99   -99   -99   -99 -99",
             "@C  ICBL  SH2O  SNH4  SNO3"]
-    out += [f" 1{slb:6d}{sh2o:6.3f}   0.5   1.0" for slb, sh2o in init_sh2o]
+    out += [f" 1{slb:6d}{sh2o:6.3f}{INIT_NH4 * (1 if slb <= 30 else 0.5):6.1f}{INIT_NO3 * (1 if slb <= 30 else 0.5):6.1f}"
+            for slb, sh2o in init_sh2o]
     out += ["", "*PLANTING DETAILS",
             "@P PDATE EDATE  PPOP  PPOE  PLME  PLDS  PLRS  PLRD  PLDP  PLWT  PAGE  PENV  PLPH  SPRL                        PLNAME"]
     for k, p in enumerate(plantings):
         out.append(f"{k + 1:2d} {yyddd(p)}   -99{ppop_m2:6.1f}{ppop_m2:6.1f}     S     R{ROWS_CM.get(crop, ROW_CM):6d}     0{DEPTH_CM:6d}"
                    "   -99   -99   -99   -99     0                        -99")
+    if mf:
+        out += ["", "*FERTILIZERS (INORGANIC)",
+                "@F FDATE  FMCD  FACD  FDEP  FAMN  FAMP  FAMK  FAMC  FAMO  FOCD FERNAME"]
+        for das, share in nitrogen.get("split") or [(0, 1.0)]:
+            out.append(f" 1 {int(das):5d} {UREA} AP002     5{rate * float(share):6.0f}     0     0     0     0   -99 -99")
     s = yyddd(start)
     out += ["", "*SIMULATION CONTROLS",
             "@N GENERAL     NYERS NREPS START SDATE RSEED SNAME.................... SMODEL",
             f" 1 GE              1     1     S {s}  2150 CROP ENGINE",
             "@N OPTIONS     WATER NITRO SYMBI PHOSP POTAS DISES  CHEM  TILL   CO2",
-            f" 1 OP              {'Y' if water else 'N'}     N     N     N     N     N     N     N     M",
+            f" 1 OP              {'Y' if water else 'N'}     {'Y' if nitrogen else 'N'}     {'Y' if nitrogen and crop == 'BN' else 'N'}"
+            "     N     N     N     N     N     M",
             "@N METHODS     WTHER INCON LIGHT EVAPO INFIL PHOTO HYDRO NSWIT MESOM MESEV MESOL",
             f" 1 ME              M     M     E     F     S     {PHOTO.get(crop, 'R')}     R     1     G     S     2",
             "@N MANAGEMENT  PLANT IRRIG FERTI RESID HARVS",
-            " 1 MA              R     N     N     N     A",
+            f" 1 MA              R     N     {'D' if mf else 'N'}     N     A",
             "@N OUTPUTS     FNAME OVVEW SUMRY FROPT GROUT CAOUT WAOUT NIOUT MIOUT DIOUT VBOSE CHOUT OPOUT FMOPT",
             " 1 OU              N     N     Y     1     Y     N     N     N     N     N     Y     N     N     A",
             "",
@@ -459,7 +485,9 @@ def run_members(task, members, plantings):
             (folder / cul_file).write_text(cultivar_file(DATA / "Genotype" / cul_file, cultivar, cfg), encoding="latin-1")
             cul_id = CUSTOM_ID
         soil_id = "CESOIL0001"
-        (folder / "SOIL.SOL").write_text(soil_file(soil_id, task["lat"], task.get("lon", 0.0), task["layers"], root),
+        nit = task.get("nitrogen")
+        (folder / "SOIL.SOL").write_text(soil_file(soil_id, task["lat"], task.get("lon", 0.0), task["layers"], root,
+                                                   nitrogen=bool(nit), organic_n_factor=float((nit or {}).get("organic_n_factor", 1.0))),
                                          encoding="ascii")
         stations = []
         for m in members:
@@ -475,7 +503,8 @@ def run_members(task, members, plantings):
         last = dates[-2].date()
         fx = f"CE{dates[0].year % 100:02d}0001.{ext}"
         (folder / fx).write_text(experiment_file("CE000001", crop, cul_id, soil_id, dates[0].date(), plantings,
-                                                 stations, init, ppop, last, water=task.get("water", True)),
+                                                 stations, init, ppop, last, water=task.get("water", True),
+                                                 nitrogen=task.get("nitrogen")),
                                  encoding="ascii")
         (folder / "DSSATPRO.V48").write_text(run_profile(folder, crop, model), encoding="ascii")
         env = dict(os.environ, DSSAT_HOME=short_path(DATA) + os.sep)

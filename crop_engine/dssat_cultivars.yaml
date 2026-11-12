@@ -19,3 +19,11 @@ varieties:
   maize_medium: {cultivar: KY0010, P1: 298.8, G2: 812.5, G3: 11.08}      # H512, mid-altitude hybrid
   sorghum:      {cultivar: IB0026, P1: 200.0, P5: 300.0, G2: 5.142}      # CSH-1, short-season tropical hybrid
   bean:         {cultivar: IB0014, EM-FL: 24.94, FL-SH: 3.636, FL-SD: 10.39, SD-PM: 20.26, FL-LF: 10.39}   # Canadian Wonder
+
+# The soil with DSSAT's nitrogen balance on (crop_engine/run_nitrogen.py): the factor on the soil's organic nitrogen
+# (SLNI = organic carbon / 10 × organic_n_factor), fitted by `python -m crop_engine.calibration.dssat --nitrogen`
+# (outputs/crop_engine/calibration/dssat/nitrogen.json, 12 Nov 2026) so that early maize without fertiliser yields
+# what Kenyan maize nitrogen trials give against 60 kg N/ha (about 0.6) over the observed Short Rains 1993-2016 at
+# Kiboko and Kapiti. The SoilGrids carbon mineralises far more nitrogen than a cropped dryland field: at the fitted
+# 0.06, the lower bound of the fit, the ratio is still 0.67 (1.0 at the factor 1, no response to fertiliser at all).
+soil: {organic_n_factor: 0.06}

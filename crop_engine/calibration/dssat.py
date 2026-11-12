@@ -22,7 +22,16 @@ no-water-stress yield over the Short Rains 2012 sowings at Kiboko (20 Oct, 3 and
 (4.97 t/ha, calibration/sorghum result), through a factor on G2 (partitioning to the panicle). The dry bean has no
 trial: its yield level stays DSSAT's. Weather: the site's ERA5-Land temperature, radiation, vapour pressure and wind.
 
-Writes outputs/crop_engine/calibration/dssat/result.json and prints the coefficients for crop_engine/dssat_cultivars.yaml
+Soil nitrogen (--nitrogen). With DSSAT's nitrogen balance on, the SoilGrids organic carbon (with a C : N of 10)
+mineralises so much nitrogen that maize without fertiliser yields as much as with it, which cropped dryland fields
+do not: a cropped field's organic nitrogen is depleted. One factor on the soil's organic nitrogen (organic_n_factor,
+dssat_cultivars.yaml "soil") is fitted so that early maize without fertiliser yields N_TARGET of its yield with 60
+kg N/ha, at the median of the observed Short Rains seasons N_YEARS at N_SITES (FAO agricultural onset, the
+outlook's urea split): the ratio Kenyan maize nitrogen trials give (crop_engine/yields observations: the median of
+24 trial-seasons 0.63, 8 in the east 0.64, the dryland Short Rains seasons of Machang'a 2005 and 2006 and Machakos
+2015 0.57–0.59). A first, regional calibration: the sites' own fields are not measured.
+
+Writes outputs/crop_engine/calibration/dssat/result.json (nitrogen: nitrogen.json) and prints the coefficients for crop_engine/dssat_cultivars.yaml
 (edited by hand, citing it). Usage: python -m crop_engine.calibration.dssat [--varieties ...]
 """
 import argparse
@@ -50,6 +59,12 @@ MAIZE_TRAIN = {"variety": "maize_medium", "observed_t_ha": 7.76, "year": 2012,
 MAIZE_CHECKS = cw.CHECKS
 SORGHUM_TRAIN = {"variety": "sorghum", "sowings": ["2012-10-20", "2012-11-03", "2012-11-17"],
                  "source": "AquaCrop's no-water-stress yield at Kiboko, SR 2012 sowings (calibration/sorghum result.json)"}
+N_TARGET = {"ratio_0_60": 0.62, "source": "Kenyan maize nitrogen trials (crop_engine/yields observations): median "
+                                            "yield without N over the yield with 45-75 kg N/ha, 24 trial-seasons 0.63, "
+                                            "8 eastern 0.64, dryland Short Rains 0.57-0.59"}
+N_SITES = ("kalro_kiboko_makueni_farm", "kapiti_research_station_farm")
+N_YEARS = (1993, 2016)
+N_SPLIT = [(0, 0.4), (30, 0.6)]
 DAYS = 300
 SCALE_RANGE = (0.3, 2.5)
 OUT = C.OUT / "calibration" / "dssat"
@@ -172,15 +187,65 @@ def fit_yield(variety, phen, target, site, elev, plantings, tol=0.02):
                 lambda y: abs(y - target) < tol)
 
 
+def nitrogen_ratio(tasks, factor, workers):
+    """Median, over the seasons whose crop matures with 60 kg N/ha, of the yield without N over the yield with it."""
+    from crop_engine import run_outlook as ro_
+    runs = []
+    for t in tasks:
+        for rate in (0, 60):
+            runs.append(dict(t, nitrogen={"rate_kg_ha": rate, "split": N_SPLIT, "organic_n_factor": factor}))
+    res = ro_.run_tasks(runs, workers, engine="dssat")
+    ratios = []
+    for k in range(0, len(res), 2):
+        y0, y60 = res[k][0], res[k + 1][0]
+        if y60["status"] == "ok" and y60["yield_t_ha"] >= 0.5:
+            ratios.append((y0["yield_t_ha"] if y0["status"] in ("ok", "died") else 0.0) / y60["yield_t_ha"])
+    return (float(np.median(ratios)) if ratios else None), len(ratios)
+
+
+def calibrate_nitrogen(workers):
+    from crop_engine import compare_engines as ce
+    from crop_engine.data import soil as soil_mod
+    from crop_engine.data import weather as W
+    _, vs = ro.load_varieties(["maize_early"])
+    ds.attach(vs)
+    inp = W.Inputs(refresh=False)
+    rep = [(s, g) for s, g in ro.cells(inp.sites) if s.id in N_SITES]
+    soils = {s.id: soil_mod.profile(s) for s, _ in rep}
+    tasks, _ = ce.tasks_for(inp, list(range(N_YEARS[0], N_YEARS[1] + 1)), rep, vs, ["fao-agricultural"], soils)
+    tasks = [t for t in tasks if t["planting"][0] is not None]
+    log(f"nitrogen: {len(tasks)} observed seasons at {', '.join(N_SITES)}, early maize, 0 and 60 kg N/ha")
+    target = N_TARGET["ratio_0_60"]
+    scan = {}
+    ratio = lambda f: scan.setdefault(f, nitrogen_ratio(tasks, f, workers))[0]        # noqa: E731
+    for f in (1.0, 0.5, 0.25, 0.12, 0.06):
+        log(f"  organic N × {f}: ratio {ratio(f)} ({scan[f][1]} seasons)")
+    f, r, reached = _fit(ratio, target, sorted(scan), lambda v: abs(v - target) < 0.01)
+    log(f"nitrogen: organic_n_factor {f} → ratio {r:.3f} (target {target}{'' if reached else ', not reached'})")
+    out = {"created": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "target": N_TARGET,
+           "sites": list(N_SITES), "years": list(N_YEARS), "split": N_SPLIT, "c_to_n": ds.C_TO_N,
+           "initial_ppm": {"NO3": ds.INIT_NO3, "NH4": ds.INIT_NH4},
+           "scan": {str(k): {"ratio": v[0], "seasons": v[1]} for k, v in sorted(scan.items())},
+           "organic_n_factor": f, "ratio": r, "reached": reached}
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "nitrogen.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
+    log(f"dssat_cultivars.yaml soil: {{organic_n_factor: {f}}}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--varieties", nargs="+", default=["maize_early", "maize_medium", "sorghum", "bean"])
+    ap.add_argument("--nitrogen", action="store_true", help="fit the soil's organic nitrogen factor instead")
+    ap.add_argument("--workers", type=int, default=2)
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if not ds.installed():
         log(f"DSSAT is not installed ({ds.EXE}): python -m crop_engine.adapters.dssat_adapter --install")
         return 1
+    if a.nitrogen:
+        return calibrate_nitrogen(a.workers)
     tref, varieties = ro.load_varieties(a.varieties)
     ds.attach(varieties)
     site = next(s for s in registered_sites() if s.id == SITE)

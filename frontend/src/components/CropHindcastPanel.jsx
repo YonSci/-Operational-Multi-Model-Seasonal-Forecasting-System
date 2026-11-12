@@ -14,7 +14,7 @@ const pct = v => v == null ? '—' : `${Math.round(v * 100)}%`
 const fmtT = v => v == null ? '—' : v < 0.05 ? '0' : v.toFixed(1)
 const median = a => { const s = a.filter(v => v != null).sort((x, y) => x - y); if (!s.length) return null
                       const h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2 }
-const ENGINES = { aquacrop: 'AquaCrop', wofost: 'WOFOST' }
+const ENGINES = { aquacrop: 'AquaCrop', wofost: 'WOFOST', dssat: 'DSSAT' }
 const PREDICTORS = [['lgp', 'Season length'], ['rain', 'Oct–Dec rain'], ['onset', 'Onset date']]
 const IN_TEXT = { lgp: 'season length', rain: 'Oct–Dec rain', onset: 'onset date' }
 const S2S_CROPS = ['maize_early', 'sorghum']
@@ -187,28 +187,30 @@ function download(name, rows) {
 }
 
 // one row of scores: each model's rank correlation, ROC area and Brier skill, and the platform's predictors
-function ScoreCells({ c, county }) {
-  const a = c?.aquacrop?.all, w = c?.wofost?.all, b = c?.aquacrop?.baselines
+function ScoreCells({ c, county, models }) {
+  const b = c?.aquacrop?.baselines
   return (
     <>
-      <td style={{ ...td, fontWeight: 600 }}>{r2(a?.r)}</td><td style={td}>{r2(a?.auc)}</td><td style={td}>{r2(a?.bss)}</td>
-      <td style={{ ...td, fontWeight: 600 }}>{r2(w?.r)}</td><td style={td}>{r2(w?.auc)}</td><td style={td}>{r2(w?.bss)}</td>
+      {models.flatMap(k => {
+        const x = c?.[k]?.all
+        return [<td key={k + 'r'} style={{ ...td, fontWeight: 600 }}>{r2(x?.r)}</td>, <td key={k + 'a'} style={td}>{r2(x?.auc)}</td>,
+                <td key={k + 'b'} style={td}>{r2(x?.bss)}</td>]
+      })}
       {PREDICTORS.map(([k]) => <td key={k} style={td}>{r2(b?.[k]?.r)}</td>)}
       {county !== undefined && <td style={td}>{county ? `${r2(county.aquacrop?.forecast)} (${county.years.length} yr)` : '—'}</td>}
     </>
   )
 }
-const ScoreHead = ({ first, county }) => (
+const ScoreHead = ({ first, county, models }) => (
   <thead>
     <tr>
       <th style={th} rowSpan={2}>{first}</th>
-      <th style={{ ...th, textAlign: 'center' }} colSpan={3}>AquaCrop</th>
-      <th style={{ ...th, textAlign: 'center' }} colSpan={3}>WOFOST</th>
+      {models.map(k => <th key={k} style={{ ...th, textAlign: 'center' }} colSpan={3}>{ENGINES[k]}</th>)}
       <th style={{ ...th, textAlign: 'center', whiteSpace: 'normal' }} colSpan={3}>The platform’s forecasts as predictors, r</th>
       {county && <th style={{ ...th, whiteSpace: 'normal' }} rowSpan={2}>County yields, r (AquaCrop forecast)</th>}
     </tr>
     <tr>
-      {['r', 'ROC', 'BSS', 'r', 'ROC', 'BSS'].map((k, i) => <th key={i} style={th}>{k}</th>)}
+      {models.flatMap(k => ['r', 'ROC', 'BSS'].map(x => <th key={k + x} style={th}>{x}</th>))}
       {PREDICTORS.map(([k, l]) => <th key={k} style={th}>{l}</th>)}
     </tr>
   </thead>
@@ -232,6 +234,7 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
   const label = k => ix.varieties?.[k]?.label ?? k
   const county = d.county?.[sid]?.[vk]?.[rk]
   const all = Object.values(d.sites).flatMap(vs => Object.values(vs).flatMap(rs => Object.values(rs)))
+  const models = Object.keys(ENGINES).filter(k => d.made?.[k])                 // the models with a hindcast on disk
   const overall = Object.keys(ENGINES).map(k => [k, median(all.map(c => c[k]?.all?.r)), median(all.map(c => c[k]?.all?.auc)),
                                                  all.filter(c => c[k]).length]).filter(x => x[3])
   const s2s = S2S_CROPS.includes(vk) && rk === 'rule1' ? skill?.s2s?.sites?.[sid]?.[vk] : null
@@ -269,7 +272,7 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
                 {ENGINES[k]}
               </button>
             ))}
-            {engs.length < 2 && <span style={{ fontSize: 13, color: 'var(--text-meta)' }}>(WOFOST does not grow this crop)</span>}
+            {!engs.includes('wofost') && <span style={{ fontSize: 13, color: 'var(--text-meta)' }}>(WOFOST does not grow this crop)</span>}
           </div>
 
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
@@ -355,7 +358,7 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
       <H4>Every site: {label(vk)}, {ruleLabel}</H4>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <ScoreHead first="Site" county/>
+          <ScoreHead first="Site" county models={models}/>
           <tbody>
             {Object.keys(d.sites).filter(id => d.sites[id]?.[vk]?.[rk]).map(id => (
               <tr key={id} style={id === sid ? { background: 'var(--nav-active-bg)' } : undefined}>
@@ -363,7 +366,7 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
                   {id === sid || !onSite ? <span style={{ fontWeight: id === sid ? 600 : 400 }}>{siteName(id)}</span>
                     : <button type="button" className="crop-step-link" style={{ fontSize: 13.5 }} onClick={() => onSite(id)}>{siteName(id)}</button>}
                 </td>
-                <ScoreCells c={d.sites[id][vk][rk]} county={d.county?.[id]?.[vk]?.[rk] ?? null}/>
+                <ScoreCells c={d.sites[id][vk][rk]} county={d.county?.[id]?.[vk]?.[rk] ?? null} models={models}/>
               </tr>
             ))}
           </tbody>
@@ -374,12 +377,12 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
         <summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: 'var(--accent-text)' }}>Every crop and sowing rule at {siteName(sid)}</summary>
         <div style={{ overflowX: 'auto', marginTop: 6 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <ScoreHead first="Crop, sowing rule"/>
+            <ScoreHead first="Crop, sowing rule" models={models}/>
             <tbody>
               {Object.entries(d.sites[sid] ?? {}).flatMap(([k, rs]) => Object.entries(rs).map(([r, c]) => (
                 <tr key={k + r} style={k === vk && r === rk ? { background: 'var(--nav-active-bg)' } : undefined}>
                   <td style={{ ...td, whiteSpace: 'normal', minWidth: 160 }}>{label(k)}, {ix.planting_rules?.[r] ?? r}</td>
-                  <ScoreCells c={c}/>
+                  <ScoreCells c={c} models={models}/>
                 </tr>
               )))}
             </tbody>
