@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import CropRegionalPanel from './CropRegionalPanel.jsx'
+import CropHindcastPanel from './CropHindcastPanel.jsx'
 
 // Crop outlook (experimental): AquaCrop grown in every member of each forecast run at the Kenya monitored sites, sown on
 // the platform's onset date, compared with the same crop in the observed seasons of 1993–2025 (crop_engine/,
@@ -628,7 +629,11 @@ function SkillLine({ skill, source, sid, vk, rk }) {
         the crop grown in the observed weather {r2(c.aquacrop.r)} (AquaCrop){c.wofost ? `, ${r2(c.wofost.r)} (WOFOST)` : ''}, failure ROC area
         {' '}{r2(c.aquacrop.auc)}{c.wofost ? ` / ${r2(c.wofost.auc)}` : ''}. The platform’s own forecasts read as yield predictors:
         {' '}{best.map(([k, x]) => `${k} ${r2(x.r)}`).join(', ')}. 1 is a perfect ranking, 0 none; with {c.aquacrop.n} years a value is uncertain
-        by about ±0.2 ({madeNote(m.aquacrop, skill.seasonal.current_config)}; Forecast performance tab).
+        by about ±0.2 ({madeNote(m.aquacrop, skill.seasonal.current_config)}).{' '}
+        <button type="button" className="crop-step-link" style={{ fontSize: 13.5 }}
+                onClick={() => document.getElementById('crop-hindcast')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+          Year by year, every site and the county yields →
+        </button>
       </p>)
   }
   if (source === 's2s-ecmwf' && rk === 'rule1') {
@@ -1116,6 +1121,10 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
 
       <div style={{ marginTop: 18 }}>
         <HistoryPanel hist={histQ.data} loading={histQ.isLoading} source={run.source} sid={sid} vk={vk} rk={rk} thr={v.failure_t_ha} msg={msg}/>
+      </div>
+
+      <div id="crop-hindcast" style={{ marginTop: 18, scrollMarginTop: 12 }}>
+        <CropHindcastPanel ix={ix} sid={sid} vk={vk} rk={rk} skill={skillQ.data} onSite={setSiteId}/>
       </div>
 
       <div style={{ marginTop: 18 }}>
