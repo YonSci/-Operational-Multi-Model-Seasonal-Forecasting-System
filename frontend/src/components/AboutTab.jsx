@@ -1037,6 +1037,12 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                   3 Nov 2026 the ECMWF ENS + extended-range run (Dunning and Agri rules only) was a separate experimental run; the archive was rebuilt
                   from the forecasts on disk with the observations of the time (to 25 Oct).
                 </div>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  A day the daily update misses is filled in afterwards, up to six days back: ECMWF ENS from ECMWF’s cloud copies of its open data,
+                  GEFS from dynamical.org, and the medium-range models from Open-Meteo’s archive of past runs (each day’s 00 UTC run as issued; the
+                  value at the 0.5° cell centre rather than the mean over the cell, so slightly different from a direct download). Filled this way:
+                  27, 29 and 30 Oct for the medium-range models, and UKMO Global on 1 Nov.
+                </div>
             </Disclosure>
 
             <Disclosure title="Probabilities, skill and missing dates" scope="Kenya · Short Rains · CAL 1993–2016 · VAL 2017–2024">
