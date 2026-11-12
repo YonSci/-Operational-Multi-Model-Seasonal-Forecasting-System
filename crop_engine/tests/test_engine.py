@@ -167,6 +167,17 @@ def test_resowing_after_a_false_start():
     assert again["planting"] >= "2026-11-15" and again["status"] in ("ok", "died") and again["yield_t_ha"] > 0
 
 
+def test_a_late_germination_still_gets_its_full_season():
+    # sown on 20 Sep into dry soil, the seed waiting for the rains from 15 Nov: AquaCrop-OSPy's end of season counted
+    # maturity from sowing, so the crop that germinated in November was "mature" in December with no grain (0 t/ha,
+    # 23 Dec); counted from germination (patch_delayed_maturity) it fills its grain and matures in January
+    ds = _false_start()
+    ds.precip_mm.values[..., DATES.get_loc(pd.Timestamp("2026-10-01"))] = 0
+    m = aq.simulate(dict(_task(ds, [dt.date(2026, 9, 20)]), initial_frac=0.05, resow=None))[0]
+    assert m["status"] == "ok" and m["yield_t_ha"] > 1.0 and m["harvest"] >= "2027-01-10"
+    assert aq._PATCHED
+
+
 def test_variety_parameters_override():
     kw, _ = aq.crop_parameters(dict(VARIETY, parameters={"PlantPop": 44000, "HI0": 0.4}), 23.0)
     assert kw["PlantPop"] == 44000 and kw["HI0"] == 0.4
