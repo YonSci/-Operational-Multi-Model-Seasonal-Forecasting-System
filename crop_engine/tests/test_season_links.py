@@ -107,6 +107,44 @@ def test_skill_file_from_the_hindcasts(tmp_path, monkeypatch):
     assert "s2s" not in d                                              # no sub-seasonal hindcast on disk: left out
 
 
+def test_hindcast_file_year_by_year(tmp_path, monkeypatch):
+    monkeypatch.setattr(C, "OUT", tmp_path)
+    monkeypatch.setattr(C, "DASHBOARD_OUT", tmp_path / "dash")
+    (tmp_path / "dash").mkdir()
+    (tmp_path / "verification").mkdir()
+    assert not dashboard.write_hindcast("new", log=lambda m: None)    # no hindcast on disk: no file
+    years = [1993, 1994, 1995]
+    cell = {"years": years, "observed_t_ha": [0.0, 2.3456, 5.0], "forecast_median_t_ha": [0.1, 1.9, 4.2],
+            "forecast_p_failure": [0.84, 0.4, 0.04], "lgp_median_days": [12.0, 61.5, 95.0], "sown_before_oct": 1,
+            "crop": {"spearman": 0.513, "failure_auc": 0.8, "failure_bss": 0.32, "n_years": 3, "n_success": 2,
+                     "failure_rate": 0.333},
+            "crop_from_oct": {"spearman": 0.4, "n_years": 2},
+            "baselines": {"lgp_days": {"spearman": 0.62, "failure_auc": 0.85}},
+            "baselines_from_oct": {"rain_oct_dec_mm": {"spearman": 0.5}}}
+    county = {"years": [1993, 1995], "county_t_ha": [1.1474, 0.3061], "forecast": -0.376, "benchmark": 0.117, "lgp": None}
+    for f, h in (("hindcast_scores.json", "old"), ("hindcast_scores_wofost.json", "w1")):
+        (tmp_path / "verification" / f).write_text(json.dumps({
+            "years": years, "config_hash": h, "created": "2026-11-11T23:45", "reference": "the crop in the observed weather",
+            "sites": {"kiboko": {"maize_early": {"rule1": cell}}}, "county": {"kiboko": {"maize_early": {"rule1": county}}}}))
+    assert dashboard.write_hindcast("new", log=lambda m: None)
+    d = json.loads((tmp_path / "dash" / "hindcast.json").read_text(encoding="utf-8"))
+    assert d["years"] == years and d["current_config"] == "new" and d["made"]["wofost"]["config_hash"] == "w1"
+    a = d["sites"]["kiboko"]["maize_early"]["rule1"]["aquacrop"]
+    assert a["obs"] == [0.0, 2.35, 5.0] and a["p_fail"] == [0.84, 0.4, 0.04] and a["lgp"] == [12.0, 61.5, 95.0]
+    assert a["all"] == {"r": 0.51, "auc": 0.8, "bss": 0.32, "n": 3, "fail_rate": 0.33, "ok": 2} and a["oct"]["r"] == 0.4
+    assert a["baselines"]["lgp"]["r"] == 0.62 and a["baselines"]["onset"]["r"] is None
+    assert a["baselines_oct"]["rain"]["r"] == 0.5 and "years" not in a  # the file's years: not repeated
+    c = d["county"]["kiboko"]["maize_early"]["rule1"]
+    assert c["county_t_ha"] == [1.147, 0.306] and c["aquacrop"] == {"forecast": -0.38, "benchmark": 0.12, "lgp": None}
+    assert c["wofost"]["forecast"] == -0.38
+
+
+def test_tab_data_cleanup_keeps_the_regional_and_hindcast_files():
+    # dashboard.write removes every other .json of the folder as an older run's: grid.json (crop_engine/grid.py) was
+    # removed so, right after it was written
+    assert {"grid.json", "hindcast.json", "skill.json"} <= dashboard.KEEP
+
+
 def test_bulletin_crop_page_only_near_a_crop_site(tmp_path, monkeypatch):
     bc = _bulletin_crop()
     (tmp_path / "crop").mkdir()

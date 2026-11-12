@@ -106,6 +106,16 @@ compacted for the platform:
   rain and onset forecasts as baselines;
 - sub-seasonal: observations only against the forecast's rain, and with its temperature.
 
+**The hindcast year by year** (`hindcast.json`, `dashboard.write_hindcast`; the tab's section *How well past
+forecasts did (hindcast)*, `CropHindcastPanel.jsx`): for the chosen site, crop, rule and model, the scores as tiles
+in plain words (rank correlation, failure ROC area, failure Brier skill score, the seasons that failed), the
+platform's season-length, Oct–Dec rain and onset forecasts scored against the same crop with a verdict (the crop
+model better, on a par or worse than the best of them), a chart of each hindcast year (the crop in the observed
+weather, the forecast median, the forecast's chance of failure, the failed years marked) with its table and a CSV,
+the check against the county Short Rains maize yields (HarvestStat), every site for the same crop and rule, every
+crop and rule at the site, the sub-seasonal scores by start date (Agri rule 1), and what each score means. The file
+is rewritten from the hindcast files on disk with the rest of the tab's data, so it follows the next hindcast run.
+
 Each part records when it was made, and the tab says so when it was made with an earlier crop configuration than the
 outlook's. The tab gives a line under the headline for the chosen site, crop and rule. The **Forecast performance**
 tab (Kenya, Short Rains) ends with a card for the crop site nearest the map's location, beside the onset, cessation
@@ -479,27 +489,29 @@ seasons):
 
 | County (seasons) | Grid | Detrended | The site's cell alone |
 |---|---|---|---|
-| Taita Taveta (14) | **+0.53** | **+0.51** | — |
-| Meru (11) | +0.59 | +0.12 | — |
-| Machakos (15) | +0.43 | +0.39 | +0.38 (Kapiti) |
-| Kitui (16) | +0.20 | +0.26 | — |
-| Tharaka Nithi (11) | +0.14 | +0.22 | — |
-| Kajiado (13) | +0.13 | +0.23 | +0.00 (Livemo) |
-| Makueni (16) | +0.07 | +0.03 | +0.10 (Kiboko) |
-| Embu (16) | +0.02 | +0.11 | — |
+| Taita Taveta (14) | **+0.49** | **+0.52** | — |
+| Meru (11) | +0.52 | +0.15 | — |
+| Machakos (15) | +0.45 | +0.42 | +0.43 (Kapiti) |
+| Kajiado (13) | +0.21 | +0.25 | +0.03 (Livemo) |
+| Kitui (16) | +0.17 | +0.24 | — |
+| Embu (16) | +0.12 | +0.13 | — |
+| Tharaka Nithi (11) | +0.08 | +0.22 | — |
+| Makueni (16) | +0.06 | +0.05 | +0.10 (Kiboko) |
 
-The county average tracks the reported seasons better than a single site's cell in Kajiado and Machakos and no
-worse in Makueni, but only Taita Taveta is clearly above the noise (Meru's rank correlation is mostly a shared
+(With the 1.5 m maize rooting depth, rebuilt 11 Nov 2026; with 1.0 m the values differed by up to 0.1.) The county
+average tracks the reported seasons better than a single site's cell in Kajiado, on a par in Machakos and
+Makueni, but only Taita Taveta is clearly above the noise (Meru's rank correlation is mostly a shared
 trend). Reported county yields carry what the model leaves out (fertiliser, varieties, area planted late, pests)
 and their own reporting noise; the grid is not yet evidence of county-scale skill, and the forecasts themselves
 are not verified (a hindcast of the grid, as `crop_engine/hindcast.py` does for the sites, is the next check:
 about 58 000 member seasons for 1993–2016, a night's run).
 
-**The 1 Oct 2026 forecast** (observations to 5 Nov): well above normal in the south-east, where most of the maize
-is (Makueni 187 %, Kitui 160 %, Machakos 157 %, Kajiado 159 % of the area-mean normal; below-normal chances
-4–12 %), close to normal in Embu and Tharaka Nithi, below in Meru (71 %, 84 % below normal). Where a cell holds a
-monitored site the two agree: Kiboko's cell 204 % of normal against the site's 202 % (crop failure 24 % in both),
-Kapiti's 219 % against 246 % (the cell 0.6 °C warmer).
+**The 1 Oct 2026 forecast** (observations to 5 Nov, rebuilt 11 Nov): well above normal in the south-east, where most
+of the maize is (Makueni 188 %, Kitui 162 %, Machakos 162 %, Kajiado 160 % of the area-mean normal; below-normal
+chances 4–12 %), above in Taita Taveta (130 %) and Embu (116 %), close to normal in Tharaka Nithi (104 %), below in
+Meru (76 %, 44 % below normal). Where a cell holds a monitored site the two agreed in the first run (Kiboko's cell
+204 % of normal against the site's 202 %, Kapiti's 219 % against 246 %, the cell's temperature 0.4–0.7 °C from the
+site's).
 
 **Sowing into a long dry spell** (found here; the site outlook has it too). Meru's low numbers come from cells sown
 at a September FAO onset (from the observed rain) followed by four to six dry weeks: AquaCrop counts the crop's
