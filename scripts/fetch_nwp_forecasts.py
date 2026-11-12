@@ -32,6 +32,7 @@ BASE = Path(__file__).resolve().parent.parent
 OUT = BASE / "data" / "nwp"
 MODELS = ["ecmwf_ifs025", "gfs_global", "icon_global", "gem_global", "ukmo_global_deterministic_10km"]
 API = "https://api.open-meteo.com/v1/forecast"
+SINGLE_RUNS_API = "https://single-runs-api.open-meteo.com/v1/forecast"   # past runs, each as issued
 BATCH = 50
 
 
@@ -57,20 +58,44 @@ def stations():
     return [(s["site_name"], s["lat"], s["lon"]) for s in ml.SITES if s["country"] == "kenya"]
 
 
-def fetch_batch(points):
+def fetch_batch(points, run=None):
+    """Daily rain per point and model; with `run` (a date), that day's 00 UTC run from Open-Meteo's archive of past runs."""
     q = {"latitude": ",".join(f"{p[0]:.3f}" for p in points), "longitude": ",".join(f"{p[1]:.3f}" for p in points),
          "daily": "precipitation_sum", "models": ",".join(MODELS), "forecast_days": 16, "timezone": "Africa/Nairobi"}
+    api = API
+    if run is not None:
+        # the archive gives daily sums only in UTC, and leaves the run's first day empty (no rain at hour 0), so
+        # sum the hourly rain instead: hours 01–24 UTC make the day, as in the direct downloads
+        api = SINGLE_RUNS_API
+        del q["daily"]
+        q.update(hourly="precipitation", timezone="GMT", run=f"{run:%Y-%m-%d}T00:00")
     for k in range(6):
         try:
-            r = requests.get(API, params=q, timeout=120)
+            r = requests.get(api, params=q, timeout=120)
             if r.status_code == 429:
                 time.sleep(30 * (k + 1)); continue
             r.raise_for_status()
             d = r.json()
-            return d if isinstance(d, list) else [d]
+            d = d if isinstance(d, list) else [d]
+            return [_hourly_to_daily(x) for x in d] if run is not None else d
         except requests.RequestException:
             time.sleep(10 * (k + 1))
     raise RuntimeError("Open-Meteo request failed")
+
+
+def _hourly_to_daily(d):
+    """Open-Meteo hourly rain → {"daily": {"time", "precipitation_sum[_<model>]"}}; days with a missing hour are None."""
+    t = pd.DatetimeIndex(d["hourly"]["time"]) - pd.Timedelta(hours=1)     # rain at hh:00 fell in the hour before
+    out = {}
+    for key, vals in d["hourly"].items():
+        if key == "time":
+            continue
+        s = pd.Series(np.array(vals, dtype=float), index=t)
+        g = s.groupby(s.index.normalize())
+        day = g.sum().where(g.count() == 24)
+        out[key.replace("precipitation", "precipitation_sum", 1)] = [None if np.isnan(v) else round(float(v), 2) for v in day.values]
+    out["time"] = [f"{x:%Y-%m-%d}" for x in day.index]
+    return {"daily": out}
 
 
 def main():

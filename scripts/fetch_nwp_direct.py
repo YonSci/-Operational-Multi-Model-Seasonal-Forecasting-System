@@ -15,6 +15,9 @@ Daily precipitation forecasts for Kenya downloaded directly from each producing 
 Days are UTC days (00–24 UTC) of the 00 UTC run. Any model whose download fails is filled from
 Open-Meteo (fetch_nwp_forecasts.py) so the dashboard always has all six. Output has the same columns
 as fetch_nwp_forecasts.py, plus `source`: data/nwp/nwp_<YYYYMMDD>.csv
+
+A missed day (--archive --date YYYYMMDD) is filled afterwards from Open-Meteo's archive of past runs
+(source `open-meteo-run`), and the ECMWF ENS median from that day's ENS file.
 """
 import argparse
 import bz2
@@ -355,11 +358,16 @@ def ukmo(date):
     return [date + dt.timedelta(days=k) for k in range(nd)], la, lo, np.clip(daily[:nd], 0, None)
 
 
-def ens_median(date):
-    f = sorted(glob.glob(str(BASE / "data" / "ecmwf_ens" / "ens_tp_*_kenya.nc")))
+def ens_median(date, exact=False):
+    """Median of the ENS run of `date`; without `exact`, the latest run up to that date."""
+    f = [p for p in sorted(glob.glob(str(BASE / "data" / "ecmwf_ens" / "ens_tp_*_kenya.nc")))
+         if Path(p).stem.split("_")[2][:8] <= f"{date:%Y%m%d}"]
+    if exact:
+        f = [p for p in f if Path(p).stem.split("_")[2][:8] == f"{date:%Y%m%d}"]
     if not f:
-        raise RuntimeError("no ECMWF ENS file (run fetch_ecmwf_ens.py)")
-    e = xr.open_dataset(f[-1])["precip"].median("member")
+        raise RuntimeError(f"no ECMWF ENS file for {date} (run fetch_ecmwf_ens.py)")
+    with xr.open_dataset(f[-1]) as ds:
+        e = ds["precip"].median("member").load()
     la, lo = np.meshgrid(e.lat.values, e.lon.values, indexing="ij")
     return [pd.Timestamp(t).date() for t in e.time.values], la.ravel(), lo.ravel(), e.values.reshape(e.sizes["time"], -1)
 
@@ -392,10 +400,15 @@ def main():
     ap.add_argument("--no-fallback", action="store_true")
     ap.add_argument("--only-missing", action="store_true",
                     help="fetch only models that do not yet have direct data in the day's file (for retries)")
+    ap.add_argument("--archive", action="store_true",
+                    help="a past run: Open-Meteo's archive of past runs, and the ECMWF ENS median from that day's ENS file")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     date = dt.datetime.strptime(a.date, "%Y%m%d").date()
+    if a.archive:
+        archive(date, a.models)
+        return
     if a.only_missing:
         f = OUT / f"nwp_{date:%Y%m%d}.csv"
         have = set(pd.read_csv(f).query("source == 'direct'").model) if f.exists() and "source" in pd.read_csv(f, nrows=1) else set()
@@ -448,6 +461,29 @@ def main():
                 write(out, [r for r in fb_rows if r["model"] in keep])
             except Exception as exc:
                 log(f"Open-Meteo fallback failed ({type(exc).__name__}); keeping earlier values for {', '.join(fb)} if any")
+
+
+def archive(date, models):
+    """A missed day's file: the models' 00 UTC run of `date` from Open-Meteo's archive, the ENS median from that day's file."""
+    points = [("grid", "", la, lo) for la, lo in om.kenya_points()] + [("station", n, la, lo) for n, la, lo in om.stations()]
+    rows = []
+    if "ecmwf_ens_median" in models:
+        try:
+            rows += sample(points, *ens_median(date, exact=True), "ecmwf_ens_median", "direct")
+        except Exception as exc:
+            log(f"ecmwf_ens_median: {type(exc).__name__}: {exc}")
+    om.MODELS[:] = [m for m in models if m in om.MODELS]
+    for i in range(0, len(points), om.BATCH):
+        chunk = points[i:i + om.BATCH]
+        for (kind, site, plat, plon), d in zip(chunk, om.fetch_batch([(p[2], p[3]) for p in chunk], run=date)):
+            for m in om.MODELS:
+                vals = d["daily"].get(f"precipitation_sum_{m}") or (d["daily"].get("precipitation_sum") if len(om.MODELS) == 1 else None)
+                for t, v in zip(d["daily"]["time"], vals or []):
+                    if v is not None:
+                        rows.append({"model": m, "kind": kind, "site": site, "lat": plat, "lon": plon,
+                                     "date": t, "rain_mm": round(float(v), 1), "source": "open-meteo-run"})
+        time.sleep(1)
+    write(OUT / f"nwp_{date:%Y%m%d}.csv", rows)
 
 
 def write(out, rows):
