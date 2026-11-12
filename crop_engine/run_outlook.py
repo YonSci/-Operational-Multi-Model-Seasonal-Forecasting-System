@@ -123,10 +123,13 @@ def cells(sites):
 
 
 def run_tasks(tasks, workers, engine="aquacrop"):
-    """Simulate the tasks with AquaCrop (default) or WOFOST (adapters/wofost_adapter.py)."""
+    """Simulate the tasks with AquaCrop (default), WOFOST (adapters/wofost_adapter.py) or DSSAT (dssat_adapter.py)."""
     if engine == "wofost":
         from crop_engine.adapters import wofost_adapter as wf
         fn = wf.simulate
+    elif engine == "dssat":
+        from crop_engine.adapters import dssat_adapter as dsa
+        fn = dsa.simulate
     else:
         fn = aq.simulate
     if workers <= 1:

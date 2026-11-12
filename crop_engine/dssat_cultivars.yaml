@@ -1,0 +1,21 @@
+# DSSAT's cultivars for the crop engine's varieties (adapters/dssat_adapter.py, the third engine), apart from
+# varieties.yaml so that the outlook's configuration (run_outlook.config_hash) does not change with them.
+#
+# `cultivar`: the DSSAT cultivar the variety starts from (DSSAT 4.8's own files: MZCER048.CUL, SGCER048.CUL,
+# BNGRO048.CUL); the other keys override its coefficients. Calibrated by crop_engine/calibration/dssat.py
+# (outputs/crop_engine/calibration/dssat/result.json, 12 Nov 2026), every coefficient within the file's MINIMA and
+# MAXIMA:
+#   phenology  maturity in the variety's maturity_days at 21 °C with no water stress, as AquaCrop's and WOFOST's:
+#              maize P1 (the juvenile phase) scaled; sorghum P1 and P5, both at DSSAT's minimum, still mature in
+#              109 days, not the class's 100 (DSSAT's sorghum cannot be shorter; PANTH, P3, P4 are fixed); dry bean
+#              its five phases × 1.039
+#   yield      medium maize with no water stress at Kiboko, 2012 dry-season sowings: Duma 43 well watered, 7.76
+#              t/ha (Ngugi et al. 2013), through G2 and G3 × 1.477 (early maize the same factor; checks: 4.96 and
+#              4.81 t/ha against the Local Katumani composite's 3.02 and the IITA 2013 median 4.5, upper bounds);
+#              sorghum matched to AquaCrop's no-water-stress yield at Kiboko, SR 2012 sowings (4.97 t/ha), G2 ×
+#              0.8595; the bean keeps DSSAT's yield level (no trial)
+varieties:
+  maize_early:  {cultivar: KY0018, P1: 96.15, G2: 664.7, G3: 15.51}      # Katumani Composite B-II
+  maize_medium: {cultivar: KY0010, P1: 298.8, G2: 812.5, G3: 11.08}      # H512, mid-altitude hybrid
+  sorghum:      {cultivar: IB0026, P1: 200.0, P5: 300.0, G2: 5.142}      # CSH-1, short-season tropical hybrid
+  bean:         {cultivar: IB0014, EM-FL: 24.94, FL-SH: 3.636, FL-SD: 10.39, SD-PM: 20.26, FL-LF: 10.39}   # Canadian Wonder
