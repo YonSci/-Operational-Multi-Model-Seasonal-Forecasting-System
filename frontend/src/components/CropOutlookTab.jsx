@@ -27,9 +27,9 @@ const STATUS_LABEL = { ok: 'Matured', died: 'Died before maturity', failed_estab
 
 const CSS = `
 .crop-viz { --crop-fc:#3987e5; --crop-o1:#b7d3f6; --crop-o2:#6da7ec; --crop-o3:#2a78d6; --crop-o4:#184f95;
-            --crop-ink1:#0f172a; --crop-ink2:#0f172a; --crop-ink3:#ffffff; --crop-ink4:#ffffff; --crop-wof:#d96a1f; }
+            --crop-ink1:#0f172a; --crop-ink2:#0f172a; --crop-ink3:#ffffff; --crop-ink4:#ffffff; --crop-wof:#d96a1f; --crop-dssat:#2fa87c; }
 html.light .crop-viz { --crop-fc:#2a78d6; --crop-o1:#104281; --crop-o2:#256abf; --crop-o3:#5598e7; --crop-o4:#86b6ef;
-                       --crop-ink1:#ffffff; --crop-ink2:#ffffff; --crop-ink3:#0f172a; --crop-ink4:#0f172a; --crop-wof:#c2560c; }
+                       --crop-ink1:#ffffff; --crop-ink2:#ffffff; --crop-ink3:#0f172a; --crop-ink4:#0f172a; --crop-wof:#c2560c; --crop-dssat:#14855c; }
 .crop-viz select:focus-visible, .crop-viz button:focus-visible, .crop-viz summary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 .crop-table th, .crop-table td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border-primary); white-space:nowrap; }
 .crop-table th { font-size:13px; font-weight:600; color:var(--text-meta); }
@@ -107,9 +107,16 @@ const num = v => (v === '' || v == null || !Number.isFinite(+v)) ? null : +v
 // of failure if sown within AGREE_P; depend on the model when they differ by more than twice that; partly in between
 const AGREE_T = 1.0, AGREE_P = 0.15
 const AGREEMENT = {
-  agree: { short: 'agree', label: 'The two crop models agree', tone: 'ok' },
-  partly: { short: 'partly agree', label: 'The two crop models partly agree', tone: 'mid' },
+  agree: { short: 'agree', label: 'The crop models agree', tone: 'ok' },
+  partly: { short: 'partly agree', label: 'The crop models partly agree', tone: 'mid' },
   differ: { short: 'depends on the model', label: 'The outcome depends on the crop model', tone: 'warn' },
+}
+const LEVEL_ORDER = ['agree', 'partly', 'differ']
+// AquaCrop against each other model that has this crop (WOFOST, DSSAT): the weakest agreement of the pairs
+function agreementAll(a, others) {
+  const gs = others.map(o => agreementOf(a, o)).filter(Boolean)
+  if (!gs.length) return null
+  return gs.reduce((w, g) => LEVEL_ORDER.indexOf(g.level) > LEVEL_ORDER.indexOf(w.level) ? g : w)
 }
 function agreementOf(a, w) {
   const ya = a?.yield_if_sown_t_ha?.median, yw = w?.yield_if_sown_t_ha?.median
@@ -420,7 +427,7 @@ function CanopyChart({ fc, past, nMembers }) {
 // ── The season at this site, step by step ────────────────────────────────────────────────────────────────────────
 // Rain so far is the Near real-time rainfall tracking tab's own figure (tracker/data/sites.csv), the soil water the
 // FAO water balance's, sowing, canopy and yield this crop run's: each step reads as the tab it links to does
-function SeasonChain({ tr, sw, initial, summary, R, wofR, rk, ruleLabel, fao, canopy, onOpen }) {
+function SeasonChain({ tr, sw, initial, summary, R, wofR, dssR, rk, ruleLabel, fao, canopy, onOpen }) {
   const rain = num(tr?.rain_since_oct1_chirps_mm), normal = num(tr?.normal_same_days_mm), pn = num(tr?.pct_of_normal)
   const peak = canopy?.median?.length ? canopy.median.reduce((a, v, i) => (v ?? -1) > (canopy.median[a] ?? -1) ? i : a, 0) : null
   const peakDate = peak == null ? null : new Date(Date.parse(canopy.start + 'T00:00:00Z') + peak * (canopy.step_days ?? 7) * DAY).toISOString().slice(0, 10)
@@ -445,8 +452,10 @@ function SeasonChain({ tr, sw, initial, summary, R, wofR, rk, ruleLabel, fao, ca
                         : `harvest about ${fmtDate(summary?.harvest_median)}`,
       link: ['Canopy chart', () => go('crop-canopy')] },
     { title: 'Yield if sown', kind: 'Forecast', value: R?.nSown ? `${fmtT(R.ySown.median)} t/ha` : '—',
-      sub: `AquaCrop${wofR?.nSown ? `; WOFOST ${fmtT(wofR.ySown.median)} t/ha` : ''}. Failure if sown ${pct(R?.pFailSown)}${wofR?.nSown ? ` (WOFOST ${pct(wofR.pFailSown)})` : ''}`,
-      link: ['Two crop models', () => go('crop-models')] },
+      sub: `AquaCrop${wofR?.nSown ? `; WOFOST ${fmtT(wofR.ySown.median)}` : ''}${dssR?.nSown ? `; DSSAT ${fmtT(dssR.ySown.median)}` : ''}`
+           + `${wofR?.nSown || dssR?.nSown ? ' t/ha' : ''}. Failure if sown ${pct(R?.pFailSown)}`
+           + `${wofR?.nSown || dssR?.nSown ? ` (${[wofR?.nSown && `WOFOST ${pct(wofR.pFailSown)}`, dssR?.nSown && `DSSAT ${pct(dssR.pFailSown)}`].filter(Boolean).join(', ')})` : ''}`,
+      link: ['Crop models', () => go('crop-models')] },
   ]
   return (
     <section aria-label="The season at this site, step by step" style={{ marginBottom: 18 }}>
@@ -592,23 +601,25 @@ function HistoryPanel({ hist, loading, source, sid, vk, rk, thr, msg }) {
 }
 
 // ── The two crop models as a confidence signal ───────────────────────────────────────────────────────────────────
-function ModelAgreement({ a, w, share, vk }) {
-  const g = agreementOf(a, w)
+function ModelAgreement({ a, w, d, share, shareD, vk }) {
+  const others = [['WOFOST', w, share], ['DSSAT', d, shareD]].filter(([, x]) => agreementOf(a, x))
+  const g = agreementAll(a, others.map(([, x]) => x))
   if (!g) return (
     <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
-      {cropOf(vk) === 'bean' ? 'One crop model only: WOFOST has no dry bean, so there is no second opinion on this crop.'
+      {cropOf(vk) === 'bean' ? 'One crop model only for this run: WOFOST has no dry bean, and DSSAT has not grown this run.'
                              : 'No second crop model for this run, so there is no second opinion on it.'}
     </p>)
   const t = TONE[g.tone]
-  const yA = a.yield_if_sown_t_ha.median, yW = w.yield_if_sown_t_ha.median
+  const shares = others.filter(([, , sh]) => sh != null).map(([n, , sh]) => `${n} ${pct(sh)}`)
   return (
     <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1"
          style={{ marginTop: 10, background: t.bg, color: t.fg, border: '1px solid var(--border-primary)', borderRadius: 10, padding: '9px 14px',
                   fontSize: 14, lineHeight: 1.5 }}>
       <strong>{g.label}.</strong>
       <span style={{ color: g.tone === 'warn' ? t.fg : 'var(--text-body)' }}>
-        Yield if sown {fmtT(yA)} t/ha (AquaCrop) and {fmtT(yW)} t/ha (WOFOST); failure if sown {pct(a.p_failure_if_sown)} and {pct(w.p_failure_if_sown)}
-        {share != null ? `; they agree on whether the crop fails in ${pct(share)} of the members` : ''}.
+        Yield if sown {fmtT(a.yield_if_sown_t_ha.median)} t/ha (AquaCrop){others.map(([n, x]) => `, ${fmtT(x.yield_if_sown_t_ha.median)} t/ha (${n})`).join('')};
+        {' '}failure if sown {pct(a.p_failure_if_sown)}{others.map(([n, x]) => `, ${pct(x.p_failure_if_sown)} (${n})`).join('')}
+        {shares.length ? `; members on which ${others.length > 1 ? 'each' : 'it'} agrees with AquaCrop on whether the crop fails: ${shares.join(', ')}` : ''}.
         {g.level === 'differ' ? ' Read this outlook with care: the answer here rests on the model as much as on the forecast.'
           : g.level === 'agree' ? ' The outcome rests less on the choice of model.' : ''}
       </span>
@@ -626,8 +637,8 @@ function SkillLine({ skill, source, sid, vk, rk }) {
     return (
       <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '8px 0 0', lineHeight: 1.5 }}>
         <strong style={{ color: 'var(--text-body)' }}>How past forecasts did</strong> (SEAS5 1 Oct, {m.aquacrop?.years?.join('–')}): rank correlation with
-        the crop grown in the observed weather {r2(c.aquacrop.r)} (AquaCrop){c.wofost ? `, ${r2(c.wofost.r)} (WOFOST)` : ''}, failure ROC area
-        {' '}{r2(c.aquacrop.auc)}{c.wofost ? ` / ${r2(c.wofost.auc)}` : ''}. The platform’s own forecasts read as yield predictors:
+        the crop grown in the observed weather {r2(c.aquacrop.r)} (AquaCrop){c.wofost ? `, ${r2(c.wofost.r)} (WOFOST)` : ''}{c.dssat ? `, ${r2(c.dssat.r)} (DSSAT)` : ''}, failure ROC area
+        {' '}{r2(c.aquacrop.auc)}{c.wofost ? ` / ${r2(c.wofost.auc)}` : ''}{c.dssat ? ` / ${r2(c.dssat.auc)}` : ''}. The platform’s own forecasts read as yield predictors:
         {' '}{best.map(([k, x]) => `${k} ${r2(x.r)}`).join(', ')}. 1 is a perfect ranking, 0 none; with {c.aquacrop.n} years a value is uncertain
         by about ±0.2 ({madeNote(m.aquacrop, skill.seasonal.current_config)}).{' '}
         <button type="button" className="crop-step-link" style={{ fontSize: 13.5 }}
@@ -676,15 +687,16 @@ export function CropSkillPanel({ selectedSite, onOpen }) {
       </p>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={th}>Crop, sowing rule</th><th style={th}>AquaCrop</th><th style={th}>WOFOST</th>
-            <th style={th}>Season length</th><th style={th}>Oct–Dec rain</th><th style={th}>Onset</th><th style={th}>Failure ROC, AquaCrop / WOFOST</th></tr></thead>
+          <thead><tr><th style={th}>Crop, sowing rule</th><th style={th}>AquaCrop</th><th style={th}>WOFOST</th><th style={th}>DSSAT</th>
+            <th style={th}>Season length</th><th style={th}>Oct–Dec rain</th><th style={th}>Onset</th><th style={th}>Failure ROC, AquaCrop / WOFOST / DSSAT</th></tr></thead>
           <tbody>
             {rows.map(({ vk, rk, c }) => (
               <tr key={vk + rk}>
                 <td style={{ ...td, whiteSpace: 'normal' }}>{ix.varieties?.[vk]?.label ?? vk}, {ix.planting_rules[rk]}</td>
                 <td style={{ ...td, fontWeight: 600 }}>{r2(c.aquacrop?.r)}</td><td style={{ ...td, fontWeight: 600 }}>{r2(c.wofost?.r)}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{r2(c.dssat?.r)}</td>
                 <td style={td}>{r2(c.lgp?.r)}</td><td style={td}>{r2(c.rain?.r)}</td><td style={td}>{r2(c.onset?.r)}</td>
-                <td style={td}>{r2(c.aquacrop?.auc)} / {r2(c.wofost?.auc)}</td>
+                <td style={td}>{r2(c.aquacrop?.auc)} / {r2(c.wofost?.auc)} / {r2(c.dssat?.auc)}</td>
               </tr>
             ))}
           </tbody>
@@ -699,7 +711,7 @@ export function CropSkillPanel({ selectedSite, onOpen }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2" style={{ marginTop: 10 }}>
         <span style={{ fontSize: 12.5, color: 'var(--text-meta)', flex: '1 1 320px' }}>
           Against the crop simulated in the observed weather, not measured yields; {rows[0]?.c?.aquacrop?.n ?? 24} years, so a value is uncertain by about ±0.2.
-          AquaCrop’s scores {madeNote(m.aquacrop, skill.seasonal.current_config)}; WOFOST’s {madeNote(m.wofost)}.
+          AquaCrop’s scores {madeNote(m.aquacrop, skill.seasonal.current_config)}; WOFOST’s {madeNote(m.wofost)}{m.dssat ? `; DSSAT’s ${madeNote(m.dssat)}` : ''}.
         </span>
         <button type="button" onClick={() => onOpen({ lat: site.lat, lon: site.lon, site_name: site.name })}
                 style={{ background: 'none', border: '1px solid var(--border-primary)', color: 'var(--accent-text)', borderRadius: 8, padding: '6px 12px',
@@ -845,34 +857,50 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
 
 // The dashboard's own choices (season, seasonal run, onset method, forecast type and model) set the defaults here; a
 // choice the crop outlook cannot follow is named in a notice, never replaced silently
-// ── Two crop models on the same members: AquaCrop (published) and WOFOST (second model) ─────────────────────────────
-function EnginePanel({ aqua, wof, v, vk, why, past, pastWof }) {
-  if (!wof) {
-    const reason = why ?? (cropOf(vk) === 'bean' ? 'WOFOST has no dry bean crop set, so the bean is grown by AquaCrop only.'
-      : 'This run was made before the second model was added, or without its radiation, humidity and wind.')
+// ── The crop models on the same members: AquaCrop (published), WOFOST and DSSAT ───────────────────────────────────
+const MODEL_INFO = {
+  wofost: { label: 'WOFOST', color: 'var(--crop-wof)' },
+  dssat: { label: 'DSSAT', color: 'var(--crop-dssat)' },
+}
+function EnginePanel({ aqua, others, v, vk, why, past }) {
+  const have = others.filter(o => o.members?.length)
+  if (!have.length) {
+    const reason = why ?? (cropOf(vk) === 'bean' ? 'No other model for the bean in this run: WOFOST has no dry bean, and DSSAT has not grown this run.'
+      : 'This run was made before the other models were added, or without their radiation, humidity and wind.')
     return <p style={{ fontSize: 14, color: 'var(--text-meta)', margin: 0, lineHeight: 1.55 }}>{reason}</p>
   }
   const thr = v.failure_t_ha
-  const ra = rates(aqua.map(m => ({ status: m[3], y: m[2] })), thr)
-  const rw = rates(wof.map(m => ({ status: m[3], y: m[2] })), thr)
+  const rate = ms => rates(ms.map(m => ({ status: m[3], y: m[2] })), thr)
+  const ra = rate(aqua)
   const harvest = ms => median(ms.filter(m => SIMULATED.includes(m[3]) && m[1]).map(m => Date.parse(m[1])))
-  const pairs = aqua.map((m, i) => [m, wof[i]]).filter(([a, w]) => w && a[3] !== 'error' && w[3] !== 'error')
-  const agree = pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < thr) === (effYield(w[3], w[2]) < thr)).length / pairs.length : null
-  const d = rw.ySown.median != null && ra.ySown.median != null ? rw.ySown.median - ra.ySown.median : null
-  const rows = [['AquaCrop (the published outlook)', ra, harvest(aqua)], ['WOFOST (second model)', rw, harvest(wof)]]
-  const seasonRates = s => rates(s.map(x => ({ status: x[4], y: x[3] })), thr)
+  const agreeWith = ms => {
+    const pairs = aqua.map((m, i) => [m, ms[i]]).filter(([a, w]) => w && a[3] !== 'error' && w[3] !== 'error')
+    return pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < thr) === (effYield(w[3], w[2]) < thr)).length / pairs.length : null
+  }
+  const rows = [['AquaCrop (the published outlook)', ra, harvest(aqua), 'var(--crop-fc)'],
+                ...have.map(o => [MODEL_INFO[o.key].label, rate(o.members), harvest(o.members), MODEL_INFO[o.key].color])]
+  const seasonRates = x => rates(x.map(y => ({ status: y[4], y: y[3] })), thr)
   const pastRows = [past && ['AquaCrop, simulated past seasons', seasonRates(past), null],
-                    pastWof && ['WOFOST, simulated past seasons', seasonRates(pastWof), null]].filter(Boolean)
+                    ...have.map(o => o.past && [`${MODEL_INFO[o.key].label}, simulated past seasons`, seasonRates(o.past), null])].filter(Boolean)
   const iso = t => t == null ? null : new Date(t).toISOString().slice(0, 10)
+  const diffs = have.map(o => {
+    const r = rate(o.members), d = r.ySown.median != null && ra.ySown.median != null ? r.ySown.median - ra.ySown.median : null
+    return d == null ? null : Math.abs(d) < 0.25 ? `${MODEL_INFO[o.key].label} gives about the same yield for the sown crops as AquaCrop`
+      : `${MODEL_INFO[o.key].label}’s median yield of the sown crops is ${fmtT(Math.abs(d))} t/ha ${d < 0 ? 'lower' : 'higher'} than AquaCrop’s`
+  }).filter(Boolean)
+  const agrees = have.map(o => [MODEL_INFO[o.key].label, agreeWith(o.members)]).filter(([, a]) => a != null)
   return (
     <>
       <div style={{ overflowX: 'auto' }}>
         <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th>Crop model</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Failure if sown</th><th>Matured</th><th>Harvest</th></tr></thead>
           <tbody>
-            {[...rows, ...pastRows].map(([label, r, h], i) => (
+            {[...rows, ...pastRows].map(([label, r, h, color], i) => (
               <tr key={label}>
-                <td style={{ fontWeight: i < 2 ? 600 : 400, color: i < 2 ? 'var(--heading)' : undefined }}>{label}</td>
+                <td style={{ fontWeight: i < rows.length ? 600 : 400, color: i < rows.length ? 'var(--heading)' : undefined }}>
+                  {color && <span aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: color, marginRight: 8 }}/>}
+                  {label}
+                </td>
                 <td>{r.nSown ? `${fmtT(r.ySown.median)} t/ha` : '—'}</td>
                 <td>{r.nSown ? `${fmtT(r.ySown.p10)}–${fmtT(r.ySown.p90)} t/ha` : '—'}</td>
                 <td>{pct(r.pFailSown)}</td>
@@ -884,16 +912,57 @@ function EnginePanel({ aqua, wof, v, vk, why, past, pastWof }) {
         </table>
       </div>
       <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
-        {d == null ? 'No sown crop to compare.'
-          : Math.abs(d) < 0.25 ? 'The two models give about the same yield for the sown crops. '
-          : `WOFOST’s median yield of the sown crops is ${fmtT(Math.abs(d))} t/ha ${d < 0 ? 'lower' : 'higher'} than AquaCrop’s. `}
-        {agree != null && `They agree on whether a member’s crop fails for ${pct(agree)} of the members. `}
-        {pastRows.length === 2 && 'Each model is also grown in the observed weather of the same past seasons, so each forecast can be read against its own model’s normal. '}
-        Same weather, soil, starting water and sowing dates; only the crop model differs, so the gap between them is part of the
-        uncertainty the forecast does not show on its own. WOFOST’s maize yield level is calibrated to the same Kiboko trial as
-        AquaCrop’s, and its sorghum to AquaCrop’s own sorghum level; it has no dry bean.
+        {diffs.length ? `${diffs.join('; ')}. ` : 'No sown crop to compare. '}
+        {agrees.length > 0 && `They agree with AquaCrop on whether a member’s crop fails for ${agrees.map(([n, a]) => `${pct(a)} of the members (${n})`).join(' and ')}. `}
+        {pastRows.length > 1 && 'Each model is also grown in the observed weather of the same past seasons, so each forecast can be read against its own model’s normal. '}
+        Same weather, soil, starting water and sowing dates; only the crop model differs, so the gaps between them are part of the
+        uncertainty the forecast does not show on its own. WOFOST’s and DSSAT’s maize yield levels are calibrated to the same Kiboko
+        trial as AquaCrop’s, and their sorghum to AquaCrop’s own sorghum level; WOFOST has no dry bean. AquaCrop’s crop dies when a long
+        dry spell kills its canopy, while WOFOST’s and DSSAT’s survive with a smaller yield: where seasons are dry, they fail less.
       </p>
     </>
+  )
+}
+
+// ── Nitrogen: DSSAT's crop with its nitrogen balance on, at assumed fertiliser rates (crop_engine/run_nitrogen.py) ────
+function NitrogenPanel({ data, seasonal, sid, vk, rk, ruleLabel, msg }) {
+  const sub = 'DSSAT grows the same members again with its nitrogen balance on: no fertiliser, and urea at two rates, beside its '
+    + 'outlook with no nitrogen limitation. AquaCrop and WOFOST, like DSSAT’s outlook, have no nitrogen limit.'
+  if (!data?.sites) return null                                       // not made yet: the panel stays hidden
+  if (!seasonal) return <Panel title="Nitrogen (DSSAT)" sub={sub}>{msg('Made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
+  const cell = data.sites?.[sid]?.results?.[vk]?.[rk]
+  const meta = data.meta
+  if (!cell) return <Panel title="Nitrogen (DSSAT)" sub={sub}>{msg('No nitrogen levels for this site, crop and rule.')}</Panel>
+  const rows = [['water_limited', 'No nitrogen limit (DSSAT’s outlook)'], ...Object.entries(meta.levels).map(([k, l]) => [k, l.label])]
+  const top = cell.water_limited?.yield_if_sown_t_ha?.median
+  return (
+    <Panel title="Nitrogen (DSSAT)" sub={sub}>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th>Fertiliser</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Share of the no-limit yield</th><th>Failure if sown</th></tr></thead>
+          <tbody>
+            {rows.map(([k, label]) => {
+              const x = cell[k], y = x?.yield_if_sown_t_ha
+              return (
+                <tr key={k}>
+                  <td style={{ fontWeight: k === 'water_limited' ? 600 : 400, color: k === 'water_limited' ? 'var(--heading)' : undefined }}>{label}</td>
+                  <td>{y ? `${fmtT(y.median)} t/ha` : '—'}</td>
+                  <td>{y ? `${fmtT(y.p10)}–${fmtT(y.p90)} t/ha` : '—'}</td>
+                  <td>{y && top ? pct(y.median / top) : '—'}</td>
+                  <td>{pct(x?.p_failure_if_sown)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
+        {meta.assumed}. {ruleLabel}. The soil’s nitrogen is set so that maize without fertiliser yields about 0.6 of its yield
+        with 60 kg N/ha, as Kenyan maize nitrogen trials do (a first, regional calibration: the fields here are not measured).
+        {cropOf(vk) === 'bean' ? ' The bean fixes its own nitrogen, so fertiliser changes little.' : ''}
+        {' '}Made {fmtDate(meta.created?.slice(0, 10))} from the outlook of {fmtDate(meta.run)} (observations to {fmtDate(meta.obs_end)}); refreshed weekly.
+      </p>
+    </Panel>
   )
 }
 
@@ -931,6 +1000,9 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const runQ = useQuery({ queryKey: ['crop-run', run?.id], enabled: !!run, staleTime: 30 * 60_000,
                           queryFn: () => getJSON(DATA + (run.file ?? run.source + '.json')) })
   // management scenarios of the seasonal run (crop_engine/run_scenarios.py); absent until first made
+  // DSSAT's nitrogen levels of the seasonal run (crop_engine/run_nitrogen.py); absent until first made
+  const nitQ = useQuery({ queryKey: ['crop-nitrogen'], staleTime: 30 * 60_000, retry: false,
+                          queryFn: () => getJSON(DATA + 'nitrogen.json').catch(() => null) })
   const scenQ = useQuery({ queryKey: ['crop-scenarios'], staleTime: 30 * 60_000, retry: false,
                            queryFn: () => getJSON(DATA + 'scenarios.json').catch(() => null) })
   // each outlook's summary on every day it was rebuilt (crop_engine/dashboard.py write_history); absent until first made
@@ -951,6 +1023,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const members = res?.results?.[vk]?.[rk]?.members ?? []
   const canopy = res?.results?.[vk]?.[rk]?.canopy
   const wofMembers = res?.results?.[vk]?.[rk]?.wofost?.members
+  const dssMembers = res?.results?.[vk]?.[rk]?.dssat?.members
   const b = bench.data?.sites?.[sid]?.[vk]?.[rk]
   const fcY = members.filter(m => m[3] !== 'error').map(m => effYield(m[3], m[2]))
   const pastY = (b?.seasons ?? []).filter(s => s[4] !== 'error').map(s => effYield(s[4], s[3]))
@@ -972,8 +1045,14 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   const pastPotential = median((b?.seasons ?? []).filter(s => SIMULATED.includes(s[4]) && s[5] != null).map(s => s[5]))
   const vb = summary?.vs_benchmark ?? {}
   const wofR = wofMembers?.length ? rates(wofMembers.map(m => ({ status: m[3], y: m[2] })), v.failure_t_ha) : null
+  const dssR = dssMembers?.length ? rates(dssMembers.map(m => ({ status: m[3], y: m[2] })), v.failure_t_ha) : null
   const openTab = tab => onOpenTab?.(tab, { lat: site.lat, lon: site.lon, site_name: site.name })
   const wSummary = ix.wofost?.[run.id]?.[sid]?.[vk]?.[rk]
+  const dSummary = ix.dssat?.[run.id]?.[sid]?.[vk]?.[rk]
+  const shareWith = ms => {                                           // members on which the two models give the same failure verdict
+    const pairs = (ms ?? []).map((w, i) => [members[i], w]).filter(([a, w]) => a && w && a[3] !== 'error' && w[3] !== 'error')
+    return pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < v.failure_t_ha) === (effYield(w[3], w[2]) < v.failure_t_ha)).length / pairs.length : null
+  }
   const agreeShare = (() => {                                          // members on which both models give the same failure verdict
     const pairs = (wofMembers ?? []).map((w, i) => [members[i], w]).filter(([a, w]) => a && w && a[3] !== 'error' && w[3] !== 'error')
     return pairs.length ? pairs.filter(([a, w]) => (effYield(a[3], a[2]) < v.failure_t_ha) === (effYield(w[3], w[2]) < v.failure_t_ha)).length / pairs.length : null
@@ -993,7 +1072,8 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         What each forecast means for a crop at the monitored sites: the AquaCrop crop model grown in the weather of every forecast
         member, sown on the platform’s onset date, and compared with the same crop simulated in the observed weather of {years[0]}–{years[1]}
         (simulated past seasons, not measured yields) and with the yields measured in field trials at the site, where there are any.
-        A second crop model, WOFOST, grows the same maize and sorghum members, to show how much the answer depends on the model.
+        Two more crop models grow the same members, to show how much the answer depends on the model: WOFOST (maize and sorghum)
+        and DSSAT (maize, sorghum and the bean).
       </p>
       <div role="note" style={{ marginTop: 12, background: 'var(--caution-bg)', color: 'var(--caution-text)', borderRadius: 8, padding: '10px 14px',
                                 fontSize: 14, lineHeight: 1.55, maxWidth: 860 }}>
@@ -1035,7 +1115,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
 
       {summary && R && (
         <SeasonChain tr={trackerRowOf(trackerQ.data, site)} sw={res?.soil_water} initial={res?.initial_water_fraction} summary={summary}
-                     R={R} wofR={wofR} rk={rk} ruleLabel={rules[rk]} fao={res?.fao_reference?.agricultural} canopy={canopy} onOpen={openTab}/>
+                     R={R} wofR={wofR} dssR={dssR} rk={rk} ruleLabel={rules[rk]} fao={res?.fao_reference?.agricultural} canopy={canopy} onOpen={openTab}/>
       )}
       {summary && R && (
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
@@ -1055,7 +1135,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                 sub={summary.stress_days_median != null ? <>Water-stress days: {Math.round(summary.stress_days_median)}. Season rain: {Math.round(summary.rain_mm_median)} mm (medians of sown crops)</> : 'No sown crop'}/>
         </div>
       )}
-      {summary && R && <ModelAgreement a={summary} w={wSummary} share={agreeShare} vk={vk}/>}
+      {summary && R && <ModelAgreement a={summary} w={wSummary} d={dSummary} share={agreeShare} shareD={shareWith(dssMembers)} vk={vk}/>}
       {summary && R && <SkillLine skill={skillQ.data} source={run.source} sid={sid} vk={vk} rk={rk}/>}
       {summary && R && (
         <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
@@ -1098,12 +1178,15 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
       </div>
 
       <div id="crop-models" style={{ marginTop: 18, scrollMarginTop: 12 }}>
-        <Panel title="Two crop models, the same forecast"
-               sub="AquaCrop, the published outlook, and WOFOST 7.2 grown in the same members of this forecast, sown on the same dates.">
+        <Panel title="Three crop models, the same forecast"
+               sub="AquaCrop, the published outlook, WOFOST 7.2 and DSSAT 4.8 grown in the same members of this forecast, sown on the same dates.">
           {runQ.isLoading ? msg('Loading…')
-            : members.length ? <EnginePanel aqua={members} wof={wofMembers} v={v} vk={vk} past={b?.seasons}
-                                            pastWof={bench.data?.wofost?.[sid]?.[vk]?.[rk]?.seasons}
-                                            why={runQ.data?.meta?.second_engine?.why_not && !wofMembers ? `No second model for this run: ${runQ.data.meta.second_engine.why_not}.` : null}/>
+            : members.length ? <EnginePanel aqua={members} v={v} vk={vk} past={b?.seasons}
+                                            others={[{ key: 'wofost', members: wofMembers, past: bench.data?.wofost?.[sid]?.[vk]?.[rk]?.seasons },
+                                                     { key: 'dssat', members: dssMembers, past: bench.data?.dssat?.[sid]?.[vk]?.[rk]?.seasons }]}
+                                            why={!wofMembers && !dssMembers && (runQ.data?.meta?.second_engine?.why_not || runQ.data?.meta?.third_engine?.why_not)
+                                              ? `No other model for this run: ${[runQ.data.meta.second_engine?.why_not && `WOFOST ${runQ.data.meta.second_engine.why_not}`,
+                                                  runQ.data.meta.third_engine?.why_not && `DSSAT ${runQ.data.meta.third_engine.why_not}`].filter(Boolean).join('; ')}.` : null}/>
             : msg('No members for this choice.')}
         </Panel>
       </div>
@@ -1133,13 +1216,14 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr><th>Forecast</th><th>Type</th><th>Sowing</th><th>Sowing opportunity</th><th>Yield if sown</th><th>8 in 10 sown</th>
-                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th><th>WOFOST yield if sown</th><th>Crop models</th></tr>
+                    <th>Without water stress</th><th>Failure if sown</th><th>Matured</th><th>WOFOST yield if sown</th><th>DSSAT yield if sown</th><th>Crop models</th></tr>
               </thead>
               <tbody>
                 {runs.map(r => {
                   const s = ix.summaries?.[r.id]?.[sid]?.[vk]?.[rk]
                   if (!s) return null
-                  const ws = ix.wofost?.[r.id]?.[sid]?.[vk]?.[rk]
+                  const ws = ix.wofost?.[r.id]?.[sid]?.[vk]?.[rk], dsm = ix.dssat?.[r.id]?.[sid]?.[vk]?.[rk]
+                  const ag = agreementAll(s, [ws, dsm])
                   const on = r.id === run.id
                   return (
                     <tr key={r.id} style={{ background: on ? 'var(--nav-active-bg)' : undefined }}>
@@ -1159,7 +1243,8 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                       <td>{pct(s.p_failure_if_sown)}</td>
                       <td>{pct(s.share.ok)}</td>
                       <td>{ws?.yield_if_sown_t_ha?.median != null ? `${fmtT(ws.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
-                      <td style={{ color: agreementOf(s, ws)?.tone === 'warn' ? 'var(--caution-text)' : undefined }}>{agreementOf(s, ws)?.short ?? '—'}</td>
+                      <td>{dsm?.yield_if_sown_t_ha?.median != null ? `${fmtT(dsm.yield_if_sown_t_ha.median)} t/ha` : '—'}</td>
+                      <td style={{ color: ag?.tone === 'warn' ? 'var(--caution-text)' : undefined }}>{ag?.short ?? '—'}</td>
                     </tr>
                   )
                 })}
@@ -1174,7 +1259,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                     <td>{pastPotential != null ? `${fmtT(pastPotential)} t/ha` : '—'}</td>
                     <td>{pct(RB.pFailSown)}</td>
                     <td>{pct(RB.pOk)}</td>
-                    <td>—</td><td>—</td>
+                    <td>—</td><td>—</td><td>—</td>
                   </tr>
                 )}
                 {measured.map(o => (
@@ -1184,7 +1269,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                     <td>—</td><td>—</td>
                     <td>{fmtT(o.median_t_ha)} t/ha</td>
                     <td>high-input {fmtT(o.p90_t_ha)} t/ha</td>
-                    <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+                    <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
                   </tr>
                 ))}
               </tbody>
@@ -1197,6 +1282,12 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
         <ScenarioPanel data={scenQ.data} loading={scenQ.isLoading} seasonal={run.source === 'seasonal'} sid={sid} vk={vk} rk={rk}
                        ruleLabel={rules[rk]} msg={msg}/>
       </div>
+
+      {nitQ.data && (
+        <div id="crop-nitrogen" style={{ marginTop: 18, scrollMarginTop: 12 }}>
+          <NitrogenPanel data={nitQ.data} seasonal={run.source === 'seasonal'} sid={sid} vk={vk} rk={rk} ruleLabel={rules[rk]} msg={msg}/>
+        </div>
+      )}
 
       <div className="grid gap-4" style={{ marginTop: 18 }}>
         <Panel title="Members of this forecast">
@@ -1253,7 +1344,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
           </ul>
           <p style={{ fontSize: 13.5, margin: '10px 0 0' }}>
             <a href={METHOD_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-text)' }}>Method: CROP_ENGINE.md</a>
-            <span style={{ color: 'var(--text-meta)' }}> · {ix.engine}{ix.second_engine ? ` · second model ${ix.second_engine}` : ''}</span>
+            <span style={{ color: 'var(--text-meta)' }}> · {ix.engine}{ix.second_engine ? ` · second model ${ix.second_engine}` : ''}{ix.third_engine ? ` · third model ${ix.third_engine}` : ''}</span>
           </p>
         </Panel>
       </div>

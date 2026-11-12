@@ -46,6 +46,8 @@ WOFOST (`--engine wofost`): the same forecasts grown by WOFOST (its varieties: m
 radiation, vapour pressure and wind observed (ERA5-Land) to 30 Sep, then their day-of-year climatology (SEAS5's, ratio-
 corrected without year y, with --temperature seas5 when its radiation files are on disk), scored against WOFOST's own
 observed-weather benchmark (climatology_wofost.json, built by run_outlook). Outputs carry the suffix _wofost.
+DSSAT (`--engine dssat`): the same, for DSSAT's varieties (maize, sorghum and the bean), against DSSAT's own
+benchmark (climatology_dssat.json); outputs with the suffix _dssat.
 
 Outputs (not committed): outputs/crop_engine/verification/hindcast_members<tag>.json (every member's outcome) and
 hindcast_scores<tag>.json (`--tag`, after the temperature's suffix); a table in the log.
@@ -57,6 +59,7 @@ Usage:
   python -m crop_engine.hindcast --temperature seas5 --workers 3   # SEAS5 temperature, compared with climatology
   python -m crop_engine.hindcast --sites kalro_kiboko_makueni_farm --varieties maize_early --years 2005 2010
   python -m crop_engine.hindcast --engine wofost --workers 3       # WOFOST, against its own benchmark
+  python -m crop_engine.hindcast --engine dssat --workers 3        # DSSAT, against its own benchmark
 """
 import argparse
 import datetime as dt
@@ -204,7 +207,7 @@ def simulate(inp, years, rep_cells, varieties, rules, soils, workers, temperatur
     """Every member of every past forecast → {site: {variety: {rule: {year: [outcome, ...]}}}}."""
     tasks, keys = [], []
     for y in years:
-        met = {} if engine == "wofost" else None
+        met = {} if engine in ("wofost", "dssat") else None
         rain, tmax, tmin, et0, dates = season(inp, y, temperature, met)
         frac = inp.initial_water(y)
         src = np.full(len(dates), C.PRECIP_SOURCES.index("seasonal"), np.int8)
@@ -447,8 +450,8 @@ def main():
     ap.add_argument("--score-only", action="store_true", help="score the saved members, without simulating")
     ap.add_argument("--fao-onsets", action="store_true", help="compute the FAO onsets of the 1 Oct runs, then stop")
     ap.add_argument("--tag", default="", help="suffix of the output files (e.g. _1993_2025), kept apart from the others")
-    ap.add_argument("--engine", choices=["aquacrop", "wofost"], default="aquacrop",
-                    help="wofost: WOFOST's varieties against WOFOST's own benchmark (climatology_wofost.json)")
+    ap.add_argument("--engine", choices=["aquacrop", "wofost", "dssat"], default="aquacrop",
+                    help="wofost / dssat: that engine's varieties against its own benchmark (climatology_<engine>.json)")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -466,16 +469,18 @@ def main():
     _, varieties = ro.load_varieties(a.varieties)
     inp = W.Inputs(refresh=False)
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
-    if a.engine == "wofost":
-        varieties = {vk: varieties[vk] for vk in ro.wofost_varieties(varieties)}
-        bp = C.OUT / "climatology_wofost.json"
+    if a.engine in ("wofost", "dssat"):
+        use = ro.wofost_varieties(varieties) if a.engine == "wofost" else ro.dssat_varieties(varieties)
+        varieties = {vk: varieties[vk] for vk in use}
+        bp = C.OUT / f"climatology_{a.engine}.json"
         if not bp.exists():
-            log("no WOFOST benchmark (climatology_wofost.json): run the outlook once with WOFOST")
+            log(f"no {a.engine} benchmark ({bp.name}): run the outlook once with it")
             return 1
         bench = json.loads(bp.read_text(encoding="utf-8"))
     rep_cells = [(s, g) for s, g in ro.cells(inp.sites) if not a.sites or s.id in a.sites]
     OUT.mkdir(parents=True, exist_ok=True)
-    sfx = suffix(a.temperature) + ("_wofost" if a.engine == "wofost" else "") + a.tag
+    eng_sfx = f"_{a.engine}" if a.engine != "aquacrop" else ""
+    sfx = suffix(a.temperature) + eng_sfx + a.tag
     mpath = OUT / f"hindcast_members{sfx}.json"
     saved = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() else None
     if a.score_only:
@@ -492,14 +497,14 @@ def main():
            "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
            "engine": a.engine,
            "reference": "the same crop grown in each season's observed weather by the same model ("
-                        + ("climatology_wofost.json" if a.engine == "wofost" else "climatology.json") + ")", "sites": sc}
+                        + (f"climatology_{a.engine}.json" if eng_sfx else "climatology.json") + ")", "sites": sc}
     table(sc)
     counties = county_yields()
     if counties:
         out["county"] = county_scores(sc, counties)
         log("county Short Rains maize yields (HarvestStat):")
         county_table(out["county"])
-    cpath = OUT / f"hindcast_members{'_wofost' if a.engine == 'wofost' else ''}{a.tag}.json"
+    cpath = OUT / f"hindcast_members{eng_sfx}{a.tag}.json"
     if a.temperature == "seas5" and cpath.exists():                     # the same years, climatological temperature
         clim_members = json.loads(cpath.read_text(encoding="utf-8"))["sites"]
         log(f"the same {len(years)} years with climatological temperature:")
