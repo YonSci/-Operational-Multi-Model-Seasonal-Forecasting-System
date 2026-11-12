@@ -19,6 +19,15 @@ After a failed establishment the member is re-sown at its next sowing opportunit
 "resow": Agri rule dates, config.RESOW_MAX times at most) when the variety can still mature; the outcome is then the
 re-sown crop's, with `sowings` and `first_planting` recording it.
 
+Delayed germination (seed waiting in dry soil). AquaCrop-OSPy 3.1.0 counts the growing degree days of the delay
+(delayed_gdds) and takes them off every stage, the canopy and the harvest index, as FAO AquaCrop does, but its end
+of season, the maturity check of run_single_timestep (step 19), compares the raw sum from sowing with the crop's
+maturity: a crop that waited weeks for rain was ended at its sowing date's maturity, before its grain had filled (a
+Meru cell sown on 20 Sep 2026 emerged on 9 Nov at 590 of its GDD and was "mature" in February with a harvest index
+of 0.06). patch_delayed_maturity() makes that one check count from germination too: harvest_index (step 17) moves
+the crop's maturity by the delay for the check, and growth_stage (step 10) puts it back before the canopy (step 11),
+the only other reader. A crop's season is then as long after a late germination as after a prompt one.
+
 A simulated member also carries `_canopy`: its canopy cover (fraction) every CANOPY_STEP days from the season start,
 for the canopy bands of the summaries (run_outlook.canopy_band); it is not written to the results.
 
@@ -80,6 +89,34 @@ def gdd(tmax, tmin, tbase, tupp):
     return np.maximum((tx + tn) / 2, tbase) - tbase
 
 
+_PATCHED = []
+
+
+def patch_delayed_maturity():
+    """AquaCrop-OSPy's maturity check counted from germination (module doc). Idempotent, per process."""
+    if _PATCHED:
+        return
+    import aquacrop.timestep.run_single_timestep as rst
+    hi0, gs0 = rst.harvest_index, rst.growth_stage
+
+    def growth_stage(crop, new_cond, growing_season):
+        m0 = getattr(crop, "_maturity_gdd", None)
+        if m0 is not None:
+            crop.Maturity = m0                                          # the crop's own maturity for the canopy
+        return gs0(crop, new_cond, growing_season)
+
+    def harvest_index(prof, z_top, crop, new_cond, *args):
+        out = hi0(prof, z_top, crop, new_cond, *args)
+        if crop.CalendarType == 2:                                      # GDD crops: the check right after this
+            if getattr(crop, "_maturity_gdd", None) is None:
+                crop._maturity_gdd = crop.Maturity
+            crop.Maturity = crop._maturity_gdd + float(out.delayed_gdds)
+        return out
+
+    rst.harvest_index, rst.growth_stage = harvest_index, growth_stage
+    _PATCHED.append(True)
+
+
 def make_soil(layers):
     from aquacrop import Soil
     s = Soil("custom", dz=list(SOIL_DZ))
@@ -91,6 +128,7 @@ def make_soil(layers):
 def _sow(task, m, plant, dates, g):
     """One sowing of member m on `plant` → outcome dict (status, yield, dates, stress)."""
     from aquacrop import AquaCropModel, Crop, FieldMngt, InitialWaterContent, IrrigationManagement
+    patch_delayed_maturity()
     r = dict(member=m + 1, planting=plant.isoformat(), status="not_sown", yield_t_ha=0.0, potential_t_ha=None,
              biomass_t_ha=None, harvest=None, max_canopy=None, stress_days=None, rain_mm=None, sources=None)
     k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])

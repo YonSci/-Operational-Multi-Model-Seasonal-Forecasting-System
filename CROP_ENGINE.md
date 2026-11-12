@@ -513,15 +513,12 @@ Meru (76 %, 44 % below normal). Where a cell holds a monitored site the two agre
 204 % of normal against the site's 202 %, Kapiti's 219 % against 246 %, the cell's temperature 0.4–0.7 °C from the
 site's).
 
-**Sowing into a long dry spell** (found here; the site outlook has it too). Meru's low numbers come from cells sown
-at a September FAO onset (from the observed rain) followed by four to six dry weeks: AquaCrop counts the crop's
-growing degree-days from the sowing date while no canopy grows, so the crop that emerges with the November rains
-reaches "maturity" after three months, with a harvest index of about 0.06; its yield without water stress is low
-too, and the run counts it as matured (its canopy reached 0.75), not as a failed establishment to be re-sown. Sown
-five days later into the same weather, the same cell yields 7.8 t/ha instead of 1.6. In this forecast 10 % of the
-grid's matured members (46 cells) and 14 % of the sites' have a harvest index below 0.15. It is an AquaCrop
-adapter matter, to be fixed for the sites and the grid together (counting establishment from emergence, or
-treating no emergence within a few weeks as a failed establishment, re-sown at the next opportunity).
+**Sowing into a long dry spell** (found here; the site outlook had it too; fixed, *Delayed germination*, below).
+Meru's low numbers came from cells sown at a September FAO onset (from the observed rain) followed by four to six
+dry weeks: the seed waited in dry soil and germinated with the November rains, but AquaCrop-OSPy ended the season
+at the maturity counted from sowing, so the crop "matured" in February with a harvest index of about 0.06 (1.6
+t/ha; sown five days later, 7.8). In the first forecast 10 % of the grid's matured members (46 cells) and 14 % of
+the sites' had a harvest index below 0.15.
 
 ## Inputs
 
@@ -674,6 +671,20 @@ re-sows after the next good rain, provided the variety can still mature by 31 Ma
 crop's; `sowings` and `first_planting` record it, and the summary's `resown` gives the share of members re-sown.
 A `died` crop can still yield: AquaCrop ends the season when the canopy collapses, often late in grain filling. A crop failure is a yield below the variety's threshold (0.5 t/ha
 grain; 0.2 t/ha bean). A water-stress day is a day with transpiration below half its potential.
+
+**Delayed germination** (November 2026, `aquacrop_adapter.patch_delayed_maturity`). A seed sown into dry soil waits
+for rain: AquaCrop-OSPy 3.1.0 counts the growing degree days of the wait (`delayed_gdds`) and takes them off every
+stage, the canopy and the harvest index, as FAO AquaCrop does, but its end of season (`run_single_timestep`, step
+19) compared the raw sum from sowing with the crop's maturity. A crop that germinated weeks late was ended at its
+sowing date's maturity, before its grain had filled. The adapter now makes that one check count from germination
+(the installed library is not edited). The Meru cell sown on 20 Sep 2026, germinating on 9 Nov, yields 6.2 t/ha in
+place of 1.6, harvested on 2 Mar in place of February. Over the sites, the matured members of the 1 Oct forecast
+with a harvest index below 0.15 fall from 71 of 499 to 16 of 502; 70 of the benchmark's 1,584 observed seasons
+change, every one to a higher yield (Genco Tana River's early maize, FAO onset: median 0.45 → 0.65 t/ha, failure
+52 → 45 %); this forecast's early maize moves little at most sites (Genco Tana River 1.6 → 4.0 t/ha, Kiboko 2.9 →
+2.7: a later germination fills its grain later and drier). A crop that germinates and then stalls in the dry
+spell is unchanged: it counts as a failure by its yield. A rule that killed every crop not established three weeks
+after its no-stress date was tried first and not adopted: it re-sowed seed that would have done well after waiting.
 
 Below / above normal compare a run's yields with the benchmark's terciles. They are left out (null) where a third or
 more of the benchmark years are crop failures, since the terciles then do not separate yields; the run's chance of
