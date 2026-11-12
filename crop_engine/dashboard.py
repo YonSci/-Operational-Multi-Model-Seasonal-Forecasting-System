@@ -20,6 +20,12 @@ the latest result of each forecast source and of the benchmark, read by frontend
                     season as [year, planting, harvest, yield t/ha, outcome, yield without water stress t/ha]
   bulletins/        one crop bulletin PDF per crop site (write_bulletins; index.json "bulletins")
   skill.json        how well past crop forecasts did: the seasonal and sub-seasonal hindcast scores (write_skill)
+  hindcast.json     the seasonal hindcast year by year, for the tab's Forecast skill section (write_hindcast): per
+                    site, variety, rule and model, the crop in the observed weather, the forecast median and chance
+                    of failure each year, the scores over all years and over the crops sown from October, the
+                    platform's season-length, Oct-Dec rain and onset forecasts scored as yield predictors, and the
+                    check against county Short Rains maize yields (HarvestStat)
+  grid.json         the gridded regional outlook (crop_engine/grid.py writes it; kept here)
   history.json      each outlook's summary on every day its run was rebuilt (write_history)
   scenarios.json    the management scenarios of the latest seasonal run (crop_engine.run_scenarios), when made with
                     that run's configuration (refreshed weekly: their meta gives the observations they used): per site,
@@ -45,6 +51,9 @@ OUTCOMES = [
 MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "rain_mm", "potential_t_ha", "sowings")
 
 
+# the files kept in the tab's data folder beside each source's latest run; any other .json there is an older run's
+KEEP = {"index.json", "benchmark.json", "scenarios.json", "history.json", "skill.json", "hindcast.json",
+        "grid.json"}                                                    # grid.json: written by crop_engine/grid.py
 BENCH_KEYS = ("t33", "t67", "median", "cal_median", "p_failure", "p_sowing_opportunity", "p_establishment_failure",
               "p_failure_if_sown", "yield_if_sown_t_ha", "n_valid", "n_error", "n_sown", "canopy")
 
@@ -175,6 +184,59 @@ def write_skill(current_config, log=print):
     return bool(out)
 
 
+def _full_score(c):
+    c = c or {}
+    r = lambda v: None if v is None else round(float(v), 2)                             # noqa: E731
+    return {**_score(c), "fail_rate": r(c.get("failure_rate")), "ok": c.get("n_success")}
+
+
+def write_hindcast(current_config, log=print):
+    """hindcast.json: the seasonal hindcast (crop_engine.hindcast: the 1 Oct SEAS5 forecasts of the hindcast years,
+    each model against its own crop grown in the observed weather) year by year, for the tab's Forecast skill
+    section. Per site, variety, rule and model: the observed-weather yield ("obs"), the forecast median ("fc"), the
+    forecast's chance of failure ("p_fail") and median season length ("lgp", days) of each year, the scores over all
+    years ("all") and over the crops sown from 1 Oct, when the forecast starts ("oct"), and the platform's own
+    season-length, Oct-Dec rain and onset forecasts scored as yield predictors against the same model's crop
+    ("baselines", "baselines_oct"). "county": the forecast, the benchmark and the season length against county Short
+    Rains maize yields (HarvestStat), where the site's county has them. Written only from the files on disk."""
+    V = C.OUT / "verification"
+    rd = lambda a, k=2: [None if v is None else round(float(v), k) for v in a]          # noqa: E731
+    out = {"made": {}, "sites": {}, "county": {}}
+    for eng, f in SKILL_FILES.items():
+        path = V / f
+        if not path.exists():
+            continue
+        d = json.loads(path.read_text(encoding="utf-8"))
+        out.setdefault("years", d["years"])
+        out.setdefault("reference", d.get("reference"))
+        out["made"][eng] = {"created": d.get("created"), "config_hash": d.get("config_hash"),
+                            "years": [d["years"][0], d["years"][-1]], "temperature": d.get("temperature")}
+        for sid, vs in d["sites"].items():
+            for vk, rs in vs.items():
+                for rk, c in rs.items():
+                    cell = out["sites"].setdefault(sid, {}).setdefault(vk, {}).setdefault(rk, {})
+                    cell[eng] = {"obs": rd(c["observed_t_ha"]), "fc": rd(c["forecast_median_t_ha"]),
+                                 "p_fail": rd(c["forecast_p_failure"]), "lgp": rd(c["lgp_median_days"], 1),
+                                 "all": _full_score(c.get("crop")), "oct": _full_score(c.get("crop_from_oct")),
+                                 "sown_before_oct": c.get("sown_before_oct"),
+                                 "baselines": {k: _score((c.get("baselines") or {}).get(b)) for k, b in BASELINES.items()},
+                                 "baselines_oct": {k: _score((c.get("baselines_from_oct") or {}).get(b))
+                                                   for k, b in BASELINES.items()},
+                                 **({"years": c["years"]} if c.get("years") != out["years"] else {})}
+        for sid, vs in d.get("county", {}).items():
+            for vk, rs in vs.items():
+                for rk, c in rs.items():
+                    cc = out["county"].setdefault(sid, {}).setdefault(vk, {}).setdefault(
+                        rk, {"years": c["years"], "county_t_ha": rd(c["county_t_ha"], 3)})
+                    cc[eng] = {k: None if c.get(k) is None else round(float(c[k]), 2) for k in ("forecast", "benchmark", "lgp")}
+    if not out["made"]:
+        return False
+    out["current_config"] = current_config
+    _dump(C.DASHBOARD_OUT / "hindcast.json", out)
+    log(f"dashboard: seasonal hindcast year by year ({', '.join(out['made'])})")
+    return True
+
+
 def write_bulletins(log=print):
     """bulletins/<site id>.pdf: the crop bulletin of every crop site (backend/bulletin_crop.py, the bulletin's crop page as
     a small vector PDF), drawn from the data just written, listed in index.json ("bulletins") for the tab's download.
@@ -264,8 +326,9 @@ def write(log=print):
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
     write_history([(r, ch, summaries.get(r["id"], {}), wofost.get(r["id"])) for r, ch in hist], log)
     write_skill(chash0, log)
+    write_hindcast(chash0, log)
     write_bulletins(log)
-    keep = {f"{r['source']}.json" for r in runs} | {"index.json", "benchmark.json", "scenarios.json", "history.json", "skill.json"}
+    keep = {f"{r['source']}.json" for r in runs} | KEEP
     for p in C.DASHBOARD_OUT.glob("*.json"):
         if p.name not in keep:
             p.unlink()
