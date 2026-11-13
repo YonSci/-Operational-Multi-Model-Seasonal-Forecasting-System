@@ -39,3 +39,31 @@ def load(name: str):
     with _lock:                                   # a failed read is retried after a minute, not after 30
         _cache[name] = (now if data is not None else now - TTL + 60, data)
     return data
+
+
+PUBLIC = Path(__file__).resolve().parents[2] / "frontend" / "public"
+SITE_URL = "https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/"
+
+
+def load_public(rel: str):
+    """A JSON file of the dashboard's public folder (e.g. boundaries/ke_admin1.geojson): the repository copy, or
+    the published site's (SITE_URL). Cached as load()."""
+    key = "public:" + rel
+    now = time.time()
+    with _lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < TTL:
+            return hit[1]
+    data = None
+    try:
+        path = PUBLIC / rel
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            with urllib.request.urlopen(os.environ.get("SITE_URL", SITE_URL).rstrip("/") + "/" + rel, timeout=30) as r:
+                data = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        data = None
+    with _lock:
+        _cache[key] = (now if data is not None else now - TTL + 60, data)
+    return data

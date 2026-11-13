@@ -221,8 +221,91 @@ def template_advisory(rec, audience="general"):
     return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
 
 
+def _pcts(d):
+    return ", ".join(f"{k} {v}%" for k, v in (d or {}).items())
+
+
+def template_area(rec, audience="general"):
+    sc, run = rec["scope"], rec["run"]
+    nm = sc["name"][:1].upper() + sc["name"][1:]
+    summary = [f"{nm} ({sc['cells']} grid cells), "
+               f"{rec['season']['label']} {rec['season']['year']}, {run['method']} method."]
+    local = []
+    for key, q in rec["quantities"].items():
+        cm = q["cell_medians"]
+        f = (lambda v: fdate(v)) if q["unit"] == "date" else (lambda v: f"{v:g} days" if v is not None else "n/a")
+        summary.append(f"{q['label']}: middle of the area {f(cm['median'])}; 8 in 10 cells between {f(cm['p10'])} and "
+                       f"{f(cm['p90'])}.")
+        if q.get("area_event_chances_pct"):
+            local.append(f"{q['label']}, area-wide: {_pcts(q['area_event_chances_pct'])} of the members.")
+        if q.get("average_cell_chances_pct"):
+            local.append(f"{q['label']}, at a typical place (skill-weighted): {_pcts(q['average_cell_chances_pct'])}.")
+        if q.get("cells_estimated_from_observations_pct"):
+            local.append(f"{q['label']}: {q['cells_estimated_from_observations_pct']}% of the cells are already "
+                         f"estimated from observed rain.")
+    sk = rec.get("onset_skill_area_mean") or {}
+    if sk:
+        local.append("Onset skill, area average: " + ", ".join(
+            f"{'RPSS' if k == 'rpss_val' else 'hit rate'} {v}" for k, v in sk.items()) + ".")
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
+def template_attention(rec, audience="general"):
+    c = rec["criterion"]
+    summary = [f"{c['label']} ({c['test']}): {rec['flagged_cells']} of {rec['cells_with_values']} grid cells, "
+               f"{rec['season']['label']} {rec['season']['year']}, {rec['run']['method']} method."]
+    u = "%" if c["value_unit"] == "%" else " days"
+    local = [f"{r['area']}: {r['flagged_pct']}% of its {r['cells']} cells (average {r['mean_value']:g}{u})."
+             for r in rec["ranked_areas"][:5] if r["flagged_cells"]]
+    if not local:
+        local = ["No area meets the test in this run."]
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
+def template_chart(rec, audience="general"):
+    k = rec["chart"]
+    if k == "member_dates":
+        q = rec["quantity"]
+        f = (lambda v: fdate(v)) if q["unit"] == "date" else (lambda v: f"{v:g} days" if v is not None else "n/a")
+        summary = [f"The chart shows the {rec['members']} forecast members' {q['label'].lower()} at "
+                   f"{(rec['scope'].get('site') or {}).get('name') or 'this place'}: median {f(rec['median'])}, 8 in 10 "
+                   f"between {f(rec['range_80'][0])} and {f(rec['range_80'][1])}."]
+        if rec["members"] > rec["members_with_value"]:
+            summary.append(f"{rec['members'] - rec['members_with_value']} members have no date in the window.")
+        busiest = max(rec["members_by_week"], key=lambda b: b["members"]) if rec["members_by_week"] else None
+        local = ([f"Most members fall between {f(busiest['from'])} and {f(busiest['to'])} ({busiest['members']} members)."]
+                 if busiest else []) + list(rec["reads"])
+    elif k == "crop_outcomes":
+        y = rec["yield_t_ha"]
+        summary = [f"{rec['crop']} at {rec['scope']['crop_site']}, sown by the {rec['sowing_rule']}: median yield "
+                   f"{y['median']} t/ha, 8 in 10 members between {y['p10']} and {y['p90']} t/ha."]
+        local = ["Outcomes across the members: " + ", ".join(f"{k2} {v}" for k2, v in rec["outcomes"].items()) + "."]
+        if rec.get("harvest_range"):
+            local.append(f"Harvest between {fdate(rec['harvest_range'][0])} and {fdate(rec['harvest_range'][1])}.")
+        if rec.get("canopy_peak"):
+            local.append(f"The canopy peaks at {rec['canopy_peak']['cover']:g} of the ground in the week of "
+                         f"{fdate(rec['canopy_peak']['week_of'])}.")
+        local += list(rec["reads"])
+    else:
+        if rec.get("illustrative"):
+            summary, local = list(rec["reads"]), []
+        else:
+            t = rec["season_total_mm"]
+            summary = [f"Season rainfall in the members: median {t['median']} mm, 8 in 10 between {t['p10']} and {t['p90']} mm."]
+            if rec.get("rain_so_far_mm") is not None:
+                summary.append(f"Observed so far: {rec['rain_so_far_mm']} mm.")
+            local = []
+            if rec.get("next_30_days"):
+                n = rec["next_30_days"]
+                local.append(f"Next 30 days: longest dry spell in the median member {n['longest_dry_spell_days_median']} days; "
+                             f"{n['members_with_dry_spell_10_days_or_more_pct']}% of members have a dry spell of 10 days or more.")
+            local += list(rec["reads"])
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
 TEMPLATES = {"location": template_location, "changes": template_changes, "map": template_map,
-             "advisory": template_advisory}
+             "advisory": template_advisory, "area": template_area, "attention": template_attention,
+             "chart": template_chart}
 
 # ---------------------------------------------------------------------------- number checks
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -305,6 +388,7 @@ it is not an amount earlier or later. A median date is not a promise of rain on 
 - Do not give farming instructions. Beyond what the forecast implies for timing and season length, mention only \
 the options and guidance the record itself contains, as options to consider under the stated conditions.
 - Keep every caution in the record that applies; put them in "cautions".
+- Write dates as day and month (29 Oct), not as 2026-10-29.
 - Plain text only: no markdown, no headings, no bullet characters. Short sentences.
 
 Reference notes (the platform's documentation):
@@ -327,6 +411,13 @@ TASKS = {
     "changes": "Explain what changed between the two forecast runs and why, using only the documented input changes. "
                "Do not claim how much each input caused the change.",
     "map": "Explain what this map shows, where the main patterns are, and how to read it correctly.",
+    "area": "Explain the outlook for this area. Keep the two kinds of chance apart: the area-wide chances count "
+            "members in which most of the area is in a third (not skill-weighted); the average cell chances are a "
+            "typical place's skill-weighted chances.",
+    "attention": "Explain which areas meet the criterion and how strongly, and what the ranking does and does not "
+                 "mean (it is where the forecast shows the condition, not impact or damage).",
+    "chart": "Explain what this chart shows and how to read it, with its figures. If the record says the chart is "
+             "illustrative, say so plainly and give no rainfall figures.",
     "advisory": "Write the advisory card's text: the current assessment (summary) and, in local_implications, why "
                 "these options, their trade-offs, what could change the assessment and when to look again. Present "
                 "the options as options to consider, never as instructions. The guidance is a draft that no "

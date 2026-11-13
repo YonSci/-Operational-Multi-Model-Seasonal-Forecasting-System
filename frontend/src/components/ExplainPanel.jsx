@@ -12,7 +12,14 @@ export const AUDIENCES = [
   { id: 'extension', label: 'Extension officer' },
   { id: 'technical', label: 'Technical' },
 ]
-const TITLES = { location: 'Explain this location', changes: 'What changed?', map: 'Explain this map', advisory: 'Advisory (draft)' }
+const TITLES = { location: 'Explain this location', changes: 'What changed?', map: 'Explain this map', advisory: 'Advisory (draft)',
+                 area: 'Explain an area', attention: 'Areas needing attention', chart: 'Explain a chart' }
+const CRITERIA = [['late_onset', 'Higher chance of a late onset'], ['early_cessation', 'Higher chance of an early end of the rains'],
+                  ['short_season', 'Higher chance of a short season'], ['onset_delay', 'Onset later than normal'],
+                  ['season_shorter', 'Season shorter than normal'], ['no_onset', 'Members finding no onset']]
+const CHARTS = [['member_dates', 'Member dates (onset, cessation, season length)'], ['crop_outcomes', 'Crop outcomes (yield, harvest, canopy)'],
+                ['rain_plume', 'Rainfall plume']]
+const QUANTITIES = [['onset', 'Onset'], ['cessation', 'Cessation'], ['lgp', 'Season length']]
 // Advisory profile choices (backend/assistant/advisory_rules.yaml)
 const DECISIONS = [['sowing', 'When to sow'], ['crop_choice', 'Which crop or maturity class'], ['establishment', 'Establishment after sowing'],
                    ['replanting', 'Replanting after poor establishment'], ['water', 'Water management']]
@@ -41,7 +48,7 @@ export function useExplain(req) {
   return useQuery({
     queryKey: ['explain', req],
     queryFn: () => fetchExplain(req),
-    enabled: !!req,
+    enabled: !!req && !(req.kind === 'area' && !req.name && !req.bbox),
     staleTime: 10 * 60_000,
     retry: 1,
   })
@@ -160,6 +167,116 @@ function Pick({ id, label, value, choices, onChange }) {
   )
 }
 
+function useRegions(season) {
+  return useQuery({ queryKey: ['explain-regions', season], staleTime: Infinity, enabled: !!season,
+                    queryFn: async () => { const r = await fetch(`${API_BASE}/explain/regions?season=${encodeURIComponent(season)}`); if (!r.ok) throw new Error('regions'); return r.json() } })
+}
+
+function AreaForm({ request, onProfile, onDraw, drawing }) {
+  const { data } = useRegions(request.season)
+  const kind = data?.kind === 'region' ? 'Region' : 'County'
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginTop: 8 }}>
+      <Pick id="area-name" label={kind} value={request.name || ''} onChange={v => onProfile({ name: v, bbox: '' })}
+            choices={[['', request.bbox ? 'Drawn area' : 'Choose...'], ...(data?.names ?? []).map(n => [n, n])]}/>
+      <button type="button" onClick={onDraw} aria-pressed={drawing}
+              style={{ background: drawing ? 'var(--nav-active-bg)' : 'var(--bg-elevated)', color: 'var(--accent-text)', border: '1px solid var(--info-border)',
+                       borderRadius: 8, padding: '5px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 32 }}>
+        {drawing ? 'Click two corners on the map...' : 'Draw an area on the map'}
+      </button>
+    </div>
+  )
+}
+
+function AttentionForm({ request, onProfile, onShowLayer }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginTop: 8 }}>
+      <Pick id="att-criterion" label="Criterion" value={request.criterion ?? 'late_onset'} choices={CRITERIA} onChange={v => onProfile({ criterion: v })}/>
+      <button type="button" onClick={onShowLayer}
+              style={{ background: 'var(--bg-elevated)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
+                       padding: '5px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 32 }}>Show on the map</button>
+    </div>
+  )
+}
+
+function ChartForm({ request, onProfile }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginTop: 8 }}>
+      <Pick id="chart-kind" label="Chart" value={request.chart ?? 'member_dates'} choices={CHARTS} onChange={v => onProfile({ chart: v })}/>
+      {(request.chart ?? 'member_dates') === 'member_dates' && <Pick id="chart-q" label="Quantity" value={request.quantity ?? 'onset'} choices={QUANTITIES} onChange={v => onProfile({ quantity: v })}/>}
+      {request.chart === 'crop_outcomes' && <Pick id="chart-crop" label="Crop" value={request.crop ?? 'maize_early'} choices={CROPS} onChange={v => onProfile({ crop: v })}/>}
+    </div>
+  )
+}
+
+function AttentionTable({ ev }) {
+  const u = ev.criterion.value_unit === '%' ? '%' : ' days'
+  const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
+  const td = { padding: '5px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 13, fontVariantNumeric: 'tabular-nums' }
+  const rows = ev.ranked_areas.filter(r => r.flagged_cells > 0)
+  if (!rows.length) return <p style={{ ...lbl, fontSize: 13 }}>No area meets this criterion in the current run.</p>
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
+      <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>{ev.criterion.label}: {ev.criterion.test}</caption>
+      <thead><tr><th style={th} scope="col">#</th><th style={th} scope="col">Area</th><th style={th} scope="col">Cells meeting it</th><th style={th} scope="col">Average</th></tr></thead>
+      <tbody>{rows.map((r, i) => (
+        <tr key={r.area}><td style={td}>{i + 1}</td><td style={td}>{r.area}</td><td style={td}>{r.flagged_pct}% of {r.cells}</td><td style={td}>{r.mean_value}{u}</td></tr>
+      ))}</tbody>
+    </table>
+  )
+}
+
+function AreaEvidence({ ev }) {
+  return (
+    <>
+      <div style={box}>
+        <KV k="Area" v={ev.scope.name}/>
+        <KV k="Grid cells" v={ev.scope.cells}/>
+        <KV k="Run" v={ev.run.model}/>
+      </div>
+      {Object.entries(ev.quantities).map(([k, q]) => (
+        <div key={k} style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>{q.label}</div>
+          <KV k="Middle of the area" v={valueOf(q, q.cell_medians.median)}/>
+          <KV k="8 in 10 cells" v={`${valueOf(q, q.cell_medians.p10)} to ${valueOf(q, q.cell_medians.p90)}`}/>
+          <KV k="Area-wide (members)" v={q.area_event_chances_pct ? Object.entries(q.area_event_chances_pct).map(([c, v]) => `${c} ${v}%`).join(', ') : null}/>
+          <KV k="Typical place (skill-weighted)" v={pctTriple(q.average_cell_chances_pct)}/>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function ChartEvidence({ ev }) {
+  if (ev.chart === 'member_dates') {
+    const max = Math.max(1, ...ev.members_by_week.map(b => b.members))
+    const lab = b => ev.quantity.unit === 'date' ? `${fdate(b.from).replace(/ \d{4}$/, '')} - ${fdate(b.to).replace(/ \d{4}$/, '')}` : `${b.from}-${b.to} d`
+    return (
+      <div style={box}>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>{ev.quantity.label}: members by week</div>
+        {ev.members_by_week.map((b, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, margin: '2px 0' }}>
+            <span style={{ flex: '0 0 120px', color: 'var(--text-meta)' }}>{lab(b)}</span>
+            <span aria-hidden="true" style={{ height: 10, width: `${(b.members / max) * 60}%`, background: 'var(--accent-text)', borderRadius: 3 }}/>
+            <span>{b.members}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (ev.chart === 'crop_outcomes') {
+    return (
+      <div style={box}>
+        <KV k="Crop" v={`${ev.crop} at ${ev.scope.crop_site}`}/>
+        <KV k="Yield (t/ha)" v={`median ${ev.yield_t_ha.median}; 8 in 10 between ${ev.yield_t_ha.p10} and ${ev.yield_t_ha.p90}`}/>
+        <KV k="Outcomes" v={Object.entries(ev.outcomes).map(([k, v]) => `${k} ${v}`).join(', ')}/>
+        <KV k="Harvest" v={ev.harvest_range ? `${fdate(ev.harvest_range[0])} to ${fdate(ev.harvest_range[1])}` : null}/>
+      </div>
+    )
+  }
+  return <div style={box}><KV k="Rainfall plume" v={ev.illustrative ? 'Illustrative on this server (not the forecast members)' : `season total median ${ev.season_total_mm?.median} mm`}/></div>
+}
+
 function AdvisoryForm({ request, onProfile }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginTop: 8 }}>
@@ -248,7 +365,7 @@ function AdvisoryEvidence({ ev }) {
   )
 }
 
-export default function ExplainPanel({ request, onClose, onAudience, compareOptions, onCompare, onProfile }) {
+export default function ExplainPanel({ request, onClose, onAudience, compareOptions, onCompare, onProfile, onDraw, drawing, onShowLayer }) {
   const [tab, setTab] = useState('summary')
   const closeRef = useRef(null)
   const { data, isLoading, isError, error } = useExplain(request)
@@ -294,6 +411,9 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
           )}
         </div>
         {request.kind === 'advisory' && <AdvisoryForm request={request} onProfile={onProfile}/>}
+        {request.kind === 'area' && <AreaForm request={request} onProfile={onProfile} onDraw={onDraw} drawing={drawing}/>}
+        {request.kind === 'attention' && <AttentionForm request={request} onProfile={onProfile} onShowLayer={onShowLayer}/>}
+        {request.kind === 'chart' && <ChartForm request={request} onProfile={onProfile}/>}
         <nav role="tablist" aria-label="Explanation sections" style={{ display: 'flex', gap: 4, marginTop: 10 }}>
           {tabs.map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} style={btn(tab === id)}>{label}</button>
@@ -310,6 +430,7 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
         )}
         {ex && tab === 'summary' && <Para lines={ex.sections.summary}/>}
         {ev?.kind === 'advisory' && tab === 'summary' && <OptionsTable ev={ev}/>}
+        {ev?.kind === 'attention' && tab === 'summary' && <AttentionTable ev={ev}/>}
         {ex && tab === 'local' && <Para lines={ex.sections.local_implications}/>}
         {ex && tab !== 'evidence' && ex.sections.cautions?.length > 0 && (
           <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: 'var(--caution-bg)', color: 'var(--caution-text)', fontSize: 13, lineHeight: 1.5 }}>
@@ -323,6 +444,9 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
             {ev.kind === 'changes' && <ChangesEvidence ev={ev}/>}
             {ev.kind === 'map' && <MapEvidence ev={ev}/>}
             {ev.kind === 'advisory' && <AdvisoryEvidence ev={ev}/>}
+            {ev.kind === 'area' && <AreaEvidence ev={ev}/>}
+            {ev.kind === 'attention' && <AttentionTable ev={ev}/>}
+            {ev.kind === 'chart' && <ChartEvidence ev={ev}/>}
             <div style={{ ...box, marginTop: 8 }}>
               <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Sources</div>
               {(ev.sources ?? []).map((s, i) => <KV key={i} k={s.what} v={s.detail}/>)}

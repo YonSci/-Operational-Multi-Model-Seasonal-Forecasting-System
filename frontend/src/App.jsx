@@ -1971,9 +1971,18 @@ const fmtStamp = iso => {
   return `${fmtDate(m[1])}, ${m[2]} ${zone}`.trim()
 }
 
+// Areas needing attention: the map layer of each criterion, and the tab whose layer list holds it
+const ATTENTION_LAYERS = {
+  late_onset: { variable: 'onset', layer: 'prob_an', tab: 'probabilistic' },
+  early_cessation: { variable: 'cessation', layer: 'prob_bn', tab: 'probabilistic' },
+  short_season: { variable: 'lgp', layer: 'prob_bn', tab: 'probabilistic' },
+  onset_delay: { variable: 'onset', layer: 'anomaly', tab: 'forecast' },
+  season_shorter: { variable: 'lgp', layer: 'anomaly', tab: 'forecast' },
+  no_onset: { variable: 'onset', layer: 'failure', tab: 'probabilistic' },
+}
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, onOpen, onAsk }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -1985,6 +1994,9 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, onOpen, onAsk 
       {canCompare && <button type="button" style={b} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
       {canMap && <button type="button" style={b} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
       {canAdvise && <button type="button" style={b} onClick={() => onOpen('advisory')} title="Draft guidance and crop options for one decision at the selected place">Advisory (draft)</button>}
+      <button type="button" style={b} onClick={() => onOpen('chart')} title="What a chart at the selected place shows">Explain a chart</button>
+      {canAreas && <button type="button" style={b} onClick={() => onOpen('area')} title="The outlook over a county, region or drawn area">Explain an area</button>}
+      {canAreas && <button type="button" style={b} onClick={() => onOpen('attention')} title="Counties or regions ranked on one criterion">Areas needing attention</button>}
     </div>
   )
 }
@@ -2880,6 +2892,9 @@ export default function App() {
   // place, run, method and map layer, so the panel updates when they change
   const [explain, setExplain] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const [drawArea, setDrawArea] = useState(false)
+  const [requestedLayer, setRequestedLayer] = useState(null)
+  const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
   const [chatMessages, setChatMessages] = useState([])
   const compareOptions = selectedSeason === 'short_rains' && !isJoined
     ? SHORT_RAINS_INITS.filter(i => !i.experimental && shortRainsModel(i.init, srDef) !== srModel && hasModel(modelsData, shortRainsModel(i.init, srDef)))
@@ -2892,6 +2907,10 @@ export default function App() {
     : explain.kind === 'map' ? { kind: 'map', variable: mapLayer.variable, layer: mapLayer.layer, model: mapModel, season: selectedSeason, audience: explain.audience }
     : explain.kind === 'changes' ? (compareOptions.length ? { kind: 'changes', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
                                                              compare_to: compareOptions.some(o => o.model === explain.compare_to) ? explain.compare_to : defaultCompare, audience: explain.audience } : null)
+    : explain.kind === 'area' ? { kind: 'area', season: selectedSeason, model: effectiveModel, name: explain.name ?? '', bbox: explain.bbox ?? '', audience: explain.audience }
+    : explain.kind === 'attention' ? { kind: 'attention', season: selectedSeason, model: effectiveModel, criterion: explain.criterion ?? 'late_onset', audience: explain.audience }
+    : explain.kind === 'chart' ? { kind: 'chart', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                                   chart: explain.chart ?? 'member_dates', quantity: explain.quantity ?? 'onset', crop: explain.crop ?? 'maize_early', audience: explain.audience }
     : explain.kind === 'advisory' ? { kind: 'advisory', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience,
                                       decision: explain.decision ?? 'sowing', crop: explain.crop ?? 'maize_early', planted: explain.planted ?? 'unknown',
                                       sowing_date: explain.planted === 'yes' ? (explain.sowing_date ?? '') : '', water: explain.water ?? 'rainfed',
@@ -3006,6 +3025,10 @@ export default function App() {
                 selectedSeason={selectedSeason}
                 selectedYear={selectedYear}
                 onOpenBulletin={()=>setBulletinModalOpen(true)}
+                drawArea={drawArea}
+                onAreaDrawn={onAreaDrawn}
+                drawnArea={explain?.kind === 'area' && explain?.bbox ? explain.bbox.split(',').map(Number) : null}
+                requestedLayer={requestedLayer}
               />
               </ErrorBoundary>
             </div>
@@ -3020,6 +3043,7 @@ export default function App() {
            {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
              <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
                                                     canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
+                                                    canAreas={!!effectiveModel}
                                                     onOpen={kind => { setChatOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
                                                     onAsk={() => { setExplain(null); setChatOpen(true) }}/></div>
            )}
@@ -3078,7 +3102,13 @@ export default function App() {
         <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
                       onAudience={audience => setExplain(e => ({ ...e, audience }))}
                       compareOptions={compareOptions} onCompare={compare_to => setExplain(e => ({ ...e, compare_to }))}
-                      onProfile={patch => setExplain(e => ({ ...e, ...patch }))}/>
+                      onProfile={patch => setExplain(e => ({ ...e, ...patch }))}
+                      drawing={drawArea} onDraw={() => setDrawArea(d => !d)}
+                      onShowLayer={() => {
+                        const c = ATTENTION_LAYERS[explain?.criterion ?? 'late_onset']
+                        if (c.tab !== activeTab) setActiveTab(c.tab)
+                        setRequestedLayer({ ...c, nonce: Date.now() })
+                      }}/>
       )}
       <BulletinModal
         isOpen={bulletinModalOpen}
