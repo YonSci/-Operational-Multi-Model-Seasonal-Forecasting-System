@@ -334,7 +334,20 @@ def _loop(client, s: Session, messages, kw):
     return resp
 
 
-def reply(messages, context, audience="general") -> dict:
+def reply(messages, context, audience="general", language="en") -> dict:
+    out = _reply(messages, context, audience)
+    if language and language != "en" and out.get("reply"):
+        from . import translate
+        tr, err = translate.translate({"reply": out["reply"], "cautions": out.get("cautions") or []}, language)
+        if tr:
+            out.update(reply=tr["reply"], cautions=tr["cautions"], language=language,
+                       translation_notice=translate.NOTICE.get(language))
+        else:
+            out["translation_note"] = err
+    return out
+
+
+def _reply(messages, context, audience="general") -> dict:
     """The assistant's answer to the last user message."""
     hist = _clean_history(messages)
     if not hist or hist[-1]["role"] != "user":

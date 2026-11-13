@@ -10,21 +10,28 @@ import mam_loader as dl
 from pydantic import BaseModel
 
 from assistant import advisory, areas, charts, chat, evidence as ev
-from assistant import narrate
+from assistant import narrate, translate
 from kenya_api.pixel import _clean
 import json
 
 router = APIRouter()
 
 
-def _reply(kind, rec, audience):
-    out = {"kind": kind, "evidence": rec, "explanation": narrate.explain(kind, rec, audience)}
+def _reply(kind, rec, audience, language="en"):
+    out = {"kind": kind, "evidence": rec,
+           "explanation": translate.localise(narrate.explain(kind, rec, audience), language)}
     return Response(content=json.dumps(_clean(out)), media_type="application/json")
 
 
 def _ready():
     if not dl.is_loaded():
         raise HTTPException(503, "Data not yet loaded.")
+
+
+@router.get("/languages")
+def languages():
+    """The assistant's languages, with the review status of each glossary."""
+    return {"languages": translate.languages()}
 
 
 @router.get("/status")
@@ -40,6 +47,7 @@ def explain_location(
     model: str = Query("", description="Platform model name, as for /pixel"),
     year: int = Query(None),
     audience: str = Query("general", description="general | farmer | extension | technical"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """What the current outlook means at one place (the forecast grid cell holding lat, lon)."""
     _ready()
@@ -47,7 +55,7 @@ def explain_location(
         rec = ev.location(lat, lon, season, model, year)
     except ValueError as e:
         raise HTTPException(404, str(e))
-    return _reply("location", rec, audience)
+    return _reply("location", rec, audience, language)
 
 
 @router.get("/changes")
@@ -58,6 +66,7 @@ def explain_changes(
     compare_to: str = Query(..., description="The earlier run, or another method, to compare with"),
     year: int = Query(None),
     audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """What changed at one place between two runs (or two methods)."""
     _ready()
@@ -67,7 +76,7 @@ def explain_changes(
         rec = ev.changes(lat, lon, season, model, compare_to, year)
     except ValueError as e:
         raise HTTPException(404, str(e))
-    return _reply("changes", rec, audience)
+    return _reply("changes", rec, audience, language)
 
 
 @router.get("/map")
@@ -75,6 +84,7 @@ def explain_map(
     variable: str = Query("onset"), layer: str = Query("median"),
     model: str = Query(""), season: str = Query("short_rains"),
     audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """What a map layer shows: its distribution, where values are high and low, and the monitored sites."""
     _ready()
@@ -82,7 +92,7 @@ def explain_map(
         rec = ev.map_layer(variable, layer, model, season)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return _reply("map", rec, audience)
+    return _reply("map", rec, audience, language)
 
 
 @router.get("/advisory")
@@ -98,6 +108,7 @@ def explain_advisory(
     objective: str = Query("maturity", description="maturity | establishment | downside | yield | water"),
     year: int = Query(None),
     audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """An advisory card (DRAFT rules, not reviewed): the assessment for one decision, the options from the crop
     outlook ranked by the objective, their trade-offs, and what could change the assessment."""
@@ -108,13 +119,14 @@ def explain_advisory(
                                                       "objective": objective}, year)
     except ValueError as e:
         raise HTTPException(404, str(e))
-    return _reply("advisory", rec, audience)
+    return _reply("advisory", rec, audience, language)
 
 
 class ChatIn(BaseModel):
     messages: list = []
     context: dict = {}
     audience: str = "general"
+    language: str = "en"
 
 
 @router.post("/chat")
@@ -122,7 +134,7 @@ def chat_reply(body: ChatIn):
     """The forecast assistant's answer to the last user message, from the platform's evidence (assistant/chat.py).
     Context: {lat, lon, season, model, variable, layer, site_name} of the dashboard."""
     _ready()
-    out = chat.reply(body.messages, body.context, body.audience)
+    out = chat.reply(body.messages, body.context, body.audience, body.language)
     return Response(content=json.dumps(_clean(out)), media_type="application/json")
 
 
@@ -139,6 +151,7 @@ def explain_area(
     name: str = Query("", description="county (Kenya) or region (Ethiopia)"),
     bbox: str = Query("", description="drawn rectangle: west,south,east,north"),
     audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """The outlook over a county/region or a drawn rectangle: cell spread, area-wide event chances (members) and the
     average of the cells' skill-weighted chances."""
@@ -148,7 +161,7 @@ def explain_area(
         rec = areas.area(season, model, name=name or None, bbox=box)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return _reply("area", rec, audience)
+    return _reply("area", rec, audience, language)
 
 
 @router.get("/attention")
@@ -156,6 +169,7 @@ def explain_attention(
     season: str = Query("short_rains"), model: str = Query(...),
     criterion: str = Query("late_onset", description=", ".join(areas.CRITERIA)),
     audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """Areas needing attention on one criterion: counties/regions ranked by the share of their cells that meet it."""
     _ready()
@@ -163,7 +177,7 @@ def explain_attention(
         rec = areas.attention(season, model, criterion)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return _reply("attention", rec, audience)
+    return _reply("attention", rec, audience, language)
 
 
 @router.get("/chart")
@@ -173,6 +187,7 @@ def explain_chart(
     season: str = Query("short_rains"), model: str = Query(""),
     quantity: str = Query("onset"), crop: str = Query("maize_early"),
     audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
 ):
     """What a chart shows: member dates, crop outcomes, or the rainfall plume (illustrative where the server has no
     daily members)."""
@@ -181,4 +196,4 @@ def explain_chart(
         rec = charts.chart(chart_kind, lat, lon, season, model, quantity=quantity, crop=crop)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return _reply("chart", rec, audience)
+    return _reply("chart", rec, audience, language)

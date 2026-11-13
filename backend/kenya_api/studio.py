@@ -39,6 +39,7 @@ class ComposeIn(BaseModel):
     sowing_date: str | None = None
     audience: str = "general"
     length: str = "standard"
+    language: str = "en"
 
 
 @router.post("/compose")
@@ -52,6 +53,13 @@ def compose(body: ComposeIn):
     except ValueError as e:
         raise HTTPException(400, str(e))
     b = bulletins.compose(snap, body.audience, body.length)
+    if body.language and body.language != "en":
+        from assistant import translate
+        tr, err = translate.translate({k: b[k] for k in ("title", "sections", "sms", "audio_script")}, body.language)
+        if tr:
+            b.update(tr, language=body.language, translation_notice=translate.NOTICE.get(body.language))
+        else:
+            b["translation_note"] = err
     return _json({"bulletin": b, "snapshot": snap, "quality": bulletins.check(b, snap)})
 
 

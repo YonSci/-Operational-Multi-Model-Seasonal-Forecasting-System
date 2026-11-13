@@ -2917,18 +2917,18 @@ export default function App() {
   const defaultCompare = (compareOptions.filter(o => SHORT_RAINS_INITS.findIndex(i => shortRainsModel(i.init, srDef) === o.model) < curIdx).at(-1) ?? compareOptions[0])?.model
   const mapModel = isJoined ? frModel : (selectedModel === 'multimodel' && selectedSeason === 'long_rains' ? '' : effectiveModel)
   const explainRequest = !explain ? null
-    : explain.kind === 'map' ? { kind: 'map', variable: mapLayer.variable, layer: mapLayer.layer, model: mapModel, season: selectedSeason, audience: explain.audience }
+    : explain.kind === 'map' ? { kind: 'map', variable: mapLayer.variable, layer: mapLayer.layer, model: mapModel, season: selectedSeason, audience: explain.audience, language: explain.language ?? 'en' }
     : explain.kind === 'changes' ? (compareOptions.length ? { kind: 'changes', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
-                                                             compare_to: compareOptions.some(o => o.model === explain.compare_to) ? explain.compare_to : defaultCompare, audience: explain.audience } : null)
-    : explain.kind === 'area' ? { kind: 'area', season: selectedSeason, model: effectiveModel, name: explain.name ?? '', bbox: explain.bbox ?? '', audience: explain.audience }
-    : explain.kind === 'attention' ? { kind: 'attention', season: selectedSeason, model: effectiveModel, criterion: explain.criterion ?? 'late_onset', audience: explain.audience }
+                                                             compare_to: compareOptions.some(o => o.model === explain.compare_to) ? explain.compare_to : defaultCompare, audience: explain.audience, language: explain.language ?? 'en' } : null)
+    : explain.kind === 'area' ? { kind: 'area', season: selectedSeason, model: effectiveModel, name: explain.name ?? '', bbox: explain.bbox ?? '', audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'attention' ? { kind: 'attention', season: selectedSeason, model: effectiveModel, criterion: explain.criterion ?? 'late_onset', audience: explain.audience, language: explain.language ?? 'en' }
     : explain.kind === 'chart' ? { kind: 'chart', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
-                                   chart: explain.chart ?? 'member_dates', quantity: explain.quantity ?? 'onset', crop: explain.crop ?? 'maize_early', audience: explain.audience }
-    : explain.kind === 'advisory' ? { kind: 'advisory', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience,
+                                   chart: explain.chart ?? 'member_dates', quantity: explain.quantity ?? 'onset', crop: explain.crop ?? 'maize_early', audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'advisory' ? { kind: 'advisory', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience, language: explain.language ?? 'en',
                                       decision: explain.decision ?? 'sowing', crop: explain.crop ?? 'maize_early', planted: explain.planted ?? 'unknown',
                                       sowing_date: explain.planted === 'yes' ? (explain.sowing_date ?? '') : '', water: explain.water ?? 'rainfed',
                                       objective: explain.objective ?? 'maturity' }
-    : { kind: 'location', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience }
+    : { kind: 'location', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience, language: explain.language ?? 'en' }
   const mrfChoices = MRF_ORDER.filter(id => frRuns?.some(r => r.source === 'mr-' + id) || mrfModels?.some(m => m.id === id))
     .map(id => ({ id, label: frRuns?.find(r => r.source === 'mr-' + id)?.model_label ?? MRF_LABELS[id] }))
 
