@@ -36,8 +36,9 @@ slowly, so its ECe answers each event more slowly; the long-run levels are alike
 evaporation. The stress, as AquaCrop's: the root zone's ECe gives KsSalt (linear from ECemin to ECemax); its running
 mean over the canopy days gives the CCx reduction through the crop's salinity regression (calibrated by the
 reference season, preparefertilitysalinity.f90 519-741), and from it the reductions of CGC, the canopy's decline
-(CCsaltDistortion 25 %) and the stomata (RedKsSto); the root zone's ECsw closes the stomata further each day
-(AdjustedKsStoToECsw, ResponseECsw 100 %). Combined with fertility: the larger reduction of each, RedWP from
+(CCsaltDistortion 25 %) and the stomata (RedKsSto); the soil water's ECsw closes the stomata further each day
+(AdjustedKsStoToECsw, ResponseECsw 100 %), as AquaCrop 7's calculate_transpiration: a cap on the root zone's
+transpiration, each compartment's own limit, and what one compartment holds back taken from the others up to the cap. Combined with fertility: the larger reduction of each, RedWP from
 fertility, RedKsSto from salinity. Crop tolerance (ECemin, ECemax, dS/m): FAO Irrigation and Drainage Paper 29
 (Ayers and Westcot 1985, Table 4; Maas and Hoffman 1977): the threshold ECe and the ECe at zero yield.
 """
@@ -303,12 +304,15 @@ def active_cell(th, scp1, ul, dx):
 
 # ── a model run's state ─────────────────────────────────────────────────────────────────────────────────────────────
 class Context:
-    """One AquaCrop-OSPy run's settings and state (module doc). fertility: {"stress_pct"}; weeds: {"rc_pct",
+    """One AquaCrop-OSPy run's settings and state (module doc). fertility: {"stress_pct"} or {"stress_pct_by_crop":
+    {AquaCrop crop: level}}; weeds: {"rc_pct",
     "delta_rc_pct"}; salinity: {"ecw", "ecgw", "ece_initial"} (dS/m; ecgw with the task's water table)."""
 
     def __init__(self, crop_key, cg, fertility=None, weeds=None, salinity=None):
         self.crop_key, self.cg = crop_key, np.asarray(cg, float)
-        self.sf0 = int((fertility or {}).get("stress_pct", 0))
+        fert = fertility or {}
+        by_crop = fert.get("stress_pct_by_crop")                 # a calibrated level per crop (aquacrop_fertility.yaml)
+        self.sf0 = int(round(float(by_crop.get(crop_key, 0) if by_crop else fert.get("stress_pct", 0))))
         self.rc = float((weeds or {}).get("rc_pct", 0.0))
         self.drc = float((weeds or {}).get("delta_rc_pct", 0.0))
         self.sal = salinity or None
@@ -508,15 +512,46 @@ def install():
         rz = x.root_zone(prof, th0, float(cond.z_root))
         if rz is None:
             return tr, tr_ns, tr_pot, cond, irr_net
+        # 1. the root zone's cap (AquaCrop's TpotMAX = RedFactECsw × Tpot): the stomata of the whole root zone
         ks_w = min(1.0, tr / tr_pot) if tr_pot > 0 else 1.0
         sto = 1 - x.red["RedKsSto"] / 100.0
         osm = adjusted_ks_sto(x.ecemin, x.ecemax, rz[0], rz[1], rz[2], rz[3], x.bsalt, ks_in=1.0)
-        f = min(1.0, sto, osm / max(ks_w, 1e-6))
-        if f < 1.0:
-            took = np.maximum(th0 - np.array(cond.th, float), 0.0)
-            if took.sum() > 0:
-                cond.th = np.array(cond.th, float) + took * (1 - f)
-            tr = tr * f
+        cap = tr * min(1.0, sto, osm / max(ks_w, 1e-6))
+        # 2. each compartment's own limit (AquaCrop's alfa: AdjustedKsStoToECsw of the compartment's ECe and ECsw, on
+        # its water-stress Ks × (1 - RedKsSto)): its extraction × alfa / Ks, Ks as AquaCrop-OSPy's KsComp
+        took = np.maximum(th0 - np.array(cond.th, float), 0.0)
+        m = 1000 * np.asarray(prof.dz, float)
+        f_comp = np.ones(len(took))
+        for i in np.nonzero(took > 0)[0]:
+            ks = _ks_comp(crop, prof, th0, i, et0)
+            if ks <= 0:
+                continue
+            ece = min(x.salt[i] / (m[i] * prof.th_s[i]), SALT_SOLUB) / EQUIV
+            ecsw = min(x.salt[i] / (m[i] * max(th0[i], 1e-6)), SALT_SOLUB) / EQUIV
+            ecsw_fc = min(x.salt[i] / (m[i] * prof.th_fc[i]), SALT_SOLUB) / EQUIV
+            wrel = float(np.clip((prof.th_fc[i] - th0[i]) / max(prof.th_fc[i] - prof.th_wp[i], 1e-6), 0, 1))
+            alfa = adjusted_ks_sto(x.ecemin, x.ecemax, ece, ecsw, ecsw_fc, wrel, x.bsalt, ks_in=sto * ks)
+            f_comp[i] = min(1.0, alfa / ks)
+        # 3. AquaCrop's redistribution: what one compartment's stomata hold back is taken from the others, up to the
+        # root zone's cap: the cap's water shared out by the compartments' salt-limited extraction, each at most its
+        # water above the wilting point
+        weight = took * f_comp * m
+        target = min(cap, tr)
+        if weight.sum() <= 0 or took.sum() <= 0 or target >= tr - 1e-9 and np.all(f_comp >= 1):
+            return tr, tr_ns, tr_pot, cond, irr_net
+        avail = np.maximum(th0 - np.asarray(prof.th_wp, float), 0.0) * m
+        new = np.zeros(len(took))
+        left, open_ = target, weight > 0
+        for _ in range(len(took)):
+            if left <= 1e-9 or not open_.any():
+                break
+            share = left * weight * open_ / float(np.sum(weight * open_))
+            add = np.minimum(share, avail - new)
+            new += add
+            left -= float(add.sum())
+            open_ = open_ & (avail - new > 1e-9)
+        cond.th = th0 - new / m                                     # every compartment's water as AquaCrop leaves it
+        tr = float(new.sum())
         return tr, tr_ns, tr_pot, cond, irr_net
 
     def groundwater_inflow(prof, cond):
@@ -566,6 +601,26 @@ def install():
     rst.canopy_cover, rst.transpiration = canopy_cover, transpiration
     rst.groundwater_inflow, rst.biomass_accumulation = groundwater_inflow, biomass_accumulation
     _INSTALLED.append(o)
+
+
+def _ks_comp(crop, prof, th, i, et0):
+    """AquaCrop-OSPy's stomatal water-stress coefficient of compartment i (transpiration.py's KsComp)."""
+    p_up = crop.p_up[1]
+    if crop.ETadj == 1:
+        p_up = p_up + (0.04 * (5 - et0)) * (np.log10(10 - 9 * p_up))
+    taw = prof.th_fc[i] - prof.th_wp[i]
+    if th[i] >= prof.th_fc[i] - taw * p_up:
+        return 1.0
+    if th[i] <= prof.th_wp[i]:
+        return 0.0
+    wrel = (prof.th_fc[i] - th[i]) / taw
+    prel = (wrel - crop.p_up[1]) / (crop.p_lo[1] - crop.p_up[1])
+    if prel <= 0:
+        return 1.0
+    if prel >= 1:
+        return 0.0
+    s = crop.fshape_w[1]
+    return float(np.clip(1 - (np.exp(prel * s) - 1) / (np.exp(s) - 1), 0, 1))
 
 
 def _route_salt(x, prof, th_post, th_cr, flux_out):

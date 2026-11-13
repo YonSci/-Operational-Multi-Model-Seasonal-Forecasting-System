@@ -75,6 +75,11 @@ def irrigation(spec, plant):
     if not spec:
         return None
     spec = dict(spec)
+    start = int(spec.pop("start_stage", 1))
+    if start > 1 and "SMT" in spec:
+        # no irrigation before growth stage `start`: AquaCrop-OSPy's trigger (depletion + the day's demand over TAW
+        # > 1 - SMT/100) passes 1 in a dry seedbed, so an SMT of 0 still irrigated at sowing; -1000 % never triggers
+        spec["SMT"] = [-1000 if i < start - 1 else s for i, s in enumerate(spec["SMT"])]
     das = spec.pop("schedule_das", None)
     if das is not None:
         spec["irrigation_method"] = 3
@@ -186,11 +191,68 @@ def patch_capillary_rise():
     _CR_PATCHED.append(True)
 
 
+_SUB_PATCHED = []
+
+
+def patch_submergence():
+    """AquaCrop-OSPy 3.1.0 resets its submerged-days counter (day_submerged) only in the runoff step of a field with
+    no bunds. On a bunded field a pond that lasted the crop's LagAer days (3) left the counter there for the rest of
+    the season: every compartment got full aeration stress (transpiration.py: AerComp = 0) and the crop transpired
+    nothing from then on, with no water standing (a Kapiti member: 7.7 t/ha without bunds, 0.05 with 10 cm bunds).
+    FAO AquaCrop 7 resets the counter each day the surface holds no water (simul.f90, after the transpiration:
+    "if (GetSurfaceStorage() < epsilon(0._sp)) call SetDaySubmerged(0)"); so does this, after AquaCrop-OSPy's
+    transpiration step. Idempotent, per process."""
+    if _SUB_PATCHED:
+        return
+    import aquacrop.timestep.run_single_timestep as rst
+    tr0 = rst.transpiration
+
+    def transpiration(*a, **k):
+        out = tr0(*a, **k)
+        cond = out[3]
+        if cond.surface_storage < np.finfo(np.float32).eps:
+            cond.day_submerged = 0
+        return out
+
+    rst.transpiration = transpiration
+    _SUB_PATCHED.append(True)
+
+
+def aligned_layers(layers, dz=SOIL_DZ):
+    """The soil layers resampled onto the compartments' boundaries (make_soil): each layer's bottom moved to the
+    nearest compartment boundary (duplicates merged, the last at the profile's bottom), and its sand, clay, organic
+    matter, coarse fragments, field capacity and wilting point the depth-weighted mean of the layers it overlaps."""
+    from crop_engine.data.soil import Layer
+    cb = np.round(np.cumsum(dz), 3)
+    bottoms = sorted({float(cb[int(np.argmin(np.abs(cb - L.bottom_cm / 100.0)))]) for L in layers} | {float(cb[-1])})
+    keys = ("sand", "clay", "om", "cfvo", "theta_fc", "theta_wp")
+    out, top = [], 0.0
+    for bot in bottoms:
+        w = np.array([max(0.0, min(bot, L.bottom_cm / 100.0) - max(top, L.top_cm / 100.0)) for L in layers])
+        if w.sum() <= 0:                                             # below the data: the deepest layer's values
+            w = np.zeros(len(layers))
+            w[-1] = 1.0
+        v = {k: float(np.dot(w, [getattr(L, k) for L in layers]) / w.sum()) for k in keys}
+        out.append(Layer(round(top * 100), round(bot * 100), **v))
+        top = bot
+    return out
+
+
 def make_soil(layers):
+    """AquaCrop-OSPy's soil of the site's layers. Two corrections to AquaCrop-OSPy 3.1.0's way:
+    1. Layers on the compartments' boundaries (aligned_layers). AquaCrop-OSPy gives a layer the compartments down to
+       its thickness counted from where the previous layer's compartments ended: the SoilGrids 0-5 cm layer, thinner
+       than the 10 cm top compartment, got none and was dropped, every layer below moved up 5 cm, and the 100-200 cm
+       layer was lost to the 60-100 cm one (its compartments filled from above).
+    2. Coarse fragments, as FAO AquaCrop 7 (its GravelVol): a layer holds water only in its fine earth, so its
+       saturation, field capacity and wilting point are those of its texture × (1 - coarse fragments, % volume / 100);
+       the saturated conductivity is the texture's."""
     from aquacrop import Soil
     s = Soil("custom", dz=list(SOIL_DZ))
-    for L in layers:
-        s.add_layer_from_texture(thickness=L.thickness_m, Sand=L.sand, Clay=L.clay, OrgMat=L.om, penetrability=100)
+    for L in aligned_layers(layers):
+        wp, fc, sat, ksat = s.calculate_soil_hydraulic_properties(L.sand / 100.0, L.clay / 100.0, L.om)
+        f = 1.0 - min(max(float(L.cfvo), 0.0), 90.0) / 100.0
+        s.add_layer(round(L.thickness_m, 3), round(wp * f, 3), round(fc * f, 3), round(sat * f, 3), ksat, 100)
     return s
 
 
@@ -200,6 +262,8 @@ def _sow(task, m, plant, dates, g):
     patch_delayed_maturity()
     if task.get("groundwater"):
         patch_capillary_rise()
+    if (task.get("field") or {}).get("bunds"):
+        patch_submergence()
     r = dict(member=m + 1, planting=plant.isoformat(), status="not_sown", yield_t_ha=0.0, potential_t_ha=None,
              biomass_t_ha=None, harvest=None, max_canopy=None, stress_days=None, rain_mm=None, sources=None)
     k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])

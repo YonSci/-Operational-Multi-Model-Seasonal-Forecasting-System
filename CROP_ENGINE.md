@@ -159,10 +159,10 @@ outlook can be read against what a farmer could do differently. Each scenario ch
 | Calendar sowing | 15 Oct, 1 Nov, 15 Nov | every member sown on that date, onset or not (AquaCrop's germination still needs a wet topsoil) |
 | Plant density | × 0.67, × 1.2 | the variety's plant population. AquaCrop-OSPy derives only the initial canopy cover from it (CCo = population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated at Kiboko) does not change |
 | Initial soil water | wilting point, field capacity on 1 Aug | in place of the ERA5-Land plant-available water |
-| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from sowing to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency). The cap is on net water: with `AppEff` 75 and a cap, AquaCrop-OSPy 3.1.0 ended every Genco Tana River member's season early (all died in October) |
+| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from canopy growth to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage, none before the crop has emerged with rain: `start_stage` 2, *Supplementary irrigation's false start* below), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency; the cap is on net water) |
 | | full irrigation | method 1, 70 % throughout, no seasonal cap: the yield with water no longer limiting |
 | | mulch, 50 % residue cover | `FieldMngt`: mulches on 50 % of the surface, soil evaporation there × 0.5 |
-| | tied ridges or pits (no surface runoff) | `FieldMngt(sr_inhb=True)`: surface runoff fully inhibited, the rain infiltrates where it falls, as tied ridges or zai pits make it. Not AquaCrop's bunds (`bunds`, `z_bund`): they pond the rain over the whole field like a rice paddy, and in the first run the waterlogged topsoil stopped the crop (canopy under 8 %) in most members at Kapiti, Kiboko and Livemo |
+| | tied ridges or pits (no surface runoff) | `FieldMngt(sr_inhb=True)`: surface runoff fully inhibited, the rain infiltrates where it falls, as tied ridges or zai pits make it. AquaCrop's bunds (`bunds`, `z_bund`) are their own scenario (*More of AquaCrop* below). In the first run 20 cm bunds stopped the crop (canopy under 8 %) in most members at Kapiti, Kiboko and Livemo; that was an AquaCrop-OSPy bug, fixed (*Bunds* below), not waterlogging |
 
 Each member records the irrigation it received (`irrigation_mm`); the scenario summaries give the sown crops'
 median (`irrigation_mm_median`), shown under the scenario's name on the dashboard. The outlook itself stays
@@ -255,8 +255,8 @@ outlook's configuration hash includes the file and every AquaCrop normal and run
   profiles (their 0–5 cm layer is thinner than a 10 cm compartment) and every member errored; `patch_capillary_rise`
   passes the check for a profile with no layer below its 2 m (the code it guards is marked broken in AquaCrop-OSPy
   and has nothing to do then).
-- **Bunds** 10 cm high (`FieldMngt` bunds): the rain held on the field. The 20 cm of the first trial waterlogged
-  the crop at most sites (the *field* note in `management.py`).
+- **Bunds** 10 cm high (`FieldMngt` bunds): the rain held on the field until it infiltrates (the crop's failure
+  under bunds in the first trial was an AquaCrop-OSPy bug: *Bunds: the submerged-days counter* below).
 - **Irrigation methods 2–5**: every 7 days to field capacity (up to 30 mm); a fixed schedule from each member's
   sowing (25 mm at sowing, 30 mm at 20, 40 and 60 days); the **net irrigation requirement** (the root zone kept at
   60 % of its available water, the water counted, not applied: what a crop would need); drip at 3 mm a day.
@@ -281,13 +281,14 @@ outlook is unchanged. Each follows AquaCrop's equations, in growing degree days 
   compartments; the root zone's ECe and soil-water ECsw act through AquaCrop's canopy and stomatal responses.
   Tolerance (ECe at which yield starts to fall, and at which it is nil): FAO 29 (Ayers and Westcot 1985; Maas and
   Hoffman 1977): maize 1.7–10, sorghum 6.8–13, bean 1.0–6.3. **Check** (irrigated maize, a saline soil): 2, 4, 6 dS/m
-  → 0.95, 0.76, 0.51 of the yield on a fresh soil, against FAO 29's 0.96, 0.72, 0.48. At 8 dS/m the crop collapses
-  (0.01; FAO 29: 0.24): AquaCrop's stomata close fully once the soil water's salinity, which rises as the soil dries
-  below field capacity, passes the crop's limit. Saline irrigation water acts slowly from a fresh profile (ECw 4:
+  → 0.92, 0.74, 0.53 of the yield on a fresh soil, against FAO 29's 0.96, 0.72, 0.48; at 8 dS/m 0.10 (FAO 29:
+  0.24): near the crop's limit AquaCrop's root-zone stomata nearly close as the soil water's salinity rises when the
+  soil dries below field capacity (AquaCrop 7's own cap, kept). (With the root-zone rule alone, the first port: 0.95,
+  0.76, 0.51 and 0.01; *Salinity in each compartment* below.) Saline irrigation water acts slowly from a fresh profile (ECw 4:
   0.97 in one season): the salt builds up over years (FAO 29's ECe ≈ 1.5 ECw is that steady state).
 - **Simplified from AquaCrop 7**: no salt cells inside a compartment (incoming water mixes with all of it, so ECe
   answers each rain or irrigation faster than AquaCrop's, alike in the long run), no salt moved up with
-  evaporation; the stomatal salinity effect is applied to the root zone as a whole, not compartment by compartment.
+  evaporation.
   AquaCrop's quirks are kept where they are its behaviour (no salinity effect on the first canopy day; the time to
   full canopy recomputed for fertility only; no weed expansion under fertility stress).
 
@@ -300,8 +301,9 @@ in 15 min on three workers). Compared with the stored outlook, which predates #7
 River's gains below are mostly #71's late-germination fix; the first daily run after merging gives like-for-like
 figures. Median yield over all members:
 
-- **Bunds 10 cm** still waterlog the crop where rain ponds on clay: early maize at Kiboko 0.2, Kapiti 0.0 and
-  Livemo 0.0 t/ha (outlook 2.9, 5.3, 1.0); they help where the soil drains (El Karama 1.2 → 1.6).
+- **Bunds 10 cm** (in this first run): early maize at Kiboko 0.2, Kapiti 0.0 and Livemo 0.0 t/ha (outlook 2.9,
+  5.3, 1.0), the crops matured but transpired nothing after a pond: an AquaCrop-OSPy bug, fixed since (*Bunds: the
+  submerged-days counter* below), after which bunds give 3.9, 5.5 and 3.1.
 - **Irrigation methods**: every 7 days and the net requirement reach full irrigation's yields; the net requirement
   counts 142–330 mm of early maize's water against full irrigation's 212–397 mm applied; drip at 3 mm a day comes
   close with 276–384 mm; the fixed 115 mm schedule ranges from 0.7 t/ha at Maralal to 6.9 at Kapiti.
@@ -315,10 +317,102 @@ figures. Median yield over all members:
   threshold is 1 dS/m), sorghum least; saline irrigation water (ECw 2) and a saline water table change nothing in
   one season (the salt builds up over years).
 
-AquaCrop-OSPy's profile maps compartments to soil layers by depth, and with the SoilGrids layers the compartments
-of 1–2 m take the 60–100 cm layer's texture, not the 100–200 cm layer's: a quirk of the package that affects every
-AquaCrop run alike (the two layers' textures are close at the sites: Kiboko 37/44 against 38/43 % sand/clay), left
-as is here.
+### AquaCrop's soil: layers on the compartments and coarse fragments (November 2026)
+
+Two corrections in `aquacrop_adapter.make_soil`, in every AquaCrop run (the outlook included):
+
+- **Layers on the compartments' boundaries.** AquaCrop-OSPy 3.1.0 gives a layer the compartments down to its
+  thickness counted from where the previous layer's compartments ended. The SoilGrids 0–5 cm layer is thinner than
+  the 10 cm top compartment, so it got none and was dropped; every layer below moved up 5 cm, and the 100–200 cm
+  layer was lost, its compartments filled with the 60–100 cm layer's soil. (It is also why the water table's
+  capillary rise asserted, *More of AquaCrop* above.) The SoilGrids layers are now resampled onto the compartments'
+  boundaries (`aligned_layers`: 0–10, 10–30, 30–60, 60–100, 100–200 cm), each with the depth-weighted texture, organic
+  matter and coarse fragments of the layers it overlaps, and every compartment takes its own layer.
+- **Coarse fragments**, as FAO AquaCrop 7 (its GravelVol): a layer holds water only in its fine earth, so its
+  saturation, field capacity and wilting point are its texture's × (1 − coarse fragments, % volume / 100); the
+  saturated conductivity stays the texture's. The SoilGrids coarse fragments at the sites rise from 4–7 % at the
+  surface to 13–20 % at 1–2 m (Kiboko 20.5 %), so the deep soil holds up to a fifth less water.
+
+Effect, observed seasons 1993–2016, FAO onset sowing, median (mean) yield before → after, t/ha:
+
+| Site | Early maize | Sorghum | Bean |
+|---|---|---|---|
+| El Karama | 1.97 → 2.02 (2.73 → 2.87) | 2.22 → 2.76 (2.85 → 3.09) | 0.75 → 0.73 (1.06 → 1.08) |
+| Genco Maralal | 0.99 → 1.13 (1.92 → 1.99) | 1.81 → 2.02 (2.59 → 2.60) | 1.11 → 1.34 (1.35 → 1.36) |
+| Genco Tana River | 0.49 → 0.59 (1.45 → 1.50) | 0.57 → 0.66 (1.33 → 1.39) | 0.83 → 0.86 (0.84 → 0.88) |
+| KALRO Kiboko | 0.60 → 0.81 (1.33 → 1.53) | 0.59 → 0.72 (1.34 → 1.50) | 0.62 → 0.78 (0.86 → 0.91) |
+| Kapiti | 0.59 → 0.92 (1.70 → 1.85) | 0.56 → 1.07 (1.65 → 1.88) | 0.72 → 1.05 (0.97 → 1.21) |
+| Livemo | 0.03 → 0.06 (0.98 → 1.05) | 0.00 → 0.00 (0.95 → 1.06) | 0.10 → 0.17 (0.58 → 0.63) |
+
+Small gains and a few fewer failed seasons (early maize at Kapiti 12 → 10 of 24 below 0.5 t/ha). Most of it is the
+layers (early maize, layers alone: Kiboko 0.60 → 0.88, Kapiti 0.59 → 0.86): the topsoil is back and the deep soil is
+its own. A stonier soil holds less water but its smaller store fills sooner after rain, so the coarse fragments add
+a little where establishment after the first rains decides the season. The regression seasons are regenerated for
+it (`tests/reference/aquacrop_synthetic.json`: their soil has the SoilGrids layering and 5 % coarse fragments).
+
+### Bunds: the submerged-days counter (November 2026)
+
+Bunds had stopped the crop at Kapiti, Kiboko and Livemo (10 cm: early maize 0.0–0.2 t/ha, most members matured
+with nothing in the grain). Not waterlogging: AquaCrop-OSPy 3.1.0 resets its submerged-days counter only in the
+runoff step of a field without bunds. On a bunded field a pond that stood the crop's LagAer days (3) left the counter
+there for the rest of the season, every compartment got full aeration stress and the crop transpired nothing from
+then on, with no water standing (a Kapiti member: 7.7 t/ha without bunds, 0.05 with). FAO AquaCrop 7 resets the
+counter on every day the surface holds no water (`simul.f90`); `aquacrop_adapter.patch_submergence` does the same
+after AquaCrop-OSPy's transpiration step, on bunded fields only (the outlook has none). After it, 1 Oct 2026 run,
+early maize, median (failure): Kiboko 3.90 t/ha (20 %), Kapiti 5.47 (16 %), Livemo 3.08 (36 %), El Karama 1.70
+(32 %): bunds hold the rain as tied ridges do (3.97, 5.58, 2.08, 1.56). Water that stands for days still stresses
+the crop for lack of air, as AquaCrop intends: a clay field holding a 4-day storm for 16 days yields 3.9 instead of
+5.2 t/ha (`test_bunds_after_a_pond_drains`).
+
+### Supplementary irrigation's false start (November 2026)
+
+Supplementary irrigation (100 mm a season) had killed every Genco Tana River member in October, and the scenario was
+kept at 100 % application efficiency because a lower one made it worse. Neither was a bug of the efficiency. The
+FAO onset sows Tana River on 3 Sep, into dry soil: rain-fed, the seed waits for the November rains and matures in
+December (about 4 t/ha); irrigated from sowing, the first irrigations germinated it in September (AquaCrop-OSPy's
+trigger, the depletion plus the day's demand over the available water, passes 1 in a dry seedbed, so even a
+soil-moisture target of 0 % irrigated at sowing), the cap was spent keeping a full canopy alive in a dry October and
+the crop died before the rains (75 % efficiency: smaller doses, the cap gone 5 days sooner, and every member dead
+instead of most). A farmer with 100 mm keeps it for an established crop: the scenario now irrigates from canopy
+growth only (`start_stage` 2, AquaCrop only: the stage-1 trigger never fires), the cap counted in net water. 1 Oct
+2026 run, early maize, median (failure, water used): Tana River 4.84 t/ha (0 %, 75 mm; was 1.9), Kiboko 5.38 (0 %,
+75 mm), El Karama 5.05 (4 %, 100 mm), Kapiti 6.71 (4 %, 75 mm), Livemo 4.68 (20 %, 100 mm). WOFOST and DSSAT
+irrigate from sowing as before.
+
+### AquaCrop's fertility fitted to the nitrogen trials (November 2026, `calibration/aquacrop_fertility.py`)
+
+AquaCrop's soil fertility stress has a level and four response shapes; the shapes need canopy measurements under
+stress, which the trials do not have, so they stay AquaCrop's generic crop's, and the level is fitted, as AquaCrop's
+own calibration does (`crop_engine/aquacrop_fertility.yaml`; `outputs/crop_engine/calibration/aquacrop/
+fertility.json`):
+
+- **Kiboko's own field** (the 2013 irrigated trial, water not limiting): medium maize yields the trial's 0.22, 0.51
+  and 0.80 of its 160 kg N/ha yield at stress levels **71, 51 and 24 %** (0, 40, 80 kg N/ha).
+- **Regional** (early maize, observed Short Rains 1993–2016 at Kiboko and Kapiti, FAO onset; the trials' 0.62 of the
+  fertilised yield, DSSAT's target): **74 %**. Up to about 50 % the level hardly lowers these rain-fed yields (0.98–1.0
+  of unstressed): AquaCrop readjusts the stress each day from the biomass so far, so a season already short of water
+  is not penalised twice; above 60 % it bites (70 %: 0.79, 80 %: 0.36).
+- The two agree: an unfertilised dryland maize field is at about 70–75 % in AquaCrop's terms.
+
+The scenario **No fertiliser** grows maize and sorghum at 74 % (sorghum takes maize's level: no sorghum nitrogen
+trial) and the bean at none (it fixes its nitrogen). 1 Oct 2026 run, early maize, median, from the stored outlook
+(before these fixes) to no fertiliser: Kapiti 5.30 → 1.37 t/ha, Kiboko 2.92 → 1.12. This forecast is wetter than most
+of the calibration seasons, so the stress is relaxed less than in the median season. The generic
+25 and 50 % levels stay as sensitivity scenarios.
+
+### Salinity in each compartment (November 2026)
+
+The first port applied salinity's stomatal effect to the root zone as a whole, and maize collapsed at an ECe of 8
+dS/m (0.01 of a fresh soil; FAO 29: 0.24). The guess that AquaCrop 7's compartment-by-compartment rule would soften
+it was wrong: AquaCrop 7 (`simul.f90 calculate_transpiration`) does both, a root-zone cap on the day's transpiration
+(TpotMAX = RedFactECsw × Tpot) and each compartment's own limit (alfa, AdjustedKsStoToECsw of that compartment's ECe and
+ECsw on its water-stress Ks × (1 − RedKsSto)), then takes what one compartment holds back from the others, up to the
+cap. The salinity transpiration step now does all three (`aquacrop_stress.py`: the cap; each compartment's alfa over
+AquaCrop-OSPy's own KsComp; the cap's water shared out by the compartments' salt-limited extraction, each at most its
+water above the wilting point). Irrigated maize on a saline soil of 2, 4, 6, 8 dS/m: **0.92, 0.74, 0.53, 0.10** of
+a fresh soil (FAO 29: 0.96, 0.72, 0.48, 0.24; root zone alone: 0.95, 0.76, 0.51, 0.01). The crop keeps drawing on its
+wetter, less saline compartments near its limit; the rest of the gap at 8 dS/m is AquaCrop 7's own root-zone cap.
+Without the redistribution, the compartments' limits alone only threw water away (6 dS/m: 0.19).
 
 ### Questions for partners (November 2026)
 
@@ -803,7 +897,8 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
   overstate failure there; the FAO agricultural onset sows every year.
 - Sowing dates in cool sites (Kapiti, Maralal): the maturity classes are defined at 21 °C, so a medium maize or
   sorghum sown in November there needs more heat than the season gives before 31 Mar and is counted as too late.
-- Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
+- Soil is a 0.25° average of SoilGrids estimates, not measured (AquaCrop takes the coarse fragments' share out of each
+  layer's water; DSSAT receives them as SLCF; WOFOST does not use them).
 - The crop forecasts are verified against the crop grown in the observed weather (*Hindcast verification*), and
   against county yields only for their year-to-year ranking; no measured farm yields check their level.
 

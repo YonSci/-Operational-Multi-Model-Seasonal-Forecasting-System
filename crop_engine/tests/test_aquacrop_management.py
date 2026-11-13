@@ -52,6 +52,48 @@ def test_water_table_on_a_profile_with_a_thin_top_layer():
     assert r["yield_t_ha"] >= dry["yield_t_ha"]                         # the water table can only add water
 
 
+def test_bunds_after_a_pond_drains():
+    """A pond that lasted 3 days left AquaCrop-OSPy's submerged-days counter at its maximum on a bunded field, and the
+    crop transpired nothing for the rest of the season (patch_submergence: reset when no water stands, as AquaCrop 7)."""
+    from crop_engine import run_outlook as ro
+    from crop_engine.data.soil import Layer
+    _, vs = ro.load_varieties(["maize_early"])
+    v = vs["maize_early"]
+    clay = [Layer(t, b, 30, 50, 1.5, 5, 0.40, 0.25) for t, b in ((0, 10), (10, 30), (30, 60), (60, 100), (100, 200))]
+    d = pd.date_range("2025-08-01", "2026-03-31")
+    rain = np.where((d >= "2025-10-15") & (d <= "2026-01-20") & (np.arange(len(d)) % 3 == 0), 10.0, 0.0)
+    rain[(d >= "2025-11-20") & (d <= "2025-11-23")] = 70.0                    # a storm: the bunds fill for days
+    t = dict(dates=d.values, rain=rain[None, :], tmax=np.full(len(d), 28.0), tmin=np.full(len(d), 16.0),
+             et0=np.full(len(d), 4.5), source=np.zeros(len(d), int), planting=[dt.date(2025, 10, 25)], variety=v,
+             kw=v["kw"], layers=clay, initial_frac=0.5)
+    open_field = aq.simulate(t)[0]
+    bunded = aq.simulate(dict(t, field=dict(bunds=True, z_bund=0.20)))[0]
+    assert open_field["yield_t_ha"] > 1
+    # the pond stands 16 days on this clay: a real waterlogging loss (3.9 against 5.2 t/ha), not the whole season's
+    # crop (0.07 t/ha before the fix)
+    assert bunded["yield_t_ha"] > 0.5 * open_field["yield_t_ha"], (bunded["yield_t_ha"], open_field["yield_t_ha"])
+
+
+def test_no_irrigation_before_the_start_stage():
+    im = aq.irrigation({"irrigation_method": 1, "SMT": [30, 30, 30, 0], "MaxIrr": 25, "start_stage": 2}, dt.date(2026, 9, 3))
+    assert list(im.SMT) == [-1000, 30, 30, 0]                                # stage 1 (to emergence) never triggers
+    assert list(aq.irrigation({"irrigation_method": 1, "SMT": [70] * 4}, dt.date(2026, 9, 3)).SMT) == [70] * 4
+    assert mg.SCENARIOS["irr_supplementary"]["irrigation"]["start_stage"] == 2
+    assert not mg.aquacrop_only("irr_supplementary")                        # WOFOST and DSSAT read its SMT as before
+
+
+def test_calibrated_fertility_by_crop():
+    from crop_engine.adapters import aquacrop_stress as st
+    from crop_engine.calibration import aquacrop_fertility as af
+    f = mg.SCENARIOS["fert_no_n"]["fertility"]["stress_pct_by_crop"]
+    assert f["MaizeGDD"] == f["SorghumGDD"] > 50 and f["DryBeanGDD"] == 0
+    assert st.Context("MaizeGDD", [0, 1], fertility={"stress_pct_by_crop": f}).sf0 == f["MaizeGDD"]
+    bean = st.Context("DryBeanGDD", [0, 1], fertility={"stress_pct_by_crop": f})
+    assert bean.sf0 == 0 and not bean.active                                 # the bean: no stress, the outlook's run
+    assert af.fit_level((0, 10, 20), (1.0, 0.8, 0.5), 0.65) == pytest.approx(15.0)
+    assert af.fit_level((0, 10), (1.0, 0.9), 0.5) is None
+
+
 def test_aquacrop_only_scenarios():
     assert not any(mg.aquacrop_only(k) for k in ("irr_supplementary", "irr_full", "mulch", "ridges", "density_low",
                                                  "sow_plus14", "soil_dry"))
