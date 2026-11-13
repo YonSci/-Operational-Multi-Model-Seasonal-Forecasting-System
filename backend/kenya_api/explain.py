@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 import mam_loader as dl
-from assistant import evidence as ev
+from assistant import advisory, evidence as ev
 from assistant import narrate
 from kenya_api.pixel import _clean
 import json
@@ -81,3 +81,29 @@ def explain_map(
     except ValueError as e:
         raise HTTPException(400, str(e))
     return _reply("map", rec, audience)
+
+
+@router.get("/advisory")
+def explain_advisory(
+    lat: float = Query(...), lon: float = Query(...),
+    season: str = Query("short_rains"),
+    model: str = Query(""),
+    decision: str = Query("", description="sowing | crop_choice | establishment | replanting | water"),
+    crop: str = Query("maize_early", description="maize_early | maize_medium | sorghum | bean"),
+    planted: str = Query("unknown", description="yes | no | unknown"),
+    sowing_date: str = Query("", description="ISO date, when sown"),
+    water: str = Query("rainfed", description="rainfed | irrigated"),
+    objective: str = Query("maturity", description="maturity | establishment | downside | yield | water"),
+    year: int = Query(None),
+    audience: str = Query("general"),
+):
+    """An advisory card (DRAFT rules, not reviewed): the assessment for one decision, the options from the crop
+    outlook ranked by the objective, their trade-offs, and what could change the assessment."""
+    _ready()
+    try:
+        rec = advisory.card(lat, lon, season, model, {"decision": decision, "crop": crop, "planted": planted,
+                                                      "sowing_date": sowing_date, "water": water,
+                                                      "objective": objective}, year)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return _reply("advisory", rec, audience)

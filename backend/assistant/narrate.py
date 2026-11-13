@@ -205,7 +205,24 @@ def template_map(rec, audience="general"):
     return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
 
 
-TEMPLATES = {"location": template_location, "changes": template_changes, "map": template_map}
+def template_advisory(rec, audience="general"):
+    a = rec["applies_to"]
+    summary = [f"{rec['decision']['label']} for {a['crop']} ({a['stage']}) at {a['place']}, {a['season']}, "
+               f"{a['method']} method."] + list(rec["assessment"])
+    local = list(rec["why"])
+    if rec.get("best_for_objective"):
+        local.append(f"For the objective '{rec['objective']['label'].lower()}', the option that does best in the "
+                     f"crop outlook is: {rec['best_for_objective']}.")
+    local += list(rec["tradeoffs"])
+    if rec["could_change"]:
+        local.append("What could change this: " + " ".join(rec["could_change"]))
+    if rec["review"]:
+        local.append("When to look again: " + " ".join(rec["review"]))
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
+TEMPLATES = {"location": template_location, "changes": template_changes, "map": template_map,
+             "advisory": template_advisory}
 
 # ---------------------------------------------------------------------------- number checks
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -285,8 +302,8 @@ observed rain so far, not from the forecast.
 it is not an amount earlier or later. A median date is not a promise of rain on that day.
 - Name the onset method when it matters: the methods define different events.
 - State the forecast's skill where the record gives it, and say plainly when it is low (RPSS at or below 0).
-- Do not give farming instructions or recommendations. You may say what the forecast implies for timing and for \
-the season's length, conditionally.
+- Do not give farming instructions. Beyond what the forecast implies for timing and season length, mention only \
+the options and guidance the record itself contains, as options to consider under the stated conditions.
 - Keep every caution in the record that applies; put them in "cautions".
 - Plain text only: no markdown, no headings, no bullet characters. Short sentences.
 
@@ -310,6 +327,10 @@ TASKS = {
     "changes": "Explain what changed between the two forecast runs and why, using only the documented input changes. "
                "Do not claim how much each input caused the change.",
     "map": "Explain what this map shows, where the main patterns are, and how to read it correctly.",
+    "advisory": "Write the advisory card's text: the current assessment (summary) and, in local_implications, why "
+                "these options, their trade-offs, what could change the assessment and when to look again. Present "
+                "the options as options to consider, never as instructions. The guidance is a draft that no "
+                "agronomist has reviewed, and the crop figures are experimental model results: say both in cautions.",
 }
 
 

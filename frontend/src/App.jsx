@@ -1972,7 +1972,7 @@ const fmtStamp = iso => {
 
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, onOpen }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, onOpen }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -1981,6 +1981,7 @@ function AssistantBar({ siteLabel, canCompare, canMap, onOpen }) {
       <button type="button" style={b} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this location</button>
       {canCompare && <button type="button" style={b} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
       {canMap && <button type="button" style={b} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
+      {canAdvise && <button type="button" style={b} onClick={() => onOpen('advisory')} title="Draft guidance and crop options for one decision at the selected place">Advisory (draft)</button>}
     </div>
   )
 }
@@ -2886,6 +2887,10 @@ export default function App() {
     : explain.kind === 'map' ? { kind: 'map', variable: mapLayer.variable, layer: mapLayer.layer, model: mapModel, season: selectedSeason, audience: explain.audience }
     : explain.kind === 'changes' ? (compareOptions.length ? { kind: 'changes', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
                                                              compare_to: compareOptions.some(o => o.model === explain.compare_to) ? explain.compare_to : defaultCompare, audience: explain.audience } : null)
+    : explain.kind === 'advisory' ? { kind: 'advisory', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience,
+                                      decision: explain.decision ?? 'sowing', crop: explain.crop ?? 'maize_early', planted: explain.planted ?? 'unknown',
+                                      sowing_date: explain.planted === 'yes' ? (explain.sowing_date ?? '') : '', water: explain.water ?? 'rainfed',
+                                      objective: explain.objective ?? 'maturity' }
     : { kind: 'location', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience }
   const mrfChoices = MRF_ORDER.filter(id => frRuns?.some(r => r.source === 'mr-' + id) || mrfModels?.some(m => m.id === id))
     .map(id => ({ id, label: frRuns?.find(r => r.source === 'mr-' + id)?.model_label ?? MRF_LABELS[id] }))
@@ -3009,7 +3014,8 @@ export default function App() {
            )}
            {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
              <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
-                                                    canMap={mapLayer.variable !== 'mrf'} onOpen={kind => setExplain(e => ({ kind, audience: e?.audience ?? 'general', compare_to: e?.compare_to }))}/></div>
+                                                    canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
+                                                    onOpen={kind => setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' }))}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3053,7 +3059,8 @@ export default function App() {
       {explainRequest && (
         <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
                       onAudience={audience => setExplain(e => ({ ...e, audience }))}
-                      compareOptions={compareOptions} onCompare={compare_to => setExplain(e => ({ ...e, compare_to }))}/>
+                      compareOptions={compareOptions} onCompare={compare_to => setExplain(e => ({ ...e, compare_to }))}
+                      onProfile={patch => setExplain(e => ({ ...e, ...patch }))}/>
       )}
       <BulletinModal
         isOpen={bulletinModalOpen}
