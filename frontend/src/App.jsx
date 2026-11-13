@@ -20,6 +20,7 @@ import ExplainPanel from './components/ExplainPanel'
 import AssistantChat from './components/AssistantChat'
 import FieldReportPanel from './components/FieldReportPanel'
 import BulletinStudio from './components/BulletinStudio'
+import WatchPanel, { loadWatches, useWatchStatuses } from './components/WatchPanel'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1984,7 +1985,7 @@ const ATTENTION_LAYERS = {
 }
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -2001,6 +2002,8 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOp
       {canAreas && <button type="button" style={b} onClick={() => onOpen('attention')} title="Counties or regions ranked on one criterion">Areas needing attention</button>}
       <button type="button" style={b} onClick={onReport} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</button>
       <button type="button" style={b} onClick={onStudio} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</button>
+      <button type="button" style={b} onClick={onWatches} title="Saved places: did the forecast or the advice change? And the decision calendar">
+        My watches{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
     </div>
   )
 }
@@ -2898,6 +2901,10 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [studioOpen, setStudioOpen] = useState(false)
+  const [watchOpen, setWatchOpen] = useState(false)
+  const [watchList, setWatchList] = useState(loadWatches)
+  const watchStatuses = useWatchStatuses(watchList)
+  const watchAlerts = watchStatuses.filter(q => q.data && ['advice_changed', 'needs_review', 'forecast_changed'].includes(q.data.status)).length
   const [drawArea, setDrawArea] = useState(false)
   const [requestedLayer, setRequestedLayer] = useState(null)
   const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
@@ -3052,8 +3059,10 @@ export default function App() {
                                                     canAreas={!!effectiveModel}
                                                     onOpen={kind => { setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
                                                     onAsk={() => { setExplain(null); setReportOpen(false); setChatOpen(true) }}
-                                                    onReport={() => { setExplain(null); setChatOpen(false); setStudioOpen(false); setReportOpen(true) }}
-                                                    onStudio={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(true) }}/></div>
+                                                    onReport={() => { setExplain(null); setChatOpen(false); setStudioOpen(false); setWatchOpen(false); setReportOpen(true) }}
+                                                    onStudio={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(true) }}
+                                                    onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}
+                                                    watchAlerts={watchAlerts}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3093,6 +3102,13 @@ export default function App() {
            </div>
           </div>
         </div>
+      )}
+      {watchOpen && (
+        <WatchPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                    season={selectedSeason} model={effectiveModel} list={watchList} setList={setWatchList} onClose={() => setWatchOpen(false)}
+                    onOpenAdvisory={w => { setWatchOpen(false); useDashboardStore.getState().setSelectedSite({ lat: w.lat, lon: w.lon, site_name: w.place_name, country })
+                                           setExplain(e => ({ ...e, kind: 'advisory', audience: e?.audience ?? 'general', decision: w.decision, crop: w.crop,
+                                                              planted: w.planted, sowing_date: w.sowing_date ?? '' })) }}/>
       )}
       {studioOpen && (
         <BulletinStudio place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
