@@ -19,6 +19,7 @@ import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropO
 import ExplainPanel from './components/ExplainPanel'
 import AssistantChat from './components/AssistantChat'
 import FieldReportPanel from './components/FieldReportPanel'
+import BulletinStudio from './components/BulletinStudio'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1983,7 +1984,7 @@ const ATTENTION_LAYERS = {
 }
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -1999,6 +2000,7 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOp
       {canAreas && <button type="button" style={b} onClick={() => onOpen('area')} title="The outlook over a county, region or drawn area">Explain an area</button>}
       {canAreas && <button type="button" style={b} onClick={() => onOpen('attention')} title="Counties or regions ranked on one criterion">Areas needing attention</button>}
       <button type="button" style={b} onClick={onReport} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</button>
+      <button type="button" style={b} onClick={onStudio} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</button>
     </div>
   )
 }
@@ -2895,6 +2897,7 @@ export default function App() {
   const [explain, setExplain] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const [studioOpen, setStudioOpen] = useState(false)
   const [drawArea, setDrawArea] = useState(false)
   const [requestedLayer, setRequestedLayer] = useState(null)
   const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
@@ -3049,7 +3052,8 @@ export default function App() {
                                                     canAreas={!!effectiveModel}
                                                     onOpen={kind => { setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
                                                     onAsk={() => { setExplain(null); setReportOpen(false); setChatOpen(true) }}
-                                                    onReport={() => { setExplain(null); setChatOpen(false); setReportOpen(true) }}/></div>
+                                                    onReport={() => { setExplain(null); setChatOpen(false); setStudioOpen(false); setReportOpen(true) }}
+                                                    onStudio={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3089,6 +3093,10 @@ export default function App() {
            </div>
           </div>
         </div>
+      )}
+      {studioOpen && (
+        <BulletinStudio place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                        season={selectedSeason} model={effectiveModel} onClose={() => setStudioOpen(false)}/>
       )}
       {reportOpen && (
         <FieldReportPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
