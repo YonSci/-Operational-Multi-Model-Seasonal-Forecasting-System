@@ -17,6 +17,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
 import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropOutlookTab'
 import ExplainPanel from './components/ExplainPanel'
+import AssistantChat from './components/AssistantChat'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1972,12 +1973,14 @@ const fmtStamp = iso => {
 
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, onOpen }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, onOpen, onAsk }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
     <div role="group" aria-label="Forecast assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
       <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant:</span>
+      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
+              title="Ask a question about the forecast on screen">Ask the assistant</button>
       <button type="button" style={b} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this location</button>
       {canCompare && <button type="button" style={b} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
       {canMap && <button type="button" style={b} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
@@ -2876,6 +2879,8 @@ export default function App() {
   // Forecast assistant: the open explanation ({kind, audience, compare_to}); its parameters follow the current
   // place, run, method and map layer, so the panel updates when they change
   const [explain, setExplain] = useState(null)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState([])
   const compareOptions = selectedSeason === 'short_rains' && !isJoined
     ? SHORT_RAINS_INITS.filter(i => !i.experimental && shortRainsModel(i.init, srDef) !== srModel && hasModel(modelsData, shortRainsModel(i.init, srDef)))
         .map(i => ({ model: shortRainsModel(i.init, srDef), label: i.initLabel }))
@@ -3015,7 +3020,8 @@ export default function App() {
            {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
              <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
                                                     canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
-                                                    onOpen={kind => setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' }))}/></div>
+                                                    onOpen={kind => { setChatOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                                    onAsk={() => { setExplain(null); setChatOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3055,6 +3061,18 @@ export default function App() {
            </div>
           </div>
         </div>
+      )}
+      {chatOpen && (
+        <AssistantChat messages={chatMessages} setMessages={setChatMessages} onClose={() => setChatOpen(false)}
+                       context={{ lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                                  variable: mapLayer.variable, layer: mapLayer.layer, site_name: selectedSite?.site_name ?? null }}
+                       onAction={a => {
+                         if (a.action === 'open_tab' && a.tab) { setChatOpen(false); setActiveTab(a.tab) }
+                         else if (a.action === 'open_panel' && a.kind) { setChatOpen(false); setExplain(e => ({ ...e, kind: a.kind, audience: e?.audience ?? 'general' })) }
+                         else if (a.action === 'show_place' && Number.isFinite(a.lat) && Number.isFinite(a.lon)) {
+                           useDashboardStore.getState().setSelectedSite({ lat: a.lat, lon: a.lon, site_name: a.label, country })
+                         }
+                       }}/>
       )}
       {explainRequest && (
         <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
