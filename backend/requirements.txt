@@ -10,3 +10,4 @@ matplotlib>=3.8.0
 reportlab>=4.1.0
 pillow>=10.0.0
 
+anthropic>=2.8.0
