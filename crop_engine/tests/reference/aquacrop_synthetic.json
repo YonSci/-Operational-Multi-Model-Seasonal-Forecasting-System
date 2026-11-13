@@ -3,11 +3,11 @@
   "status": "ok",
   "planting": "2026-10-20",
   "harvest": "2027-01-19",
-  "yield_t_ha": 6.862,
+  "yield_t_ha": 6.841,
   "potential_t_ha": 10.58,
-  "biomass_t_ha": 14.47,
-  "max_canopy": 0.86,
-  "stress_days": 10,
+  "biomass_t_ha": 14.438,
+  "max_canopy": 0.872,
+  "stress_days": 11,
   "sowings": 1
  },
  "false_start_resown": {
@@ -25,10 +25,10 @@
   "status": "died",
   "planting": "2026-10-20",
   "harvest": "2027-01-21",
-  "yield_t_ha": 1.602,
+  "yield_t_ha": 1.582,
   "potential_t_ha": 3.144,
-  "biomass_t_ha": 10.018,
-  "max_canopy": 0.692,
+  "biomass_t_ha": 10.023,
+  "max_canopy": 0.699,
   "stress_days": 15,
   "sowings": 1
  },
@@ -36,10 +36,10 @@
   "status": "died",
   "planting": "2026-10-20",
   "harvest": "2027-01-19",
-  "yield_t_ha": 2.041,
+  "yield_t_ha": 2.032,
   "potential_t_ha": 3.463,
-  "biomass_t_ha": 10.005,
-  "max_canopy": 0.707,
+  "biomass_t_ha": 10.067,
+  "max_canopy": 0.711,
   "stress_days": 11,
   "sowings": 1
  }

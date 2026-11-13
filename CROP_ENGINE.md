@@ -315,10 +315,38 @@ figures. Median yield over all members:
   threshold is 1 dS/m), sorghum least; saline irrigation water (ECw 2) and a saline water table change nothing in
   one season (the salt builds up over years).
 
-AquaCrop-OSPy's profile maps compartments to soil layers by depth, and with the SoilGrids layers the compartments
-of 1–2 m take the 60–100 cm layer's texture, not the 100–200 cm layer's: a quirk of the package that affects every
-AquaCrop run alike (the two layers' textures are close at the sites: Kiboko 37/44 against 38/43 % sand/clay), left
-as is here.
+### AquaCrop's soil: layers on the compartments and coarse fragments (November 2026)
+
+Two corrections in `aquacrop_adapter.make_soil`, in every AquaCrop run (the outlook included):
+
+- **Layers on the compartments' boundaries.** AquaCrop-OSPy 3.1.0 gives a layer the compartments down to its
+  thickness counted from where the previous layer's compartments ended. The SoilGrids 0–5 cm layer is thinner than
+  the 10 cm top compartment, so it got none and was dropped; every layer below moved up 5 cm, and the 100–200 cm
+  layer was lost, its compartments filled with the 60–100 cm layer's soil. (It is also why the water table's
+  capillary rise asserted, *More of AquaCrop* above.) The SoilGrids layers are now resampled onto the compartments'
+  boundaries (`aligned_layers`: 0–10, 10–30, 30–60, 60–100, 100–200 cm), each with the depth-weighted texture, organic
+  matter and coarse fragments of the layers it overlaps, and every compartment takes its own layer.
+- **Coarse fragments**, as FAO AquaCrop 7 (its GravelVol): a layer holds water only in its fine earth, so its
+  saturation, field capacity and wilting point are its texture's × (1 − coarse fragments, % volume / 100); the
+  saturated conductivity stays the texture's. The SoilGrids coarse fragments at the sites rise from 4–7 % at the
+  surface to 13–20 % at 1–2 m (Kiboko 20.5 %), so the deep soil holds up to a fifth less water.
+
+Effect, observed seasons 1993–2016, FAO onset sowing, median (mean) yield before → after, t/ha:
+
+| Site | Early maize | Sorghum | Bean |
+|---|---|---|---|
+| El Karama | 1.97 → 2.02 (2.73 → 2.87) | 2.22 → 2.76 (2.85 → 3.09) | 0.75 → 0.73 (1.06 → 1.08) |
+| Genco Maralal | 0.99 → 1.13 (1.92 → 1.99) | 1.81 → 2.02 (2.59 → 2.60) | 1.11 → 1.34 (1.35 → 1.36) |
+| Genco Tana River | 0.49 → 0.59 (1.45 → 1.50) | 0.57 → 0.66 (1.33 → 1.39) | 0.83 → 0.86 (0.84 → 0.88) |
+| KALRO Kiboko | 0.60 → 0.81 (1.33 → 1.53) | 0.59 → 0.72 (1.34 → 1.50) | 0.62 → 0.78 (0.86 → 0.91) |
+| Kapiti | 0.59 → 0.92 (1.70 → 1.85) | 0.56 → 1.07 (1.65 → 1.88) | 0.72 → 1.05 (0.97 → 1.21) |
+| Livemo | 0.03 → 0.06 (0.98 → 1.05) | 0.00 → 0.00 (0.95 → 1.06) | 0.10 → 0.17 (0.58 → 0.63) |
+
+Small gains and a few fewer failed seasons (early maize at Kapiti 12 → 10 of 24 below 0.5 t/ha). Most of it is the
+layers (early maize, layers alone: Kiboko 0.60 → 0.88, Kapiti 0.59 → 0.86): the topsoil is back and the deep soil is
+its own. A stonier soil holds less water but its smaller store fills sooner after rain, so the coarse fragments add
+a little where establishment after the first rains decides the season. The regression seasons are regenerated for
+it (`tests/reference/aquacrop_synthetic.json`: their soil has the SoilGrids layering and 5 % coarse fragments).
 
 ### Questions for partners (November 2026)
 
@@ -803,7 +831,8 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
   overstate failure there; the FAO agricultural onset sows every year.
 - Sowing dates in cool sites (Kapiti, Maralal): the maturity classes are defined at 21 °C, so a medium maize or
   sorghum sown in November there needs more heat than the season gives before 31 Mar and is counted as too late.
-- Soil is a 0.25° average of SoilGrids estimates, not measured; coarse fragments are not yet used.
+- Soil is a 0.25° average of SoilGrids estimates, not measured (AquaCrop takes the coarse fragments' share out of each
+  layer's water; DSSAT receives them as SLCF; WOFOST does not use them).
 - The crop forecasts are verified against the crop grown in the observed weather (*Hindcast verification*), and
   against county yields only for their year-to-year ranking; no measured farm yields check their level.
 
