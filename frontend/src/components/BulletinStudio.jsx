@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE } from '../api/queries'
 import { AUDIENCES } from './ExplainPanel'
+import { useLanguages, speechCode, ListenButton } from './voice'
 
 const CROPS = [['maize_early', 'Early-maturing maize'], ['maize_medium', 'Medium-maturing maize'], ['sorghum', 'Sorghum'], ['bean', 'Dry bean']]
 const inp = { background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '5px 7px', fontSize: 13, width: '100%' }
@@ -30,7 +31,8 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 export default function BulletinStudio({ place, season, model, onClose }) {
   const { data: meta } = useQuery({ queryKey: ['studio-formats'], queryFn: () => getJSON('/studio/formats'), staleTime: Infinity })
   const { data: regions } = useQuery({ queryKey: ['explain-regions', season], queryFn: () => getJSON(`/explain/regions?season=${encodeURIComponent(season)}`), staleTime: Infinity })
-  const [cfg, setCfg] = useState({ format: 'site_update', audience: 'general', length: 'standard', area: '', crop: 'maize_early', planted: 'unknown', sowing_date: '' })
+  const [cfg, setCfg] = useState({ format: 'site_update', audience: 'general', length: 'standard', area: '', crop: 'maize_early', planted: 'unknown', sowing_date: '', language: 'en' })
+  const { data: langs } = useLanguages()
   const [b, setB] = useState(null)
   const [snap, setSnap] = useState(null)
   const [issues, setIssues] = useState([])
@@ -54,7 +56,7 @@ export default function BulletinStudio({ place, season, model, onClose }) {
     try { await fn() } catch (e) { setErr(String(e.message ?? e)) } finally { setBusy('') }
   }
   const compose = () => run('compose', async () => {
-    const body = { format: cfg.format, season, model, audience: cfg.audience, length: cfg.length, crop: cfg.crop, planted: cfg.planted,
+    const body = { format: cfg.format, season, model, audience: cfg.audience, length: cfg.length, crop: cfg.crop, planted: cfg.planted, language: cfg.language,
                    sowing_date: cfg.planted === 'yes' ? (cfg.sowing_date || null) : null,
                    ...(scope === 'place' ? { lat: place.lat, lon: place.lon } : {}), ...(scope === 'area' ? { area: cfg.area } : {}) }
     const j = await (await postJSON('/studio/compose', body)).json()
@@ -122,6 +124,9 @@ export default function BulletinStudio({ place, season, model, onClose }) {
           </>}
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Audience</span>
             <select value={cfg.audience} onChange={e => set({ audience: e.target.value })} style={inp}>{AUDIENCES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Language</span>
+            <select value={cfg.language} onChange={e => set({ language: e.target.value })} style={inp}>
+              {Object.entries(langs ?? { en: { native: 'English' } }).map(([k, l]) => <option key={k} value={k}>{l.native}</option>)}</select></label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Length</span>
             <select value={cfg.length} onChange={e => set({ length: e.target.value })} style={inp}>
               <option value="short">Short</option><option value="standard">Standard</option><option value="detailed">Detailed</option></select></label>
@@ -141,6 +146,7 @@ export default function BulletinStudio({ place, season, model, onClose }) {
               <button type="button" style={btn2} onClick={() => exportAs('sms')}>SMS text</button>
               <button type="button" style={btn2} onClick={() => exportAs('audio')}>Audio script</button>
             </div>
+            {(b.translation_notice || b.translation_note) && <p style={{ margin: 0, padding: '6px 10px', borderRadius: 6, background: 'var(--caution-bg)', color: 'var(--caution-text)', fontSize: 12.5 }}>{b.translation_notice ?? b.translation_note}</p>}
             <div role="status" style={{ padding: '8px 10px', borderRadius: 6, fontSize: 13, background: issues.length ? 'var(--caution-bg)' : 'var(--ok-bg)', color: issues.length ? 'var(--caution-text)' : 'var(--ok-text)' }}>
               {issues.length ? <><strong>{issues.length} issue(s) to fix before reviewing or publishing:</strong>
                 <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{issues.map((i, k) => <li key={k}>{KIND[i.kind] ?? i.kind} ({i.part}): {i.detail}</li>)}</ul></>
@@ -157,6 +163,7 @@ export default function BulletinStudio({ place, season, model, onClose }) {
             ))}
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>SMS ({(b.sms ?? '').length} characters; up to 300)</span>
               <textarea rows={3} value={b.sms ?? ''} onChange={e => setB(x => ({ ...x, sms: e.target.value }))} style={{ ...inp, fontFamily: 'inherit' }}/></label>
+            <div><ListenButton text={b.audio_script ?? ''} lang={speechCode(langs, b.language ?? 'en')} style={btn2}/></div>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Audio script (radio)</span>
               <textarea rows={4} value={b.audio_script ?? ''} onChange={e => setB(x => ({ ...x, audio_script: e.target.value }))} style={{ ...inp, fontFamily: 'inherit' }}/></label>
           </>

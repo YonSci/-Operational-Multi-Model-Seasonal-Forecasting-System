@@ -250,9 +250,19 @@ def check(bulletin: dict, snap: dict) -> list:
             issues.append({"part": part, "kind": "certainty", "detail": f"'{m.group(0)}' sounds more certain than a forecast can be", "text": line[:200]})
     full = " ".join(line for _, line in texts).lower()
     recs = snap.get("records", {})
-    if "advisory" in recs and "draft" not in full:
+    draft_words, exp_words = ["draft"], ["experimental"]
+    lang = bulletin.get("language")
+    if lang and lang != "en":                                 # the labels in the bulletin's language
+        try:
+            from . import translate
+            terms = translate.glossary()["terms"]
+            draft_words += [terms[t][lang].lower() for t in ("draft guidance", "not yet reviewed") if terms.get(t, {}).get(lang)]
+            exp_words += [terms["experimental"][lang].lower()] if terms.get("experimental", {}).get(lang) else []
+        except Exception:
+            pass
+    if "advisory" in recs and not any(w in full for w in draft_words):
         issues.append({"part": "options", "kind": "missing_label", "detail": "The advisory options must say they are draft guidance, not yet reviewed."})
-    if ("advisory" in recs or "t/ha" in full) and "experimental" not in full:
+    if ("advisory" in recs or "t/ha" in full) and not any(w in full for w in exp_words):
         issues.append({"part": "evidence", "kind": "missing_label", "detail": "Crop figures must be labelled experimental."})
     for k, label in SECTIONS:
         if not [x for x in (bulletin.get("sections") or {}).get(k, []) if x and x.strip()]:

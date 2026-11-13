@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { API_BASE } from '../api/queries'
+import { useLanguages, speechCode, ListenButton } from './voice'
 
 export const AUDIENCES = [
   { id: 'general', label: 'General' },
@@ -366,6 +367,7 @@ function AdvisoryEvidence({ ev }) {
 }
 
 export default function ExplainPanel({ request, onClose, onAudience, compareOptions, onCompare, onProfile, onDraw, drawing, onShowLayer }) {
+  const { data: langs } = useLanguages()
   const [tab, setTab] = useState('summary')
   const closeRef = useRef(null)
   const { data, isLoading, isError, error } = useExplain(request)
@@ -400,6 +402,11 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
                   style={{ background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}>
             {AUDIENCES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
           </select>
+          <label style={lbl} htmlFor="explain-language">Language</label>
+          <select id="explain-language" value={request.language ?? 'en'} onChange={e => onProfile({ language: e.target.value })}
+                  style={{ background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}>
+            {Object.entries(langs ?? { en: { native: 'English' } }).map(([k, l]) => <option key={k} value={k}>{l.native}</option>)}
+          </select>
           {request.kind === 'changes' && compareOptions?.length > 0 && (
             <>
               <label style={lbl} htmlFor="explain-compare">Compared with</label>
@@ -427,6 +434,16 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
           <p style={{ margin: '0 0 10px', padding: '6px 10px', borderRadius: 6, background: 'var(--exp-bg)', color: 'var(--exp-text)', fontSize: 13, fontWeight: 600 }}>
             Draft guidance: not yet reviewed by an agronomist. Options to consider, not instructions.
           </p>
+        )}
+        {ex?.translation_notice && tab !== 'evidence' && (
+          <p style={{ margin: '0 0 10px', padding: '6px 10px', borderRadius: 6, background: 'var(--caution-bg)', color: 'var(--caution-text)', fontSize: 12.5 }}>{ex.translation_notice}</p>
+        )}
+        {ex?.translation_note && tab !== 'evidence' && <p style={{ ...lbl, margin: '0 0 8px' }}>{ex.translation_note}</p>}
+        {ex && tab !== 'evidence' && (
+          <div style={{ marginBottom: 8 }}>
+            <ListenButton text={(tab === 'summary' ? ex.sections.summary : ex.sections.local_implications).join(' ')} lang={speechCode(langs, ex.language ?? 'en')}
+                          style={{ background: 'var(--bg-elevated)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8, padding: '3px 9px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}/>
+          </div>
         )}
         {ex && tab === 'summary' && <Para lines={ex.sections.summary}/>}
         {ev?.kind === 'advisory' && tab === 'summary' && <OptionsTable ev={ev}/>}

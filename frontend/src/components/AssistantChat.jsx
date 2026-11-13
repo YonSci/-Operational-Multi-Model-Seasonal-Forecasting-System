@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { API_BASE } from '../api/queries'
 import { AUDIENCES } from './ExplainPanel'
+import { useLanguages, speechCode, ListenButton, useDictation } from './voice'
 
 const SUGGESTIONS = [
   'When will the rains start here, and how sure is that?',
@@ -18,6 +19,9 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [audience, setAudience] = useState('general')
+  const [language, setLanguage] = useState('en')
+  const { data: langs } = useLanguages()
+  const dict = useDictation(speechCode(langs, language), t => setText(x => (x ? x + ' ' : '') + t))
   const endRef = useRef(null)
   const inputRef = useRef(null)
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [messages, busy])
@@ -36,12 +40,12 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
     try {
       const res = await fetch(`${API_BASE}/explain/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })), context, audience }),
+        body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })), context, audience, language }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const j = await res.json()
-      setMessages([...next, { role: 'assistant', content: j.reply, source: j.source, note: j.note, evidence: j.evidence ?? [],
-                              actions: j.actions ?? [], cautions: j.cautions ?? [] }])
+      setMessages([...next, { role: 'assistant', content: j.reply, source: j.source, note: [j.note, j.translation_notice, j.translation_note].filter(Boolean).join(' '),
+                              evidence: j.evidence ?? [], actions: j.actions ?? [], cautions: j.cautions ?? [], language: j.language ?? 'en' }])
     } catch (e) {
       setMessages([...next, { role: 'assistant', content: `The assistant could not answer (${e.message}). The Explain buttons still work.`, source: 'error', evidence: [], actions: [] }])
     } finally {
@@ -67,6 +71,11 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
           <select id="chat-audience" value={audience} onChange={e => setAudience(e.target.value)}
                   style={{ background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}>
             {AUDIENCES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+          </select>
+          <label htmlFor="chat-language" style={{ fontSize: 12, color: 'var(--text-meta)' }}>Language</label>
+          <select id="chat-language" value={language} onChange={e => setLanguage(e.target.value)}
+                  style={{ background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}>
+            {Object.entries(langs ?? { en: { native: 'English' } }).map(([k, l]) => <option key={k} value={k}>{l.native}</option>)}
           </select>
           {messages.length > 0 && (
             <button type="button" onClick={() => setMessages([])} style={{ ...chip, marginLeft: 'auto' }}>New conversation</button>
@@ -94,6 +103,9 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
               {m.role === 'assistant' && m.cautions?.length > 0 && (
                 <ul style={{ margin: '6px 0 0', paddingLeft: 16, fontSize: 12.5, color: 'var(--caution-text)' }}>{m.cautions.map((c, k) => <li key={k}>{c}</li>)}</ul>
               )}
+              {m.role === 'assistant' && m.source !== 'error' && (
+                <div style={{ marginTop: 6 }}><ListenButton text={m.content} lang={speechCode(langs, m.language ?? 'en')} style={chip}/></div>
+              )}
               {m.role === 'assistant' && m.actions?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                   {m.actions.map((a, k) => <button key={k} type="button" style={chip} onClick={() => onAction(a)}>{a.label}</button>)}
@@ -119,6 +131,11 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
                placeholder="Ask about this forecast" autoComplete="off"
                style={{ flex: 1, minWidth: 0, background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)',
                         borderRadius: 8, padding: '8px 10px', fontSize: 14 }}/>
+        {dict.supported && (
+          <button type="button" onClick={dict.listening ? dict.stop : dict.start} aria-pressed={dict.listening}
+                  title="Speak your question (uses this browser's speech recognition)"
+                  style={{ ...chip, borderRadius: 8, minHeight: 38 }}>{dict.listening ? 'Listening...' : 'Speak'}</button>
+        )}
         <button type="submit" disabled={busy || !text.trim()}
                 style={{ background: 'var(--btn-primary)', color: '#fff', border: 0, borderRadius: 8, padding: '0 14px', fontWeight: 600,
                          minHeight: 38, cursor: busy ? 'wait' : 'pointer', opacity: busy || !text.trim() ? 0.6 : 1 }}>Ask</button>
