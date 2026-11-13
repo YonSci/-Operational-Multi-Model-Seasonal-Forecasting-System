@@ -73,6 +73,29 @@ def normalise(profile: dict, lib: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------- crop outlook
+def current_config():
+    """The crop configuration of the latest seasonal outlook, as the dashboard publishes it (skill.json,
+    hindcast.json or the outlook history), or None when no file says."""
+    sk = crop_data.load("skill.json") or {}
+    if (sk.get("seasonal") or {}).get("current_config"):
+        return sk["seasonal"]["current_config"]
+    hc = crop_data.load("hindcast.json") or {}
+    if hc.get("current_config"):
+        return hc["current_config"]
+    hist = ((crop_data.load("history.json") or {}).get("sources") or {}).get("seasonal") or []
+    return hist[-1].get("config") if hist else None
+
+
+def scenarios_current(scen: dict, run: dict) -> bool:
+    """Whether scenarios.json was made from the current seasonal run with the current crop configuration, the check
+    crop_engine.dashboard.write_scenarios makes before publishing it."""
+    meta = scen.get("meta") or {}
+    if run and meta.get("id") and meta["id"] != run.get("id"):
+        return False
+    cur = current_config()
+    return not (cur and meta.get("config_hash") and meta["config_hash"] != cur)
+
+
 def _crop(lat, lon, variety, rule):
     """The crop outlook near (lat, lon): site, run, the variety's summary and its scenarios, or a reason."""
     index = crop_data.load("index.json")
@@ -90,13 +113,19 @@ def _crop(lat, lon, variety, rule):
     run = next((r for r in index.get("runs") or [] if r.get("source") == "seasonal"), None)
     summ = (((index.get("summaries") or {}).get(run["id"] if run else "", {}).get(sid) or {}))
     scen_all = crop_data.load("scenarios.json") or {}
+    scen_note = None
+    if scen_all and not scenarios_current(scen_all, run):         # made with another run or crop configuration
+        scen_all, scen_note = {}, ("The management scenarios are being rebuilt for the current crop configuration; "
+                                   "scenario options return after the next weekly scenario update.")
+    elif not scen_all:
+        scen_note = "The management scenarios are not available at the moment (they are rebuilt weekly)."
     scen = (((scen_all.get("sites") or {}).get(sid) or {}).get("results") or {})
     if variety not in summ:
         return {"available": False, "reason": f"No crop outlook for {variety} at {site['name']}."}
     return {"available": True, "site_id": sid, "site": site["name"], "distance_km": round(km, 1),
             "run": run, "varieties": index.get("varieties") or {}, "rules": index.get("planting_rules") or {},
             "summaries": summ, "scenarios": scen, "rule": rule if rule in (summ[variety] or {}) else next(iter(summ[variety])),
-            "caveats": index.get("caveats") or [], "engine": index.get("engine")}
+            "caveats": index.get("caveats") or [], "engine": index.get("engine"), "scenarios_note": scen_note}
 
 
 def metrics(r: dict) -> dict:
@@ -145,6 +174,8 @@ def options(decision: dict, crop: dict, variety: str, lib: dict) -> list:
                             "is_baseline": v == variety, **metrics(r)})
     else:                                                     # management scenarios for the chosen crop
         res = ((crop["scenarios"].get(variety) or {}).get(rule) or {})
+        if not res:                                           # no scenarios: the reference alone compares nothing
+            return []
         for k in sc_keys:
             r = res.get(k) if k != "baseline" else (res.get("baseline") or (crop["summaries"].get(variety) or {}).get(rule))
             if r:
@@ -299,6 +330,8 @@ def card(lat: float, lon: float, season: str, model: str, profile: dict, year=No
             if sm and abs(ev._shift(sm, p["sowing_date"])) > 7:
                 caveats.append(f"Your sowing date ({_fd(p['sowing_date'])}) differs from the modelled sowing "
                                f"({_fd(sm)}) by more than a week, so the crop figures fit your field less well.")
+        if crop.get("scenarios_note") and (dec.get("scenario_options")):
+            caveats.insert(1, crop["scenarios_note"])
     else:
         caveats.append(crop.get("reason", "No crop options here."))
     if past:
