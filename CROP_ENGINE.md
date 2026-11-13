@@ -281,13 +281,14 @@ outlook is unchanged. Each follows AquaCrop's equations, in growing degree days 
   compartments; the root zone's ECe and soil-water ECsw act through AquaCrop's canopy and stomatal responses.
   Tolerance (ECe at which yield starts to fall, and at which it is nil): FAO 29 (Ayers and Westcot 1985; Maas and
   Hoffman 1977): maize 1.7–10, sorghum 6.8–13, bean 1.0–6.3. **Check** (irrigated maize, a saline soil): 2, 4, 6 dS/m
-  → 0.95, 0.76, 0.51 of the yield on a fresh soil, against FAO 29's 0.96, 0.72, 0.48. At 8 dS/m the crop collapses
-  (0.01; FAO 29: 0.24): AquaCrop's stomata close fully once the soil water's salinity, which rises as the soil dries
-  below field capacity, passes the crop's limit. Saline irrigation water acts slowly from a fresh profile (ECw 4:
+  → 0.92, 0.74, 0.53 of the yield on a fresh soil, against FAO 29's 0.96, 0.72, 0.48; at 8 dS/m 0.10 (FAO 29:
+  0.24): near the crop's limit AquaCrop's root-zone stomata nearly close as the soil water's salinity rises when the
+  soil dries below field capacity (AquaCrop 7's own cap, kept). (With the root-zone rule alone, the first port: 0.95,
+  0.76, 0.51 and 0.01; *Salinity in each compartment* below.) Saline irrigation water acts slowly from a fresh profile (ECw 4:
   0.97 in one season): the salt builds up over years (FAO 29's ECe ≈ 1.5 ECw is that steady state).
 - **Simplified from AquaCrop 7**: no salt cells inside a compartment (incoming water mixes with all of it, so ECe
   answers each rain or irrigation faster than AquaCrop's, alike in the long run), no salt moved up with
-  evaporation; the stomatal salinity effect is applied to the root zone as a whole, not compartment by compartment.
+  evaporation.
   AquaCrop's quirks are kept where they are its behaviour (no salinity effect on the first canopy day; the time to
   full canopy recomputed for fertility only; no weed expansion under fertility stress).
 
@@ -398,6 +399,20 @@ trial) and the bean at none (it fixes its nitrogen). 1 Oct 2026 run, early maize
 (before these fixes) to no fertiliser: Kapiti 5.30 → 1.37 t/ha, Kiboko 2.92 → 1.12. This forecast is wetter than most
 of the calibration seasons, so the stress is relaxed less than in the median season. The generic
 25 and 50 % levels stay as sensitivity scenarios.
+
+### Salinity in each compartment (November 2026)
+
+The first port applied salinity's stomatal effect to the root zone as a whole, and maize collapsed at an ECe of 8
+dS/m (0.01 of a fresh soil; FAO 29: 0.24). The guess that AquaCrop 7's compartment-by-compartment rule would soften
+it was wrong: AquaCrop 7 (`simul.f90 calculate_transpiration`) does both, a root-zone cap on the day's transpiration
+(TpotMAX = RedFactECsw × Tpot) and each compartment's own limit (alfa, AdjustedKsStoToECsw of that compartment's ECe and
+ECsw on its water-stress Ks × (1 − RedKsSto)), then takes what one compartment holds back from the others, up to the
+cap. The salinity transpiration step now does all three (`aquacrop_stress.py`: the cap; each compartment's alfa over
+AquaCrop-OSPy's own KsComp; the cap's water shared out by the compartments' salt-limited extraction, each at most its
+water above the wilting point). Irrigated maize on a saline soil of 2, 4, 6, 8 dS/m: **0.92, 0.74, 0.53, 0.10** of
+a fresh soil (FAO 29: 0.96, 0.72, 0.48, 0.24; root zone alone: 0.95, 0.76, 0.51, 0.01). The crop keeps drawing on its
+wetter, less saline compartments near its limit; the rest of the gap at 8 dS/m is AquaCrop 7's own root-zone cap.
+Without the redistribution, the compartments' limits alone only threw water away (6 dS/m: 0.19).
 
 ### Questions for partners (November 2026)
 
