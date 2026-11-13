@@ -7,7 +7,9 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 import mam_loader as dl
-from assistant import advisory, evidence as ev
+from pydantic import BaseModel
+
+from assistant import advisory, chat, evidence as ev
 from assistant import narrate
 from kenya_api.pixel import _clean
 import json
@@ -107,3 +109,18 @@ def explain_advisory(
     except ValueError as e:
         raise HTTPException(404, str(e))
     return _reply("advisory", rec, audience)
+
+
+class ChatIn(BaseModel):
+    messages: list = []
+    context: dict = {}
+    audience: str = "general"
+
+
+@router.post("/chat")
+def chat_reply(body: ChatIn):
+    """The forecast assistant's answer to the last user message, from the platform's evidence (assistant/chat.py).
+    Context: {lat, lon, season, model, variable, layer, site_name} of the dashboard."""
+    _ready()
+    out = chat.reply(body.messages, body.context, body.audience)
+    return Response(content=json.dumps(_clean(out)), media_type="application/json")
