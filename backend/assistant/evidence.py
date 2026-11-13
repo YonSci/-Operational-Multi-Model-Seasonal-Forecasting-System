@@ -207,6 +207,13 @@ def location(lat: float, lon: float, season: str, model: str, year=None) -> dict
         "skill_weight_alpha": _num(m.get("alpha_on_px"), 2),
         "no_onset_share_pct": _pct(m.get("p_fail")),
     }
+    try:                                                      # what people near here have reported
+        from . import feedback
+        near = feedback.nearby(lat, lon)
+    except Exception:
+        near = None
+    if near:
+        rec["field_reports_nearby"] = near
     rec["caveats"] = caveats(rec)
     rec["sources"] = sources(rec)
     rec["id"] = record_id(rec)
@@ -233,6 +240,8 @@ def caveats(rec):
     if rec["run"]["weather_forecasts_joined"]:
         out.append("Experimental run: weather forecasts are joined in front of the seasonal forecast and the run "
                    "has not been tested on past seasons.")
+    if rec.get("field_reports_nearby"):
+        out.append("Field reports are observations sent in by users; unverified ones have not been checked by a reviewer.")
     out.append("Values describe the forecast grid cell, not a measured field.")
     return out
 
