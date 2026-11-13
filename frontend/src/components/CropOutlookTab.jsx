@@ -858,7 +858,7 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         falls below 30 % of its available water from sowing to flowering, at most 100 mm a season reaching the soil (about 130 mm
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
         covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
-        Bunds hold up to 10 cm of rain on the field (which can waterlog a crop). The other irrigation methods water every 7 days
+        Bunds hold up to 10 cm of rain on the field until it soaks in. The other irrigation methods water every 7 days
         to field capacity, on a fixed schedule from sowing, at a constant 3 mm a day (drip), or count the net water a crop needs
         to keep its root zone above 60 % (the requirement, not a practice). A water table feeds the root zone by capillary rise.
         Soil fertility, weeds and salinity are FAO AquaCrop 7&apos;s methods, added to AquaCrop-OSPy: a fertility stress level

@@ -20,10 +20,10 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
                 season of every Genco Tana River member early (all died in October), which no farmer's irrigation does
   field         AquaCrop-OSPy FieldMngt: mulches (mulch_pct % of the surface covered, soil evaporation there cut by
                 f_mulch: crop residues, 50 % cover); water harvesting as sr_inhb (surface runoff fully inhibited: the
-                rain infiltrates where it falls, as tied ridges or zai pits make it). Ridges are not AquaCrop's bunds:
-                bunds pond the rain on the whole field like a rice paddy (at 20 cm the waterlogged topsoil stopped the
-                crop in most members at Kapiti, Kiboko and Livemo, canopy under 8 %). Bunds are their own scenario,
-                10 cm high (AquaCrop only)
+                rain infiltrates where it falls, as tied ridges or zai pits make it). Bunds are their own scenario, 10 cm
+                high (AquaCrop only): the rain held on the field until it infiltrates. (Bunds of 20 cm once stopped most
+                crops at Kapiti, Kiboko and Livemo: an AquaCrop-OSPy bug, aquacrop_adapter.patch_submergence, not
+                waterlogging.)
 Scenarios only AquaCrop can grow (aquacrop_only; WOFOST and DSSAT leave them out):
   irrigation    methods 2-5: every 7 days to field capacity; a fixed schedule from each member's sowing; the net
                 irrigation requirement (the water counted, not applied); drip at a constant 3 mm a day

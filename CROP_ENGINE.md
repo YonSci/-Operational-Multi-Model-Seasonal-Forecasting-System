@@ -162,7 +162,7 @@ outlook can be read against what a farmer could do differently. Each scenario ch
 | Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from sowing to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency). The cap is on net water: with `AppEff` 75 and a cap, AquaCrop-OSPy 3.1.0 ended every Genco Tana River member's season early (all died in October) |
 | | full irrigation | method 1, 70 % throughout, no seasonal cap: the yield with water no longer limiting |
 | | mulch, 50 % residue cover | `FieldMngt`: mulches on 50 % of the surface, soil evaporation there × 0.5 |
-| | tied ridges or pits (no surface runoff) | `FieldMngt(sr_inhb=True)`: surface runoff fully inhibited, the rain infiltrates where it falls, as tied ridges or zai pits make it. Not AquaCrop's bunds (`bunds`, `z_bund`): they pond the rain over the whole field like a rice paddy, and in the first run the waterlogged topsoil stopped the crop (canopy under 8 %) in most members at Kapiti, Kiboko and Livemo |
+| | tied ridges or pits (no surface runoff) | `FieldMngt(sr_inhb=True)`: surface runoff fully inhibited, the rain infiltrates where it falls, as tied ridges or zai pits make it. AquaCrop's bunds (`bunds`, `z_bund`) are their own scenario (*More of AquaCrop* below). In the first run 20 cm bunds stopped the crop (canopy under 8 %) in most members at Kapiti, Kiboko and Livemo; that was an AquaCrop-OSPy bug, fixed (*Bunds* below), not waterlogging |
 
 Each member records the irrigation it received (`irrigation_mm`); the scenario summaries give the sown crops'
 median (`irrigation_mm_median`), shown under the scenario's name on the dashboard. The outlook itself stays
@@ -255,8 +255,8 @@ outlook's configuration hash includes the file and every AquaCrop normal and run
   profiles (their 0–5 cm layer is thinner than a 10 cm compartment) and every member errored; `patch_capillary_rise`
   passes the check for a profile with no layer below its 2 m (the code it guards is marked broken in AquaCrop-OSPy
   and has nothing to do then).
-- **Bunds** 10 cm high (`FieldMngt` bunds): the rain held on the field. The 20 cm of the first trial waterlogged
-  the crop at most sites (the *field* note in `management.py`).
+- **Bunds** 10 cm high (`FieldMngt` bunds): the rain held on the field until it infiltrates (the crop's failure
+  under bunds in the first trial was an AquaCrop-OSPy bug: *Bunds: the submerged-days counter* below).
 - **Irrigation methods 2–5**: every 7 days to field capacity (up to 30 mm); a fixed schedule from each member's
   sowing (25 mm at sowing, 30 mm at 20, 40 and 60 days); the **net irrigation requirement** (the root zone kept at
   60 % of its available water, the water counted, not applied: what a crop would need); drip at 3 mm a day.
@@ -300,8 +300,9 @@ in 15 min on three workers). Compared with the stored outlook, which predates #7
 River's gains below are mostly #71's late-germination fix; the first daily run after merging gives like-for-like
 figures. Median yield over all members:
 
-- **Bunds 10 cm** still waterlog the crop where rain ponds on clay: early maize at Kiboko 0.2, Kapiti 0.0 and
-  Livemo 0.0 t/ha (outlook 2.9, 5.3, 1.0); they help where the soil drains (El Karama 1.2 → 1.6).
+- **Bunds 10 cm** (in this first run): early maize at Kiboko 0.2, Kapiti 0.0 and Livemo 0.0 t/ha (outlook 2.9,
+  5.3, 1.0), the crops matured but transpired nothing after a pond: an AquaCrop-OSPy bug, fixed since (*Bunds: the
+  submerged-days counter* below), after which bunds give 3.9, 5.5 and 3.1.
 - **Irrigation methods**: every 7 days and the net requirement reach full irrigation's yields; the net requirement
   counts 142–330 mm of early maize's water against full irrigation's 212–397 mm applied; drip at 3 mm a day comes
   close with 276–384 mm; the fixed 115 mm schedule ranges from 0.7 t/ha at Maralal to 6.9 at Kapiti.
@@ -347,6 +348,20 @@ layers (early maize, layers alone: Kiboko 0.60 → 0.88, Kapiti 0.59 → 0.86): 
 its own. A stonier soil holds less water but its smaller store fills sooner after rain, so the coarse fragments add
 a little where establishment after the first rains decides the season. The regression seasons are regenerated for
 it (`tests/reference/aquacrop_synthetic.json`: their soil has the SoilGrids layering and 5 % coarse fragments).
+
+### Bunds: the submerged-days counter (November 2026)
+
+Bunds had stopped the crop at Kapiti, Kiboko and Livemo (10 cm: early maize 0.0–0.2 t/ha, most members matured
+with nothing in the grain). Not waterlogging: AquaCrop-OSPy 3.1.0 resets its submerged-days counter only in the
+runoff step of a field without bunds. On a bunded field a pond that stood the crop's LagAer days (3) left the counter
+there for the rest of the season, every compartment got full aeration stress and the crop transpired nothing from
+then on, with no water standing (a Kapiti member: 7.7 t/ha without bunds, 0.05 with). FAO AquaCrop 7 resets the
+counter on every day the surface holds no water (`simul.f90`); `aquacrop_adapter.patch_submergence` does the same
+after AquaCrop-OSPy's transpiration step, on bunded fields only (the outlook has none). After it, 1 Oct 2026 run,
+early maize, median (failure): Kiboko 3.90 t/ha (20 %), Kapiti 5.47 (16 %), Livemo 3.08 (36 %), El Karama 1.70
+(32 %): bunds hold the rain as tied ridges do (3.97, 5.58, 2.08, 1.56). Water that stands for days still stresses
+the crop for lack of air, as AquaCrop intends: a clay field holding a 4-day storm for 16 days yields 3.9 instead of
+5.2 t/ha (`test_bunds_after_a_pond_drains`).
 
 ### Questions for partners (November 2026)
 

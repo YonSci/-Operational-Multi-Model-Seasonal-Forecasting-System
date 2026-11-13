@@ -186,6 +186,33 @@ def patch_capillary_rise():
     _CR_PATCHED.append(True)
 
 
+_SUB_PATCHED = []
+
+
+def patch_submergence():
+    """AquaCrop-OSPy 3.1.0 resets its submerged-days counter (day_submerged) only in the runoff step of a field with
+    no bunds. On a bunded field a pond that lasted the crop's LagAer days (3) left the counter there for the rest of
+    the season: every compartment got full aeration stress (transpiration.py: AerComp = 0) and the crop transpired
+    nothing from then on, with no water standing (a Kapiti member: 7.7 t/ha without bunds, 0.05 with 10 cm bunds).
+    FAO AquaCrop 7 resets the counter each day the surface holds no water (simul.f90, after the transpiration:
+    "if (GetSurfaceStorage() < epsilon(0._sp)) call SetDaySubmerged(0)"); so does this, after AquaCrop-OSPy's
+    transpiration step. Idempotent, per process."""
+    if _SUB_PATCHED:
+        return
+    import aquacrop.timestep.run_single_timestep as rst
+    tr0 = rst.transpiration
+
+    def transpiration(*a, **k):
+        out = tr0(*a, **k)
+        cond = out[3]
+        if cond.surface_storage < np.finfo(np.float32).eps:
+            cond.day_submerged = 0
+        return out
+
+    rst.transpiration = transpiration
+    _SUB_PATCHED.append(True)
+
+
 def aligned_layers(layers, dz=SOIL_DZ):
     """The soil layers resampled onto the compartments' boundaries (make_soil): each layer's bottom moved to the
     nearest compartment boundary (duplicates merged, the last at the profile's bottom), and its sand, clay, organic
@@ -230,6 +257,8 @@ def _sow(task, m, plant, dates, g):
     patch_delayed_maturity()
     if task.get("groundwater"):
         patch_capillary_rise()
+    if (task.get("field") or {}).get("bunds"):
+        patch_submergence()
     r = dict(member=m + 1, planting=plant.isoformat(), status="not_sown", yield_t_ha=0.0, potential_t_ha=None,
              biomass_t_ha=None, harvest=None, max_canopy=None, stress_days=None, rain_mm=None, sources=None)
     k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])

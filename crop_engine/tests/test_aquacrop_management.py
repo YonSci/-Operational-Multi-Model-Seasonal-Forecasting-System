@@ -52,6 +52,28 @@ def test_water_table_on_a_profile_with_a_thin_top_layer():
     assert r["yield_t_ha"] >= dry["yield_t_ha"]                         # the water table can only add water
 
 
+def test_bunds_after_a_pond_drains():
+    """A pond that lasted 3 days left AquaCrop-OSPy's submerged-days counter at its maximum on a bunded field, and the
+    crop transpired nothing for the rest of the season (patch_submergence: reset when no water stands, as AquaCrop 7)."""
+    from crop_engine import run_outlook as ro
+    from crop_engine.data.soil import Layer
+    _, vs = ro.load_varieties(["maize_early"])
+    v = vs["maize_early"]
+    clay = [Layer(t, b, 30, 50, 1.5, 5, 0.40, 0.25) for t, b in ((0, 10), (10, 30), (30, 60), (60, 100), (100, 200))]
+    d = pd.date_range("2025-08-01", "2026-03-31")
+    rain = np.where((d >= "2025-10-15") & (d <= "2026-01-20") & (np.arange(len(d)) % 3 == 0), 10.0, 0.0)
+    rain[(d >= "2025-11-20") & (d <= "2025-11-23")] = 70.0                    # a storm: the bunds fill for days
+    t = dict(dates=d.values, rain=rain[None, :], tmax=np.full(len(d), 28.0), tmin=np.full(len(d), 16.0),
+             et0=np.full(len(d), 4.5), source=np.zeros(len(d), int), planting=[dt.date(2025, 10, 25)], variety=v,
+             kw=v["kw"], layers=clay, initial_frac=0.5)
+    open_field = aq.simulate(t)[0]
+    bunded = aq.simulate(dict(t, field=dict(bunds=True, z_bund=0.20)))[0]
+    assert open_field["yield_t_ha"] > 1
+    # the pond stands 16 days on this clay: a real waterlogging loss (3.9 against 5.2 t/ha), not the whole season's
+    # crop (0.07 t/ha before the fix)
+    assert bunded["yield_t_ha"] > 0.5 * open_field["yield_t_ha"], (bunded["yield_t_ha"], open_field["yield_t_ha"])
+
+
 def test_aquacrop_only_scenarios():
     assert not any(mg.aquacrop_only(k) for k in ("irr_supplementary", "irr_full", "mulch", "ridges", "density_low",
                                                  "sow_plus14", "soil_dry"))
