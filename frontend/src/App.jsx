@@ -8,6 +8,8 @@ import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
+import { SHORT_RAINS_INITS, hasModel, latestShortRainsInit } from './shortRainsRuns'
+import { BRAND } from './brand'
 import { version } from '../package.json'
 import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
@@ -56,15 +58,6 @@ const SEASONS = {
     { id:'deyr',   label:'Autumn rains — Deyr/Hagaya (SON–OND)',        init:'0901', initLabel:'Sep 01' },
   ],
 }
-// Short Rains initializations -> backend model name (Oct runs appear only when the backend has them)
-const SHORT_RAINS_INITS = [
-  { init:'0901',  initLabel:'Sep 01',           model:'ECMWF SEAS5 (Sep)' },
-  { init:'1001',  initLabel:'Oct 01',           model:'ECMWF SEAS5 (Oct)' },
-  { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
-  { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
-  // latest obs, then ECMWF ENS (days 1-15) and extended range (to day 46), then SEAS5 (blend_subseasonal.py)
-  { init:'1001w',  initLabel:'Oct 01 + obs + weather forecasts (experimental)', model:'ECMWF SEAS5 (Oct+Obs+S2S)', experimental:true },
-]
 // Onset / cessation method (Short Rains): Dunning cumulative anomaly, or the agricultural rules adapted from ICPAC's operational definitions
 // (scripts/onset_rules.py) served as "<init> - Agri rule <k>" models; each rule sets onset, cessation and season length
 const ONSET_DEFS = [
@@ -81,7 +74,6 @@ const ONSET_DEFS = [
   { id:'fao-cropwater', group:'fao', label:'FAO water balance', defLabel:'Crop-water', suffix:' - FAO water balance (cropwater)',
     title:'Agricultural onset (as Agricultural); crop-water-requirement cessation: after the climatological rainfall peak, 21-day rain < 0.5 x crop water need (ETc = Kc x ET0) with PAW/TAW falling below 20%. Crop-water LGP between them.' },
 ]
-const hasModel = (modelsData, name) => Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === name || m?.raw_name === name)
 const shortRainsModel = (init, onsetDef='dunning') =>
   (SHORT_RAINS_INITS.find(i=>i.init===init) ?? SHORT_RAINS_INITS[0]).model + ((ONSET_DEFS.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]).suffix)
 const INIT_LABELS = Object.fromEntries(
@@ -1989,8 +1981,7 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
   const hoursSince = ds?.last_update ? (Date.now() - Date.parse(ds.last_update)) / 3.6e6 : null
   // newest Short Rains run on offer (the selector lists the same ones); the experimental run is an alternative to
   // the latest-obs run, not its replacement
-  const latestInit = selectedSeason === 'short_rains'
-    ? SHORT_RAINS_INITS.filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model))).at(-1) : null
+  const latestInit = selectedSeason === 'short_rains' ? latestShortRainsInit(modelsData) : null
   const runInfo = SHORT_RAINS_INITS.find(i => i.init === selectedInit)
   let status, tone
   if (daily && hoursSince != null && hoursSince > 36) {
@@ -2474,8 +2465,8 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <button type="button" onClick={onLogoClick} className="flex flex-col text-left" title="Back to the start page"
                 style={{background:'transparent',border:'none',cursor:'pointer',padding:0,gap:2}}>
-          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>Onset–Cessation–SL Forecast System (OCL-FS)</span>
-          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>Onset, cessation, LGP and crop forecasts for Kenya and Ethiopia: ILRI &amp; ICPAC</span>
+          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>{BRAND.short}</span>
+          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>{BRAND.tagline}: ILRI &amp; ICPAC</span>
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
           <span className="hidden md:inline-flex items-center gap-2" style={{fontSize:13.5,color:'var(--text-meta)'}}
@@ -2663,6 +2654,10 @@ export default function App() {
   const [mapGridData,   setMapGridData]   = useState(null)
   const [selectedYear,  setSelectedYear]  = useState(2026)
   const [selectedInit,  setSelectedInit]  = useState('0901')
+  // A run named by the opened or shared address, or picked in the selector, is kept; otherwise the dashboard
+  // follows the newest published Short Rains run (latestShortRainsInit) as soon as the run list arrives
+  const runPinned = useRef(!!opened?.run)
+  const pickInit = init => { runPinned.current = true; setSelectedInit(init) }
   const [onsetDef,      setOnsetDef]      = useState('dunning')
   const [forecastType,  setForecastType]  = useState(typeFromUrl(opened) ?? 'seasonal')   // Forecast tab: seasonal | subseasonal | medium
   const [mrfModel,      setMrfModel]      = useState(opened?.type === 'medium' && opened.model ? opened.model : 'ecmwf_ens_median')
@@ -2692,6 +2687,7 @@ export default function App() {
       return
     }
     urlRef.current = null
+    runPinned.current = false                          // a new country: its newest run again
     setSelectedSeason(first.id)
     setSelectedInit(first.init)
     if (country === 'ethiopia') {
@@ -2716,6 +2712,7 @@ export default function App() {
   const changeSeason = (seasonId) => {
     const seasons = SEASONS[country]??SEASONS.kenya
     const s = seasons.find(x=>x.id===seasonId) ?? seasons[0]
+    runPinned.current = false                          // a new season: its newest run again
     setSelectedSeason(s.id)
     setSelectedInit(s.init)
     if (s.id === 'kiremt' || s.id === 'short_rains' || s.id === 'fmam' || s.id === 'belg' || s.id === 'bega' || s.id === 'ondj') {
@@ -2764,6 +2761,7 @@ export default function App() {
         urlRef.current = null
         const s = (SEASONS[country] ?? SEASONS.kenya).find(x => x.id === u.season)
         if (s) { setSelectedSeason(s.id); setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? runFromUrl(u.run) : s.init) }
+        runPinned.current = !!u.run
         if (ONSET_DEFS.some(d => d.id === u.method)) setOnsetDef(u.method)
         if (u.site) useDashboardStore.getState().setSelectedSite({ ...u.site, country })
       }
@@ -2786,6 +2784,12 @@ export default function App() {
 
   const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
   const { data: modelsData, isLoading: modelsLoading } = useModels(selectedSeason)
+  // A visit that names no run opens the newest published Short Rains run, as the landing page's preview does
+  useEffect(()=>{
+    if (runPinned.current || selectedSeason !== 'short_rains' || !modelsData?.models) return
+    const latest = latestShortRainsInit(modelsData)
+    if (latest && latest.init !== selectedInit) setSelectedInit(latest.init)
+  },[modelsData, selectedSeason, selectedInit])
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
   const activeModels    = useDashboardStore(s=>s.activeModels)
   const setActiveModels = useDashboardStore(s=>s.setActiveModels)
@@ -2897,7 +2901,7 @@ export default function App() {
               selectedSeason={selectedSeason} onSeasonChange={changeSeason}
               selectedModel={selectedModel} setSelectedModel={setSelectedModel}
               selectedYear={selectedYear} setSelectedYear={setSelectedYear}
-              selectedInit={selectedInit} setSelectedInit={setSelectedInit}
+              selectedInit={selectedInit} setSelectedInit={pickInit}
               onsetDef={onsetDef} setOnsetDef={setOnsetDef}
               forecastType={forecastType} setForecastType={setForecastType}
               frRuns={frRuns} frList={frList} frSel={frSel} setFcRun={setFcRun}

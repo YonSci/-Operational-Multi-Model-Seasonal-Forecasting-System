@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useRef, useState } from 'react'
 import { Info, Database, CalendarRange, Map as MapIcon, ShieldCheck, FileCode2, ChevronRight, ExternalLink, Copy, Check } from 'lucide-react'
 import { version } from '../../package.json'
 import CropWorkflowDiagram from './CropWorkflowDiagram'
+import { BRAND } from '../brand'
 
 // Public method documents (main branch). `updated` is the date of the last commit to each file on main.
 const REPO_BLOB = 'https://github.com/YonSci/-Operational-Multi-Model-Seasonal-Forecasting-System/blob/main/'
@@ -227,7 +228,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
       <header className="about-head">
         <p className="site-eyebrow">About</p>
         <h1>About the platform</h1>
-        <p className="about-lede">The Onset–Cessation–SL Forecast System (OCL-FS) helps users explore the timing and uncertainty of rainfall seasons in Kenya and Ethiopia.</p>
+        <p className="about-lede">The {BRAND.full} helps users explore rainfall seasons in Kenya and Ethiopia, from the season ahead to the coming weeks and days: when the rains may start and end, their uncertainty, the rain so far, and experimental crop outlooks.</p>
       </header>
       <div className="about-layout">
        <nav className="about-nav" aria-label="About sections">
