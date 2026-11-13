@@ -12,7 +12,15 @@ export const AUDIENCES = [
   { id: 'extension', label: 'Extension officer' },
   { id: 'technical', label: 'Technical' },
 ]
-const TITLES = { location: 'Explain this location', changes: 'What changed?', map: 'Explain this map' }
+const TITLES = { location: 'Explain this location', changes: 'What changed?', map: 'Explain this map', advisory: 'Advisory (draft)' }
+// Advisory profile choices (backend/assistant/advisory_rules.yaml)
+const DECISIONS = [['sowing', 'When to sow'], ['crop_choice', 'Which crop or maturity class'], ['establishment', 'Establishment after sowing'],
+                   ['replanting', 'Replanting after poor establishment'], ['water', 'Water management']]
+const CROPS = [['maize_early', 'Early-maturing maize'], ['maize_medium', 'Medium-maturing maize'], ['sorghum', 'Sorghum'], ['bean', 'Dry bean']]
+const PLANTED = [['unknown', 'Not stated'], ['no', 'Not yet sown'], ['yes', 'Sown']]
+const WATERS = [['rainfed', 'Rainfed'], ['irrigated', 'Irrigation available']]
+const OBJECTIVES = [['maturity', 'Reach maturity'], ['establishment', 'Reduce establishment failure'], ['downside', 'Protect the poor years'],
+                    ['yield', 'Higher typical yield'], ['water', 'Use less irrigation water']]
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fdate = iso => { if (!iso) return 'n/a'; const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number); return `${d} ${MON[m - 1]} ${y}` }
 const STATUS = { estimated_from_observations: 'Estimated from observations so far', partly_observed: 'Partly within the observed period', forecast: 'Forecast' }
@@ -140,7 +148,107 @@ function MapEvidence({ ev }) {
   )
 }
 
-export default function ExplainPanel({ request, onClose, onAudience, compareOptions, onCompare }) {
+function Pick({ id, label, value, choices, onChange }) {
+  return (
+    <label htmlFor={id} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span style={lbl}>{label}</span>
+      <select id={id} value={value} onChange={e => onChange(e.target.value)}
+              style={{ background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}>
+        {choices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function AdvisoryForm({ request, onProfile }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginTop: 8 }}>
+      <Pick id="adv-decision" label="Decision" value={request.decision ?? 'sowing'} choices={DECISIONS} onChange={v => onProfile({ decision: v })}/>
+      <Pick id="adv-crop" label="Crop" value={request.crop ?? 'maize_early'} choices={CROPS} onChange={v => onProfile({ crop: v })}/>
+      <Pick id="adv-planted" label="Field" value={request.planted ?? 'unknown'} choices={PLANTED} onChange={v => onProfile({ planted: v })}/>
+      {request.planted === 'yes' && (
+        <label htmlFor="adv-sown" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={lbl}>Sowing date</span>
+          <input id="adv-sown" type="date" value={request.sowing_date ?? ''} onChange={e => onProfile({ sowing_date: e.target.value })}
+                 style={{ background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)', borderRadius: 6, padding: '3px 6px', fontSize: 13 }}/>
+        </label>
+      )}
+      <Pick id="adv-water" label="Water" value={request.water ?? 'rainfed'} choices={WATERS} onChange={v => onProfile({ water: v })}/>
+      <Pick id="adv-objective" label="Objective" value={request.objective ?? 'maturity'} choices={OBJECTIVES} onChange={v => onProfile({ objective: v })}/>
+    </div>
+  )
+}
+
+const num = (v, unit = '') => v == null ? 'n/a' : `${v}${unit}`
+
+function OptionsTable({ ev }) {
+  if (!ev.options?.length) {
+    return <p style={{ ...lbl, fontSize: 13 }}>{ev.crop_outlook?.reason ?? 'No crop options for this choice.'}</p>
+  }
+  const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
+  const td = { padding: '5px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 13, fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }
+  return (
+    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>
+          Options under the same forecast, ranked by: {ev.objective.label.toLowerCase()} (crop outlook, experimental)
+        </caption>
+        <thead><tr>
+          <th style={th} scope="col">#</th><th style={th} scope="col">Option</th><th style={th} scope="col">Reach maturity</th>
+          <th style={th} scope="col">Median yield (t/ha)</th><th style={th} scope="col">Poor year, 1 in 10 (t/ha)</th><th style={th} scope="col">Irrigation (mm)</th>
+        </tr></thead>
+        <tbody>
+          {ev.options.map(o => (
+            <tr key={o.id} style={{ opacity: o.past ? 0.55 : 1, background: o.rank === 1 ? 'var(--nav-active-bg)' : 'transparent' }}>
+              <td style={td}>{o.rank ?? '-'}</td>
+              <td style={td}>{o.label}{o.is_baseline ? ' (reference)' : ''}{o.past ? ' (date already past)' : ''}
+                {o.sowing_median && <div style={{ ...lbl, fontSize: 11.5 }}>sown about {fdate(o.sowing_median)}</div>}</td>
+              <td style={td}>{num(o.p_mature_pct, '%')}</td>
+              <td style={td}>{num(o.yield_median)}</td>
+              <td style={td}>{num(o.yield_p10)}</td>
+              <td style={td}>{num(o.irrigation_mm)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function AdvisoryEvidence({ ev }) {
+  const a = ev.applies_to
+  return (
+    <>
+      <div style={box}>
+        <KV k="Decision" v={`${ev.decision.label}: ${ev.decision.question}`}/>
+        <KV k="Place" v={typeof a.place === 'string' ? a.place : `${a.place.lat}, ${a.place.lon}`}/>
+        <KV k="Crop" v={a.crop}/>
+        <KV k="Stage" v={a.stage}/>
+        <KV k="Water" v={a.water}/>
+        <KV k="Season and method" v={`${a.season}, ${a.method}`}/>
+        <KV k="Crop site" v={a.crop_site ? `${a.crop_site} (${a.crop_site_km} km)` : null}/>
+        <KV k="Sowing rule" v={a.sowing_rule}/>
+        <KV k="Crop outlook" v={ev.crop_outlook.available ? `${ev.crop_outlook.engine}, ${ev.crop_outlook.run}, observations to ${fdate(ev.crop_outlook.observations_through)}` : ev.crop_outlook.reason}/>
+      </div>
+      <div style={{ ...box, marginTop: 8 }}>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Rules used</div>
+        {ev.rules_used.length ? ev.rules_used.map(r => <KV key={r.id} k={r.id} v={r.status === 'reviewed' ? `Reviewed by ${r.reviewed_by}` : 'Draft: not yet reviewed'}/>)
+          : <p style={{ ...lbl, margin: 0 }}>No rule applies to this situation.</p>}
+      </div>
+      <div style={{ ...box, marginTop: 8 }}>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Forecast behind the card</div>
+        {['onset', 'cessation', 'lgp'].map(k => {
+          const c = ev.climate[k]
+          const unit = k === 'lgp' ? 'days' : 'date'
+          return <KV key={k} k={{ onset: 'Onset', cessation: 'Cessation', lgp: 'Season length' }[k]}
+                     v={`${valueOf({ unit }, c.median) ?? 'n/a'}${c.chances_pct ? '; ' + pctTriple(c.chances_pct) : ''}`}/>
+        })}
+      </div>
+    </>
+  )
+}
+
+export default function ExplainPanel({ request, onClose, onAudience, compareOptions, onCompare, onProfile }) {
   const [tab, setTab] = useState('summary')
   const closeRef = useRef(null)
   const { data, isLoading, isError, error } = useExplain(request)
@@ -185,6 +293,7 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
             </>
           )}
         </div>
+        {request.kind === 'advisory' && <AdvisoryForm request={request} onProfile={onProfile}/>}
         <nav role="tablist" aria-label="Explanation sections" style={{ display: 'flex', gap: 4, marginTop: 10 }}>
           {tabs.map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} style={btn(tab === id)}>{label}</button>
@@ -194,7 +303,13 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} role="tabpanel">
         {isLoading && <p style={{ color: 'var(--text-meta)' }}>Preparing the explanation...</p>}
         {isError && <p style={{ color: 'var(--bad-text)' }}>{error?.message ?? 'The explanation could not be made.'}</p>}
+        {ev?.kind === 'advisory' && tab !== 'evidence' && (
+          <p style={{ margin: '0 0 10px', padding: '6px 10px', borderRadius: 6, background: 'var(--exp-bg)', color: 'var(--exp-text)', fontSize: 13, fontWeight: 600 }}>
+            Draft guidance: not yet reviewed by an agronomist. Options to consider, not instructions.
+          </p>
+        )}
         {ex && tab === 'summary' && <Para lines={ex.sections.summary}/>}
+        {ev?.kind === 'advisory' && tab === 'summary' && <OptionsTable ev={ev}/>}
         {ex && tab === 'local' && <Para lines={ex.sections.local_implications}/>}
         {ex && tab !== 'evidence' && ex.sections.cautions?.length > 0 && (
           <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: 'var(--caution-bg)', color: 'var(--caution-text)', fontSize: 13, lineHeight: 1.5 }}>
@@ -207,6 +322,7 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
             {ev.kind === 'location' && <LocationEvidence ev={ev}/>}
             {ev.kind === 'changes' && <ChangesEvidence ev={ev}/>}
             {ev.kind === 'map' && <MapEvidence ev={ev}/>}
+            {ev.kind === 'advisory' && <AdvisoryEvidence ev={ev}/>}
             <div style={{ ...box, marginTop: 8 }}>
               <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Sources</div>
               {(ev.sources ?? []).map((s, i) => <KV key={i} k={s.what} v={s.detail}/>)}
