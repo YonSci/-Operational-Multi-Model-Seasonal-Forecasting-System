@@ -86,3 +86,18 @@ create table if not exists watches (
   last_checked_at timestamptz
 );
 alter table watches enable row level security;
+
+-- Official outlooks uploaded by hand (backend/assistant/extras.py): chances by area name and/or GeoJSON polygons.
+create table if not exists official_outlooks (
+  id          uuid primary key default gen_random_uuid(),
+  created_at  timestamptz not null default now(),
+  source      text not null,
+  season      text not null,
+  year        integer not null,
+  issued_on   date,
+  variable    text not null default 'rainfall',
+  regions     jsonb,
+  geojson     jsonb,
+  uploaded_by text
+);
+alter table official_outlooks enable row level security;
