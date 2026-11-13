@@ -87,6 +87,13 @@ def agreement(a, w):
 
 
 AGREE_LABEL = {"agree": "agree", "partly": "partly agree", "differ": "depends on the model", None: "—"}
+LEVELS = ("agree", "partly", "differ")
+
+
+def agreement_all(a, others):
+    """AquaCrop against each other model of the crop (WOFOST, DSSAT): the weakest agreement, as the tab's."""
+    got = [g for g in (agreement(a, o) for o in others if o) if g]
+    return max(got, key=LEVELS.index) if got else None
 
 
 def _t(v):
@@ -146,9 +153,10 @@ def page_data(lat, lon):
         if not a:
             continue
         w = ix.get("wofost", {}).get(run["id"], {}).get(sid, {}).get(vk, {}).get(rule)
+        d = ix.get("dssat", {}).get(run["id"], {}).get(sid, {}).get(vk, {}).get(rule)
         py, pf = past_stats(bench.get(vk, {}).get(rule), v.get("failure_t_ha", 0.5))
-        crops.append({"key": vk, "label": v.get("label", vk), "a": a, "w": w, "past_yield": py, "past_fail": pf,
-                      "agree": agreement(a, w) if w else None})
+        crops.append({"key": vk, "label": v.get("label", vk), "a": a, "w": w, "d": d, "past_yield": py, "past_fail": pf,
+                      "agree": agreement_all(a, [w, d])})
     tr = next((r for r in (_read("sites.csv") or []) if r.get("site") == site.get("name")), None)
     sc = _read("crop/scenarios.json")
     scen = []
@@ -158,14 +166,17 @@ def page_data(lat, lon):
             if not cell:
                 continue
             base, bw = cell["baseline"]["yield_t_ha"]["median"], (cell.get("baseline_wofost") or {}).get("yield_t_ha", {}).get("median")
+            bd = (cell.get("baseline_dssat") or {}).get("yield_t_ha", {}).get("median")
             rows = []
             for k in SCEN_ROWS:
                 if k not in cell:
                     continue
                 x = cell[k]
                 wy = (x.get("wofost") or {}).get("yield_t_ha", {}).get("median")
+                dy = (x.get("dssat") or {}).get("yield_t_ha", {}).get("median")
                 rows.append({"key": k, "label": sc["meta"]["scenarios"][k]["label"], "dA": x["yield_t_ha"]["median"] - base,
-                             "dW": None if wy is None or bw is None else wy - bw, "irr": x.get("irrigation_mm_median")})
+                             "dW": None if wy is None or bw is None else wy - bw,
+                             "dD": None if dy is None or bd is None else dy - bd, "irr": x.get("irrigation_mm_median")})
             scen.append({"key": vk, "label": ix["varieties"][vk]["label"], "rows": rows})
     skill = (_read("crop/skill.json") or {}).get("seasonal", {})
     return {"site": site, "sid": sid, "km": near[1], "run": run, "rule": ix["planting_rules"].get(rule, rule), "rule_key": rule,
@@ -251,7 +262,7 @@ def _draw(data):
     site, run = data["site"], data["run"]
     text(0.05, y, f"CROP OUTLOOK  ·  {site['name']}", fontsize=19, fontweight="bold")
     y -= 0.032
-    text(0.05, y, W(f"Kenya, Short Rains {run['run'][:4]} · experimental · AquaCrop (the published outlook) and WOFOST (a second crop model) "
+    text(0.05, y, W(f"Kenya, Short Rains {run['run'][:4]} · experimental · AquaCrop (the published outlook), WOFOST and DSSAT (two more crop models) "
                     f"grown in every member of {run['model_label']}, observations to {_d(run['obs_end'])}; crops sown by {data['rule']}"
                     + (f" · {round(data['km'])} km from the bulletin's location" if data["km"] >= 2 else ""), 125), fontsize=10.5, color=MUTED)
     y -= 0.05
@@ -275,22 +286,24 @@ def _draw(data):
     # ── the outlook by crop
     text(0.05, y, "Outlook by crop", fontsize=13, fontweight="bold")
     y -= 0.012
-    head = ["Crop", "Sowing\n(median)", "Yield if sown\nAquaCrop (8 in 10)", "Yield if sown\nWOFOST", "Failure if sown\nAquaCrop / WOFOST",
-            "Past seasons\nyield / failure", "Crop models"]
+    head = ["Crop", "Sowing\n(median)", "Yield if sown\nAquaCrop (8 in 10)", "WOFOST\nyield", "DSSAT\nyield",
+            "Failure if sown\nAQ / WOF / DSSAT", "Past seasons\nyield / failure", "Crop models"]
     rows = []
     for c in data["crops"]:
-        a, w = c["a"], c["w"] or {}
+        a, w, d = c["a"], c["w"] or {}, c.get("d") or {}
         ya = a.get("yield_if_sown_t_ha") or {}
         rows.append([c["label"], _d((a.get("planting") or {}).get("median")),
                      f"{_t(ya.get('median'))} t/ha ({_t(ya.get('p10'))}–{_t(ya.get('p90'))})",
-                     f"{_t((w.get('yield_if_sown_t_ha') or {}).get('median'))} t/ha" if w else "no WOFOST",
-                     f"{_p(a.get('p_failure_if_sown'))} / {_p(w.get('p_failure_if_sown')) if w else '—'}",
+                     f"{_t((w.get('yield_if_sown_t_ha') or {}).get('median'))} t/ha" if w else "—",
+                     f"{_t((d.get('yield_if_sown_t_ha') or {}).get('median'))} t/ha" if d else "—",
+                     f"{_p(a.get('p_failure_if_sown'))} / {_p(w.get('p_failure_if_sown')) if w else '—'} / "
+                     f"{_p(d.get('p_failure_if_sown')) if d else '—'}",
                      f"{_t(c['past_yield'])} t/ha / {_p(c['past_fail'])}", AGREE_LABEL[c["agree"]]])
     h = 0.021 * (len(rows) + 1.6)
     ax = fig.add_axes([0.05, y - h, 0.9, h])
     ax.axis("off")
     tb = ax.table(cellText=rows, colLabels=head, loc="upper left", cellLoc="left", colLoc="left",
-                  colWidths=[0.19, 0.09, 0.17, 0.11, 0.16, 0.15, 0.13])
+                  colWidths=[0.2, 0.08, 0.16, 0.08, 0.07, 0.16, 0.13, 0.12])
     tb.auto_set_font_size(False)
     tb.set_fontsize(10)
     tb.scale(1, 1.75)
@@ -300,10 +313,10 @@ def _draw(data):
         if r == 0:
             cell.set_text_props(fontweight="bold", color=MUTED, fontsize=9)
             cell.set_height(cell.get_height() * 1.5)
-        elif k == 6 and data["crops"][r - 1]["agree"] == "differ":
+        elif k == 7 and data["crops"][r - 1]["agree"] == "differ":
             cell.set_text_props(color=WARN, fontweight="bold")
     y -= h + 0.008
-    text(0.05, y, W("Yield if sown: median of the sown crops (8 in 10 in brackets); failure: a yield below the crop's threshold (0.5 t/ha, bean "
+    text(0.05, y, W("Yield if sown: median of the sown crops (8 in 10 in brackets); failure (AQ AquaCrop, WOF WOFOST): a yield below the crop's threshold (0.5 t/ha, bean "
                     "0.2). Simulated past seasons: the same model in the observed weather of 1993–2025 (the normal). Crop models: agree when "
                     f"the yields are within {AGREE_T:g} t/ha and the failure chances within {round(AGREE_P * 100)} points; depends on the model "
                     "beyond twice that. Water-limited yields (no nutrient, pest or management losses): an upper bound for most fields.", 140),
@@ -311,26 +324,28 @@ def _draw(data):
     y -= 0.055
 
     # ── what management could change
-    text(0.05, y, "What management could change (change in median yield, AquaCrop / WOFOST)", fontsize=13, fontweight="bold")
+    text(0.05, y, "What management could change (change in median yield, AquaCrop / WOFOST / DSSAT)", fontsize=13, fontweight="bold")
     y -= 0.022
     if not data["scenarios"]:
         text(0.05, y, "The management scenarios come with the next weekly crop run.", fontsize=11, color=MUTED)
         y -= 0.03
     for g in data["scenarios"]:
         rows = [[r["label"] + (f" ({round(r['irr'])} mm)" if r.get("irr") else ""),
-                 f"{r['dA']:+.1f} t/ha", "—" if r["dW"] is None else f"{r['dW']:+.1f} t/ha"] for r in g["rows"]]
+                 f"{r['dA']:+.1f} t/ha", "—" if r["dW"] is None else f"{r['dW']:+.1f} t/ha",
+                 "—" if r.get("dD") is None else f"{r['dD']:+.1f} t/ha"] for r in g["rows"]]
         cand = [r for r in g["rows"] if r["key"] != "irr_full"]
         best = max(cand, key=lambda r: r["dA"]) if cand else None
         head_ = (g["label"] + (f": the largest gain short of full irrigation is {best['label'].lower()} "
-                                    f"({best['dA']:+.1f} t/ha AquaCrop" + ("" if best["dW"] is None else f", {best['dW']:+.1f} WOFOST") + ")"
+                                    f"({best['dA']:+.1f} t/ha AquaCrop" + ("" if best["dW"] is None else f", {best['dW']:+.1f} WOFOST")
+                                    + ("" if best.get("dD") is None else f", {best['dD']:+.1f} DSSAT") + ")"
                                     if best and best["dA"] > 0.05 else ""))
         text(0.05, y, W(head_, 105), fontsize=11, fontweight="bold")
         y -= 0.012 + 0.017 * (len(W(head_, 105).splitlines()) - 1)
         h = 0.0145 * (len(rows) + 1.3)
         ax = fig.add_axes([0.05, y - h, 0.78, h])
         ax.axis("off")
-        tb = ax.table(cellText=rows, colLabels=["Choice", "AquaCrop", "WOFOST"], loc="upper left", cellLoc="left", colLoc="left",
-                      colWidths=[0.66, 0.17, 0.17])
+        tb = ax.table(cellText=rows, colLabels=["Choice", "AquaCrop", "WOFOST", "DSSAT"], loc="upper left", cellLoc="left", colLoc="left",
+                      colWidths=[0.55, 0.15, 0.15, 0.15])
         tb.auto_set_font_size(False)
         tb.set_fontsize(9.5)
         tb.scale(1, 1.35)
@@ -340,8 +355,8 @@ def _draw(data):
             if r == 0:
                 cell.set_text_props(fontweight="bold", color=MUTED)
         y -= h + 0.018
-    text(0.05, y, W("Each choice changes one thing for every member of the same seasonal forecast; plant density is AquaCrop's only "
-                    "(WOFOST has no plant population). The amounts (100 mm of water, half the soil under residues, ridges that let no rain "
+    text(0.05, y, W("Each choice changes one thing for every member of the same seasonal forecast; WOFOST has no plant population, and "
+                    "DSSAT no seasonal cap on irrigation (no supplementary irrigation). The amounts (100 mm of water, half the soil under residues, ridges that let no rain "
                     "run off) are assumptions until the site's managers answer the questions below.", 140), fontsize=9, color=MUTED)
     y -= 0.045
 
@@ -354,7 +369,8 @@ def _draw(data):
         yrs = "–".join(str(x) for x in m.get("years", []))
         f = lambda x: "—" if x is None else f"{x:.2f}"                                  # noqa: E731
         text(0.05, y, W(f"{data['crops'][0]['label']}, {data['rule']}: the 1 Oct SEAS5 forecasts of {yrs} ranked the years' crops with a correlation of "
-                        f"{f(sk['aquacrop'].get('r'))} (AquaCrop)" + (f" and {f(sk['wofost'].get('r'))} (WOFOST)" if sk.get("wofost") else "")
+                        f"{f(sk['aquacrop'].get('r'))} (AquaCrop)" + (f", {f(sk['wofost'].get('r'))} (WOFOST)" if sk.get("wofost") else "")
+                        + (f", {f(sk['dssat'].get('r'))} (DSSAT)" if sk.get("dssat") else "")
                         + f" against each model's crop in the observed weather; the platform's season-length forecast alone {f((sk.get('lgp') or {}).get('r'))}, "
                         f"its Oct–Dec rain {f((sk.get('rain') or {}).get('r'))}. 1 is a perfect ranking, 0 none; with {sk['aquacrop'].get('n')} years a value is "
                         "uncertain by about ±0.2.", 120), fontsize=10.5)

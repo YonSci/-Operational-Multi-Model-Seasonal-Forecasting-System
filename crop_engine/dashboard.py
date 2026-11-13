@@ -96,14 +96,33 @@ def write_index():
 
 HISTORY_SOURCES = ("seasonal", "s2s-ecmwf", "s2s-gefs")     # the outlooks whose day-by-day change the tab shows
 HISTORY_KEYS = ["yield_if_sown_median", "yield_if_sown_p10", "yield_if_sown_p90", "p_failure_if_sown",
-                "p_sowing_opportunity", "wofost_yield_if_sown_median", "wofost_p_failure_if_sown"]
+                "p_sowing_opportunity", "wofost_yield_if_sown_median", "wofost_p_failure_if_sown",
+                "dssat_yield_if_sown_median", "dssat_p_failure_if_sown"]
 
 
-def _hist_row(s, w):
-    y, wy = s.get("yield_if_sown_t_ha") or {}, (w or {}).get("yield_if_sown_t_ha") or {}
+def _hist_row(s, w, d=None):
+    y, wy, dy = (s.get("yield_if_sown_t_ha") or {}, (w or {}).get("yield_if_sown_t_ha") or {},
+                 (d or {}).get("yield_if_sown_t_ha") or {})
     r = lambda v, n=2: None if v is None else round(float(v), n)                        # noqa: E731
     return [r(y.get("median")), r(y.get("p10")), r(y.get("p90")), r(s.get("p_failure_if_sown"), 3),
-            r(s.get("p_sowing_opportunity"), 3), r(wy.get("median")), r((w or {}).get("p_failure_if_sown"), 3)]
+            r(s.get("p_sowing_opportunity"), 3), r(wy.get("median")), r((w or {}).get("p_failure_if_sown"), 3),
+            r(dy.get("median")), r((d or {}).get("p_failure_if_sown"), 3)]
+
+
+def _pad_history(h):
+    """A history with fewer columns than HISTORY_KEYS (older, a prefix of them): its rows padded with None, so a new
+    column never discards the days already recorded."""
+    old = h.get("keys") or []
+    if old == HISTORY_KEYS[:len(old)] and len(old) < len(HISTORY_KEYS):
+        pad = [None] * (len(HISTORY_KEYS) - len(old))
+        for lst in h.get("sources", {}).values():
+            for e in lst:
+                for vs in e.get("cells", {}).values():
+                    for rs in vs.values():
+                        for rk, row in rs.items():
+                            rs[rk] = list(row) + pad
+        h["keys"] = list(HISTORY_KEYS)
+    return h
 
 
 def write_history(entries, log=print):
@@ -119,14 +138,19 @@ def write_history(entries, log=print):
                 h = json.loads(f.read_text(encoding="utf-8"))
             except ValueError:
                 h = None
+    if h:
+        h = _pad_history(h)
     if not h or h.get("keys") != HISTORY_KEYS:
         h = {"keys": HISTORY_KEYS, "sources": {}}
     n = 0
-    for r, chash, summ, wsumm in entries:
+    for entry in entries:
+        r, chash, summ, wsumm = entry[:4]
+        dsumm = entry[4] if len(entry) > 4 else None
         if r["source"] not in HISTORY_SOURCES:
             continue
         day = r["created"][:10]
-        cells = {sid: {vk: {rk: _hist_row(x, (((wsumm or {}).get(sid) or {}).get(vk) or {}).get(rk))
+        cells = {sid: {vk: {rk: _hist_row(x, (((wsumm or {}).get(sid) or {}).get(vk) or {}).get(rk),
+                                          (((dsumm or {}).get(sid) or {}).get(vk) or {}).get(rk))
                             for rk, x in rs.items()} for vk, rs in vs.items()} for sid, vs in summ.items()}
         lst = [e for e in h["sources"].get(r["source"], []) if e["date"] != day]
         lst.append({"date": day, "run": r["run"], "obs_end": r["obs_end"], "config": chash, "cells": cells})
@@ -176,13 +200,15 @@ def write_skill(current_config, log=print):
     if seas:
         seas["current_config"] = current_config
         out["seasonal"] = seas
-    path = V / "hindcast_s2s.json"
-    if path.exists():
+    for key, fname in (("s2s", "hindcast_s2s.json"), ("s2s_dssat", "hindcast_s2s_dssat.json")):
+        path = V / fname
+        if not path.exists():
+            continue
         d = json.loads(path.read_text(encoding="utf-8"))
-        out["s2s"] = {"created": d.get("created"), "config_hash": d.get("config_hash"), "current_config": current_config,
-                      "years": [d["years"][0], d["years"][-1]], "inits": d.get("inits"),
-                      "sites": {sid: {vk: {md: {k: _score(c.get(k)) for k in ("reference", "forecast", "forecast_t") if k in c}
-                                           for md, c in ms.items()} for vk, ms in vs.items()} for sid, vs in d["sites"].items()}}
+        out[key] = {"created": d.get("created"), "config_hash": d.get("config_hash"), "current_config": current_config,
+                          "years": [d["years"][0], d["years"][-1]], "inits": d.get("inits"),
+                          "sites": {sid: {vk: {md: {k: _score(c.get(k)) for k in ("reference", "forecast", "forecast_t") if k in c}
+                                               for md, c in ms.items()} for vk, ms in vs.items()} for sid, vs in d["sites"].items()}}
     if out:
         _dump(C.DASHBOARD_OUT / "skill.json", out)
         log(f"dashboard: crop skill ({', '.join(out)})")
@@ -343,7 +369,7 @@ def write(log=print):
         "outcomes": [{"id": i, "label": a, "title": t} for i, a, t in OUTCOMES], "member_keys": list(MEMBER_KEYS),
         "observed_yields": observed_yields(),
         "caveats": meta0["caveats"], "engine": meta0["engine"]})
-    write_history([(r, ch, summaries.get(r["id"], {}), wofost.get(r["id"])) for r, ch in hist], log)
+    write_history([(r, ch, summaries.get(r["id"], {}), wofost.get(r["id"]), dssat.get(r["id"])) for r, ch in hist], log)
     write_skill(chash0, log)
     write_hindcast(chash0, log)
     write_bulletins(log)

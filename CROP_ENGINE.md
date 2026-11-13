@@ -249,6 +249,14 @@ crop residues cover after sowing and whether residues go to livestock instead; w
 used (tied ridges, zai pits, furrows, fanya juu terraces, half-moons) and how high or deep; and any other practice
 to test. Answers go into a per-site table; where practice varies a lot, two levels are shown (e.g. 50 and 150 mm).
 
+For DSSAT's nitrogen levels (*Nitrogen (DSSAT)*) the questionnaire also asks, per crop: whether farmers near the site
+apply fertiliser or manure in the Short Rains, which product and how much per hectare (kg or bags of 50 kg of DAP,
+CAN or urea; manure in carts or tonnes), when (at sowing, at top-dressing, both) and what share of farmers do; and
+for the site's own fields, any soil test (organic carbon, total nitrogen, mineral nitrogen at sowing, extractable
+phosphorus, pH) with its depth and year, and yields with and without fertiliser where the site has compared them.
+The answers go into `dssat_cultivars.yaml`: `nitrogen.sites.<site>` (the rates grown, kg N/ha) and
+`soil.sites.<site>` (the site's organic nitrogen factor, refitted to its fields).
+
 ## Hindcast verification (`crop_engine/hindcast.py`)
 
 Does the crop outlook tell good seasons from bad ones, and does it say more than the forecasts the platform already
@@ -467,8 +475,13 @@ scenarios (`crop_engine.run_all`), within the crop outlook's time limit; publish
   the cell averaged 5 × 5, as the platform's ET0; `data/crop_engine/grid/era5land_t2m_<year>.nc`, the current
   year topped up daily), then SEAS5 member k bias-corrected to it. A site takes its temperature at the point
   (Open-Meteo): on the cells holding Kapiti, Kiboko and Livemo the cell mean differs from the site's by 0.4–0.7 °C
-  (warmer at Kapiti, cooler at the other two), with the same day-to-day variation (r 1.00). No radiation, humidity or wind
-  (AquaCrop needs none; no WOFOST on the grid).
+  (warmer at Kapiti, cooler at the other two), with the same day-to-day variation (r 1.00). No WOFOST on the grid.
+- **DSSAT** (CERES-Maize, the early maize cultivar) grows the same cells and members beside AquaCrop, with the
+  cells' ERA5-Land solar radiation, humidity and wind (`era5land.site_met` at the cell centres, fetched once from
+  Earth Engine and cached per cell), against its own normal (`grid/benchmark_dssat.json`, rebuilt when DSSAT's
+  configuration or the cells change); published as `cells_dssat` and `counties_dssat` with its own county check
+  against HarvestStat. `--no-dssat` leaves it out; without the cells' radiation it is left out with the reason
+  in the log.
 - **Normal**: the same crop in the observed weather of 1993–2025 per cell (`outputs/crop_engine/grid/
   benchmark.json`, rebuilt when the varieties, the cells or the temperature files change).
 - **Counties**: the mean of the cells' yields weighted by the county's maize area in each, member by member for
@@ -1239,7 +1252,8 @@ each other model of the crop and reports the weakest agreement (for the bean, Aq
 strip, the table of every forecast, the skill line and the hindcast section carry DSSAT beside WOFOST. DSSAT's
 colour is a green (`--crop-dssat`, `#2fa87c` dark, `#14855c` light), checked against AquaCrop's blue and WOFOST's
 orange for colour-vision deficiency and contrast in both themes. The crop bulletin (`backend/bulletin_crop.py`)
-still compares AquaCrop with WOFOST only.
+carries DSSAT too: a DSSAT yield column, the failure if sown of all three models, the agreement over all of them,
+DSSAT's column in the management table and its hindcast in the skill line.
 
 ### DSSAT's hindcast (November 2026, `crop_engine.hindcast --engine dssat`)
 
@@ -1285,6 +1299,44 @@ fertiliser, 3.5 with 25 and 4.3 with 50 kg N/ha, against 4.7 with no nitrogen li
 2.7; the bean, which fixes its nitrogen, 1.42 to 1.51 against 1.54. Kapiti is alike (maize 2.7, 3.8, 4.6 against
 5.3). The chance of failure does not change with nitrogen: in these models a failure is a water failure.
 
+**Rates and soil per site.** The levels grown and the organic-nitrogen factor are in `dssat_cultivars.yaml`
+(`nitrogen` and `soil`), each with a `sites` table for the rates and soil a site's managers report (empty until
+then: every site takes the assumed levels and the regional factor; `nitrogen.json`'s meta lists which sites have
+their own). **The nitrogen-limited normal** (`climatology_dssat_n.json`): the benchmark's observed seasons grown at
+each level, rebuilt when DSSAT's configuration or the levels change; each level's outlook is compared with the
+same level in the observed weather (its chance of below / above normal), not with the water-limited normal.
+**Its hindcast**: `python -m crop_engine.hindcast --engine dssat --nitrogen n0` (or `n25`, `n50`) scores the
+1993–2016 forecasts at that level against that normal (`hindcast_scores_dssat_n0.json`).
+
+### DSSAT in the rest of the engine (November 2026)
+
+- **Management scenarios** (`run_scenarios`): DSSAT grows every scenario except the ones capped by a seasonal
+  irrigation amount, which DSSAT's automatic irrigation does not have. Sowing date, density and starting water as
+  AquaCrop's; irrigation by DSSAT's automatic irrigation (IRRIG A) of the top `IRR_DEPTH_CM` (30 cm), refilled
+  when it falls below the scenario's threshold; mulch as 3,000 kg/ha of surface residue at the start (about half
+  the soil covered); ridges and pits as a runoff curve number of 35. The scenarios table has a DSSAT column beside
+  WOFOST's.
+- **Yield without water stress and water-stress days** per member: each sown member is grown again with the water
+  balance off (`potential_t_ha`), and the days with DSSAT's water-stress factor on transpiration (PlantGro WSPD)
+  above 0.5, i.e. transpiration below half its potential (`stress_days`), AquaCrop's definition. Off in the
+  benchmarks and hindcasts (`potential=False`), which do not show them.
+- **How this outlook has changed**: the chart's history has DSSAT's yield if sown and failure beside AquaCrop's and
+  WOFOST's (`history.json` entries carry 9 values; older entries are padded).
+- **Sub-seasonal hindcast**: `python -m crop_engine.hindcast_s2s --engine dssat` grows the ECMWF extended-range
+  reforecasts with DSSAT against its own normal (`hindcast_s2s_dssat.json`); the hindcast panel shows both models.
+- **The regional maize map** (`grid.py`): DSSAT grows the cells beside AquaCrop (*Gridded regional outlook*); a
+  toggle in the panel switches the map, the county table and the cell table between the two.
+- **Run failures**: a member DSSAT could not run is retried alone up to three times with a short pause (0.5, 1,
+  1.5 s), which cleared every crash seen under load.
+
+**Checked, not changed.** The bean: DSSAT's CROPGRO Canadian Wonder yields 3.84 t/ha with no water stress at
+Kiboko, inside the range of the Kenyan bean trials, so its level is kept (no trial near the sites to fit it to).
+Sorghum: a 100-day class cannot be reached inside DSSAT's coefficient ranges (109 days, *DSSAT's calibration*):
+a limit of DSSAT's sorghum file, documented, not worked around. **Not modelled**: phosphorus and potassium (DSSAT
+4.8's phosphorus module exists for maize but needs the soil's P pools, which SoilGrids does not give; iSDAsoil's
+extractable phosphorus at 30 m is a candidate source), and pests and diseases (DSSAT's pest module needs observed
+damage per date). Yields remain water- (and, at the levels, nitrogen-) limited.
+
 ## Testing
 
 `python -m pytest crop_engine/tests` (also in CI: `.github/workflows/crop-engine-tests.yml`, on every pull request
@@ -1329,8 +1381,9 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   WOFOST's own observed-weather benchmark and its hindcast skill (done). The multi-layer water balance was tested and
   not adopted (*Water balance*).
 - **P2**: DSSAT as a third engine is in place: the adapter, its calibration, its benchmark, hindcast and outlook,
-  and its nitrogen levels at assumed rates (*Third engine: DSSAT*); next, the partners' fertiliser rates, a soil
-  nitrogen calibration on the sites' own fields, and DSSAT in the crop bulletin. SARRA-Py where partner data support
+  its nitrogen levels with their own normal and hindcast, the management scenarios, the bulletin, the sub-seasonal
+  hindcast and the regional map (*Third engine: DSSAT*); next, the partners' fertiliser rates and the sites' soil
+  tests in `dssat_cultivars.yaml` (the questionnaire asks for them), then phosphorus where soil data allow. SARRA-Py where partner data support
   it; the Long Rains (MAM) and Ethiopia; crop
   bulletins. Gridded regional yield forecasts: a pilot for the eastern Kenya Short Rains maize counties is in place
   (*Gridded regional outlook*); next, a hindcast of the grid against HarvestStat, the AquaCrop dry-sowing fix, then

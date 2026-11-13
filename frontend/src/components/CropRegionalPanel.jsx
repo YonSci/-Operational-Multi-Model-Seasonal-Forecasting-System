@@ -63,7 +63,7 @@ function GridMap({ data, layer, site, onHover, hover }) {
                const r = [...ringsOf(g)].sort((a, b) => b.length - a.length)[0] ?? []
                return [n, X(r.reduce((s, p) => s + p[0], 0) / r.length), Y(r.reduce((s, p) => s + p[1], 0) / r.length)]
              }) }
-  }, [data])
+  }, [data.outlines, data.cells])
   const half = data.meta.cell_deg / 2
   return (
     <svg viewBox={`0 0 ${geo.W} ${geo.H}`} role="img" style={{ width: '100%', maxWidth: 460, height: 'auto', display: 'block' }}
@@ -133,9 +133,14 @@ export default function CropRegionalPanel({ site }) {
                        queryFn: () => fetch(DATA).then(r => r.ok ? r.json() : null).catch(() => null) })
   const [layer, setLayer] = useState('pct')
   const [hover, setHover] = useState(null)
-  const d = q.data
-  if (!d?.cells?.length) return null                                    // not made yet: the panel stays hidden
+  const [model, setModel] = useState('aquacrop')
+  const raw = q.data
+  if (!raw?.cells?.length) return null                                  // not made yet: the panel stays hidden
+  const hasD = !!raw.cells_dssat?.length
+  const useD = hasD && model === 'dssat'                                 // DSSAT: its own cells and counties, same map
+  const d = useD ? { ...raw, cells: raw.cells_dssat, counties: raw.counties_dssat ?? [] } : raw
   const m = d.meta
+  const pick = k => { setModel(k); setHover(null) }
   const counties = [...d.counties].sort((a, b) => b.area_ha - a.area_ha)
   return (
     <section aria-label="Regional maize outlook" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 12,
@@ -145,10 +150,23 @@ export default function CropRegionalPanel({ site }) {
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--caution-text)', background: 'var(--caution-bg)', borderRadius: 999, padding: '2px 9px' }}>Pilot</span>
       </div>
       <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '4px 0 0', lineHeight: 1.5, maxWidth: 860 }}>
-        The same crop model on every 0.25° cell (about 28 km) that grows rainfed maize: {m.variety_label.toLowerCase()} sown at the {m.rule_label} of
+        {useD ? 'DSSAT (CERES-Maize)' : 'AquaCrop'} on every 0.25° cell (about 28 km) that grows rainfed maize: {m.variety_label.toLowerCase()} sown at the {m.rule_label} of
         each cell, in the {m.members} members of {m.model_label}, observations to {fmtDate(m.obs_end)}. Each is compared with the same crop in the
-        observed weather of {m.years[0]}–{m.years[1]}. A county is the mean of its cells, weighted by their maize area.
+        observed weather of {m.years[0]}–{m.years[1]}{hasD ? ', grown by the same model' : ''}. A county is the mean of its cells, weighted by their maize area.
       </p>
+      {hasD && (
+        <div role="radiogroup" aria-label="Crop model" className="flex flex-wrap items-center gap-2" style={{ margin: '12px 0 0' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-meta)' }}>Crop model</span>
+          {[['aquacrop', 'AquaCrop'], ['dssat', 'DSSAT']].map(([k, lab]) => (
+            <button key={k} type="button" role="radio" aria-checked={model === k} onClick={() => pick(k)}
+                    style={{ fontSize: 13.5, fontWeight: 600, borderRadius: 999, padding: '5px 12px', minHeight: 32, cursor: 'pointer',
+                             border: '1px solid var(--border-primary)',
+                             background: model === k ? 'var(--nav-active-bg)' : 'transparent', color: model === k ? 'var(--heading)' : 'var(--text-body)' }}>
+              {lab}
+            </button>
+          ))}
+        </div>
+      )}
       <div role="radiogroup" aria-label="Map layer" className="flex flex-wrap gap-2" style={{ margin: '12px 0 4px' }}>
         {Object.entries(LAYERS).map(([k, L]) => (
           <button key={k} type="button" role="radio" aria-checked={layer === k} onClick={() => setLayer(k)}

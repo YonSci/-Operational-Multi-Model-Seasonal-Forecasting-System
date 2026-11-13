@@ -10,6 +10,10 @@ WOFOST results, except plant density (WOFOST has no plant population): its own o
 then each scenario, summarised against WOFOST's own benchmark (climatology_wofost.json); each cell carries
 "baseline_wofost" and every scenario a "wofost" summary beside AquaCrop's. --no-wofost leaves it out.
 
+DSSAT, the third model, the same way for its varieties (run_outlook.dssat_varieties) when the run has DSSAT results
+("baseline_dssat", "dssat"), against climatology_dssat.json, every scenario but the supplementary irrigation (its
+seasonal cap: DSSAT's automatic irrigation has none; adapters/dssat_adapter.py). --no-dssat leaves it out.
+
 Output (not committed): outputs/crop_engine/scenarios/<run id>.json, with the outlook's own summary as "baseline"
 next to each scenario's; the Crop outlook tab's copy is written by crop_engine.dashboard (scenarios.json).
 A run whose scenarios were made from the same results is skipped; with --max-age-days, so is one made from the same
@@ -105,6 +109,13 @@ def base_tasks(res, ds, varieties, rules, site_ids):
     return out
 
 
+def dssat_plan(res, varieties, keys):
+    """The DSSAT varieties of a run with DSSAT results, and the scenarios DSSAT can grow (no seasonal irrigation cap)."""
+    if not any("dssat" in x for s in res["sites"].values() for rs in s["results"].values() for x in rs.values()):
+        return set(), []
+    return set(ro.dssat_varieties(varieties)), [k for k in keys if "MaxIrrSeason" not in (mg.SCENARIOS[k].get("irrigation") or {})]
+
+
 def wofost_plan(res, varieties, keys):
     """The WOFOST varieties of a run with WOFOST results, and the scenarios WOFOST can grow."""
     if not any("wofost" in x for s in res["sites"].values() for rs in s["results"].values() for x in rs.values()):
@@ -113,11 +124,11 @@ def wofost_plan(res, varieties, keys):
 
 
 def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2, force=False, max_age_days=None,
-        wofost=True):
+        wofost=True, dssat=True):
     """Simulate the scenarios of run `rid` and write scenarios/<rid>.json → its path, or None when skipped."""
     keys = list(keys or mg.SCENARIOS)
     res = json.loads((C.RESULTS_OUT / f"{rid}.json").read_text(encoding="utf-8"))
-    shash = scenario_hash(res["meta"], keys) + ("-wofost" if wofost else "")
+    shash = scenario_hash(res["meta"], keys) + ("-wofost" if wofost else "") + ("-dssat" if dssat else "")
     path = SCEN_OUT / f"{rid}.json"
     if path.exists() and not force:
         old = json.loads(path.read_text(encoding="utf-8"))["meta"]
@@ -148,24 +159,29 @@ def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2,
         for sk in keys:
             tasks.append(mg.apply(t, sk))
             tkeys.append((*key3, sk))
-    wof_vars, wof_keys = wofost_plan(res, varieties, keys) if wofost else (set(), [])
-    wtasks, wkeys = [], []
-    for key3, t in base:
-        if key3[1] in wof_vars and "rad" in t:
-            wtasks.append(t)
-            wkeys.append((*key3, None))
-            for sk in wof_keys:
-                wtasks.append(mg.apply(t, sk))
-                wkeys.append((*key3, sk))
+    plans = {"wofost": wofost_plan(res, varieties, keys) if wofost else (set(), []),
+             "dssat": dssat_plan(res, varieties, keys) if dssat else (set(), [])}
+    etasks = {}
+    for eng, (vars_, ekeys) in plans.items():
+        et, ek = [], []
+        for key3, t in base:
+            if key3[1] in vars_ and "rad" in t:
+                t = dict(t, potential=False)                            # DSSAT: the scenarios' summaries need no second run
+                et.append(t)
+                ek.append((*key3, None))
+                for sk in ekeys:
+                    et.append(mg.apply(t, sk))
+                    ek.append((*key3, sk))
+        etasks[eng] = (et, ek)
     log(f"{rid}: {len(tasks)} runs: {len(base)} of the outlook unchanged (the control) and the scenarios ({len(reps)} grid cells, {len(varieties)} varieties, {len(rules)} rules, "
         f"{len(keys)} scenarios, {len(base[0][1]['planting']) if base else 0} members)")
     t0 = time.time()
     outs = ro.run_tasks(tasks, workers)
-    wouts = ro.run_tasks(wtasks, workers, engine="wofost") if wtasks else []
-    if wtasks:
-        log(f"{rid}: WOFOST {len(wtasks)} runs ({len(wof_keys)} scenarios; plant density is AquaCrop's only)")
-    wbp = C.OUT / "climatology_wofost.json"
-    wbench = json.loads(wbp.read_text(encoding="utf-8"))["sites"] if wbp.exists() else {}
+    eouts = {}
+    for eng, (et, _) in etasks.items():
+        eouts[eng] = ro.run_tasks(et, workers, engine=eng) if et else []
+        if et:
+            log(f"{rid}: {eng.upper()} {len(et)} runs ({len(plans[eng][1])} scenarios)")
     out, worst = {}, 0.0
     for (sid, vk, rk, sk), members in zip(tkeys, outs):
         for m in members:
@@ -185,26 +201,29 @@ def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2,
             cell = entry["results"].setdefault(vk, {}).setdefault(
                 rk, {"baseline": compact(res["sites"][gid]["results"][vk][rk]["summary"])})
             cell[sk] = compact(summ)
-    for (sid, vk, rk, sk), members in zip(wkeys, wouts):
-        for m in members:
-            m.pop("_canopy", None)
-        wb = wbench.get(sid, {}).get(vk, {}).get(rk)
-        if sk is None:
-            orig = res["sites"][sid]["results"][vk][rk].get("wofost", {}).get("members", [])
-            diff = max((abs((a["yield_t_ha"] or 0) - (b["yield_t_ha"] or 0)) for a, b in zip(orig, members)), default=0.0)
-            if diff > REPRODUCE_TOL:
-                log(f"{rid}: WOFOST's outlook of {sid} {vk} {rk} not reproduced (up to {diff:.2f} t/ha): its scenarios left out")
+    for eng, (et, ek) in etasks.items():
+        bp = C.OUT / f"climatology_{eng}.json"
+        ebench = json.loads(bp.read_text(encoding="utf-8"))["sites"] if bp.exists() else {}
+        for (sid, vk, rk, sk), members in zip(ek, eouts[eng]):
+            for m in members:
+                m.pop("_canopy", None)
+            eb = ebench.get(sid, {}).get(vk, {}).get(rk)
+            if sk is None:
+                orig = res["sites"][sid]["results"][vk][rk].get(eng, {}).get("members", [])
+                diff = max((abs((a["yield_t_ha"] or 0) - (b["yield_t_ha"] or 0)) for a, b in zip(orig, members)), default=0.0)
+                if diff > REPRODUCE_TOL:
+                    log(f"{rid}: {eng.upper()}'s outlook of {sid} {vk} {rk} not reproduced (up to {diff:.2f} t/ha): its scenarios left out")
+                    continue
+                for gid in [x for x in wanted if cell_of[x] == cell_of[sid]]:
+                    c = out.get(gid, {}).get("results", {}).get(vk, {}).get(rk)
+                    if c is not None:
+                        c[f"baseline_{eng}"] = compact(res["sites"][gid]["results"][vk][rk][eng]["summary"])
                 continue
+            summ = compact(ro.summarize(members, varieties[vk], eb))
             for gid in [x for x in wanted if cell_of[x] == cell_of[sid]]:
                 c = out.get(gid, {}).get("results", {}).get(vk, {}).get(rk)
-                if c is not None:
-                    c["baseline_wofost"] = compact(res["sites"][gid]["results"][vk][rk]["wofost"]["summary"])
-            continue
-        summ = compact(ro.summarize(members, varieties[vk], wb))
-        for gid in [x for x in wanted if cell_of[x] == cell_of[sid]]:
-            c = out.get(gid, {}).get("results", {}).get(vk, {}).get(rk)
-            if c is not None and "baseline_wofost" in c and sk in c:
-                c[sk]["wofost"] = summ
+                if c is not None and f"baseline_{eng}" in c and sk in c:
+                    c[sk][eng] = summ
     meta = {"id": rid, "source": res["meta"]["source"], "model_label": res["meta"]["model_label"],
             "run": res["meta"]["run"], "obs_end": res["meta"]["obs_end"], "engine": res["meta"]["engine"],
             "config_hash": res["meta"]["config_hash"], "scenario_hash": shash, "baseline_reproduced_within_t_ha": round(worst, 3),
@@ -213,8 +232,10 @@ def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2,
             "scenarios": {k: mg.describe(k) for k in keys},
             "varieties": {k: res["meta"]["varieties"][k] for k in varieties},
             "planting_rules": {k: res["meta"]["planting_rules"][k] for k in rules},
-            "second_engine": ({"engine": ro.SECOND_ENGINE, "varieties": sorted(wof_vars), "scenarios": wof_keys}
-                              if wtasks else None)}
+            "second_engine": ({"engine": ro.SECOND_ENGINE, "varieties": sorted(plans["wofost"][0]), "scenarios": plans["wofost"][1]}
+                              if etasks["wofost"][0] else None),
+            "third_engine": ({"engine": ro.THIRD_ENGINE, "varieties": sorted(plans["dssat"][0]), "scenarios": plans["dssat"][1]}
+                             if etasks["dssat"][0] else None)}
     SCEN_OUT.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"meta": meta, "sites": out}, indent=1), encoding="utf-8")
     log(f"{rid}: done in {time.time() - t0:.0f} s → {path.relative_to(C.BASE)}")
@@ -232,7 +253,8 @@ def main():
     ap.add_argument("--force", action="store_true", help="rebuild scenarios already made from the same results")
     ap.add_argument("--max-age-days", type=float, help="keep scenarios made from the same configuration this recently")
     ap.add_argument("--no-dashboard", action="store_true", help="do not rewrite the tab's scenarios.json")
-    ap.add_argument("--no-wofost", action="store_true", help="AquaCrop only")
+    ap.add_argument("--no-wofost", action="store_true", help="no WOFOST")
+    ap.add_argument("--no-dssat", action="store_true", help="no DSSAT")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -240,7 +262,8 @@ def main():
     if not rid:
         log("no seasonal run on disk")
         return 1
-    run(rid, a.sites, a.varieties, a.rules, a.scenarios, a.workers, a.force, a.max_age_days, wofost=not a.no_wofost)
+    run(rid, a.sites, a.varieties, a.rules, a.scenarios, a.workers, a.force, a.max_age_days, wofost=not a.no_wofost,
+        dssat=not a.no_dssat)
     if not a.no_dashboard:
         from crop_engine import dashboard
         dashboard.write_scenarios(log)

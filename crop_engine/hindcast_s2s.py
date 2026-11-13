@@ -27,8 +27,13 @@ and the reference, and their difference; also over the years whose observed rule
 season still open: the forecast can matter). Radiation, humidity and wind forecasts (not in the reforecasts on
 disk) are left out.
 
+DSSAT (--engine dssat): the same forecasts grown by DSSAT, against DSSAT's own crop in the observed weather
+(climatology_dssat.json); its radiation, humidity and wind as its temperature: ERA5-Land to the start, the 1993–2016
+day-of-year climatology from it (the forecast's rain is again the signal). Output hindcast_s2s_dssat.json.
+
 Outputs (not committed): outputs/crop_engine/verification/hindcast_s2s.json and a table in the log.
 Usage: python -m crop_engine.hindcast_s2s --workers 3 [--inits 10-01 10-17 11-01] [--varieties maize_early sorghum]
+       python -m crop_engine.hindcast_s2s --engine dssat --workers 3
 """
 import argparse
 import datetime as dt
@@ -130,7 +135,24 @@ def climatology_rain(inp, dates, y, n_mem):
     return out
 
 
-def simulate(inp, years, inits, rep_cells, varieties, soils, workers):
+def met_series(inp, dates, start):
+    """DSSAT's radiation, vapour pressure and wind (site, T): ERA5-Land to `start`, the day-of-year climatology from it."""
+    r = inp.radiation(dates)
+    if r is None:
+        raise RuntimeError("no ERA5-Land radiation, humidity or wind at the sites (DSSAT needs them)")
+    vals, _, elev = r
+    after = dates >= start
+    doy = era5land.doy_noleap(dates[after]) - 1
+    out = {}
+    for col in vals:
+        v = vals[col].copy()
+        for k, st in enumerate(inp.sites):
+            v[k, after] = inp.met2_clim[st.id][col][doy]
+        out[col] = v.astype(np.float32)
+    return out, elev
+
+
+def simulate(inp, years, inits, rep_cells, varieties, soils, workers, engine="aquacrop"):
     pet = orl.load_pet(inp.lat, inp.lon, orl.EXT_DAYS)
     refs = {md: reforecast(md, inp.sites) for md in inits}
     reft = {md: reforecast_temperature(md, inp.sites) for md in inits}
@@ -157,6 +179,7 @@ def simulate(inp, years, inits, rep_cells, varieties, soils, workers):
                 cx, cn = inp.tclim[s.id]
                 tx[k, after], tn[k, after] = cx[doy], np.minimum(cn[doy], cx[doy])
             e0[:, after] = inp.et0_clim.T[:, after]
+            met = met_series(inp, dates, I) if engine == "dssat" else None
             for s, _ in rep_cells:
                 k = ids.index(s.id)
                 base = np.where(after[None], clim[:, k], obs[k][None])               # observations only
@@ -176,14 +199,19 @@ def simulate(inp, years, inits, rep_cells, varieties, soils, workers):
                     plant = [pl.observed_rule_date(rain[m], dates, pet[:, s.i, s.j], RULE) for m in range(n_mem)]
                     resow = pl.sowing_opportunities(rain, dates)
                     for vk, v in varieties.items():
-                        tasks.append(dict(dates=dates.values, rain=rain, tmax=rx.astype(np.float32),
-                                          tmin=rn.astype(np.float32), et0=re.astype(np.float32),
-                                          source=np.zeros(len(dates), np.int8), planting=plant, resow=resow, variety=v,
-                                          kw=v["kw"], layers=soils[s.id], initial_frac=float(frac[k])))
+                        t = dict(dates=dates.values, rain=rain, tmax=rx.astype(np.float32),
+                                 tmin=rn.astype(np.float32), et0=re.astype(np.float32),
+                                 source=np.zeros(len(dates), np.int8), planting=plant, resow=resow, variety=v,
+                                 kw=v["kw"], layers=soils[s.id], initial_frac=float(frac[k]))
+                        if met is not None:
+                            vals, elev = met
+                            t.update(rad=vals["rad_mj_m2"][k], vap=vals["vap_hpa"][k], wind2=vals["wind2_ms"][k],
+                                     lat=s.lat, lon=s.lon, elev=float(elev[k]), potential=False)
+                        tasks.append(t)
                         keys.append((s.id, vk, md, kind, y))
     log(f"{len(tasks)} forecasts to simulate ({sum(len(t['planting']) for t in tasks)} member seasons)")
     t0 = time.time()
-    res = ro.run_tasks(tasks, workers)
+    res = ro.run_tasks(tasks, workers, engine=engine)
     log(f"simulated in {time.time() - t0:.0f} s")
     out = {}
     for (sid, vk, md, kind, y), members in zip(keys, res):
@@ -234,6 +262,8 @@ def main():
     ap.add_argument("--sites", nargs="+")
     ap.add_argument("--years", nargs=2, type=int, default=[2006, 2025])
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--engine", choices=["aquacrop", "dssat"], default="aquacrop",
+                    help="dssat: DSSAT's varieties against DSSAT's own benchmark (climatology_dssat.json)")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -241,16 +271,26 @@ def main():
     _, varieties = ro.load_varieties(a.varieties)
     inp = W.Inputs(refresh=False)
     bench = json.loads((C.OUT / "climatology.json").read_text(encoding="utf-8"))
+    if a.engine == "dssat":
+        varieties = {vk: varieties[vk] for vk in ro.dssat_varieties(varieties)}
+        bp = C.OUT / "climatology_dssat.json"
+        if not bp.exists():
+            log("no DSSAT benchmark (climatology_dssat.json): run the outlook once with DSSAT")
+            return 1
+        bench = json.loads(bp.read_text(encoding="utf-8"))
     rep_cells = [(s, g) for s, g in ro.cells(inp.sites) if not a.sites or s.id in a.sites]
     soils = {s.id: soil_mod.profile(s) for s, _ in rep_cells}
-    members = simulate(inp, years, a.inits, rep_cells, varieties, soils, a.workers)
+    members = simulate(inp, years, a.inits, rep_cells, varieties, soils, a.workers, a.engine)
     sc = score(members, bench["sites"], varieties, years)
     table(sc)
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "hindcast_s2s.json").write_text(json.dumps({
-        "years": years, "inits": a.inits, "rule": RULE, "config_hash": bench.get("config_hash"),
+    name = "hindcast_s2s.json" if a.engine == "aquacrop" else f"hindcast_s2s_{a.engine}.json"
+    (OUT / name).write_text(json.dumps({
+        "years": years, "inits": a.inits, "rule": RULE, "config_hash": bench.get("config_hash"), "engine": a.engine,
         "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
-        "reference": "the crop grown in the observed weather (climatology.json), Agri rule 1", "sites": sc,
+        "reference": "the crop grown in the observed weather ("
+                     + ("climatology.json" if a.engine == "aquacrop" else f"climatology_{a.engine}.json") + "), Agri rule 1",
+        "sites": sc,
         "members": members}), encoding="utf-8")
     return 0
 

@@ -1311,9 +1311,9 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             <Tbl head={['Step', 'What happens', 'Code']} rows={[
               ['1 Inputs', 'Observed CHIRPS v2 rain to the last day and the forecast run’s rain members (SEAS5 bias-corrected to CHIRPS, sub-seasonal and weather models joined in front of it); ERA5-Land temperature at the site (Open-Meteo) and its solar radiation, humidity and wind (Google Earth Engine); the sub-seasonal models’ own temperature (ECMWF extended range, GEFS) at the sites; SoilGrids layers and the ERA5-Land soil water on 1 Aug; the sowing date of each member by Agri rule 1 and by the FAO agricultural onset.', 'crop_engine/data/'],
               ['2 Crop weather', 'One daily file per run: 1 Aug – 31 Mar for every member, with the source of every day (observed, forecast, SEAS5, climatology). The sub-seasonal runs take their own model’s temperature in its range, then SEAS5; SEAS5 temperature, radiation, humidity and wind are corrected to the site’s ERA5-Land record; ET0 is the platform’s FAO-56 ET0, then its climatology scaled by each member’s weather. The file is checked (no gaps, value ranges, Tmin ≤ Tmax, source codes) before any crop runs.', 'data/weather.py, data/seas5.py, data/s2s_temperature.py'],
-              ['3 Crop models', 'AquaCrop-OSPy grows the published outlook; WOFOST 7.2 grows the same maize and sorghum members as a second model, shown beside it, so the dependence on the model can be seen. A member sown on a false start is re-sown once at its next sowing opportunity.', 'adapters/aquacrop_adapter.py, adapters/wofost_adapter.py'],
-              ['4 Products', 'The Crop outlook tab: yields, chance of failure and sowing opportunity per site, crop and rule, against the same crop grown in the observed weather of 1993–2025, with WOFOST’s result beside AquaCrop’s. The management scenarios: the same members with one choice changed.', 'run_outlook.py, run_scenarios.py, dashboard.py'],
-              ['5 Calibration and verification', 'Calibration against trials at KALRO Kiboko and Embu (phenology, AquaCrop’s harvest index, WOFOST’s photosynthesis: maize to Duma 43, sorghum to AquaCrop’s level); the hindcast of the 1 Oct SEAS5 runs 1993–2016 against the observed-weather crop and the season-length forecast; county Short Rains maize yields; and AquaCrop against WOFOST on 1,188 observed seasons.', 'calibration/, hindcast.py, compare_engines.py'],
+              ['3 Crop models', 'AquaCrop-OSPy grows the published outlook; WOFOST 7.2 (maize and sorghum) and DSSAT 4.8 (maize, sorghum and the bean) grow the same members as two more models, shown beside it, so the dependence on the model can be seen. A member sown on a false start is re-sown once at its next sowing opportunity.', 'adapters/aquacrop_adapter.py, adapters/wofost_adapter.py, adapters/dssat_adapter.py'],
+              ['4 Products', 'The Crop outlook tab: yields, chance of failure and sowing opportunity per site, crop and rule, against the same crop grown in the observed weather of 1993–2025, with WOFOST’s and DSSAT’s results beside AquaCrop’s. The management scenarios: the same members with one choice changed. DSSAT’s nitrogen levels: the same members at three fertiliser rates.', 'run_outlook.py, run_scenarios.py, run_nitrogen.py, dashboard.py'],
+              ['5 Calibration and verification', 'Calibration against trials at KALRO Kiboko and Embu (phenology, AquaCrop’s harvest index, WOFOST’s photosynthesis: maize to Duma 43, sorghum to AquaCrop’s level); the hindcast of the 1 Oct SEAS5 runs 1993–2016 against the observed-weather crop and the season-length forecast; county Short Rains maize yields; AquaCrop against WOFOST on 1,188 observed seasons and against DSSAT on 1,584; DSSAT’s phenology, yield level and soil nitrogen calibrated to the same targets and to Kenyan nitrogen trials.', 'calibration/, hindcast.py, compare_engines.py'],
             ]}/>
           </S>
 
@@ -1497,6 +1497,35 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               3.8 t/ha. WOFOST’s multi-layer water balance does no better there. There, this season, the outlook depends on the model.
               Each model also has its own simulated past seasons (WOFOST grown in the observed weather of 1993–2025), shown in the tab
               beside AquaCrop’s.
+            </p>
+          </S>
+
+          <S title="Third crop model: DSSAT 4.8 (CERES-Maize, CERES-Sorghum, CROPGRO-Dry bean)" id="about-dssat" scope="Kenya · Short Rains · maize, sorghum and the bean · shown beside AquaCrop and WOFOST in the Crop outlook tab">
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:'0 0 16px'}}>
+              DSSAT (the Decision Support System for Agrotechnology Transfer) is the most widely used family of crop models. The crop engine runs
+              DSSAT’s own program (the open-source CSM 4.8 build) on exactly AquaCrop’s inputs: the same members, soil, 1 Aug water, sowing and
+              re-sowing. CERES-Maize and CERES-Sorghum grow the grain from radiation-use efficiency, kernel number and kernel growth;
+              CROPGRO grows the bean, including its own nitrogen fixation. Since November 2026 it grows every forecast run’s members, the Crop
+              outlook tab shows it beside the other two models, and it has its own normal (DSSAT grown in the observed weather of 1993–2025)
+              and hindcast. Its outlook is water-limited, as the others’; its nitrogen balance runs apart, at fertiliser levels.
+            </p>
+            <h4 className="about-subhead">What the crop engine sets</h4>
+            <Tbl head={['', 'Value used']} rows={[
+              ['Cultivars', 'From DSSAT’s own files: Katumani Composite B-II (early maize), H512 (medium maize), CSH-1 (sorghum) and Canadian Wonder (dry bean, grown in Kenya).'],
+              ['Phenology', 'Each variety matures in its stated days at 21 °C, the targets of the other two models, with every coefficient inside DSSAT’s own ranges: maize’s juvenile phase P1 fitted; sorghum’s P1 and P5 at DSSAT’s minimum still take 109 days, not the class’s 100 (three of its phases are fixed in DSSAT’s file); the bean’s phases × 1.04.'],
+              ['Yield level', 'Maize: kernels per plant (G2) and kernel filling rate (G3) × 1.48, so medium maize with no water stress at Kiboko in the 2012 dry season yields Duma 43’s 7.76 t/ha, the trial the other two were fitted to; early maize shares the factor (5.0 t/ha, below AquaCrop’s 6.5 and WOFOST’s 6.2). Sorghum: G2 × 0.86, matched to AquaCrop’s no-water-stress sorghum (4.97 t/ha). The bean keeps DSSAT’s level: no bean trial near the sites.'],
+              ['Weather and demand', 'Rain, Tmax, Tmin, solar radiation, vapour pressure and wind of the weather file; DSSAT computes its own FAO-56 Penman-Monteith reference ET from them (it cannot be given an ET0 series).'],
+              ['Soil', 'The SoilGrids layers: lower and drained upper limits from the wilting point and field capacity, saturation and conductivity (Saxton & Rawls 2006), organic carbon; roots to the variety’s 1.5 m, as the other two.'],
+              ['Outcome', 'As AquaCrop’s. A seed that does not germinate within 15 days, or a canopy that never reaches 5 % cover, is a failed establishment and is re-sown; DSSAT’s crop survives a dry spell with a smaller yield where AquaCrop’s canopy dies, so it fails less in dry seasons.'],
+              ['Nitrogen', 'With the balance on: urea split 40 % at sowing and 60 % 30 days after (the bean all at sowing); the soil’s organic nitrogen from its organic carbon (C : N 10) × 0.06, fitted so maize without fertiliser yields about 0.6 of its yield with 60 kg N/ha, as Kenyan nitrogen trials show (a first, regional calibration). The levels (0, 25, 50 kg N/ha) are assumptions until the sites’ managers report their rates.'],
+            ]}/>
+            <h4 className="about-subhead" style={{marginTop:24}}>How it compares and how it did</h4>
+            <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
+              On the 1,584 observed seasons of 1993–2025 DSSAT ranks the years as AquaCrop does (rank correlation of the sown seasons’ yields
+              0.73 at the median, AquaCrop against WOFOST 0.67) and agrees with it on failure in 82 % of seasons. Where both crops mature they
+              yield alike; the difference is in dry seasons, where AquaCrop’s crop dies and DSSAT’s survives. Its hindcast of the 1 Oct SEAS5
+              forecasts of 1993–2016, against its own crop in the observed weather: median rank correlation 0.58 and failure ROC area 0.84
+              (AquaCrop 0.51 and 0.82, WOFOST 0.58 and 0.79). Against county Short Rains maize yields it does no better than the other two.
             </p>
           </S>
 
