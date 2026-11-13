@@ -9,7 +9,7 @@ from fastapi.responses import Response
 import mam_loader as dl
 from pydantic import BaseModel
 
-from assistant import advisory, chat, evidence as ev
+from assistant import advisory, areas, charts, chat, evidence as ev
 from assistant import narrate
 from kenya_api.pixel import _clean
 import json
@@ -124,3 +124,61 @@ def chat_reply(body: ChatIn):
     _ready()
     out = chat.reply(body.messages, body.context, body.audience)
     return Response(content=json.dumps(_clean(out)), media_type="application/json")
+
+
+@router.get("/regions")
+def list_regions(season: str = Query("short_rains")):
+    """The counties (Kenya) or regions (Ethiopia) an area explanation can name."""
+    country = areas.country_of(season)
+    return {"country": country, "kind": areas.ADMIN[country][1], "names": sorted(n for n, _ in areas.regions(country) if n)}
+
+
+@router.get("/area")
+def explain_area(
+    season: str = Query("short_rains"), model: str = Query(...),
+    name: str = Query("", description="county (Kenya) or region (Ethiopia)"),
+    bbox: str = Query("", description="drawn rectangle: west,south,east,north"),
+    audience: str = Query("general"),
+):
+    """The outlook over a county/region or a drawn rectangle: cell spread, area-wide event chances (members) and the
+    average of the cells' skill-weighted chances."""
+    _ready()
+    try:
+        box = [float(x) for x in bbox.split(",")] if bbox else None
+        rec = areas.area(season, model, name=name or None, bbox=box)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _reply("area", rec, audience)
+
+
+@router.get("/attention")
+def explain_attention(
+    season: str = Query("short_rains"), model: str = Query(...),
+    criterion: str = Query("late_onset", description=", ".join(areas.CRITERIA)),
+    audience: str = Query("general"),
+):
+    """Areas needing attention on one criterion: counties/regions ranked by the share of their cells that meet it."""
+    _ready()
+    try:
+        rec = areas.attention(season, model, criterion)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _reply("attention", rec, audience)
+
+
+@router.get("/chart")
+def explain_chart(
+    chart_kind: str = Query(..., alias="chart", description=", ".join(charts.KINDS)),
+    lat: float = Query(...), lon: float = Query(...),
+    season: str = Query("short_rains"), model: str = Query(""),
+    quantity: str = Query("onset"), crop: str = Query("maize_early"),
+    audience: str = Query("general"),
+):
+    """What a chart shows: member dates, crop outcomes, or the rainfall plume (illustrative where the server has no
+    daily members)."""
+    _ready()
+    try:
+        rec = charts.chart(chart_kind, lat, lon, season, model, quantity=quantity, crop=crop)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _reply("chart", rec, audience)

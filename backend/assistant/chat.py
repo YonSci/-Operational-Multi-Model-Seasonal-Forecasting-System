@@ -17,7 +17,7 @@ import logging
 import os
 import re
 
-from . import advisory, knowledge as kn, narrate
+from . import advisory, areas, charts, knowledge as kn, narrate
 from . import evidence as ev
 
 log = logging.getLogger("assistant")
@@ -71,6 +71,22 @@ TOOLS = [
                                      "planted": {"type": "string", "enum": ["yes", "no", "unknown"]},
                                      "sowing_date": _nullable("string", description="ISO date, when known"),
                                      "objective": {"type": "string", "enum": ["maturity", "establishment", "downside", "yield", "water"]}}}},
+    {"name": "explain_area", "strict": True,
+     "description": "The outlook over a county (Kenya) or region (Ethiopia) by name: spread of dates across its cells, "
+                    "area-wide event chances counted over members, and the average of the cells' skill-weighted chances.",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["name"],
+                      "properties": {"name": {"type": "string"}}}},
+    {"name": "find_attention_areas", "strict": True,
+     "description": "Counties or regions ranked by how much of their area meets a criterion in the current run.",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["criterion"],
+                      "properties": {"criterion": {"type": "string", "enum": list(areas.CRITERIA)}}}},
+    {"name": "explain_chart", "strict": True,
+     "description": "What a chart at the selected place shows: member_dates (onset/cessation/season-length members), "
+                    "crop_outcomes (crop yields and outcomes), rain_plume (daily rainfall members; may be illustrative).",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["chart", "quantity", "crop"],
+                      "properties": {"chart": {"type": "string", "enum": list(charts.KINDS)},
+                                     "quantity": {"type": "string", "enum": ["onset", "cessation", "lgp"]},
+                                     "crop": {"type": "string", "enum": ["maize_early", "maize_medium", "sorghum", "bean"]}}}},
     {"name": "search_notes", "strict": True,
      "description": "The platform's method notes: onset methods, terciles, skill-weighted chances, hit rate, RPSS, "
                     "medians and ranges, map layers. Use for definitions and how to read a figure.",
@@ -154,6 +170,15 @@ class Session:
                 return {"error": "Advisory cards are available for the Kenya Short Rains only."}
             rec = advisory.card(float(self.lat), float(self.lon), self.season, self.model,
                                 {k: args.get(k) for k in ("decision", "crop", "planted", "sowing_date", "objective")})
+        elif name == "explain_area":
+            rec = areas.area(self.season, self.model, name=args.get("name"))
+        elif name == "find_attention_areas":
+            rec = areas.attention(self.season, self.model, args.get("criterion"))
+        elif name == "explain_chart":
+            if self.lat is None or self.lon is None:
+                return {"error": "No place is selected on the dashboard; ask the user to pick one."}
+            rec = charts.chart(args.get("chart"), float(self.lat), float(self.lon), self.season, self.model,
+                               quantity=args.get("quantity") or "onset", crop=args.get("crop") or "maize_early")
         elif name == "search_notes":
             return {"notes": search_notes(args.get("query", ""))}
         elif name == "suggest_action":
