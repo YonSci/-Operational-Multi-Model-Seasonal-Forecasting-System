@@ -54,6 +54,9 @@
   --r1-text:        #38bdf8;
   --r2-text:        #4ade80;
   --ok-text:        #34d399;
+  --ok-bg:          rgba(52, 211, 153, 0.12);
+  --exp-text:       #fbbf24;
+  --exp-bg:         rgba(251, 191, 36, 0.14);
   --warn-text:      #fbbf24;
   --bad-text:       #fca5a5;
   --violet-text:    #a78bfa;
@@ -104,6 +107,9 @@ html.light {
   --r1-text:        #0369a1;
   --r2-text:        #15803d;
   --ok-text:        #0f766e;
+  --ok-bg:          #e6f4f1;
+  --exp-text:       #78520b;
+  --exp-bg:         #fff3d6;
   --warn-text:      #92400e;
   --bad-text:       #b42318;
   --violet-text:    #5b21b6;

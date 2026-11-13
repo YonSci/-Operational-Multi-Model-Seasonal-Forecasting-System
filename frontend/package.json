@@ -3,7 +3,7 @@
   "private": true,
   "version": "3.1.0",
   "type": "module",
-  "description": "Onset–Cessation–SL Forecast System (OCL-FS): onset, cessation, LGP and crop forecasts for Kenya and Ethiopia — ILRI & ICPAC",
+  "description": "Seasonal to Sub-seasonal Climate & Agricultural Intelligence System: seasonal to sub-seasonal rainfall outlooks, rainfall tracking and experimental crop outlooks for Kenya and Ethiopia (ILRI & ICPAC)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
