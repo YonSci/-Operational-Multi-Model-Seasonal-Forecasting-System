@@ -303,12 +303,15 @@ def active_cell(th, scp1, ul, dx):
 
 # ── a model run's state ─────────────────────────────────────────────────────────────────────────────────────────────
 class Context:
-    """One AquaCrop-OSPy run's settings and state (module doc). fertility: {"stress_pct"}; weeds: {"rc_pct",
+    """One AquaCrop-OSPy run's settings and state (module doc). fertility: {"stress_pct"} or {"stress_pct_by_crop":
+    {AquaCrop crop: level}}; weeds: {"rc_pct",
     "delta_rc_pct"}; salinity: {"ecw", "ecgw", "ece_initial"} (dS/m; ecgw with the task's water table)."""
 
     def __init__(self, crop_key, cg, fertility=None, weeds=None, salinity=None):
         self.crop_key, self.cg = crop_key, np.asarray(cg, float)
-        self.sf0 = int((fertility or {}).get("stress_pct", 0))
+        fert = fertility or {}
+        by_crop = fert.get("stress_pct_by_crop")                 # a calibrated level per crop (aquacrop_fertility.yaml)
+        self.sf0 = int(round(float(by_crop.get(crop_key, 0) if by_crop else fert.get("stress_pct", 0))))
         self.rc = float((weeds or {}).get("rc_pct", 0.0))
         self.drc = float((weeds or {}).get("delta_rc_pct", 0.0))
         self.sal = salinity or None

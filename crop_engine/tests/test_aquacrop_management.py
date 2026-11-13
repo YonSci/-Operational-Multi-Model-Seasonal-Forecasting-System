@@ -74,6 +74,26 @@ def test_bunds_after_a_pond_drains():
     assert bunded["yield_t_ha"] > 0.5 * open_field["yield_t_ha"], (bunded["yield_t_ha"], open_field["yield_t_ha"])
 
 
+def test_no_irrigation_before_the_start_stage():
+    im = aq.irrigation({"irrigation_method": 1, "SMT": [30, 30, 30, 0], "MaxIrr": 25, "start_stage": 2}, dt.date(2026, 9, 3))
+    assert list(im.SMT) == [-1000, 30, 30, 0]                                # stage 1 (to emergence) never triggers
+    assert list(aq.irrigation({"irrigation_method": 1, "SMT": [70] * 4}, dt.date(2026, 9, 3)).SMT) == [70] * 4
+    assert mg.SCENARIOS["irr_supplementary"]["irrigation"]["start_stage"] == 2
+    assert not mg.aquacrop_only("irr_supplementary")                        # WOFOST and DSSAT read its SMT as before
+
+
+def test_calibrated_fertility_by_crop():
+    from crop_engine.adapters import aquacrop_stress as st
+    from crop_engine.calibration import aquacrop_fertility as af
+    f = mg.SCENARIOS["fert_no_n"]["fertility"]["stress_pct_by_crop"]
+    assert f["MaizeGDD"] == f["SorghumGDD"] > 50 and f["DryBeanGDD"] == 0
+    assert st.Context("MaizeGDD", [0, 1], fertility={"stress_pct_by_crop": f}).sf0 == f["MaizeGDD"]
+    bean = st.Context("DryBeanGDD", [0, 1], fertility={"stress_pct_by_crop": f})
+    assert bean.sf0 == 0 and not bean.active                                 # the bean: no stress, the outlook's run
+    assert af.fit_level((0, 10, 20), (1.0, 0.8, 0.5), 0.65) == pytest.approx(15.0)
+    assert af.fit_level((0, 10), (1.0, 0.9), 0.5) is None
+
+
 def test_aquacrop_only_scenarios():
     assert not any(mg.aquacrop_only(k) for k in ("irr_supplementary", "irr_full", "mulch", "ridges", "density_low",
                                                  "sow_plus14", "soil_dry"))

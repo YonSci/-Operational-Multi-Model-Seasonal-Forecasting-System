@@ -14,10 +14,12 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
   irrigation    AquaCrop-OSPy IrrigationManagement: method 1 irrigates (up to MaxIrr mm a day) whenever the root
                 zone's water falls below SMT % of its available water, per growth stage (emergence, canopy growth,
                 maximum canopy and flowering, senescence), up to MaxIrrSeason mm a season. Supplementary: 30 % from
-                sowing to flowering, 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at
-                75 % efficiency); full: 70 % throughout, no cap (the water-unlimited yield). The efficiency is left
-                at 100 % (net water): in AquaCrop-OSPy 3.1.0 a lower AppEff together with a seasonal cap ended the
-                season of every Genco Tana River member early (all died in October), which no farmer's irrigation does
+                canopy growth to flowering (start_stage 2: none before the crop has emerged with rain), 100 mm a
+                season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency: the cap is
+                counted in net water); full: 70 % throughout, no cap (the water-unlimited yield). Irrigating from
+                sowing (the first version) germinated a crop sown into dry soil weeks before the rains, spent the
+                cap keeping it alive and let it die before the rains came (every Genco Tana River member, October);
+                a lower efficiency only made the cap run out sooner
   field         AquaCrop-OSPy FieldMngt: mulches (mulch_pct % of the surface covered, soil evaporation there cut by
                 f_mulch: crop residues, 50 % cover); water harvesting as sr_inhb (surface runoff fully inhibited: the
                 rain infiltrates where it falls, as tied ridges or zai pits make it). Bunds are their own scenario, 10 cm
@@ -28,7 +30,9 @@ Scenarios only AquaCrop can grow (aquacrop_only; WOFOST and DSSAT leave them out
   irrigation    methods 2-5: every 7 days to field capacity; a fixed schedule from each member's sowing; the net
                 irrigation requirement (the water counted, not applied); drip at a constant 3 mm a day
   groundwater   a water table at a constant depth (1.5 or 2.5 m): capillary rise into the root zone
-  fertility     AquaCrop 7's soil fertility stress (%), its generic crop response (adapters/aquacrop_stress.py)
+  fertility     AquaCrop 7's soil fertility stress (%), its generic crop response (adapters/aquacrop_stress.py); "no
+                fertiliser" at the level fitted to the Kenyan maize nitrogen trials (aquacrop_fertility.yaml: maize
+                and sorghum 74 %, the bean none as it fixes its nitrogen)
   weeds         AquaCrop 7's weeds, their relative cover of the canopy (%)
   salinity      AquaCrop 7's salinity: a saline soil (initial ECe), saline irrigation water (ECw) or a saline water
                 table (ECgw), dS/m; one season from the stated start (salt builds up over years: ECe ≈ 1.5 ECw)
@@ -36,9 +40,13 @@ These are assumed levels, to show what the practice or condition would change, n
 Re-sowing after a failed establishment works as in the outlook.
 """
 import datetime as dt
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
+
+FERTILITY = yaml.safe_load((Path(__file__).resolve().parent.parent / "aquacrop_fertility.yaml").read_text(encoding="utf-8"))
 
 SCENARIOS = {
     "sow_minus14": dict(label="Sow 14 days earlier", group="Sowing date", sow_shift=-14),
@@ -52,7 +60,8 @@ SCENARIOS = {
     "soil_dry": dict(label="Dry soil on 1 Aug (wilting point)", group="Initial soil water", initial_frac=0.0),
     "soil_wet": dict(label="Wet soil on 1 Aug (field capacity)", group="Initial soil water", initial_frac=1.0),
     "irr_supplementary": dict(label="Supplementary irrigation, up to 100 mm a season", group="Water management",
-                              irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100)),
+                              irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100,
+                                             start_stage=2)),
     "irr_full": dict(label="Full irrigation (no water stress)", group="Water management",
                      irrigation=dict(irrigation_method=1, SMT=[70, 70, 70, 70], MaxIrr=50)),
     "mulch": dict(label="Mulch, 50 % residue cover", group="Water management",
@@ -74,6 +83,8 @@ SCENARIOS = {
     "gw_1_5m": dict(label="Water table at 1.5 m", group="Groundwater", groundwater=dict(depth_m=1.5)),
     "gw_2_5m": dict(label="Water table at 2.5 m", group="Groundwater", groundwater=dict(depth_m=2.5)),
     # AquaCrop 7's soil fertility stress, weeds and salinity (adapters/aquacrop_stress.py; AquaCrop only)
+    "fert_no_n": dict(label="No fertiliser (fertility stress fitted to Kenyan maize nitrogen trials)",
+                      group="Soil fertility", fertility=dict(stress_pct_by_crop=dict(FERTILITY["no_fertiliser"]))),
     "fert_25": dict(label="Soil fertility stress 25 % (about 80 % of the unstressed biomass)", group="Soil fertility",
                     fertility=dict(stress_pct=25)),
     "fert_50": dict(label="Soil fertility stress 50 % (about half the unstressed biomass)", group="Soil fertility",

@@ -159,7 +159,7 @@ outlook can be read against what a farmer could do differently. Each scenario ch
 | Calendar sowing | 15 Oct, 1 Nov, 15 Nov | every member sown on that date, onset or not (AquaCrop's germination still needs a wet topsoil) |
 | Plant density | × 0.67, × 1.2 | the variety's plant population. AquaCrop-OSPy derives only the initial canopy cover from it (CCo = population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated at Kiboko) does not change |
 | Initial soil water | wilting point, field capacity on 1 Aug | in place of the ERA5-Land plant-available water |
-| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from sowing to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency). The cap is on net water: with `AppEff` 75 and a cap, AquaCrop-OSPy 3.1.0 ended every Genco Tana River member's season early (all died in October) |
+| Water management | supplementary irrigation, up to 100 mm a season | AquaCrop-OSPy `IrrigationManagement` method 1: irrigate whenever the root zone's water falls below 30 % of its available water from canopy growth to flowering (soil-moisture targets 30, 30, 30, 0 % by growth stage, none before the crop has emerged with rain: `start_stage` 2, *Supplementary irrigation's false start* below), at most 25 mm a day and 100 mm a season reaching the soil (about 130 mm drawn from a pan or tank at 75 % efficiency; the cap is on net water) |
 | | full irrigation | method 1, 70 % throughout, no seasonal cap: the yield with water no longer limiting |
 | | mulch, 50 % residue cover | `FieldMngt`: mulches on 50 % of the surface, soil evaporation there × 0.5 |
 | | tied ridges or pits (no surface runoff) | `FieldMngt(sr_inhb=True)`: surface runoff fully inhibited, the rain infiltrates where it falls, as tied ridges or zai pits make it. AquaCrop's bunds (`bunds`, `z_bund`) are their own scenario (*More of AquaCrop* below). In the first run 20 cm bunds stopped the crop (canopy under 8 %) in most members at Kapiti, Kiboko and Livemo; that was an AquaCrop-OSPy bug, fixed (*Bunds* below), not waterlogging |
@@ -362,6 +362,42 @@ early maize, median (failure): Kiboko 3.90 t/ha (20 %), Kapiti 5.47 (16 %), Live
 (32 %): bunds hold the rain as tied ridges do (3.97, 5.58, 2.08, 1.56). Water that stands for days still stresses
 the crop for lack of air, as AquaCrop intends: a clay field holding a 4-day storm for 16 days yields 3.9 instead of
 5.2 t/ha (`test_bunds_after_a_pond_drains`).
+
+### Supplementary irrigation's false start (November 2026)
+
+Supplementary irrigation (100 mm a season) had killed every Genco Tana River member in October, and the scenario was
+kept at 100 % application efficiency because a lower one made it worse. Neither was a bug of the efficiency. The
+FAO onset sows Tana River on 3 Sep, into dry soil: rain-fed, the seed waits for the November rains and matures in
+December (about 4 t/ha); irrigated from sowing, the first irrigations germinated it in September (AquaCrop-OSPy's
+trigger, the depletion plus the day's demand over the available water, passes 1 in a dry seedbed, so even a
+soil-moisture target of 0 % irrigated at sowing), the cap was spent keeping a full canopy alive in a dry October and
+the crop died before the rains (75 % efficiency: smaller doses, the cap gone 5 days sooner, and every member dead
+instead of most). A farmer with 100 mm keeps it for an established crop: the scenario now irrigates from canopy
+growth only (`start_stage` 2, AquaCrop only: the stage-1 trigger never fires), the cap counted in net water. 1 Oct
+2026 run, early maize, median (failure, water used): Tana River 4.84 t/ha (0 %, 75 mm; was 1.9), Kiboko 5.38 (0 %,
+75 mm), El Karama 5.05 (4 %, 100 mm), Kapiti 6.71 (4 %, 75 mm), Livemo 4.68 (20 %, 100 mm). WOFOST and DSSAT
+irrigate from sowing as before.
+
+### AquaCrop's fertility fitted to the nitrogen trials (November 2026, `calibration/aquacrop_fertility.py`)
+
+AquaCrop's soil fertility stress has a level and four response shapes; the shapes need canopy measurements under
+stress, which the trials do not have, so they stay AquaCrop's generic crop's, and the level is fitted, as AquaCrop's
+own calibration does (`crop_engine/aquacrop_fertility.yaml`; `outputs/crop_engine/calibration/aquacrop/
+fertility.json`):
+
+- **Kiboko's own field** (the 2013 irrigated trial, water not limiting): medium maize yields the trial's 0.22, 0.51
+  and 0.80 of its 160 kg N/ha yield at stress levels **71, 51 and 24 %** (0, 40, 80 kg N/ha).
+- **Regional** (early maize, observed Short Rains 1993–2016 at Kiboko and Kapiti, FAO onset; the trials' 0.62 of the
+  fertilised yield, DSSAT's target): **74 %**. Up to about 50 % the level hardly lowers these rain-fed yields (0.98–1.0
+  of unstressed): AquaCrop readjusts the stress each day from the biomass so far, so a season already short of water
+  is not penalised twice; above 60 % it bites (70 %: 0.79, 80 %: 0.36).
+- The two agree: an unfertilised dryland maize field is at about 70–75 % in AquaCrop's terms.
+
+The scenario **No fertiliser** grows maize and sorghum at 74 % (sorghum takes maize's level: no sorghum nitrogen
+trial) and the bean at none (it fixes its nitrogen). 1 Oct 2026 run, early maize, median, from the stored outlook
+(before these fixes) to no fertiliser: Kapiti 5.30 → 1.37 t/ha, Kiboko 2.92 → 1.12. This forecast is wetter than most
+of the calibration seasons, so the stress is relaxed less than in the median season. The generic
+25 and 50 % levels stay as sensitivity scenarios.
 
 ### Questions for partners (November 2026)
 

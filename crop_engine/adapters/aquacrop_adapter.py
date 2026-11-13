@@ -75,6 +75,11 @@ def irrigation(spec, plant):
     if not spec:
         return None
     spec = dict(spec)
+    start = int(spec.pop("start_stage", 1))
+    if start > 1 and "SMT" in spec:
+        # no irrigation before growth stage `start`: AquaCrop-OSPy's trigger (depletion + the day's demand over TAW
+        # > 1 - SMT/100) passes 1 in a dry seedbed, so an SMT of 0 still irrigated at sowing; -1000 % never triggers
+        spec["SMT"] = [-1000 if i < start - 1 else s for i, s in enumerate(spec["SMT"])]
     das = spec.pop("schedule_das", None)
     if das is not None:
         spec["irrigation_method"] = 3
