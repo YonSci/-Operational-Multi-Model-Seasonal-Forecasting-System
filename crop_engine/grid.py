@@ -77,9 +77,8 @@ CAVEATS = [
     "The normal is the same crop grown in the observed weather of 1993–2025; the terciles are those of 1993–2016.",
     "The forecasts have not been verified against observed yields; the county normals are compared with HarvestStat's "
     "Short Rains maize yields (see the county table).",
-    "Known issue: a crop sown before a long dry spell can show a very low yield although it matured (the crop model "
-    "counts its development from sowing, not from emergence); in this forecast it lowers Meru most. A fix is planned "
-    "for the sites and the grid together.",
+    "A crop sown into dry soil waits for rain to germinate, and its season counts from germination (a correction "
+    "of AquaCrop-OSPy's end of season, November 2026).",
 ]
 
 

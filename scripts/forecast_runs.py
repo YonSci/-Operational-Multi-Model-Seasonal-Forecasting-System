@@ -29,7 +29,7 @@ Output, one small file per run:
 A run already built from the same observations is skipped.
 
 Usage:
-  python scripts/forecast_runs.py                    # the latest run of every source on disk
+  python scripts/forecast_runs.py                    # the latest run of every source, and any run on disk not yet built
   python scripts/forecast_runs.py --all              # every run on disk (rebuilds the archive)
   python scripts/forecast_runs.py --sources s2s-gefs mr-gfs_global --dates 20261101
 """
@@ -302,7 +302,13 @@ def main():
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    todo, nwp_dates = candidates(a.all, a.dates)
+    todo, nwp_dates = candidates(True, a.dates)
+    if not a.all and not a.dates:
+        # the latest run of each source, and any earlier run never built (a missed day filled in afterwards)
+        last = {}
+        for s, r, _ in todo:
+            last[s] = max(last.get(s, r), r)
+        todo = [t for t in todo if t[1] == last[t[0]] or not (OUT / f"{t[0]}_{t[1]:%Y%m%d}.npz").exists()]
     write_nwp_runs([f"{d:%Y%m%d}" for d in nwp_dates])
     b = bs.Blender(BASE)
     todo = [t for t in todo if (not a.sources or t[0] in a.sources) and (a.force or not built(t[0], t[1], b.obs_end))]
