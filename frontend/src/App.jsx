@@ -16,6 +16,7 @@ import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
 import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropOutlookTab'
+import ExplainPanel from './components/ExplainPanel'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1969,6 +1970,21 @@ const fmtStamp = iso => {
   return `${fmtDate(m[1])}, ${m[2]} ${zone}`.trim()
 }
 
+// Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
+// an earlier run, and the map layer on screen
+function AssistantBar({ siteLabel, canCompare, canMap, onOpen }) {
+  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
+              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+  return (
+    <div role="group" aria-label="Forecast assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant:</span>
+      <button type="button" style={b} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this location</button>
+      {canCompare && <button type="button" style={b} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
+      {canMap && <button type="button" style={b} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
+    </div>
+  )
+}
+
 function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit }) {
   const models = Object.entries(modelsData?.models ?? {})
   const base = (model || '').split(' - ')[0]
@@ -2856,6 +2872,21 @@ export default function App() {
   const { data: mrfModels, isLoading: mrfLoading, isError: mrfError } = useMediumRange(isMedium, frSel?.run ?? fcRun)
   const mrfSel = mrfModels?.find(m => m.id === mrfModel) ?? mrfModels?.[0]
   const mrfGridData = useMemo(() => isMedium && mapLayer.variable === 'mrf' ? mrfGrid(mrfSel, mapLayer.layer === 'all' ? 'all' : 'd7') : null, [isMedium, mrfSel, mapLayer.variable, mapLayer.layer])
+  // Forecast assistant: the open explanation ({kind, audience, compare_to}); its parameters follow the current
+  // place, run, method and map layer, so the panel updates when they change
+  const [explain, setExplain] = useState(null)
+  const compareOptions = selectedSeason === 'short_rains' && !isJoined
+    ? SHORT_RAINS_INITS.filter(i => !i.experimental && shortRainsModel(i.init, srDef) !== srModel && hasModel(modelsData, shortRainsModel(i.init, srDef)))
+        .map(i => ({ model: shortRainsModel(i.init, srDef), label: i.initLabel }))
+    : []
+  const curIdx = SHORT_RAINS_INITS.findIndex(i => i.init === selectedInit)
+  const defaultCompare = (compareOptions.filter(o => SHORT_RAINS_INITS.findIndex(i => shortRainsModel(i.init, srDef) === o.model) < curIdx).at(-1) ?? compareOptions[0])?.model
+  const mapModel = isJoined ? frModel : (selectedModel === 'multimodel' && selectedSeason === 'long_rains' ? '' : effectiveModel)
+  const explainRequest = !explain ? null
+    : explain.kind === 'map' ? { kind: 'map', variable: mapLayer.variable, layer: mapLayer.layer, model: mapModel, season: selectedSeason, audience: explain.audience }
+    : explain.kind === 'changes' ? (compareOptions.length ? { kind: 'changes', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                                                             compare_to: compareOptions.some(o => o.model === explain.compare_to) ? explain.compare_to : defaultCompare, audience: explain.audience } : null)
+    : { kind: 'location', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience }
   const mrfChoices = MRF_ORDER.filter(id => frRuns?.some(r => r.source === 'mr-' + id) || mrfModels?.some(m => m.id === id))
     .map(id => ({ id, label: frRuns?.find(r => r.source === 'mr-' + id)?.model_label ?? MRF_LABELS[id] }))
 
@@ -2976,6 +3007,10 @@ export default function App() {
            {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
              <div className="shrink-0"><RunStatusBar modelsData={modelsData} model={effectiveModel} health={health} selectedSeason={selectedSeason} selectedInit={selectedInit}/></div>
            )}
+           {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
+             <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
+                                                    canMap={mapLayer.variable !== 'mrf'} onOpen={kind => setExplain(e => ({ kind, audience: e?.audience ?? 'general', compare_to: e?.compare_to }))}/></div>
+           )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
             {activeTab==='forecast' && country==='kenya' && selectedSeason==='short_rains' && (
@@ -3014,6 +3049,11 @@ export default function App() {
            </div>
           </div>
         </div>
+      )}
+      {explainRequest && (
+        <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
+                      onAudience={audience => setExplain(e => ({ ...e, audience }))}
+                      compareOptions={compareOptions} onCompare={compare_to => setExplain(e => ({ ...e, compare_to }))}/>
       )}
       <BulletinModal
         isOpen={bulletinModalOpen}
