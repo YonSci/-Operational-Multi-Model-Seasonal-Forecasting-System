@@ -37,8 +37,13 @@ def languages():
     return out
 
 
+_DEC_COMMA = re.compile(r"(?<=\d),(?=\d)")
+
+
 def _numbers(texts):
-    return sorted(n.rstrip("0").rstrip(".") if "." in n else n for t in texts for n in _NUM.findall(t or ""))
+    """The numbers of the texts as a sorted list; a decimal comma (0,87) reads as a decimal point."""
+    return sorted(n.rstrip("0").rstrip(".") if "." in n else n
+                  for t in texts for n in _NUM.findall(_DEC_COMMA.sub(".", t or "")))
 
 
 def same_numbers(src: list, dst: list) -> bool:
@@ -70,7 +75,7 @@ def _put(d, path, value):
 
 
 def translate(obj, lang: str):
-    """`obj` (strings nested in dicts and lists) in `lang`, or (None, reason)."""
+    """(`obj` in `lang`, note) on success, the note saying if any sentence stayed in English; or (None, reason)."""
     if lang in (None, "", "en"):
         return obj, None
     langs = glossary()["languages"]
@@ -83,7 +88,8 @@ def translate(obj, lang: str):
     key = (lang, json.dumps(items, ensure_ascii=False))
     with _lock:
         if key in _cache:
-            return json.loads(json.dumps(_cache[key])), None
+            val, note = _cache[key]
+            return json.loads(json.dumps(val)), note
     if not narrate._limiter.allow(int(os.environ.get("ASSISTANT_MAX_CALLS_PER_HOUR", "200"))):
         return None, "The assistant is busy; the text is shown in English."
     g = glossary()
@@ -111,25 +117,39 @@ def translate(obj, lang: str):
     except Exception as e:
         log.warning("translate: %s: %s", type(e).__name__, e)
         return None, "The translation could not be made; the text is shown in English."
-    if len(out) != len(texts) or not all(same_numbers([a], [b]) for a, b in zip(texts, out)):
-        log.warning("translate: numbers changed in translation to %s", lang)
+    if len(out) != len(texts):
+        log.warning("translate: %d texts in, %d out (%s)", len(texts), len(out), lang)
+        return None, "The translation could not be made; the text is shown in English."
+    bad = [k for k, (a, b) in enumerate(zip(texts, out)) if not same_numbers([a], [b])]
+    for k in bad[:3]:                                         # what changed, for the logs
+        log.warning("translate (%s): figures changed: %s -> %s", lang, _numbers([texts[k]]), _numbers([out[k]]))
+    if len(bad) > len(texts) / 2:
         return None, "The translation changed some figures, so the English text is shown."
     res = json.loads(json.dumps(obj))
-    for (path, _), t in zip(items, out):
-        _put(res, path, t)
+    for k, ((path, _), t) in enumerate(zip(items, out)):
+        _put(res, path, texts[k] if k in bad else t)          # a sentence whose figures changed stays in English
+    if bad:
+        res = {"__value__": res, "__kept_english__": len(bad)}
+    note = None
+    if isinstance(res, dict) and "__kept_english__" in res:
+        note = f"{res['__kept_english__']} sentence(s) kept in English because a figure changed in translation."
+        res = res["__value__"]
     with _lock:
-        _cache[key] = res
+        _cache[key] = (res, note)
         while len(_cache) > 512:
             _cache.popitem(last=False)
-    return json.loads(json.dumps(res)), None
+    return json.loads(json.dumps(res)), note
 
 
 def localise(explanation: dict, lang: str) -> dict:
     """An explanation ({sections, ...}) in `lang`, with its translation status."""
     if lang in (None, "", "en"):
         return {**explanation, "language": "en"}
-    sec, err = translate(explanation["sections"], lang)
+    sec, msg = translate(explanation["sections"], lang)
     if sec is None:
-        return {**explanation, "language": "en", "translation_note": err}
-    return {**explanation, "sections": sec, "language": lang, "translation_status": "machine translation, not yet reviewed",
-            "translation_notice": NOTICE.get(lang)}
+        return {**explanation, "language": "en", "translation_note": msg}
+    out = {**explanation, "sections": sec, "language": lang, "translation_status": "machine translation, not yet reviewed",
+           "translation_notice": NOTICE.get(lang)}
+    if msg:
+        out["translation_note"] = msg
+    return out

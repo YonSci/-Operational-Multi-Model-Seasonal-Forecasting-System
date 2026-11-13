@@ -116,3 +116,18 @@ def test_chat_in_swahili(monkeypatch):
     monkeypatch.setattr(chat, "_claude_reply", lambda *a, **k: None)          # the answer is the template's
     out = chat.reply([{"role": "user", "content": "When will the rains start?"}], ctx, language="sw")
     assert out["language"] == "sw" and out["reply"].startswith("[sw] ")
+
+
+def test_decimal_comma_and_partial_fallback(monkeypatch):
+    assert translate.same_numbers(["0.87 of the time"], ["0,87 ya wakati"])
+    # one sentence of three changes a figure: only that one stays in English
+    _enable(monkeypatch, lambda t: "[sw] " + (t.replace("53", "35") if "53" in t else t))
+    out, note = translate.translate({"s": ["Onset 29 Oct.", "End 26 Dec, chance 53%.", "Normal 12 Nov."]}, "sw")
+    assert out["s"][0].startswith("[sw] ") and out["s"][1] == "End 26 Dec, chance 53%." and out["s"][2].startswith("[sw] ")
+    assert note and "1 sentence" in note
+    ex = translate.localise({"sections": {"summary": ["Onset 29 Oct.", "End 26 Dec, chance 53%.", "Normal 12 Nov."]}}, "sw")
+    assert ex["language"] == "sw" and ex["translation_note"]
+    # most sentences change: no translation at all
+    translate._cache.clear()
+    _enable(monkeypatch, lambda t: "[sw] " + t.replace("2", "7"))
+    assert translate.translate({"s": ["Onset 29 Oct.", "End 26 Dec.", "12 Nov."]}, "sw")[0] is None
