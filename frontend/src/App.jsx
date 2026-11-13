@@ -21,6 +21,7 @@ import AssistantChat from './components/AssistantChat'
 import FieldReportPanel from './components/FieldReportPanel'
 import BulletinStudio from './components/BulletinStudio'
 import WatchPanel, { loadWatches, useWatchStatuses } from './components/WatchPanel'
+import ToolsPanel from './components/ToolsPanel'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1985,7 +1986,7 @@ const ATTENTION_LAYERS = {
 }
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts, onTools }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -2004,6 +2005,7 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOp
       <button type="button" style={b} onClick={onStudio} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</button>
       <button type="button" style={b} onClick={onWatches} title="Saved places: did the forecast or the advice change? And the decision calendar">
         My watches{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
+      <button type="button" style={b} onClick={onTools} title="Past seasons like this one, season review, learning, scenario planning, official outlooks">More tools</button>
     </div>
   )
 }
@@ -2902,6 +2904,7 @@ export default function App() {
   const [reportOpen, setReportOpen] = useState(false)
   const [studioOpen, setStudioOpen] = useState(false)
   const [watchOpen, setWatchOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [watchList, setWatchList] = useState(loadWatches)
   const watchStatuses = useWatchStatuses(watchList)
   const watchAlerts = watchStatuses.filter(q => q.data && ['advice_changed', 'needs_review', 'forecast_changed'].includes(q.data.status)).length
@@ -3062,7 +3065,8 @@ export default function App() {
                                                     onReport={() => { setExplain(null); setChatOpen(false); setStudioOpen(false); setWatchOpen(false); setReportOpen(true) }}
                                                     onStudio={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(true) }}
                                                     onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}
-                                                    watchAlerts={watchAlerts}/></div>
+                                                    watchAlerts={watchAlerts}
+                                                    onTools={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3102,6 +3106,10 @@ export default function App() {
            </div>
           </div>
         </div>
+      )}
+      {toolsOpen && (
+        <ToolsPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                    season={selectedSeason} model={effectiveModel} onClose={() => setToolsOpen(false)}/>
       )}
       {watchOpen && (
         <WatchPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}

@@ -312,9 +312,40 @@ def template_chart(rec, audience="general"):
     return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
 
 
+def template_analogues(rec, audience="general"):
+    t = rec["target"]
+    summary = [f"Past seasons most like this one (forecast onset {fdate(t['onset'])}, season {t['season_length_days']:g} days), "
+               f"from {rec['seasons_compared']} observed seasons {rec['years'][0]}-{rec['years'][1]}:"]
+    summary += [f"{a['year']}: onset {fdate(a['onset'])}" + (f", end {fdate(a['cessation'])}" if a.get("cessation") else "")
+                + f", {a['season_length_days']} days." for a in rec["analogues"]]
+    return {"summary": summary, "local_implications": [f"How they were chosen: {rec['how']}."], "cautions": list(rec["caveats"])}
+
+
+def template_season_review(rec, audience="general"):
+    sm = rec["summary"]
+    summary = [f"Onset forecasts for the last {sm['seasons']} seasons at this place: the most likely third was right "
+               f"{sm['most_likely_right']} times; the median was off by {sm['median_abs_error_days']} days in a typical season."]
+    local = [f"{r['year']}: forecast {fdate(r['forecast_median'])}" + (f" (most likely {r['forecast_most_likely']})" if r.get("forecast_most_likely") else "")
+             + f"; observed {fdate(r['observed_onset'])} ({r['observed_third']})." for r in rec["seasons"]]
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
+def template_outlook_comparison(rec, audience="general"):
+    o, sm = rec["official"], rec["summary"]
+    summary = [f"{o['source']} {o['variable']} outlook for the {rec.get('season_label', o['season'])} {o['year']} against the "
+               f"platform: the most likely third agrees in {sm['agree']} of the {sm['comparable']} areas where both have one "
+               f"({sm['areas']} areas compared)."]
+    local = [f"{r['area']}: official " + ", ".join(f"{k} {v}%" for k, v in r["official_pct"].items()) + "; platform "
+             + ", ".join(f"{k} {v}%" for k, v in r["platform_pct"].items())
+             + ("." if r["agree"] else " (they differ)." if r["agree"] is False else " (no clear most likely third in one of them).")
+             for r in rec["rows"]]
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
 TEMPLATES = {"location": template_location, "changes": template_changes, "map": template_map,
              "advisory": template_advisory, "area": template_area, "attention": template_attention,
-             "chart": template_chart}
+             "chart": template_chart, "analogues": template_analogues, "season_review": template_season_review,
+             "outlook_comparison": template_outlook_comparison}
 
 # ---------------------------------------------------------------------------- number checks
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -425,6 +456,12 @@ TASKS = {
             "typical place's skill-weighted chances.",
     "attention": "Explain which areas meet the criterion and how strongly, and what the ranking does and does not "
                  "mean (it is where the forecast shows the condition, not impact or damage).",
+    "analogues": "Explain which past seasons were most like this one and how they turned out; say clearly that "
+                 "analogues are examples, not probabilities.",
+    "season_review": "Review how the onset forecasts did in past seasons at this place, plainly, without overstating "
+                     "what a few seasons show.",
+    "outlook_comparison": "Compare the official outlook with the platform's chances area by area, and explain why "
+                          "they may differ without saying which is right.",
     "chart": "Explain what this chart shows and how to read it, with its figures. If the record says the chart is "
              "illustrative, say so plainly and give no rainfall figures.",
     "advisory": "Write the advisory card's text: the current assessment (summary) and, in local_implications, why "
