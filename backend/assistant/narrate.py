@@ -145,6 +145,15 @@ def template_location(rec, audience="general"):
         local.append("Onset skill here on the validation years: " + ", ".join(parts) + ".")
     if rec.get("no_onset_share_pct"):
         local.append(f"{rec['no_onset_share_pct']}% of members found no onset in the search window.")
+    fr = rec.get("field_reports_nearby")
+    if fr:
+        parts = [f"{b['label'].lower()} {b['reports']}" + (f" (latest {fdate(b['latest_observed'])})" if b.get("latest_observed") else "")
+                 for b in fr["by_type"].values()]
+        ver = sum(b["verified"] for b in fr["by_type"].values())
+        local.append(f"Field reports within {fr['radius_km']:g} km: " + "; ".join(parts) + f"; {ver} verified.")
+        if fr.get("sowing_dates_reported"):
+            sd = fr["sowing_dates_reported"]
+            local.append(f"Reported sowing dates nearby: {fdate(sd['earliest'])} to {fdate(sd['latest'])}.")
     return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
 
 

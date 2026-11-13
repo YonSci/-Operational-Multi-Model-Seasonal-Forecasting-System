@@ -18,6 +18,7 @@ import AboutTab from './components/AboutTab'
 import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropOutlookTab'
 import ExplainPanel from './components/ExplainPanel'
 import AssistantChat from './components/AssistantChat'
+import FieldReportPanel from './components/FieldReportPanel'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1982,7 +1983,7 @@ const ATTENTION_LAYERS = {
 }
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -1997,6 +1998,7 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOp
       <button type="button" style={b} onClick={() => onOpen('chart')} title="What a chart at the selected place shows">Explain a chart</button>
       {canAreas && <button type="button" style={b} onClick={() => onOpen('area')} title="The outlook over a county, region or drawn area">Explain an area</button>}
       {canAreas && <button type="button" style={b} onClick={() => onOpen('attention')} title="Counties or regions ranked on one criterion">Areas needing attention</button>}
+      <button type="button" style={b} onClick={onReport} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</button>
     </div>
   )
 }
@@ -2892,6 +2894,7 @@ export default function App() {
   // place, run, method and map layer, so the panel updates when they change
   const [explain, setExplain] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [drawArea, setDrawArea] = useState(false)
   const [requestedLayer, setRequestedLayer] = useState(null)
   const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
@@ -3044,8 +3047,9 @@ export default function App() {
              <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
                                                     canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
                                                     canAreas={!!effectiveModel}
-                                                    onOpen={kind => { setChatOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
-                                                    onAsk={() => { setExplain(null); setChatOpen(true) }}/></div>
+                                                    onOpen={kind => { setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                                    onAsk={() => { setExplain(null); setReportOpen(false); setChatOpen(true) }}
+                                                    onReport={() => { setExplain(null); setChatOpen(false); setReportOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3085,6 +3089,12 @@ export default function App() {
            </div>
           </div>
         </div>
+      )}
+      {reportOpen && (
+        <FieldReportPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                          context={{ country, season: selectedSeason }} onClose={() => setReportOpen(false)}
+                          onUseSowing={({ crop, sowing_date }) => { setReportOpen(false); setExplain(e => ({ ...e, kind: 'advisory', audience: e?.audience ?? 'general',
+                                                                                                          decision: 'establishment', planted: 'yes', crop, sowing_date })) }}/>
       )}
       {chatOpen && (
         <AssistantChat messages={chatMessages} setMessages={setChatMessages} onClose={() => setChatOpen(false)}
