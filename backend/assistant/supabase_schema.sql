@@ -38,3 +38,27 @@ alter table field_reports enable row level security;
 insert into storage.buckets (id, name, public)
 values ('field-photos', 'field-photos', false)
 on conflict (id) do nothing;
+
+-- Bulletin Studio versions (backend/assistant/bulletins.py): each row is one version with the evidence snapshot
+-- it was written from and the quality check at saving time.
+create table if not exists bulletins (
+  id           uuid primary key default gen_random_uuid(),
+  created_at   timestamptz not null default now(),
+  format       text not null,
+  title        text,
+  season       text,
+  audience     text,
+  length       text,
+  sections     jsonb not null,
+  sms          text,
+  audio_script text,
+  snapshot     jsonb not null,
+  snapshot_id  text,
+  quality      jsonb,
+  version      integer not null default 1,
+  parent_id    uuid references bulletins (id),
+  status       text not null default 'draft',     -- draft | reviewed | published
+  author       text
+);
+create index if not exists bulletins_created on bulletins (created_at desc);
+alter table bulletins enable row level security;
