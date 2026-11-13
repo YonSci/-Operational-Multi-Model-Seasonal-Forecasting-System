@@ -62,3 +62,27 @@ create table if not exists bulletins (
 );
 create index if not exists bulletins_created on bulletins (created_at desc);
 alter table bulletins enable row level security;
+
+-- Watches ("Did the advice change?", backend/assistant/watches.py): anonymous; only the hash of each watch's key
+-- is stored, the key itself stays in the user's browser.
+create table if not exists watches (
+  id              uuid primary key default gen_random_uuid(),
+  created_at      timestamptz not null default now(),
+  key_hash        text not null,
+  name            text,
+  lat             double precision not null,
+  lon             double precision not null,
+  place_name      text,
+  season          text not null,
+  model           text not null,
+  crop            text,
+  planted         text,
+  sowing_date     date,
+  decision        text,
+  objective       text,
+  thresholds      jsonb,
+  baseline        jsonb,
+  baseline_at     timestamptz,
+  last_checked_at timestamptz
+);
+alter table watches enable row level security;
