@@ -50,6 +50,10 @@ ECMWF_DIR = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / f"ecmwf_{dt.date(20
 OUT_DIR = BASE_DIR / "outputs" / f"ecmwf_{dt.date(2000, INIT_MONTH, 1):%b}_obs_latest".lower()
 WIN_START, WIN_END = 244, 365                      # Short Rains window (01 Sep – 31 Dec)
 API = "http://127.0.0.1:8765"
+# forecast runs: run dates of the last GAP_DAYS days the update missed are filled in (none before FIRST_RUN)
+GAP_DAYS = 6
+FIRST_RUN = dt.date(2026, 10, 25)
+NWP_MODELS = ["ecmwf_ifs025", "ecmwf_ens_median", "gfs_global", "gem_global", "icon_global", "ukmo_global_deterministic_10km"]
 
 
 def log(msg):
@@ -155,13 +159,28 @@ def run_seasonal(obs_end, force):
 def update_forecast_runs(env):
     """Forecast runs joining weather forecasts to the seasonal forecast, one per model and run date, with every
     onset / cessation method (forecast_runs.py → backend/forecast_runs/): ECMWF ENS + extended range and NOAA GEFS
-    35-day (Sub-seasonal view), and each medium-range model (Medium-range view). Only the latest run of each model
-    is built; a run already built from the same observations is skipped."""
-    if subprocess.run([PY, str(BASE_DIR / "scripts" / "fetch_ecmwf_extended.py")], env=env).returncode:
+    35-day (Sub-seasonal view), and each medium-range model (Medium-range view). The latest run of each model is
+    built, and the runs of days the update missed (PC off, a source down) are filled in afterwards: ENS from
+    ECMWF's AWS mirror, the medium-range models from Open-Meteo's archive of past runs, GEFS from dynamical.org."""
+    scripts = BASE_DIR / "scripts"
+    if subprocess.run([PY, str(scripts / "fetch_ecmwf_extended.py")], env=env).returncode:
         log("extended range: download failed, using the runs already on disk")
-    if subprocess.run([PY, str(BASE_DIR / "scripts" / "fetch_gefs_35day.py")], env=env).returncode:
+    for back in range(1, GAP_DAYS + 1):
+        d = dt.date.today() - dt.timedelta(days=back)
+        if d < FIRST_RUN:
+            continue
+        ens, nwp = BASE_DIR / "data" / "ecmwf_ens" / f"ens_tp_{d:%Y%m%d}00_kenya.nc", BASE_DIR / "data" / "nwp" / f"nwp_{d:%Y%m%d}.csv"
+        if not ens.exists():
+            log(f"ENS {d}: missed; fetching it now")
+            subprocess.run([PY, str(scripts / "fetch_ecmwf_ens.py"), "--date", f"{d:%Y%m%d}"], env=env)
+        have = set(pd.read_csv(nwp, usecols=["model"]).model) if nwp.exists() else set()
+        missing = [m for m in NWP_MODELS if m not in have]
+        if missing:
+            log(f"medium-range {d}: missed {', '.join(missing)}; filling from the archive of past runs")
+            subprocess.run([PY, str(scripts / "fetch_nwp_direct.py"), "--archive", "--date", f"{d:%Y%m%d}", "--models", *missing], env=env)
+    if subprocess.run([PY, str(scripts / "fetch_gefs_35day.py"), "--days-back", str(GAP_DAYS)], env=env).returncode:
         log("GEFS 35-day: download failed, using the runs already on disk")
-    subprocess.run([PY, str(BASE_DIR / "scripts" / "forecast_runs.py")], check=True, env=env)
+    subprocess.run([PY, str(scripts / "forecast_runs.py")], check=True, env=env)
 
 
 CROP_MINUTES = 240   # the crop outlook's time limit (crop_engine.run_all --minutes)

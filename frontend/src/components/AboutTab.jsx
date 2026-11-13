@@ -1037,6 +1037,12 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
                   3 Nov 2026 the ECMWF ENS + extended-range run (Dunning and Agri rules only) was a separate experimental run; the archive was rebuilt
                   from the forecasts on disk with the observations of the time (to 25 Oct).
                 </div>
+                <div style={{fontSize:14, color:'var(--text-muted)', lineHeight:1.5, marginTop:6}}>
+                  A day the daily update misses is filled in afterwards, up to six days back: ECMWF ENS from ECMWF’s cloud copies of its open data,
+                  GEFS from dynamical.org, and the medium-range models from Open-Meteo’s archive of past runs (each day’s 00 UTC run as issued; the
+                  value at the 0.5° cell centre rather than the mean over the cell, so slightly different from a direct download). Filled this way:
+                  27, 29 and 30 Oct for the medium-range models, and UKMO Global on 1 Nov.
+                </div>
             </Disclosure>
 
             <Disclosure title="Probabilities, skill and missing dates" scope="Kenya · Short Rains · CAL 1993–2016 · VAL 2017–2024">
@@ -1323,8 +1329,8 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['Soil', 'Layers from texture (sand, clay, organic matter; SoilGrids) through the package’s pedotransfer functions.'],
               ['Initial soil water', 'θ = θwp + f · (θfc − θwp) at every depth on 1 Aug, with f from the ERA5-Land soil water, as in the FAO water balance.'],
               ['Crop', 'AquaCrop’s thermal-time crop files MaizeGDD, SorghumGDD and DryBeanGDD, with the adjustments below.'],
-              ['Management', 'The outlook is rain-fed, on bare soil with free surface runoff and no groundwater table. The management scenarios add supplementary or full irrigation, mulch and tied ridges (no surface runoff) through AquaCrop’s own irrigation and field-management options (see Management scenarios below).'],
-              ['CO₂', 'The package default: the Mauna Loa record and its projection, at the simulated year’s concentration.'],
+              ['Management', 'The outlook is rain-fed, on bare soil with free surface runoff and no groundwater table. The management scenarios add supplementary or full irrigation, mulch and tied ridges (no surface runoff) through AquaCrop’s own irrigation and field-management options (see Management scenarios below). They also add bunds, a water table, other irrigation methods, and FAO AquaCrop 7’s soil fertility stress, weeds and salinity, ported into AquaCrop-OSPy (scenarios only).'],
+              ['CO₂', 'The simulated year’s concentration: NOAA’s global annual mean to 2025 (425.6 ppm in 2025), SSP2-4.5 after (crop_engine/data/co2_annual.csv), in place of the package’s Mauna Loa record with the old A1B projection (418 ppm in 2020 against the observed 412.5).'],
             ]}/>
 
             <h4 className="about-subhead" style={{marginTop:24}}>Daily processes computed by AquaCrop</h4>
@@ -1370,8 +1376,9 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
 
             <h4 className="about-subhead">Not represented</h4>
             <p style={{fontSize:16,color:'var(--text-body)',lineHeight:1.7,margin:0}}>
-              Groundwater and capillary rise, salinity and weeds are not used, and irrigation, mulch and runoff control only in the scenarios. Soil fertility
-              stress is not modelled by AquaCrop-OSPy 3.1.0; its effect is absorbed in the calibrated CCx and HI0. Radiation and humidity act only
+              In the outlook, groundwater and capillary rise, salinity, weeds and soil fertility stress are not used, and irrigation, mulch and runoff
+              control only in the scenarios. AquaCrop-OSPy 3.1.0 has no soil fertility stress, weeds or salinity: they are ported from FAO AquaCrop 7
+              for the scenarios only, at assumed levels; in the outlook, fertility's effect is absorbed in the calibrated CCx and HI0. Radiation and humidity act only
               through ET0, in the soil evaporation, transpiration and Tr/ET0 terms.
             </p>
           </S>
@@ -1536,6 +1543,12 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
               ['', 'Full irrigation', 'Method 1 with SMT 70 % throughout and no seasonal cap: the yield with water no longer limiting.'],
               ['', 'Mulch, 50 % residue cover', 'FieldMngt: mulches on 50 % of the surface, soil evaporation there × 0.5.'],
               ['', 'Tied ridges or pits (no surface runoff)', 'FieldMngt with surface runoff fully inhibited: the rain infiltrates where it falls, as tied ridges or zai pits make it. Not AquaCrop’s bunds, which pond the rain over the whole field like a rice paddy: the waterlogged topsoil stopped most members’ crops at Kapiti, Kiboko and Livemo.'],
+              ['', 'Bunds 10 cm high', 'FieldMngt bunds: the rain held on the field up to 10 cm (it can waterlog the crop; 20 cm stopped most crops at Kapiti, Kiboko and Livemo). AquaCrop only.'],
+              ['Irrigation method', 'Every 7 days; fixed schedule; net requirement; drip 3 mm a day', 'IrrigationManagement methods 2 to 5: to field capacity every 7 days (up to 30 mm); 25 mm at sowing and 30 mm at 20, 40 and 60 days after each member’s sowing; the net water that keeps the root zone above 60 % of its available water (counted, not applied); a constant 3 mm a day. AquaCrop only.'],
+              ['Groundwater', 'Water table at 1.5 m, 2.5 m', 'GroundWater at a constant depth: capillary rise into the root zone, field capacity raised above the table. AquaCrop only.'],
+              ['Soil fertility', 'Stress 25 %, 50 %', 'FAO AquaCrop 7’s soil fertility stress, ported: slower and smaller canopy, lower water productivity, a mid-season canopy decline, readjusted daily from the biomass so far (AquaCrop’s generic crop response). With water not limiting, 25 % and 50 % give 0.79 and 0.52 of the unstressed biomass, as AquaCrop’s own targets (0.78, 0.52). AquaCrop only.'],
+              ['Weeds', '20 %, 50 % of the canopy', 'FAO AquaCrop 7’s weeds, ported: the total canopy grows and transpires; the crop gets its share of the transpiration. AquaCrop only.'],
+              ['Salinity', 'Saline soil (ECe 4 dS/m); saline irrigation water (ECw 2 dS/m, full irrigation); saline water table at 1.5 m (ECgw 4 dS/m)', 'FAO AquaCrop 7’s salinity, ported: salt carried with the soil water, the root zone’s salinity acting on the canopy and the stomata; crop tolerance from FAO 29 (maize 1.7 to 10, sorghum 6.8 to 13, bean 1.0 to 6.3 dS/m). Irrigated maize on a saline soil of 2, 4 and 6 dS/m yields 0.95, 0.76 and 0.51 of a fresh soil (FAO 29: 0.96, 0.72, 0.48). One season from that start: salt builds up over years. AquaCrop only.'],
             ]}/>
             <h4 className="about-subhead" style={{marginTop:24}}>First results: early maize, FAO onset sowing, 1 Oct 2026 run (observations to 5 Nov)</h4>
             <Tbl head={['Site', 'Outlook (rain-fed)', 'Supplementary irrigation, 100 mm', 'Full irrigation', 'Mulch', 'Tied ridges or pits']} rows={[
