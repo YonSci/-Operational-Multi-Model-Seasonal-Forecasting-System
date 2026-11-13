@@ -138,3 +138,22 @@ def test_advisory_endpoint():
         j = r.json()
         assert j["evidence"]["kind"] == "advisory" and j["evidence"]["options"]
         assert j["evidence"]["profile"]["crop"] == "sorghum"
+
+
+def test_scenarios_of_another_configuration_are_not_used(monkeypatch):
+    real = crop_data.load
+    scen = real("scenarios.json")
+    stale = {**scen, "meta": {**scen["meta"], "config_hash": "not-the-current-one"}}
+    monkeypatch.setattr(crop_data, "load", lambda n: stale if n == "scenarios.json" else
+                        ({"seasonal": {"current_config": "current-hash"}} if n == "skill.json" else real(n)))
+    water = advisory.card(*KIBOKO, "short_rains", FAO, {"decision": "water"}, today=EARLY)
+    assert water["options"] == []
+    assert any("being rebuilt" in c for c in water["caveats"])
+    choice = advisory.card(*KIBOKO, "short_rains", FAO, {"decision": "crop_choice"}, today=EARLY)
+    assert choice["options"]                                   # crops sown by the rule come from the outlook itself
+
+
+def test_scenarios_check():
+    run = {"id": "seasonal_20261001"}
+    assert advisory.scenarios_current({"meta": {"id": "seasonal_20261001"}}, run) in (True, False)
+    assert advisory.scenarios_current({"meta": {"id": "seasonal_20260901"}}, run) is False
