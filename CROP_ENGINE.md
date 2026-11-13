@@ -240,6 +240,86 @@ outlook's most sensitive inputs. At Kapiti most members sow late or not
 at all on the rule, so a calendar date sows a crop the rule does not: the rule waits for an onset that, in these
 members, comes late.
 
+### More of AquaCrop: CO2, water tables, bunds, irrigation methods, fertility, weeds, salinity (November 2026)
+
+**CO2, in every AquaCrop run.** AquaCrop-OSPy's bundled series is Mauna Loa to 2009 and the IPCC A1B projection after,
+which puts 2020 at 418 ppm (observed 412.5) and 2026 at 435. The adapter now gives AquaCrop `crop_engine/data/
+co2_annual.csv`: Mauna Loa 1959–1978, NOAA GML's global annual mean 1979–2025 (2025: 425.6 ppm), SSP2-4.5 from 2026
+joined to 2025 (2026: 428.6). The change is small (irrigated early maize −0.25 %), but it is in the outlook, so the
+outlook's configuration hash includes the file and every AquaCrop normal and run is rebuilt once.
+
+**AquaCrop-OSPy's own options, now used** (scenarios, AquaCrop only; `adapters/aquacrop_adapter.py`):
+
+- **Water table** at 1.5 or 2.5 m (`GroundWater`, constant depth): capillary rise into the root zone and the field
+  capacity above the table raised, as AquaCrop does. AquaCrop-OSPy 3.1.0's capillary rise asserted on the SoilGrids
+  profiles (their 0–5 cm layer is thinner than a 10 cm compartment) and every member errored; `patch_capillary_rise`
+  passes the check for a profile with no layer below its 2 m (the code it guards is marked broken in AquaCrop-OSPy
+  and has nothing to do then).
+- **Bunds** 10 cm high (`FieldMngt` bunds): the rain held on the field. The 20 cm of the first trial waterlogged
+  the crop at most sites (the *field* note in `management.py`).
+- **Irrigation methods 2–5**: every 7 days to field capacity (up to 30 mm); a fixed schedule from each member's
+  sowing (25 mm at sowing, 30 mm at 20, 40 and 60 days); the **net irrigation requirement** (the root zone kept at
+  60 % of its available water, the water counted, not applied: what a crop would need); drip at 3 mm a day.
+
+**FAO AquaCrop 7's soil fertility stress, weeds and salinity, ported** (`adapters/aquacrop_stress.py`). AquaCrop-OSPy
+3.1.0 has none of the three. They are ported from AquaCrop 7.3's Fortran (KU Leuven, BSD-3) into AquaCrop-OSPy's
+daily step, by wrapping seven of its functions; without a scenario's setting the wrappers do nothing, so the
+outlook is unchanged. Each follows AquaCrop's equations, in growing degree days as AquaCrop's GDD mode:
+
+- **Soil fertility stress** (a level in %, AquaCrop's semi-quantitative approach): smaller canopy growth and maximum,
+  lower water productivity, a canopy that declines through mid-season, the time to full canopy recomputed; the WP
+  reduction builds up with the season's transpiration; each day the level is readjusted from the crop's biomass so
+  far, so a season already short of water is not penalised twice. Response shapes: AquaCrop's generic crop. The
+  stress-biomass relationship this needs is AquaCrop's, from a reference season run in Python over the member's own
+  temperatures. **Check**: with water not limiting, the season's biomass lands on AquaCrop's own target for the level
+  (10 %: 0.93 of the unstressed biomass against 0.93; 25 %: 0.79 / 0.78; 50 %: 0.52 / 0.52; 75 %: 0.22 / 0.25).
+- **Weeds** (their share of the canopy at closure, %): the total canopy grows (AquaCrop's multiplier on CCx, CCo,
+  CDC; none under fertility stress, as AquaCrop), transpires and shades the soil; the crop gets its share of the
+  transpiration. Irrigated early maize: 10, 25, 50 % weeds → 0.93, 0.82, 0.61 of the weed-free yield.
+- **Salinity** (dS/m; the soil's initial ECe, the irrigation water's ECw, the water table's ECgw): salt per soil
+  compartment carried by AquaCrop-OSPy's own drainage and capillary rise, with AquaCrop's diffusion between
+  compartments; the root zone's ECe and soil-water ECsw act through AquaCrop's canopy and stomatal responses.
+  Tolerance (ECe at which yield starts to fall, and at which it is nil): FAO 29 (Ayers and Westcot 1985; Maas and
+  Hoffman 1977): maize 1.7–10, sorghum 6.8–13, bean 1.0–6.3. **Check** (irrigated maize, a saline soil): 2, 4, 6 dS/m
+  → 0.95, 0.76, 0.51 of the yield on a fresh soil, against FAO 29's 0.96, 0.72, 0.48. At 8 dS/m the crop collapses
+  (0.01; FAO 29: 0.24): AquaCrop's stomata close fully once the soil water's salinity, which rises as the soil dries
+  below field capacity, passes the crop's limit. Saline irrigation water acts slowly from a fresh profile (ECw 4:
+  0.97 in one season): the salt builds up over years (FAO 29's ECe ≈ 1.5 ECw is that steady state).
+- **Simplified from AquaCrop 7**: no salt cells inside a compartment (incoming water mixes with all of it, so ECe
+  answers each rain or irrigation faster than AquaCrop's, alike in the long run), no salt moved up with
+  evaporation; the stomatal salinity effect is applied to the root zone as a whole, not compartment by compartment.
+  AquaCrop's quirks are kept where they are its behaviour (no salinity effect on the first canopy day; the time to
+  full canopy recomputed for fertility only; no weed expansion under fertility stress).
+
+The levels in the scenarios (fertility stress 25 and 50 %, weeds 20 and 50 %, saline soil 4 dS/m, saline
+irrigation water 2 dS/m, saline water table 4 dS/m at 1.5 m) are assumptions to show what each would change; none
+is measured at any site. WOFOST and DSSAT leave every one of these scenarios out (`management.aquacrop_only`).
+
+**First run** (sandbox, 1 Oct 2026 SEAS5 run, FAO onset sowing, 6 sites × 4 varieties × 25 members; 15 scenarios
+in 15 min on three workers). Compared with the stored outlook, which predates #71 and the CO2 series, so Genco Tana
+River's gains below are mostly #71's late-germination fix; the first daily run after merging gives like-for-like
+figures. Median yield over all members:
+
+- **Bunds 10 cm** still waterlog the crop where rain ponds on clay: early maize at Kiboko 0.2, Kapiti 0.0 and
+  Livemo 0.0 t/ha (outlook 2.9, 5.3, 1.0); they help where the soil drains (El Karama 1.2 → 1.6).
+- **Irrigation methods**: every 7 days and the net requirement reach full irrigation's yields; the net requirement
+  counts 142–330 mm of early maize's water against full irrigation's 212–397 mm applied; drip at 3 mm a day comes
+  close with 276–384 mm; the fixed 115 mm schedule ranges from 0.7 t/ha at Maralal to 6.9 at Kapiti.
+- **Water table at 1.5 m**: early maize at Kapiti 5.3 → 6.2 t/ha, Livemo 1.0 → 1.4; nothing at Kiboko and El
+  Karama, whose clay carries little capillary rise (a season's rise at Kiboko is about a sixth of a loam's).
+- **Soil fertility stress** 25 / 50 %: early maize at Kapiti 5.3 / 3.5, Kiboko 2.9 / 2.5. Where water is short, a
+  smaller canopy can leave more water for the grain and the yield rises (Livemo 1.0 → 1.5 at 50 %): AquaCrop's
+  canopy-water trade-off, not an error.
+- **Weeds** 20 / 50 %: Kapiti 4.6 / 3.1, Kiboko 2.4 / 1.7.
+- **Salinity**: a saline soil (ECe 4) costs the bean most (Kiboko 1.3 → 0.7, Kapiti 2.0 → 1.5; FAO 29's bean
+  threshold is 1 dS/m), sorghum least; saline irrigation water (ECw 2) and a saline water table change nothing in
+  one season (the salt builds up over years).
+
+AquaCrop-OSPy's profile maps compartments to soil layers by depth, and with the SoilGrids layers the compartments
+of 1–2 m take the 60–100 cm layer's texture, not the 100–200 cm layer's: a quirk of the package that affects every
+AquaCrop run alike (the two layers' textures are close at the sites: Kiboko 37/44 against 38/43 % sand/clay), left
+as is here.
+
 ### Questions for partners (November 2026)
 
 The water-management amounts above are the engine's assumptions. A questionnaire to the managers of the six sites
@@ -706,7 +786,8 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
 ## Limitations
 
 - Yields are **water-limited**: no nutrient stress, pests, diseases, weeds or management losses. They are an upper
-  bound for smallholder fields; the plant densities are the recommended ones, not farmers' (often lower).
+  bound for smallholder fields; the plant densities are the recommended ones, not farmers' (often lower). The
+  scenarios show what soil fertility stress, weeds and salinity would take off, at assumed levels (AquaCrop only).
 - Forecast temperature is SEAS5's daily maximum and minimum with a mean-bias correction only (no variance or
   quantile correction); radiation, humidity and wind are not forecast: ET0 scales its climatology by temperature.
 - Temperature members come from SEAS5 also on the days the rain comes from a sub-seasonal or deterministic model.

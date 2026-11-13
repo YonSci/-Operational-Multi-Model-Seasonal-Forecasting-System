@@ -98,14 +98,15 @@ def load_varieties(only=None):
 
 
 def config_hash(rules, sites):
-    """Changes when the varieties, rules, sites, season end, AquaCrop version or the adapter change: results made
-    before are rebuilt."""
+    """Changes when the varieties, rules, sites, season end, AquaCrop version, the adapter or its CO2 series change:
+    results made before are rebuilt."""
     h = hashlib.sha1(C.VARIETIES_FILE.read_bytes())
     h.update(json.dumps(sorted(rules)).encode())
     h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
     h.update(ENGINE.encode())
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(aq.__file__).read_bytes())
+    h.update(aq.CO2_FILE.read_bytes())
     h.update(Path(pl.__file__).read_bytes())
     return h.hexdigest()[:12]
 
