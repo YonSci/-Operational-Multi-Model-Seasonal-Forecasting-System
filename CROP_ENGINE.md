@@ -735,6 +735,21 @@ assumed one (maize 15 %, sorghum 12.5 %, bean 13 %), flagged. Each site's county
 boundaries. Each run of the build compares the engine's observed-weather benchmark with the county Short Rains
 yields, year by year, and with the trials at the sites.
 
+**Two corrections to the sources** (November 2026, `yields/observations.py`):
+
+- **Day and month order.** The soil-health compilation writes most dates day first, but some studies month first,
+  sometimes within one row: Bungoma "3/12/2010" with a Long Rains harvest on "14/06/2010" is 12 Mar, not 3 Dec.
+  Day first is kept unless it contradicts the row's own harvest date (a season of 45–250 days) or its stated season
+  (LR sown Feb–Jul, SR Aug–Jan); then the first reading that agrees is taken, both dates in one order first
+  (Machakos "4/08/2015" to "7/12/2015", Long Rains: 8 Apr to 12 Jul). 672 sowing dates change (396 bean, 276
+  maize: Machakos and Murang'a 2015, Bungoma, Butere, Kakamega and Bondo 2010, Bungoma and Migori 2012), noted in
+  the row; 33 rows that no reading explains (a harvest before the sowing either way) lose their dates. Before, 618
+  of the 3,346 rows with both dates had a season shorter than 45 or longer than 250 days; now none of 2,774 has.
+  The Machakos 2015 nitrogen trial, read as sown on 4 Aug into dry soil, is a Long Rains trial sown on 8 Apr.
+- **N2Africa twice.** The compilation carries the N2Africa trials again (doi 10.25502/VMVB-SN23/D: the same 624
+  plots and yields, some dates with day and month swapped); its copies are dropped (matched on crop, year and
+  yield), and the trials are kept once, from N2Africa's own files.
+
 First comparison (November 2026):
 
 - **Too many failed seasons.** 40–100 % of the sown benchmark seasons do not mature: sorghum at Kiboko, for
@@ -1163,7 +1178,7 @@ file (its MINIMA and MAXIMA lines). A target out of reach there is reported, not
 | Early maize | KY0018 Katumani Composite B-II, P1 125 → 96 | 120 → 115 (115) | G2, G3 × 1.48, as medium maize |
 | Medium maize | KY0010 H512, P1 333 → 299 | 146 → 142 (142) | G2, G3 × 1.48: 3.78 → 7.76 t/ha (Duma 43, 7.76) |
 | Sorghum | IB0026 CSH-1, P1 and P5 at DSSAT's minimum | 151 → 109 (100: not reached) | G2 × 0.86: 6.12 → 4.95 t/ha (AquaCrop's 4.97) |
-| Dry bean | IB0014 Canadian Wonder, phases × 1.04 | 73 → 75 (75) | DSSAT's own (no trial) |
+| Dry bean | IB0014 Canadian Wonder, phases × 1.04 | 73 → 75 (75) | DSSAT's own; checked against 14 bush-bean trial-seasons (*DSSAT's bean against Kenyan bean trials*) |
 
 - **Phenology**: the maturity_days at 21 °C with no water stress, as the other engines'. Maize: only the juvenile
   phase P1 is fitted. DSSAT's early and late Kenyan cultivars differ mostly there, and scaling P5 as well would put
@@ -1178,6 +1193,44 @@ file (its MINIMA and MAXIMA lines). A target out of reach there is reported, not
   composite and 4.5 for the IITA 2013 median (upper bounds, as for WOFOST).
 - **Sorghum yield**: matched to AquaCrop's no-water-stress yield at Kiboko for the Short Rains 2012 sowings, as
   WOFOST's was (*Sorghum*).
+
+### DSSAT's bean against Kenyan bean trials (November 2026, `crop_engine/calibration/bean.py`)
+
+`python -m crop_engine.calibration.bean` grows DSSAT's bean, as the outlook grows it, at the bean trials of the
+yields database: sown on each trial's date, in that season's weather at the trial (CHIRPS rain of its cell, ERA5-Land
+temperature, radiation, humidity and wind at the point, fetched for the trials' window only and cached in
+`data/crop_engine/bean_trials/`), on its cell's SoilGrids profile, from 60 days before sowing with half the soil's
+available water. Plots with a sowing day, coordinates and a season within 1993–2025, three or more per trial-season,
+grouped by study, place and sowing date: **14 bush-bean trial-seasons (732 plots, 9 places, Long and Short Rains
+2010–2011)** in Busia, Siaya, Kakamega, Bungoma and Migori. Climbing beans (N2Africa's CB experiments; Kenya Tamu
+MAC 34, Kenya Mavuno MAC 64 and the Rwandan climbers) and plots with no cultivar are grown as context only: DSSAT's
+Canadian Wonder is a bush bean. Kenya Umoja (AFR 708) is a bush bean, as N2Africa's BB experiments class it.
+
+**The test, set before the runs.** These are farmers' fields and on-farm trials, limited by phosphorus, diseases
+and pests as well as water, so they bound the model from below only: a model without those limits should yield at
+least what each trial-season's best plots yielded (their 90th percentile). The yield level is kept if it does so in
+at least 75 % of the trial-seasons. (`outputs/crop_engine/calibration/dssat/bean.json`, `bean_trials.csv`.)
+
+| Bush bean, 14 trial-seasons | Plots | DSSAT |
+|---|---|---|
+| Yield, median of the trial-seasons | 0.49 t/ha (best plots 0.84; the highest plot 2.2) | 4.03 t/ha water-limited; 4.11 without water stress; 3.38 nitrogen-limited (fixing, no fertiliser) |
+| At or above the best plots | | **14 of 14: kept** |
+| Seasons ranked (Spearman, plots' median) | | 0.06 |
+| Days to 50 % flowering (N2Africa, 4 trials) | 30–40 | 2.5 days earlier on average |
+| Days to maturity (N2Africa, 4 trials) | 79–93 | 17 days earlier on average (67–74) |
+
+- **The level passes the only test these plots allow, and it is a weak one.** DSSAT is 4–5 times the plots, and
+  near its own potential in most seasons (western Kenya was seldom short of water: 1 of 14 seasons, Bondo SR 2010,
+  lost half its yield to drought), so the test cannot show the level is too high; the gap is phosphorus, disease
+  and management, which no model of the engine represents. The highest bush-bean plot (2.2 t/ha) is about half of
+  DSSAT's 4.1 t/ha without water stress. **Still open: a well-managed, well-watered bush-bean trial** would test
+  the level from above.
+- **No ranking.** DSSAT does not rank the trial-seasons (0.06): the plots' year-to-year differences are not water.
+- **Phenology.** Flowering matches. Maturity is 17 days earlier than Kenya Umoja's and the KK lines' in western Kenya
+  (N2Africa's trials at about 1,500 m): the class is the 75-day KAT type of the eastern drylands (KAT B1, B9, X56), not these mid-altitude western
+  varieties, so it is not refitted.
+- **Starting water.** A quarter or three quarters of the available water instead of half changes a trial-season's
+  yield by at most 0.36 t/ha (the bush median 4.06 and 4.04 against 4.03).
 
 ### DSSAT against AquaCrop and WOFOST (November 2026, `compare_engines --engine dssat`)
 
@@ -1277,25 +1330,83 @@ the observed Short Rains 1993–2016 at Kiboko and Kapiti; 162 kg/ha of mineral 
 season), which cropped dryland fields do not. The trials of the yields database give about 0.6 (the yield without
 nitrogen over the yield with 45–75 kg N/ha: the median of 24 Kenyan trial-seasons 0.63, the 8 in the east 0.64, the
 dryland Short Rains seasons of Machang'a 2005 and 2006 and Machakos 2015 0.57–0.59). The factor on the organic
-nitrogen gives 1.00 at 1, 0.89 at 0.25, 0.74 at 0.12 and **0.67 at 0.06**, the fit's lower bound, adopted
-(`dssat_cultivars.yaml` `soil`): below it the starting mineral nitrogen sets the floor. A first, regional
-calibration: it says DSSAT's organic matter, started from SoilGrids carbon, is far more active than these fields',
-and the fields themselves are not measured. The Machakos 2015 trial nearest the sites (sown 4 Aug into dry soil:
-DSSAT's crop does not establish) could not be grown as reported.
+nitrogen gives 1.00 at 1, 0.89 at 0.25, 0.74 at 0.12 and 0.67 at 0.06, the fit's lower bound, first adopted:
+below it the starting mineral nitrogen (3 ppm nitrate, 1 ppm ammonium in the top 30 cm, half below) set the floor.
 
-First result (the 1 Oct 2026 forecast, FAO onset): early maize at Kiboko yields if sown 2.5 t/ha without
+**Refitted with the starting mineral nitrogen halved** (November 2026). The Kiboko trial (*The sites' own fields*
+below) is fitted only with half the default starting nitrogen or less, so the regional start is halved (1.5 ppm
+nitrate, 0.5 ppm ammonium; `dssat_cultivars.yaml` `soil`) and the organic factor fitted again
+(`--nitrogen --initial-scale 0.5`, 48 observed seasons at Kiboko and Kapiti): the ratio is 0.95 at 0.5, 0.71 at
+0.25, 0.42 at 0.12, 0.26 at 0.06 and 0.19 at 0.03, and **0.20** gives 0.628 against 0.62, inside the range. The
+first fit's floor was almost all the starting nitrogen: in these dry soils little organic nitrogen mineralises in
+a season, so the pool at sowing decides the unfertilised yield, and it is the least known of the soil's inputs
+(no site measures it). The organic factor (0.20 of SoilGrids' carbon / 10) still says a cropped dryland field's
+organic matter is far less active than DSSAT's default. The Machakos 2015 trial, read as sown on 4 Aug before, is
+a Long Rains trial sown on 8 Apr (*Yield data*), now grown below.
+
+First result (the 1 Oct 2026 forecast, FAO onset, with the first fit): early maize at Kiboko yields if sown 2.5 t/ha without
 fertiliser, 3.5 with 25 and 4.3 with 50 kg N/ha, against 4.7 with no nitrogen limit; sorghum 1.2, 1.8, 2.5 against
 2.7; the bean, which fixes its nitrogen, 1.42 to 1.51 against 1.54. Kapiti is alike (maize 2.7, 3.8, 4.6 against
 5.3). The chance of failure does not change with nitrogen: in these models a failure is a water failure.
 
-**Rates and soil per site.** The levels grown and the organic-nitrogen factor are in `dssat_cultivars.yaml`
-(`nitrogen` and `soil`), each with a `sites` table for the rates and soil a site's managers report (empty until
-then: every site takes the assumed levels and the regional factor; `nitrogen.json`'s meta lists which sites have
-their own). **The nitrogen-limited normal** (`climatology_dssat_n.json`): the benchmark's observed seasons grown at
+**Rates and soil per site.** The levels grown and the soil nitrogen (organic factor, starting mineral nitrogen)
+are in `dssat_cultivars.yaml` (`nitrogen` and `soil`), each with a `sites` table: the rates a site's managers report
+(none yet) and a site's own soil nitrogen (Kiboko, from its trial; the others take the regional values);
+`nitrogen.json`'s meta lists which sites have their own. **The nitrogen-limited normal** (`climatology_dssat_n.json`): the benchmark's observed seasons grown at
 each level, rebuilt when DSSAT's configuration or the levels change; each level's outlook is compared with the
 same level in the observed weather (its chance of below / above normal), not with the water-limited normal.
 **Its hindcast**: `python -m crop_engine.hindcast --engine dssat --nitrogen n0` (or `n25`, `n50`) scores the
 1993–2016 forecasts at that level against that normal (`hindcast_scores_dssat_n0.json`).
+
+**The sites' own fields** (November 2026, `python -m crop_engine.calibration.dssat --nitrogen-sites`,
+`outputs/crop_engine/calibration/dssat/nitrogen_sites.json`). Two nitrogen trials of the yields database lie on or
+beside a monitored site, and each is grown in its own season to fit that site's soil nitrogen to its measured
+response (the yield at each rate relative to the trial's, so the trial's own yield level does not enter):
+
+- **KALRO Kiboko, 2013, irrigated**: 0, 40, 80 and 160 kg N/ha with 20 kg P/ha (Kenya soil health compilation:
+  doi 10.7910/DVN/SOAWL6 and its Dryad copy 10.5061/dryad.j3tx95xhc, whose yields differ but whose response
+  agrees). Relative to 160 kg N/ha: **0.22, 0.51 and 0.80** (1.8, 3.5, 6.2 and 7.2 t/ha in one copy). Water does
+  not limit it, so the response is the field's own nitrogen. Grown as medium maize, sown every 14 days in Jun–Jul
+  2013 (the dry season; the date is not reported), automatic irrigation, the outlook's urea split. Over a grid of
+  the organic factor (0.01–0.5) and the starting mineral nitrogen (0–1 × 3 ppm nitrate and 1 ppm ammonium): a
+  **ridge**, not a point: organic × 0.3 with no starting mineral N, 0.2 with a quarter, 0.1 with half fit about
+  equally (squared error 0.016–0.021), the default starting nitrogen three times worse or more (≥ 0.05). One trial
+  fixes how much nitrogen the field supplies, not how it splits. What it does fix: **the starting mineral nitrogen
+  is half the default or less**; the regional default had set the floor that kept the regional fit at its lower
+  bound. DSSAT's response is also more curved than the field's (unfertilised 0.10–0.13 against 0.22 at every point
+  of the ridge). At 160 kg N/ha DSSAT yields 7.4 t/ha, the Dataverse copy 7.2. **Adopted for Kiboko**
+  (`dssat_cultivars.yaml` `soil.sites`): the best organic factor at the regional starting nitrogen (half the
+  default), **0.1** (0.13, 0.62 and 0.78 against 0.22, 0.51 and 0.80), half the regional 0.20: the station's field
+  supplies less nitrogen than the region's. It may be more depleted than farmers' fields near the station (a
+  research field cropped for trials); a soil test or a farmers' trial near Kiboko would say.
+- **Machakos 2015, Long Rains, rainfed**: 0–120 kg N/ha × 0–22 kg P/ha, sown 8 Apr 2015 (*Yield data*: read as 4
+  Aug before), about 15 km from Kapiti. A poor season (0.5–0.8 t/ha), the yield peaking at 30 kg N/ha: unfertilised
+  over the mean of the fertilised rates **0.69**. Grown as early maize in its own weather (CHIRPS, ERA5-Land) at the
+  regional starting nitrogen, it is fitted best by **0.20, the regional factor itself** (0.673; 0.65 at 0.1, 0.78 at
+  0.3; squared error 0.0001 against 0.0012 and 0.0092): an independent check of the regional fit, which used other
+  data (the sites' observed seasons 1993–2016 against the trials' median 0.62). Kapiti keeps the regional values.
+  (With the default starting nitrogen the ratio had barely moved with the factor: 0.67–0.73 over 0.01–0.06.) DSSAT
+  yields 2.2–3.5 t/ha there, four to five times the plots: their yield level is set by more than water and nitrogen.
+
+**Phosphorus and potassium: checked, not added** (November 2026). DSSAT 4.8's phosphorus model runs for maize in
+this build (PHOSP Y, with a soil P tier: extractable, total and organic P, and an extraction method it knows: Olsen,
+Bray 1 or Mehlich 1, not Mehlich 3). At Kiboko, irrigated, 60 kg N/ha, 2013: 4.79 t/ha with phosphorus off, 2.51
+with 2 mg/kg Olsen P, 4.44 with 8 and 4.39 with 30. But the trials of the yields database show little to model in
+the east. **Phosphorus**: maize without P over maize with P, at the same N (40 kg N/ha or more), 12 eastern
+trial-seasons: median **0.97** (Machakos 2015 0.94–1.06, Murang'a 2014 0.99–1.05, Embu 2015 0.80–0.88); the strong
+responses are western (Sidindi 2008–2012 0.35–0.64, on acid, P-fixing soils). **Potassium**: NP over NPK, eastern
+trials **1.00** (Embu, Machakos) and 0.95 (Murang'a); the responses are in the western highlands (Uasin Gishu
+0.79). So a phosphorus or potassium limit would barely move the eastern sites' outlook, while it would need a soil P
+map (SoilGrids has none; iSDAsoil's extractable P is Mehlich 3, which this build does not read) and a calibration
+the eastern trials cannot constrain. Not added; to be revisited if the outlook extends to western Kenya.
+**Pests and diseases**: DSSAT's pest module applies damage that has been observed; it cannot forecast it, so it
+has no place in an outlook.
+
+**Fertiliser rates: still assumed.** The yields database's "farmer practice" rows are all in Nandi (western
+highlands), not the eastern drylands. The household surveys that report rates by zone (Tegemeo's panel: Eastern
+Lowlands, Coastal Lowlands, Marginal Rain Shadow; Sheahan, Black & Jayne 2013, *Food Policy* 41) could not be read
+here (the publishers' pages refuse automated access), so no zone's rate is taken from them yet. The levels stay
+0, 25 and 50 kg N/ha until the sites' managers answer or a zone's surveyed rate is added by hand.
 
 ### DSSAT in the rest of the engine (November 2026)
 

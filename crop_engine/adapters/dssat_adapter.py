@@ -17,7 +17,8 @@ limitation. With a task's "nitrogen" ({"rate_kg_ha": N, "split": [(days after so
 run_nitrogen) DSSAT's nitrogen balance is on (NITRO Y; the bean's fixation too, SYMBI Y): urea at those days after
 sowing (FERTI D), the soil's organic nitrogen from its organic carbon (SLNI = SLOC / C_TO_N × the nitrogen's
 "organic_n_factor": a cropped field's depleted organic nitrogen, calibration/dssat.py --nitrogen), its mineral nitrogen
-at the start INIT_NO3 / INIT_NH4 ppm in the top 30 cm and half that below, mineralised through the season by DSSAT's
+at the start the nitrogen's "initial_no3_ppm" / "initial_nh4_ppm" (default INIT_NO3 / INIT_NH4) in the top 30 cm and
+half that below (all three per site where fitted to a site's own field: soil_nitrogen), mineralised by DSSAT's
 CERES-Godwin soil organic matter module; no residues, phosphorus or potassium.
 
 Weather (one file per member): the task's rain, Tmax, Tmin, solar radiation, vapour pressure and 2 m wind; DSSAT's
@@ -139,12 +140,20 @@ def nitrogen_settings():
     return (yaml.safe_load(CULTIVARS_FILE.read_text(encoding="utf-8")) or {}).get("nitrogen") or {}
 
 
-def soil_factor(site_id=None):
-    """The factor on the soil's organic nitrogen for a site: its own measured value where there is one, else the
-    regional one (dssat_cultivars.yaml "soil")."""
+def soil_nitrogen(site_id=None):
+    """A site's soil nitrogen for DSSAT's nitrogen balance: {organic_n_factor, initial_no3_ppm, initial_nh4_ppm}, each
+    the site's own fitted value where there is one (dssat_cultivars.yaml "soil" sites), else the regional one, else
+    the module's default (organic factor 1, INIT_NO3, INIT_NH4)."""
     soil = soil_settings()
-    own = ((soil.get("sites") or {}).get(site_id) or {}).get("organic_n_factor") if site_id else None
-    return float(own if own is not None else soil.get("organic_n_factor", 1.0))
+    own = ((soil.get("sites") or {}).get(site_id) or {}) if site_id else {}
+    defaults = {"organic_n_factor": 1.0, "initial_no3_ppm": INIT_NO3, "initial_nh4_ppm": INIT_NH4}
+    return {k: float(own[k] if own.get(k) is not None else soil.get(k, d) if soil.get(k) is not None else d)
+            for k, d in defaults.items()}
+
+
+def soil_factor(site_id=None):
+    """The factor on the soil's organic nitrogen for a site (soil_nitrogen)."""
+    return soil_nitrogen(site_id)["organic_n_factor"]
 
 
 def attach(varieties):
@@ -247,6 +256,20 @@ def soil_layers(layers, root_depth_cm):
     return rows
 
 
+SLNI_MIN = 0.0001                 # % total N: written with four decimals, never 0 (DSSAT reads 0 as missing)
+
+
+def _slni(sloc, organic_n_factor):
+    """The layer's organic nitrogen (% total N), SLOC / C_TO_N × organic_n_factor, at least SLNI_MIN: at three
+    decimals a small factor rounded to 0.000, which DSSAT replaced by its own estimate (high nitrogen)."""
+    return max(float(sloc) / C_TO_N * float(organic_n_factor), SLNI_MIN)
+
+
+def _slni_field(v):
+    """A 6-character field with a leading blank: '.0580' below 1 (four decimals), '1.234' above."""
+    return f"{f'{v:.4f}'[1:] if v < 1 else f'{v:.3f}':>6s}"
+
+
 def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0, curve_number=None):
     """A DSSAT soil file (.SOL) with one profile (nitrogen: the layers' organic nitrogen, SLNI = SLOC / C_TO_N ×
     organic_n_factor)."""
@@ -267,7 +290,8 @@ def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_
     for r in rows:
         out.append(f"{r['SLB']:6d}   -99{r['SLLL']:6.3f}{r['SDUL']:6.3f}{r['SSAT']:6.3f}{r['SRGF']:6.3f}{r['SSKS']:6.2f}"
                    f"{r['SBDM']:6.2f}{r['SLOC']:6.2f}{r['SLCL']:6.1f}{r['SLSI']:6.1f}{r['SLCF']:6.1f}"
-                   + (f"{r['SLOC'] / C_TO_N * organic_n_factor:6.3f}" if nitrogen else "   -99") + f"{SOIL_PH:6.1f}   -99   -99   -99")
+                   + (_slni_field(_slni(r['SLOC'], organic_n_factor)) if nitrogen else "   -99")
+                   + f"{SOIL_PH:6.1f}   -99   -99   -99")
     return "\n".join(out) + "\n"
 
 
@@ -331,7 +355,9 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
             f" 1    {crop} {yyddd(start)}   -99   -99     1     1   -99"
             + (f"{int(mulch_kg_ha):6d}   0.8     0     0     0 -99" if mulch_kg_ha else "   -99   -99   -99   -99   -99 -99"),
             "@C  ICBL  SH2O  SNH4  SNO3"]
-    out += [f" 1{slb:6d}{sh2o:6.3f}{INIT_NH4 * (1 if slb <= 30 else 0.5):6.1f}{INIT_NO3 * (1 if slb <= 30 else 0.5):6.1f}"
+    nh4 = float((nitrogen or {}).get("initial_nh4_ppm", INIT_NH4))
+    no3 = float((nitrogen or {}).get("initial_no3_ppm", INIT_NO3))
+    out += [f" 1{slb:6d}{sh2o:6.3f}{nh4 * (1 if slb <= 30 else 0.5):6.2f}{no3 * (1 if slb <= 30 else 0.5):6.2f}"
             for slb, sh2o in init_sh2o]
     out += ["", "*PLANTING DETAILS",
             "@P PDATE EDATE  PPOP  PPOE  PLME  PLDS  PLRS  PLRD  PLDP  PLWT  PAGE  PENV  PLPH  SPRL                        PLNAME"]
