@@ -94,6 +94,9 @@ def test_past_sowing_options_are_reference_only():
     past = [o for o in card["options"] if o.get("past")]
     assert past and all(o["rank"] is None and o["sowing_median"] < "2026-11-13" for o in past)
     assert all(not o.get("past") for o in card["options"] if o["rank"])
+    ref = next(o for o in card["options"] if o.get("is_baseline"))
+    if ref["sowing_median"] < "2026-11-13":                       # a past reference is not the best option
+        assert ref["rank"] is None and card["best_for_objective"] != ref["label"]
     assert any("before today" in c for c in card["caveats"])
 
 

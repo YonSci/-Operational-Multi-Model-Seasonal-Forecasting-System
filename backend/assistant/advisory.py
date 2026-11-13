@@ -279,7 +279,7 @@ def card(lat: float, lon: float, season: str, model: str, profile: dict, year=No
     opts = options(dec, crop, p["crop"], lib)
     past = []
     if p["decision"] in ("sowing", "replanting"):           # a sowing date already gone is no longer an option
-        past = [o for o in opts if o.get("sowing_median") and o["sowing_median"] < today and not o.get("is_baseline")]
+        past = [o for o in opts if o.get("sowing_median") and o["sowing_median"] < today]   # the reference too
         for o in past:
             o["past"], o["rank"] = True, None
     opts = rank([o for o in opts if o not in past], obj) + past
