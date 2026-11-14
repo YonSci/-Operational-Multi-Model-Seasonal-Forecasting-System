@@ -342,10 +342,103 @@ def template_outlook_comparison(rec, audience="general"):
     return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
 
 
+def _mm(v):
+    return "n/a" if v is None else f"{v:g} mm"
+
+
+def template_tracker(rec, audience="general"):
+    sc, r = rec["scope"], rec["rain_so_far"]
+    summary = [f"Rainfall tracking at {sc['site']}, {rec['season']['label']} {rec['season']['year']}, issued "
+               f"{fdate(rec['issued'])}."]
+    if r.get("chirps_mm") is not None:
+        s = f"Since 1 Oct CHIRPS has {_mm(r['chirps_mm'])} through {fdate(r['through'])}"
+        if r.get("pct_of_normal") is not None:
+            s += f", {r['pct_of_normal']:g}% of normal ({_mm(r['normal_mm'])} for these days)"
+        summary.append(s + ".")
+    if r.get("other_products_range_mm"):
+        lo, hi = r["other_products_range_mm"]
+        summary.append(f"The other {len(r['other_products'])} satellite products give {lo:g} to {hi:g} mm.")
+    summary.append(f"{r['products_with_planting_onset']} of {r['products']} satellite products show a planting onset so far.")
+    ch = (rec.get("recent_rain") or {}).get("chirps")
+    if ch and ch.get("last_wet_day"):
+        rng = rec["recent_rain"].get("days_since_last_wet_day_range")
+        s = (f"In CHIRPS the latest day of data, {fdate(ch['last_wet_day'])}, had at least 1 mm"
+             if not ch["days_since_last_wet_day"] else
+             f"CHIRPS's last day with at least 1 mm was {fdate(ch['last_wet_day'])}, {_days(ch['days_since_last_wet_day'])} "
+             f"before its latest data")
+        s += f"; it has {_mm(ch['last_7_days_mm'])} in the last 7 days"
+        if rng and rng[0] != rng[1]:
+            s += f" (across the products, {rng[0]} to {rng[1]} days since the last wet day)"
+        summary.append(s + ".")
+    local = []
+    w = rec.get("weather_models")
+    if w and w.get("total_range_mm"):
+        lo, hi = w["total_range_mm"]
+        local.append(f"Next {w['window_days']} days ({fdate(w['from'])} to {fdate(w['to'])}): the {w['models']} weather "
+                     f"models give {lo:g} to {hi:g} mm (median {w['median_total_mm']:g} mm); "
+                     f"{w['models_with_planting_rain_within_7_days']} of {w['models']} give planting rains "
+                     f"({w['planting_rain_rule']}) within 7 days.")
+    e = rec.get("ecmwf_ensemble")
+    if e:
+        s = f"ECMWF ensemble of {fdate(e['initialised'])}:"
+        if e.get("planting_rain_within_7_days_pct") is not None:
+            s += f" {e['planting_rain_within_7_days_pct']}% of members give planting rains within 7 days"
+        if e.get("planting_onset_within_15_days_pct") is not None:
+            s += f", {e['planting_onset_within_15_days_pct']}% a planting onset within 15 days"
+        if e.get("planting_onset_median"):
+            s += f" (median {e['planting_onset_median']})"
+        local.append(s + ".")
+        if e.get("days_with_10mm_more_likely_than_not"):
+            local.append("Days on which at least 10 mm is more likely than not: "
+                         + ", ".join(fdate(d) for d in e["days_with_10mm_more_likely_than_not"]) + ".")
+    for key in ("agro_onset", "onset", "cessation"):
+        q = rec["seasonal_outlook"]["quantities"].get(key)
+        if not q or not q.get("median"):
+            continue
+        c = q["chances_pct"]
+        s = (f"Seasonal outlook, {q['label']}: median {q['median']}, normal {q['normal']}; chances "
+             + ", ".join(f"{k} {v}%" for k, v in c.items() if v is not None))
+        if q.get("skill"):
+            s += f" (skill: {q['skill']})"
+        local.append(s + ".")
+    z = rec.get("short_rains_zone")
+    if z and z.get("pct_of_normal") is not None:
+        local.append(f"Across the Short Rains zone CHIRPS has {z['pct_of_normal']:g}% of normal, and "
+                     f"{z['pct_of_zone_with_planting_onset']:g}% of the zone shows a planting onset.")
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
+def template_tracker_changes(rec, audience="general"):
+    sm, runs = rec["summary"], rec["runs"]
+    summary = [f"Weather-model runs of {fdate(runs['previous'])} and {fdate(runs['latest'])} at {rec['scope']['site']}, "
+               f"over the days both runs cover:"]
+    for m in rec["weather_models"]:
+        c = m["change_mm"]
+        move = "no change" if not c else f"{abs(c):g} mm {'more' if c > 0 else 'less'}"
+        summary.append(f"{m['model']}: {m['previous_run_mm']:g} -> {m['latest_run_mm']:g} mm for {fdate(m['days'][0])} "
+                       f"to {fdate(m['days'][1])} ({move}).")
+    if not rec["weather_models"]:
+        summary.append("No model could be compared at this site.")
+    local = []
+    if sm["models_compared"]:
+        local.append(f"{len(sm['wetter_by_5mm_or_more'])} of {sm['models_compared']} models are wetter by 5 mm or more "
+                     f"and {len(sm['drier_by_5mm_or_more'])} drier; the median change is {sm['median_change_mm']:g} mm.")
+    obs = rec.get("observed_last_3_days") or []
+    ch = next((o for o in obs if o["product"].startswith("CHIRPS")), None)
+    if ch:
+        s = f"Observed in the last 3 days of data: CHIRPS {_mm(ch['mm'])} ({fdate(ch['days'][0])} to {fdate(ch['days'][1])})"
+        others = [o["mm"] for o in obs if o is not ch]
+        if others:
+            s += f"; the other products {min(others):g} to {max(others):g} mm"
+        local.append(s + ".")
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
 TEMPLATES = {"location": template_location, "changes": template_changes, "map": template_map,
              "advisory": template_advisory, "area": template_area, "attention": template_attention,
              "chart": template_chart, "analogues": template_analogues, "season_review": template_season_review,
-             "outlook_comparison": template_outlook_comparison}
+             "outlook_comparison": template_outlook_comparison, "tracker": template_tracker,
+             "tracker_changes": template_tracker_changes}
 
 # ---------------------------------------------------------------------------- number checks
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -464,6 +557,14 @@ TASKS = {
                           "they may differ without saying which is right.",
     "chart": "Explain what this chart shows and how to read it, with its figures. If the record says the chart is "
              "illustrative, say so plainly and give no rainfall figures.",
+    "tracker": "Explain how the rainy season is going at this monitoring site: rain so far against normal, whether "
+               "the satellite products show a planting onset, the days since the last wet day, planting rains in the "
+               "weather models' next days and the ensemble's chances, and how this fits the seasonal outlook. Keep "
+               "observed rain (satellite estimates) apart from forecasts. When the satellite products disagree, say "
+               "so and give their range; do not pick one as the truth beyond saying CHIRPS is the page's reference.",
+    "tracker_changes": "Explain what changed between the two latest weather-model runs at this site, model by model "
+                       "and overall, and what rain was observed in the last days. Say that day-to-day changes are "
+                       "normal and that a steady shift over several runs matters more.",
     "advisory": "Write the advisory card's text: the current assessment (summary) and, in local_implications, why "
                 "these options, their trade-offs, what could change the assessment and when to look again. Present "
                 "the options as options to consider, never as instructions. The guidance is a draft that no "

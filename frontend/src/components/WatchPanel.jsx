@@ -9,7 +9,11 @@ export const loadWatches = () => { try { return JSON.parse(localStorage.getItem(
 const saveWatches = list => { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)) } catch { /* storage blocked */ } }
 
 const VERDICT = { unchanged: ['No change', 'var(--ok-text)', 'var(--ok-bg)'], forecast_changed: ['Forecast changed', 'var(--accent-text)', 'var(--info-bg)'],
-                  advice_changed: ['Advice changed', 'var(--warn-text)', 'var(--caution-bg)'], needs_review: ['Needs review', 'var(--warn-text)', 'var(--caution-bg)'] }
+                  advice_changed: ['Advice changed', 'var(--warn-text)', 'var(--caution-bg)'], needs_review: ['Needs review', 'var(--warn-text)', 'var(--caution-bg)'],
+                  onset_detected: ['Planting onset', 'var(--accent-text)', 'var(--info-bg)'], dry_spell: ['Dry spell', 'var(--warn-text)', 'var(--caution-bg)'],
+                  outlook_changed: ['Rain outlook changed', 'var(--accent-text)', 'var(--info-bg)'] }
+export const ALERT_STATUSES = ['advice_changed', 'needs_review', 'forecast_changed', 'onset_detected', 'dry_spell', 'outlook_changed']
+const TRACKING = 'rain_tracking'
 const DECISIONS = [['sowing', 'When to sow'], ['crop_choice', 'Which crop or maturity class'], ['establishment', 'Establishment after sowing'],
                    ['replanting', 'Replanting'], ['water', 'Water management']]
 const CROPS = [['maize_early', 'Early-maturing maize'], ['maize_medium', 'Medium-maturing maize'], ['sorghum', 'Sorghum'], ['bean', 'Dry bean']]
@@ -69,7 +73,9 @@ function WatchCard({ w, q, onRemove, onOpenAdvisory }) {
         <strong style={{ color: 'var(--heading)', flex: 1, minWidth: 0 }}>{w.name || w.place_name}</strong>
         <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600, color: v[1], background: v[2] }}>{d?.gone ? 'Removed' : v[0]}</span>
       </div>
-      <div style={lbl}>{CROPS.find(c => c[0] === w.crop)?.[1] ?? w.crop}, {DECISIONS.find(x => x[0] === w.decision)?.[1] ?? w.decision}{w.sowing_date ? `, sown ${fd(w.sowing_date)}` : ''}</div>
+      <div style={lbl}>{w.decision === TRACKING
+        ? `Rainfall tracking at ${w.place_name}: planting onset, dry spells of ${w.thresholds?.dry_days ?? 10} days or more, and changes in the next days' rain`
+        : <>{CROPS.find(c => c[0] === w.crop)?.[1] ?? w.crop}, {DECISIONS.find(x => x[0] === w.decision)?.[1] ?? w.decision}{w.sowing_date ? `, sown ${fd(w.sowing_date)}` : ''}</>}</div>
       {q.isError && <p style={{ margin: '4px 0 0', color: 'var(--bad-text)' }}>Could not check this watch.</p>}
       {d && !d.gone && <p style={{ margin: '6px 0 0' }}>{d.headline}</p>}
       {d?.changes?.length > 0 && (
@@ -78,8 +84,8 @@ function WatchCard({ w, q, onRemove, onOpenAdvisory }) {
       {d && !d.gone && <div style={{ ...lbl, marginTop: 4 }}>Compared with {new Date(d.baseline_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} (when you last acknowledged).</div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
         {d?.changes?.length > 0 && <button type="button" style={btn2} onClick={ack}>Acknowledge</button>}
-        <button type="button" style={btn2} onClick={() => setOpen(o => o === 'cal' ? null : 'cal')} aria-expanded={open === 'cal'}>Calendar</button>
-        {w.season === 'short_rains' && <button type="button" style={btn2} onClick={() => onOpenAdvisory(w)}>Open the advice</button>}
+        {w.decision !== TRACKING && <button type="button" style={btn2} onClick={() => setOpen(o => o === 'cal' ? null : 'cal')} aria-expanded={open === 'cal'}>Calendar</button>}
+        {w.season === 'short_rains' && w.decision !== TRACKING && <button type="button" style={btn2} onClick={() => onOpenAdvisory(w)}>Open the advice</button>}
         <button type="button" style={btn2} onClick={del}>Delete</button>
       </div>
       {open === 'cal' && <Calendar w={w}/>}
@@ -87,9 +93,10 @@ function WatchCard({ w, q, onRemove, onOpenAdvisory }) {
   )
 }
 
-export default function WatchPanel({ place, season, model, onClose, onOpenAdvisory, list, setList }) {
+export default function WatchPanel({ place, season, model, onClose, onOpenAdvisory, list, setList, tracking }) {
   const statuses = useWatchStatuses(list)
   const [form, setForm] = useState({ name: '', crop: 'maize_early', planted: 'no', sowing_date: '', decision: 'sowing', objective: 'maturity' })
+  const [dryDays, setDryDays] = useState(10)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const [note, setNote] = useState(null)
@@ -103,8 +110,11 @@ export default function WatchPanel({ place, season, model, onClose, onOpenAdviso
     e.preventDefault()
     setBusy(true); setErr(null)
     try {
-      const spec = { ...form, name: form.name || place.name, lat: place.lat, lon: place.lon, place_name: place.name, season, model,
-                     sowing_date: form.planted === 'yes' ? (form.sowing_date || null) : null }
+      const spec = tracking
+        ? { name: form.name || `Rain at ${tracking.name}`, lat: tracking.lat, lon: tracking.lon, place_name: tracking.name, season: 'short_rains',
+            model: 'tracker', decision: TRACKING, thresholds: { dry_days: Number(dryDays) || 10 } }
+        : { ...form, name: form.name || place.name, lat: place.lat, lon: place.lon, place_name: place.name, season, model,
+            sowing_date: form.planted === 'yes' ? (form.sowing_date || null) : null }
       const r = await fetch(`${API_BASE}/watches`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
       const j = await r.json()
       if (!r.ok) throw new Error(j.detail ?? `HTTP ${r.status}`)
@@ -127,6 +137,20 @@ export default function WatchPanel({ place, season, model, onClose, onOpenAdviso
           enough to matter since you last looked. Watches are kept in this browser.</p>
         {list.map((w, i) => <WatchCard key={w.id} w={w} q={statuses[i] ?? {}} onRemove={remove} onOpenAdvisory={onOpenAdvisory}/>)}
         {!list.length && <p style={lbl}>No watches yet.</p>}
+        {tracking && (
+          <form onSubmit={create} style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, alignItems: 'end' }}>
+            <div style={{ gridColumn: '1 / -1', fontWeight: 600, color: 'var(--heading)' }}>Watch the rain at {tracking.name}</div>
+            <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: 12.5, lineHeight: 1.5 }}>Tells you when more satellite products show a planting onset, when a
+              dry spell builds, and when the weather models&apos; rain for the next days changes.</p>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Name (optional)</span>
+              <input value={form.name} onChange={e => set({ name: e.target.value })} maxLength={60} style={inp}/></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Dry spell alert after (days without 1 mm)</span>
+              <input type="number" min={3} max={30} value={dryDays} onChange={e => setDryDays(e.target.value)} style={inp}/></label>
+            <div><button type="submit" disabled={busy} style={{ background: 'var(--btn-primary)', color: '#fff', border: 0, borderRadius: 8, padding: '7px 14px', fontWeight: 600, cursor: 'pointer', minHeight: 36 }}>
+              {busy ? 'Saving...' : 'Watch this site'}</button></div>
+          </form>
+        )}
+        {!tracking && (
         <form onSubmit={create} style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, alignItems: 'end' }}>
           <div style={{ gridColumn: '1 / -1', fontWeight: 600, color: 'var(--heading)' }}>Watch {place.name}</div>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}><span style={lbl}>Name (optional)</span>
@@ -143,6 +167,7 @@ export default function WatchPanel({ place, season, model, onClose, onOpenAdviso
           <div><button type="submit" disabled={busy} style={{ background: 'var(--btn-primary)', color: '#fff', border: 0, borderRadius: 8, padding: '7px 14px', fontWeight: 600, cursor: 'pointer', minHeight: 36 }}>
             {busy ? 'Saving...' : 'Watch this place'}</button></div>
         </form>
+        )}
         {err && <p role="alert" style={{ margin: 0, color: 'var(--bad-text)', fontSize: 13 }}>{err}</p>}
         {note && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--caution-text)' }}>{note}</p>}
       </div>

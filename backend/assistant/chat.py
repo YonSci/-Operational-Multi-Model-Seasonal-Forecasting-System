@@ -9,7 +9,8 @@ Without a Claude key the chat still answers: a keyword router picks the matching
 or advisory) and returns its standard text.
 
 Request (POST /explain/chat): {"messages": [{"role": "user"|"assistant", "content": str}, ...],
-                               "context": {"lat", "lon", "season", "model", "variable", "layer", "site_name"},
+                               "context": {"lat", "lon", "season", "model", "variable", "layer", "site_name",
+                                           "page", "tracker_site"},
                                "audience": "general"|...}
 """
 import json
@@ -17,7 +18,7 @@ import logging
 import os
 import re
 
-from . import advisory, areas, charts, knowledge as kn, narrate
+from . import advisory, areas, charts, knowledge as kn, narrate, tracker
 from . import evidence as ev
 
 log = logging.getLogger("assistant")
@@ -87,6 +88,19 @@ TOOLS = [
                       "properties": {"chart": {"type": "string", "enum": list(charts.KINDS)},
                                      "quantity": {"type": "string", "enum": ["onset", "cessation", "lgp"]},
                                      "crop": {"type": "string", "enum": ["maize_early", "maize_medium", "sorghum", "bean"]}}}},
+    {"name": "get_rain_tracking", "strict": True,
+     "description": "Near real-time rainfall tracking at a monitoring site (Kenya Short Rains): observed rain since 1 Oct "
+                    "against normal (CHIRPS and the other satellite products), how many products show a planting onset, "
+                    "days since the last wet day, the weather models' rain for the next days and planting rains, the "
+                    "ECMWF ensemble's chances, and the seasonal outlook. Site null means the site on screen or the one "
+                    "nearest the selected place.",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["site"],
+                      "properties": {"site": _nullable("string", description="site name or part of it, e.g. Kiboko")}}},
+    {"name": "compare_weather_runs", "strict": True,
+     "description": "What changed between the two latest weather-model runs at a rainfall tracking site (rain over the "
+                    "days both runs cover, model by model) and the rain observed in the last 3 days.",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["site"],
+                      "properties": {"site": _nullable("string")}}},
     {"name": "search_notes", "strict": True,
      "description": "The platform's method notes: onset methods, terciles, skill-weighted chances, hit rate, RPSS, "
                     "medians and ranges, map layers. Use for definitions and how to read a figure.",
@@ -100,14 +114,14 @@ TOOLS = [
                       "properties": {"action": {"type": "string", "enum": ["open_tab", "open_panel", "show_place"]},
                                      "label": {"type": "string", "description": "button text, at most 6 words"},
                                      "tab": _nullable("string", enum=TABS + [None]),
-                                     "kind": _nullable("string", enum=["location", "changes", "map", "advisory", None]),
+                                     "kind": _nullable("string", enum=["location", "changes", "map", "advisory", "tracker", "tracker_changes", None]),
                                      "lat": _nullable("number"), "lon": _nullable("number")}}},
 ]
 
 SYSTEM = """You are the forecast assistant of the Seasonal to Sub-seasonal Climate & Agricultural Intelligence \
 System (Kenya and Ethiopia). You answer questions about the forecasts the dashboard shows: onset, cessation and \
-length of the rainy season, their chances and skill, the map layers, what changed between runs, and draft crop \
-advisories.
+length of the rainy season, their chances and skill, the map layers, what changed between runs, draft crop \
+advisories, and the near real-time rainfall tracking at the monitoring sites (observed rain and the next days).
 
 Rules:
 - Get every figure from a tool. Never state a date, percentage, yield or score from memory; copy figures exactly as \
@@ -117,6 +131,8 @@ the tools give them.
 date is not a promise of rain that day; a chance of the late third is not an amount later; chances are \
 skill-weighted, and model agreement is not the same as skill. Say when skill is low.
 - The onset methods define different events; name the method when it matters.
+- Rainfall tracking: observed rain comes from satellite estimates, not gauges on the farm; when the products \
+disagree, give their range. Weather-model rain is raw model output. Keep observed rain and forecasts apart.
 - Advisory cards are DRAFT guidance that no agronomist has reviewed, and the crop figures are experimental: say so \
 whenever you use them, and present options as options to consider, never as instructions.
 - If a question is outside what the platform covers (pests, prices, other countries, weather today), say so \
@@ -139,6 +155,7 @@ class Session:
         self.season = c.get("season") or "short_rains"
         self.model = c.get("model") or ""
         self.variable, self.layer = c.get("variable") or "onset", c.get("layer") or "median"
+        self.page, self.tracker_site = c.get("page"), c.get("tracker_site")
         self.records, self.actions, self.notes = [], [], []
 
     def _base(self):
@@ -179,6 +196,13 @@ class Session:
                 return {"error": "No place is selected on the dashboard; ask the user to pick one."}
             rec = charts.chart(args.get("chart"), float(self.lat), float(self.lon), self.season, self.model,
                                quantity=args.get("quantity") or "onset", crop=args.get("crop") or "maize_early")
+        elif name in ("get_rain_tracking", "compare_weather_runs"):
+            site = args.get("site") or self.tracker_site
+            fn = tracker.status if name == "get_rain_tracking" else tracker.changes
+            try:
+                rec = fn(site, None, None) if site else fn(None, self.lat, self.lon)
+            except ValueError as e:
+                return {"error": str(e)}
         elif name == "search_notes":
             return {"notes": search_notes(args.get("query", ""))}
         elif name == "suggest_action":
@@ -208,13 +232,20 @@ def search_notes(query: str, k: int = 5) -> list:
 
 
 # ---------------------------------------------------------------------------- without Claude
+_TRACKER = (r"\b(rain(ed|fall)? so far|has it rained|did it rain|how much rain|rained|dry (spell|days?)|planting rains?|"
+            r"next (few|\d+|seven|ten) days|this week|satellite|chirps|observed rain)\b")
 _ROUTES = [("changes", r"\b(chang\w*|differ\w*|previous|earlier run|update[ds]?|moved|shift\w*)\b"),
            ("map", r"\b(map|layer|colou?rs?|legend|where)\b"),
            ("advisory", r"\b(sow\w*|plant\w*|crop\w*|maize|sorghum|beans?|irrigat\w*|replant\w*|advi[cs]e\w*|mulch|ridges?|variet\w*)\b")]
 
 
-def route(text: str) -> str:
+def route(text: str, page: str = None) -> str:
     low = (text or "").lower()
+    changed = re.search(_ROUTES[0][1], low)
+    if page == "tracker":
+        return "tracker_changes" if changed else "tracker"
+    if not changed and re.search(_TRACKER, low):
+        return "tracker"
     for kind, pat in _ROUTES:
         if re.search(pat, low):
             return kind
@@ -222,11 +253,15 @@ def route(text: str) -> str:
 
 
 def template_reply(session: Session, text: str, audience: str) -> dict:
-    kind = route(text)
+    kind = route(text, session.page)
     if kind in ("changes", "advisory") and session.season != "short_rains":
         kind = "location"
     try:
-        if kind == "changes":
+        if kind in ("tracker", "tracker_changes"):
+            res = session.run("get_rain_tracking" if kind == "tracker" else "compare_weather_runs", {"site": None})
+            if "error" in res and session.page != "tracker" and session.lat is not None:
+                kind, res = "location", session.run("get_place_outlook", {"lat": None, "lon": None, "method": None})
+        elif kind == "changes":
             res = session.run("compare", {"to_run": _previous_run(session), "to_method": None})
             if "error" in res:
                 kind, res = "location", session.run("get_place_outlook", {"lat": None, "lon": None, "method": None})
@@ -291,6 +326,9 @@ def _clean_history(messages):
 
 
 def _context_note(s: Session, site_name):
+    if s.page == "tracker":
+        return (f"Dashboard now: the near real-time rainfall tracking page, Kenya Short Rains, monitoring site "
+                f"{s.tracker_site or 'not reported'}.")
     place = site_name or (f"{s.lat}, {s.lon}" if s.lat is not None else "none selected")
     return (f"Dashboard now: season {kn.SEASON_LABELS.get(s.season, (s.season,))[0]}, run and method {s.model or 'default'}, "
             f"selected place {place}, map layer {s.variable}/{s.layer}.")

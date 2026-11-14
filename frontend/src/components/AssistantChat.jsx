@@ -13,7 +13,15 @@ const SUGGESTIONS = [
   'What does the map on screen show?',
   'Which crop fits this season here?',
 ]
-const KIND_LABEL = { location: 'Place outlook', changes: 'Run comparison', map: 'Map layer', advisory: 'Advisory (draft)' }
+const TRACKER_SUGGESTIONS = [
+  'How much rain has fallen here so far, and is that normal?',
+  'Has the planting onset happened here yet?',
+  'Will planting rains come in the next 7 days?',
+  'What changed since the previous weather-model run?',
+  'Why do the satellite products disagree?',
+]
+const KIND_LABEL = { location: 'Place outlook', changes: 'Run comparison', map: 'Map layer', advisory: 'Advisory (draft)',
+                     tracker: 'Rainfall tracking', tracker_changes: 'Weather-model runs' }
 
 export default function AssistantChat({ messages, setMessages, context, onClose, onAction }) {
   const [text, setText] = useState('')
@@ -86,11 +94,13 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
         {messages.length === 0 && (
           <>
             <p style={{ marginTop: 0, lineHeight: 1.55 }}>
-              Ask about the forecast on screen: the place, run, method and map layer you have selected. Answers use the
-              platform&apos;s own figures; advisories are drafts that no agronomist has reviewed yet.
+              {context?.page === 'tracker'
+                ? `Ask about the rain at ${context.tracker_site ?? 'the monitoring site on screen'}: observed rain so far, the planting onset, dry days and the weather models' next days. Answers use the page's own figures.`
+                : <>Ask about the forecast on screen: the place, run, method and map layer you have selected. Answers use the
+                  platform&apos;s own figures; advisories are drafts that no agronomist has reviewed yet.</>}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {SUGGESTIONS.map(s => <button key={s} type="button" style={chip} onClick={() => send(s)}>{s}</button>)}
+              {(context?.page === 'tracker' ? TRACKER_SUGGESTIONS : SUGGESTIONS).map(s => <button key={s} type="button" style={chip} onClick={() => send(s)}>{s}</button>)}
             </div>
           </>
         )}
@@ -128,7 +138,7 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
             style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', borderTop: '1px solid var(--border-primary)' }}>
         <label htmlFor="chat-input" style={{ position: 'absolute', left: -9999 }}>Your question</label>
         <input id="chat-input" ref={inputRef} value={text} onChange={e => setText(e.target.value)} maxLength={2000}
-               placeholder="Ask about this forecast" autoComplete="off"
+               placeholder={context?.page === 'tracker' ? 'Ask about the rain at this site' : 'Ask about this forecast'} autoComplete="off"
                style={{ flex: 1, minWidth: 0, background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)',
                         borderRadius: 8, padding: '8px 10px', fontSize: 14 }}/>
         {dict.supported && (

@@ -16,11 +16,11 @@ import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
 import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropOutlookTab'
-import ExplainPanel from './components/ExplainPanel'
+import ExplainPanel, { useTrackerSites } from './components/ExplainPanel'
 import AssistantChat from './components/AssistantChat'
 import FieldReportPanel from './components/FieldReportPanel'
 import BulletinStudio from './components/BulletinStudio'
-import WatchPanel, { loadWatches, useWatchStatuses } from './components/WatchPanel'
+import WatchPanel, { loadWatches, useWatchStatuses, ALERT_STATUSES } from './components/WatchPanel'
 import ToolsPanel from './components/ToolsPanel'
 
 // --- Helpers --------------------------------------------------------------
@@ -2010,6 +2010,26 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOp
   )
 }
 
+// The assistant on the near real-time rainfall tracking page: it explains the monitoring site the page shows
+function TrackerAssistantBar({ site, onOpen, onAsk, onReport, onWatches, watchAlerts }) {
+  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
+              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+  return (
+    <div role="group" aria-label="Rainfall tracking assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant{site ? ` (${site})` : ''}:</span>
+      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
+              title="Ask about the rain at this monitoring site">Ask the assistant</button>
+      <button type="button" style={b} onClick={() => onOpen('tracker')}
+              title="Rain so far, the planting onset, dry days and the next days, explained">How is the season going here?</button>
+      <button type="button" style={b} onClick={() => onOpen('tracker_changes')}
+              title="How the weather models' rain changed between the two latest runs">What changed since the last run?</button>
+      <button type="button" style={b} onClick={onReport} title="Send the rain or crop stage you observe at this site">Report from the field</button>
+      <button type="button" style={b} onClick={onWatches} title="Alerts for this site: planting onset, dry spells and changes in the next days">
+        Watch this site{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
+    </div>
+  )
+}
+
 function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit }) {
   const models = Object.entries(modelsData?.models ?? {})
   const base = (model || '').split(' - ')[0]
@@ -2814,10 +2834,13 @@ export default function App() {
   // The tracker page reports its content height, so it shows at full length inside the app's single scroll area
   const trackerRef = useRef(null)
   const [trackerHeight, setTrackerHeight] = useState(null)
+  // ... and the monitoring site it shows, which the assistant explains (tracker/dash-shim.js)
+  const [trackerSite, setTrackerSite] = useState(null)
   useEffect(()=>{
     const onMsg = e => {
-      if (e.data?.type === 'tracker-height' && e.source === trackerRef.current?.contentWindow && e.data.height > 0)
-        setTrackerHeight(Math.ceil(e.data.height))
+      if (e.source !== trackerRef.current?.contentWindow) return
+      if (e.data?.type === 'tracker-height' && e.data.height > 0) setTrackerHeight(Math.ceil(e.data.height))
+      if (e.data?.type === 'tracker-site' && typeof e.data.site === 'string') setTrackerSite(e.data.site)
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
@@ -2907,7 +2930,11 @@ export default function App() {
   const [toolsOpen, setToolsOpen] = useState(false)
   const [watchList, setWatchList] = useState(loadWatches)
   const watchStatuses = useWatchStatuses(watchList)
-  const watchAlerts = watchStatuses.filter(q => q.data && ['advice_changed', 'needs_review', 'forecast_changed'].includes(q.data.status)).length
+  const watchAlerts = watchStatuses.filter(q => q.data && ALERT_STATUSES.includes(q.data.status)).length
+  const onTracker = activeTab === 'tracker'
+  const { data: trackerSites } = useTrackerSites(onTracker)
+  const trackerPlace = (s => s ? { lat: s.lat, lon: s.lon, name: s.name } : null)((trackerSites ?? []).find(x => x.name === trackerSite))
+  const setTrackerPageSite = site => { try { trackerRef.current?.contentWindow?.postMessage({ type: 'tracker-set-site', site }, '*') } catch { /* page not loaded */ } }
   const [drawArea, setDrawArea] = useState(false)
   const [requestedLayer, setRequestedLayer] = useState(null)
   const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
@@ -2931,6 +2958,7 @@ export default function App() {
                                       decision: explain.decision ?? 'sowing', crop: explain.crop ?? 'maize_early', planted: explain.planted ?? 'unknown',
                                       sowing_date: explain.planted === 'yes' ? (explain.sowing_date ?? '') : '', water: explain.water ?? 'rainfed',
                                       objective: explain.objective ?? 'maturity' }
+    : (explain.kind === 'tracker' || explain.kind === 'tracker_changes') ? { kind: explain.kind, site: trackerSite ?? explain.site ?? '', audience: explain.audience, language: explain.language ?? 'en' }
     : { kind: 'location', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience, language: explain.language ?? 'en' }
   const mrfChoices = MRF_ORDER.filter(id => frRuns?.some(r => r.source === 'mr-' + id) || mrfModels?.some(m => m.id === id))
     .map(id => ({ id, label: frRuns?.find(r => r.source === 'mr-' + id)?.model_label ?? MRF_LABELS[id] }))
@@ -3099,8 +3127,15 @@ export default function App() {
                                               forecastType={forecastType} mrfModel={mrfModel} s2sModel={s2sModel}
                                               onOpenTab={(tab, s) => { if (s) useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab(tab) }}/>}
             {activeTab==='tracker'       && (
-              <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
-                      style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
+              <>
+                <TrackerAssistantBar site={trackerSite} watchAlerts={watchAlerts}
+                                     onOpen={kind => { setChatOpen(false); setReportOpen(false); setWatchOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                     onAsk={() => { setExplain(null); setReportOpen(false); setWatchOpen(false); setChatOpen(true) }}
+                                     onReport={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setReportOpen(true) }}
+                                     onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(true) }}/>
+                <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
+                        style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
+              </>
             )}
            </ErrorBoundary>
            </div>
@@ -3114,6 +3149,7 @@ export default function App() {
       {watchOpen && (
         <WatchPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
                     season={selectedSeason} model={effectiveModel} list={watchList} setList={setWatchList} onClose={() => setWatchOpen(false)}
+                    tracking={onTracker ? trackerPlace : null}
                     onOpenAdvisory={w => { setWatchOpen(false); useDashboardStore.getState().setSelectedSite({ lat: w.lat, lon: w.lon, site_name: w.place_name, country })
                                            setExplain(e => ({ ...e, kind: 'advisory', audience: e?.audience ?? 'general', decision: w.decision, crop: w.crop,
                                                               planted: w.planted, sowing_date: w.sowing_date ?? '' })) }}/>
@@ -3123,15 +3159,18 @@ export default function App() {
                         season={selectedSeason} model={effectiveModel} onClose={() => setStudioOpen(false)}/>
       )}
       {reportOpen && (
-        <FieldReportPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+        <FieldReportPanel place={onTracker && trackerPlace ? trackerPlace : { lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
                           context={{ country, season: selectedSeason }} onClose={() => setReportOpen(false)}
                           onUseSowing={({ crop, sowing_date }) => { setReportOpen(false); setExplain(e => ({ ...e, kind: 'advisory', audience: e?.audience ?? 'general',
                                                                                                           decision: 'establishment', planted: 'yes', crop, sowing_date })) }}/>
       )}
       {chatOpen && (
         <AssistantChat messages={chatMessages} setMessages={setChatMessages} onClose={() => setChatOpen(false)}
-                       context={{ lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
-                                  variable: mapLayer.variable, layer: mapLayer.layer, site_name: selectedSite?.site_name ?? null }}
+                       context={onTracker
+                         ? { page: 'tracker', tracker_site: trackerSite, lat: trackerPlace?.lat ?? null, lon: trackerPlace?.lon ?? null,
+                             season: 'short_rains', model: effectiveModel, site_name: trackerSite }
+                         : { lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                             variable: mapLayer.variable, layer: mapLayer.layer, site_name: selectedSite?.site_name ?? null }}
                        onAction={a => {
                          if (a.action === 'open_tab' && a.tab) { setChatOpen(false); setActiveTab(a.tab) }
                          else if (a.action === 'open_panel' && a.kind) { setChatOpen(false); setExplain(e => ({ ...e, kind: a.kind, audience: e?.audience ?? 'general' })) }
@@ -3144,7 +3183,7 @@ export default function App() {
         <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
                       onAudience={audience => setExplain(e => ({ ...e, audience }))}
                       compareOptions={compareOptions} onCompare={compare_to => setExplain(e => ({ ...e, compare_to }))}
-                      onProfile={patch => setExplain(e => ({ ...e, ...patch }))}
+                      onProfile={patch => { if (patch.site) setTrackerPageSite(patch.site); setExplain(e => ({ ...e, ...patch })) }}
                       drawing={drawArea} onDraw={() => setDrawArea(d => !d)}
                       onShowLayer={() => {
                         const c = ATTENTION_LAYERS[explain?.criterion ?? 'late_onset']

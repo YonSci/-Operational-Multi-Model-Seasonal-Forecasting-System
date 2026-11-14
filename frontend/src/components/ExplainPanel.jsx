@@ -14,7 +14,8 @@ export const AUDIENCES = [
   { id: 'technical', label: 'Technical' },
 ]
 const TITLES = { location: 'Explain this location', changes: 'What changed?', map: 'Explain this map', advisory: 'Advisory (draft)',
-                 area: 'Explain an area', attention: 'Areas needing attention', chart: 'Explain a chart' }
+                 area: 'Explain an area', attention: 'Areas needing attention', chart: 'Explain a chart',
+                 tracker: 'How is the season going here?', tracker_changes: 'What changed since the last run?' }
 const CRITERIA = [['late_onset', 'Higher chance of a late onset'], ['early_cessation', 'Higher chance of an early end of the rains'],
                   ['short_season', 'Higher chance of a short season'], ['onset_delay', 'Onset later than normal'],
                   ['season_shorter', 'Season shorter than normal'], ['no_onset', 'Members finding no onset']]
@@ -36,7 +37,8 @@ const STATUS = { estimated_from_observations: 'Estimated from observations so fa
 async function fetchExplain(req) {
   const { kind, ...params } = req
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]))
-  const res = await fetch(`${API_BASE}/explain/${kind}?${q}`)
+  const path = kind === 'tracker_changes' ? 'tracker/changes' : kind
+  const res = await fetch(`${API_BASE}/explain/${path}?${q}`)
   if (!res.ok) {
     let msg = `The explanation could not be made (HTTP ${res.status}).`
     try { const j = await res.json(); if (j?.detail) msg = String(j.detail) } catch { /* not JSON */ }
@@ -171,6 +173,107 @@ function Pick({ id, label, value, choices, onChange }) {
 function useRegions(season) {
   return useQuery({ queryKey: ['explain-regions', season], staleTime: Infinity, enabled: !!season,
                     queryFn: async () => { const r = await fetch(`${API_BASE}/explain/regions?season=${encodeURIComponent(season)}`); if (!r.ok) throw new Error('regions'); return r.json() } })
+}
+
+export function useTrackerSites(enabled = true) {
+  return useQuery({ queryKey: ['tracker-sites'], staleTime: 30 * 60_000, enabled,
+                    queryFn: async () => { const r = await fetch(`${API_BASE}/explain/tracker/sites`); if (!r.ok) throw new Error('sites'); return (await r.json()).sites } })
+}
+
+function TrackerForm({ request, onProfile }) {
+  const { data } = useTrackerSites()
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginTop: 8 }}>
+      <Pick id="tracker-site" label="Monitoring site" value={request.site || ''} onChange={v => onProfile({ site: v })}
+            choices={[...(request.site ? [] : [['', 'Choose...']]), ...(data ?? []).map(x => [x.name, x.name])]}/>
+    </div>
+  )
+}
+
+const mm = v => v == null ? 'n/a' : `${v} mm`
+const dm = iso => fdate(iso).replace(/ \d{4}$/, '')
+
+function TrackerEvidence({ ev }) {
+  const r = ev.rain_so_far, w = ev.weather_models, e = ev.ecmwf_ensemble
+  const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
+  const td = { padding: '4px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }
+  const recent = Object.fromEntries((ev.recent_rain?.by_product ?? []).map(x => [x.product, x]))
+  const rows = [{ product: 'CHIRPS 2.0', mm: r.chirps_mm, through: r.through }, ...r.other_products]
+  return (
+    <>
+      <div style={box}>
+        <KV k="Site" v={`${ev.scope.site} (${ev.scope.lat}, ${ev.scope.lon})`}/>
+        <KV k="Season" v={`${ev.season.label} ${ev.season.year}`}/>
+        <KV k="Issued" v={fdate(ev.issued)}/>
+        <KV k="Since 1 Oct (CHIRPS)" v={`${mm(r.chirps_mm)}, ${r.pct_of_normal ?? 'n/a'}% of normal (${mm(r.normal_mm)})`}/>
+        <KV k="Planting onset" v={`${r.products_with_planting_onset} of ${r.products} satellite products`}/>
+      </div>
+      <div style={{ ...box, marginTop: 8, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>Observed rain by satellite product (a wet day has at least {ev.recent_rain?.wet_day_mm ?? 1} mm)</caption>
+          <thead><tr><th style={th} scope="col">Product</th><th style={th} scope="col">Since 1 Oct</th><th style={th} scope="col">Last 7 days</th><th style={th} scope="col">Last wet day</th><th style={th} scope="col">Data to</th></tr></thead>
+          <tbody>{rows.map(x => {
+            const rc = recent[x.product] ?? {}
+            return (
+              <tr key={x.product}><td style={td}>{x.product}</td><td style={td}>{mm(x.mm)}</td><td style={td}>{mm(rc.last_7_days_mm)}</td>
+                <td style={td}>{rc.last_wet_day ? `${dm(rc.last_wet_day)} (${rc.days_since_last_wet_day} d before)` : 'n/a'}</td><td style={td}>{dm(x.through)}</td></tr>
+            )
+          })}</tbody>
+        </table>
+      </div>
+      {w && (
+        <div style={{ ...box, marginTop: 8, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>Weather models from {dm(w.from)} (raw); planting rains = {w.planting_rain_rule}</caption>
+            <thead><tr><th style={th} scope="col">Model</th><th style={th} scope="col">5 days</th><th style={th} scope="col">7 days</th><th style={th} scope="col">10 days</th><th style={th} scope="col">First planting rains</th></tr></thead>
+            <tbody>{w.by_model.map(m => (
+              <tr key={m.model}><td style={td}>{m.model} ({m.forecast_days} d)</td><td style={td}>{mm(m.total_5_days_mm)}</td><td style={td}>{mm(m.total_7_days_mm)}</td>
+                <td style={td}>{mm(m.total_10_days_mm)}</td><td style={td}>{m.first_planting_rain ? dm(m.first_planting_rain) : 'none'}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {e && (
+        <div style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>ECMWF ensemble ({fdate(e.initialised)})</div>
+          <KV k="Planting rains within 7 / 15 days" v={`${e.planting_rain_within_7_days_pct ?? 'n/a'}% / ${e.planting_rain_within_15_days_pct ?? 'n/a'}% of members`}/>
+          <KV k="Planting onset within 15 days" v={e.planting_onset_within_15_days_pct != null ? `${e.planting_onset_within_15_days_pct}% of members` : null}/>
+          <KV k="Planting onset median" v={e.planting_onset_median}/>
+        </div>
+      )}
+      {Object.keys(ev.seasonal_outlook?.quantities ?? {}).length > 0 && (
+        <div style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Seasonal outlook (ECMWF SEAS5{ev.seasonal_outlook.run ? `, ${fdate(ev.seasonal_outlook.run)}` : ''})</div>
+          {Object.entries(ev.seasonal_outlook.quantities).map(([k, q]) => (
+            <KV key={k} k={q.label} v={`median ${q.median ?? 'n/a'}, normal ${q.normal ?? 'n/a'}; ${pctTriple(q.chances_pct) ?? ''}${q.skill ? ` (skill: ${q.skill})` : ''}`}/>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function TrackerChangesEvidence({ ev }) {
+  const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
+  const td = { padding: '4px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }
+  return (
+    <>
+      <div style={{ ...box, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>Runs of {dm(ev.runs.previous)} and {dm(ev.runs.latest)}, over the days both cover</caption>
+          <thead><tr><th style={th} scope="col">Model</th><th style={th} scope="col">Days</th><th style={th} scope="col">Previous</th><th style={th} scope="col">Latest</th><th style={th} scope="col">Change</th></tr></thead>
+          <tbody>{ev.weather_models.map(m => (
+            <tr key={m.model}><td style={td}>{m.model}</td><td style={td}>{dm(m.days[0])} - {dm(m.days[1])}</td>
+              <td style={td}>{mm(m.previous_run_mm)}</td><td style={td}>{mm(m.latest_run_mm)}</td><td style={td}>{m.change_mm > 0 ? '+' : ''}{m.change_mm} mm</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div style={{ ...box, marginTop: 8 }}>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Observed, last 3 days of data</div>
+        {(ev.observed_last_3_days ?? []).map(o => <KV key={o.product} k={o.product} v={`${mm(o.mm)} (${dm(o.days[0])} - ${dm(o.days[1])})`}/>)}
+      </div>
+    </>
+  )
 }
 
 function AreaForm({ request, onProfile, onDraw, drawing }) {
@@ -421,6 +524,7 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
         {request.kind === 'area' && <AreaForm request={request} onProfile={onProfile} onDraw={onDraw} drawing={drawing}/>}
         {request.kind === 'attention' && <AttentionForm request={request} onProfile={onProfile} onShowLayer={onShowLayer}/>}
         {request.kind === 'chart' && <ChartForm request={request} onProfile={onProfile}/>}
+        {(request.kind === 'tracker' || request.kind === 'tracker_changes') && <TrackerForm request={request} onProfile={onProfile}/>}
         <nav role="tablist" aria-label="Explanation sections" style={{ display: 'flex', gap: 4, marginTop: 10 }}>
           {tabs.map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} style={btn(tab === id)}>{label}</button>
@@ -464,6 +568,8 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
             {ev.kind === 'area' && <AreaEvidence ev={ev}/>}
             {ev.kind === 'attention' && <AttentionTable ev={ev}/>}
             {ev.kind === 'chart' && <ChartEvidence ev={ev}/>}
+            {ev.kind === 'tracker' && <TrackerEvidence ev={ev}/>}
+            {ev.kind === 'tracker_changes' && <TrackerChangesEvidence ev={ev}/>}
             <div style={{ ...box, marginTop: 8 }}>
               <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Sources</div>
               {(ev.sources ?? []).map((s, i) => <KV key={i} k={s.what} v={s.detail}/>)}

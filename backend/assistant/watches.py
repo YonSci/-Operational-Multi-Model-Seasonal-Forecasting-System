@@ -18,18 +18,80 @@ import datetime as dt
 import hashlib
 import secrets
 
-from . import advisory, evidence as ev, feedback, narrate, store
+from . import advisory, evidence as ev, feedback, narrate, store, tracker
 
 TABLE = "watches"
-DEFAULTS = {"chance_points": 15, "median_days": 7, "maturity_points": 10, "stale_days": 21}
+DEFAULTS = {"chance_points": 15, "median_days": 7, "maturity_points": 10, "stale_days": 21,
+            "dry_days": 10, "rain_change_mm": 15, "obs_stale_days": 5}
+TRACKING = "rain_tracking"       # the decision of a rainfall tracking watch (place_name = the tracking site)
 
 
 def _hash(key):
     return hashlib.sha256(str(key).encode()).hexdigest()
 
 
+def tracker_state(w) -> dict:
+    """The figures a rainfall tracking watch compares, today."""
+    rec = tracker.status(w.get("place_name") or None, w["lat"], w["lon"])
+    r, ch = rec["rain_so_far"], (rec["recent_rain"] or {}).get("chirps") or {}
+    wm, en = rec.get("weather_models") or {}, rec.get("ecmwf_ensemble") or {}
+    return {"evidence_id": rec["id"], "site": rec["scope"]["site"], "observations_through": rec["observations_through"],
+            "chirps_mm": r.get("chirps_mm"), "pct_of_normal": r.get("pct_of_normal"),
+            "products_with_planting_onset": r["products_with_planting_onset"], "products": r["products"],
+            "days_since_last_wet_day": ch.get("days_since_last_wet_day"), "last_wet_day": ch.get("last_wet_day"),
+            "next_days_median_mm": wm.get("median_total_mm"), "next_days_window": wm.get("window_days"),
+            "models_with_planting_rain_within_7_days": wm.get("models_with_planting_rain_within_7_days"),
+            "models": wm.get("models"), "ensemble_planting_rain_7_days_pct": en.get("planting_rain_within_7_days_pct")}
+
+
+def tracker_compare(w: dict, base: dict, now: dict) -> list:
+    th = {**DEFAULTS, **(w.get("thresholds") or {})}
+    out = []
+    a, b = base.get("products_with_planting_onset"), now.get("products_with_planting_onset")
+    if a is not None and b is not None and b > a:
+        half = now.get("products", 0) / 2
+        out.append({"kind": "onset_detected" if a <= half < b else "onset_spreading",
+                    "what": "Planting onset", "detail": f"{b} of {now.get('products')} satellite products now show a "
+                                                        f"planting onset (was {a})"})
+    d0, d1 = base.get("days_since_last_wet_day"), now.get("days_since_last_wet_day")
+    if d1 is not None and d1 >= th["dry_days"] and (d0 is None or d0 < th["dry_days"] or d1 > d0):
+        out.append({"kind": "dry_spell", "what": "Dry spell",
+                    "detail": f"{d1:g} days since the last day with at least 1 mm in CHIRPS"
+                              + (f" ({narrate.fdate(now['last_wet_day'])})" if now.get("last_wet_day") else "")})
+    m0, m1 = base.get("next_days_median_mm"), now.get("next_days_median_mm")
+    if m0 is not None and m1 is not None and abs(m1 - m0) >= th["rain_change_mm"]:
+        out.append({"kind": "outlook_changed", "what": "Rain in the next days",
+                    "detail": f"median of the weather models {m0:g} -> {m1:g} mm over {now.get('next_days_window')} days"})
+    p0, p1 = base.get("ensemble_planting_rain_7_days_pct"), now.get("ensemble_planting_rain_7_days_pct")
+    if p0 is not None and p1 is not None and abs(p1 - p0) >= th["chance_points"]:
+        out.append({"kind": "outlook_changed", "what": "Planting rains within 7 days (ECMWF ensemble)",
+                    "detail": f"{p0}% -> {p1}% of members"})
+    obs = now.get("observations_through")
+    age = _days(obs, dt.date.today().isoformat()) if obs else None
+    if age is not None and age > th["obs_stale_days"]:
+        out.append({"kind": "stale", "what": "Observations",
+                    "detail": f"the observed rain ends {narrate.fdate(obs)}, {age} days ago"})
+    return out
+
+
+def tracker_verdict(changes: list) -> dict:
+    kinds = {c["kind"] for c in changes}
+    if not changes:
+        return {"status": "unchanged", "headline": "No material change at this site since you last looked."}
+    if "onset_detected" in kinds:
+        return {"status": "onset_detected", "headline": "Most satellite products now show a planting onset here: check "
+                                                        "the rain on the ground."}
+    if "dry_spell" in kinds:
+        return {"status": "dry_spell", "headline": "A dry spell is building at this site."}
+    if "outlook_changed" in kinds or "onset_spreading" in kinds:
+        return {"status": "outlook_changed", "headline": "The rain observed or expected in the next days has changed."}
+    return {"status": "needs_review", "headline": "The rainfall data for this site is late: look again after the next update."}
+
+
 def state(w) -> dict:
     """The figures a watch compares, today."""
+    if w.get("decision") == TRACKING:
+        return tracker_state(w)
     loc = ev.location(w["lat"], w["lon"], w["season"], w["model"])
     q = loc["quantities"]
     out = {"evidence_id": loc["id"], "observations_through": loc["run"]["observations_through"],
@@ -122,6 +184,9 @@ def create(spec: dict) -> dict:
         raise ValueError("A watch needs a place and a forecast run")
     w["lat"], w["lon"] = round(float(w["lat"]), 4), round(float(w["lon"]), 4)
     w["season"] = w["season"] or "short_rains"
+    if w["decision"] == TRACKING:                     # a tracking site: the record names the site it resolved to
+        site = tracker.find_site(w.get("place_name") or None, w["lat"], w["lon"])
+        w.update(place_name=site["site"], season="short_rains", crop=None, objective=None)
     w["planted"] = w["planted"] if w["planted"] in ("yes", "no", "unknown") else "unknown"
     w["decision"] = w["decision"] or ("establishment" if w["planted"] == "yes" else "sowing")
     w["thresholds"] = {k: float(v) for k, v in (spec.get("thresholds") or {}).items() if k in DEFAULTS}
@@ -143,10 +208,11 @@ def _get(wid, key):
 def check(wid, key) -> dict:
     w = _get(wid, key)
     now = state(w)
-    ch = compare(w, w.get("baseline") or {}, now)
+    tracking = w.get("decision") == TRACKING
+    ch = (tracker_compare if tracking else compare)(w, w.get("baseline") or {}, now)
     store.update(TABLE, wid, {"last_checked_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")})
-    return {"id": wid, "watch": {k: w.get(k) for k in FIELDS}, "baseline_at": w.get("baseline_at"), "changes": ch, **verdict(ch),
-            "current": now}
+    return {"id": wid, "watch": {k: w.get(k) for k in FIELDS}, "baseline_at": w.get("baseline_at"), "changes": ch,
+            **(tracker_verdict if tracking else verdict)(ch), "current": now}
 
 
 def acknowledge(wid, key) -> dict:

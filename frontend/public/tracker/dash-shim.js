@@ -80,6 +80,27 @@
   let host = null;                                   // the app's window when same origin, else null
   try { if (embedded && window.parent.document) host = window.parent; } catch (e) { host = null; }
 
+  // Site: tell the app which monitoring site the page shows (the app's assistant explains that site), and follow
+  // the app when it asks for another one.
+  // Contract: window.parent.postMessage({ type: 'tracker-site', site: <name> }, '*') on load and on each change;
+  // the app may send { type: 'tracker-set-site', site: <name> } to this window.
+  if (embedded) {
+    let lastSite = null;
+    const tell = () => {
+      const s = params.site || defaults.site || null;
+      if (!s || s === lastSite) return;
+      lastSite = s;
+      try { window.parent.postMessage({ type: 'tracker-site', site: s }, '*'); } catch (e) { /* ignore */ }
+    };
+    listeners.push(tell);
+    tell();
+    window.addEventListener('message', (e) => {
+      const d = e.data;
+      if (e.source !== window.parent || !d || d.type !== 'tracker-set-site' || typeof d.site !== 'string') return;
+      if (d.site !== (params.site || defaults.site)) window.dash.setParams({ site: d.site });
+    });
+  }
+
   // Theme: follow the app's toggle (class "light" on the app's <html>; dark when absent). Standalone or
   // cross-origin: no data-theme attribute, so theme.css follows prefers-color-scheme. Charts resolve colours
   // when drawn, so a theme change redraws them.

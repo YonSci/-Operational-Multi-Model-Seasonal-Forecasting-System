@@ -9,7 +9,7 @@ from fastapi.responses import Response
 import mam_loader as dl
 from pydantic import BaseModel
 
-from assistant import advisory, areas, charts, chat, evidence as ev
+from assistant import advisory, areas, charts, chat, evidence as ev, tracker
 from assistant import narrate, translate
 from kenya_api.pixel import _clean
 import json
@@ -197,3 +197,42 @@ def explain_chart(
     except ValueError as e:
         raise HTTPException(400, str(e))
     return _reply("chart", rec, audience, language)
+
+
+@router.get("/tracker/sites")
+def tracker_sites():
+    """The monitoring sites of the near real-time rainfall tracking page."""
+    try:
+        return {"sites": tracker.sites()}
+    except ValueError as e:
+        raise HTTPException(503, str(e))
+
+
+@router.get("/tracker")
+def explain_tracker(
+    site: str = Query("", description="tracking site name (whole or part), or give lat/lon"),
+    lat: float = Query(None), lon: float = Query(None),
+    audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
+):
+    """How the season is going at a rainfall tracking site: rain so far, planting onset in the satellite products,
+    days since the last wet day, the weather models' next days and the seasonal outlook. Needs no forecast data."""
+    try:
+        rec = tracker.status(site or None, lat, lon)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return _reply("tracker", rec, audience, language)
+
+
+@router.get("/tracker/changes")
+def explain_tracker_changes(
+    site: str = Query(""), lat: float = Query(None), lon: float = Query(None),
+    audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
+):
+    """What changed between the two latest weather-model runs at a tracking site, and the rain of the last days."""
+    try:
+        rec = tracker.changes(site or None, lat, lon)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return _reply("tracker_changes", rec, audience, language)
