@@ -441,7 +441,22 @@ Eight additions made with code and public data only. None changes the outlook's 
 - **Soil water on 1 Aug from SMAP** (`data/smap.py`, scenario `soil_smap`). NASA SMAP Level 4 root-zone soil
   moisture (0-100 cm, 9 km, from 2015), the mean of 29 Jul to 3 Aug, turned into the site's plant-available
   fraction. `--compare` scores ERA5-Land against it per site (`outputs/crop_engine/verification/initial_water_smap.json`);
-  the scenario grows the season from SMAP's value when the season's values are on disk.
+  the scenario grows the season from SMAP's value when the season's values are on disk. First comparison
+  (2015-2026, plant-available fraction on 1 Aug, mean over the years):
+
+  | Site | ERA5-Land | SMAP | SMAP - ERA5-Land | Correlation across years |
+  |---|---|---|---|---|
+  | El Karama | 0.41 | 0.66 | +0.25 | 0.85 |
+  | Genco Maralal | 0.60 | 0.62 | +0.02 | 0.83 |
+  | Genco Tana River | 0.10 | 0.06 | -0.04 | 0.52 |
+  | KALRO Kiboko | 0.14 | 0.00 | -0.14 | n/a |
+  | Kapiti | 0.25 | 0.51 | +0.26 | 0.82 |
+  | LiveMo Kajiado | 0.13 | 0.23 | +0.10 | 0.63 |
+
+  The two agree on which years start wetter (0.82-0.85 at three sites) but not on the level: SMAP starts Kapiti
+  and El Karama about a quarter of the available water wetter, which would cut early establishment failures there.
+  At Kiboko SMAP's soil moisture is below SoilGrids' wilting point every year (0): the two soils differ, and the
+  comparison says nothing there. Neither is a measurement; soil moisture readings at the sites would settle it.
 - **Heat and cold at flowering** (`aquacrop_adapter.flowering_temperature`). AquaCrop's crop files start pollination
   heat stress at 40 °C for maize, sorghum and the bean, above the thresholds reported for them, so the model rarely
   applies it here. Each member counts its flowering days above about 35 °C (maize), 36 °C (sorghum) and 32 °C

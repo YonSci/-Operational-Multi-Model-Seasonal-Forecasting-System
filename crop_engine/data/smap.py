@@ -83,7 +83,7 @@ def fetch(sites, years, path=CACHE_FILE, log=print):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"source": "NASA SMAP L4 (SPL4SMGP) sm_rootzone, 29 Jul to 3 Aug mean",
                                 "fetched": dt.date.today().isoformat(), "sites": out}, indent=1), encoding="utf-8")
-    log(f"SMAP: {len(sites)} sites, {len(years)} years → {path}")
+    log(f"SMAP: {len(sites)} sites, {len(years)} years -> {path}")
     return out
 
 
