@@ -45,6 +45,34 @@ PUBLIC = Path(__file__).resolve().parents[2] / "frontend" / "public"
 SITE_URL = "https://yonsci.github.io/-Operational-Multi-Model-Seasonal-Forecasting-System/"
 
 
+def load_tracker(name: str):
+    """A file of the rainfall tracking page's data (tracker/data/<name>): a CSV as a list of row dicts, a JSON file
+    as JSON; None when it cannot be read. The repository copy, else the published site's. Cached as load()."""
+    import csv
+    import io
+    key = "tracker:" + name
+    now = time.time()
+    with _lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < TTL:
+            return hit[1]
+    data = None
+    try:
+        path = PUBLIC / "tracker" / "data" / name
+        if path.exists() and os.environ.get("CROP_DATA_SOURCE", "auto") != "url":
+            text = path.read_text(encoding="utf-8")
+        else:
+            url = os.environ.get("SITE_URL", SITE_URL).rstrip("/") + "/tracker/data/" + name
+            with urllib.request.urlopen(url, timeout=30) as r:
+                text = r.read().decode("utf-8")
+        data = json.loads(text) if name.endswith(".json") else list(csv.DictReader(io.StringIO(text)))
+    except Exception:
+        data = None
+    with _lock:
+        _cache[key] = (now if data is not None else now - TTL + 60, data)
+    return data
+
+
 def load_public(rel: str):
     """A JSON file of the dashboard's public folder (e.g. boundaries/ke_admin1.geojson): the repository copy, or
     the published site's (SITE_URL). Cached as load()."""
