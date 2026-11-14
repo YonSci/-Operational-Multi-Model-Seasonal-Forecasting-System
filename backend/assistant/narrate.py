@@ -362,8 +362,11 @@ def template_tracker(rec, audience="general"):
     ch = (rec.get("recent_rain") or {}).get("chirps")
     if ch and ch.get("last_wet_day"):
         rng = rec["recent_rain"].get("days_since_last_wet_day_range")
-        s = (f"CHIRPS's last day with at least 1 mm was {fdate(ch['last_wet_day'])}, {_days(ch['days_since_last_wet_day'])} "
-             f"before its latest data; it has {_mm(ch['last_7_days_mm'])} in the last 7 days")
+        s = (f"In CHIRPS the latest day of data, {fdate(ch['last_wet_day'])}, had at least 1 mm"
+             if not ch["days_since_last_wet_day"] else
+             f"CHIRPS's last day with at least 1 mm was {fdate(ch['last_wet_day'])}, {_days(ch['days_since_last_wet_day'])} "
+             f"before its latest data")
+        s += f"; it has {_mm(ch['last_7_days_mm'])} in the last 7 days"
         if rng and rng[0] != rng[1]:
             s += f" (across the products, {rng[0]} to {rng[1]} days since the last wet day)"
         summary.append(s + ".")
