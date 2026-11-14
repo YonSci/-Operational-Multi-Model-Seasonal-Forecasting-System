@@ -2,7 +2,9 @@
 Measured yields of plots and trials in Kenya, in one table (yields.OBS_COLUMNS), from:
 
   IITA maize trials        entry means of the international maize trials (Kiboko 2013 and others): silking, yield
-  Kenya soil health        Alliance Bioversity–CIAT compilation (2026) of fertilizer / management experiments
+  Kenya soil health        Alliance Bioversity–CIAT compilation (2026) of fertilizer / management experiments (its
+                           dates mix day/month and month/day order: _resolve_dates; its copy of the N2Africa
+                           trials is dropped, n2africa_copies)
   N2Africa                 IITA legume agronomy trials (western Kenya, 2010–2011): bean phenology dates and yield
   published tables         yield tables transcribed from papers (yields/published/, see PUBLISHED_STUDIES)
 
@@ -101,6 +103,49 @@ def _parse_date(s):
     return None, None if s in ("", "nan") else "unparsed"
 
 
+SEASON_DAYS = (45, 250)        # sowing to harvest of a plausible crop season (days)
+
+
+def _readings(s):
+    """The dates a 'a/b/yyyy' string can be: day first (the source's convention) and month first, each if valid."""
+    s = str(s).strip()
+    m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", s)
+    if not m:
+        return []
+    out = []
+    for order, (d, mo) in (("day first", (m[1], m[2])), ("month first", (m[2], m[1]))):
+        try:
+            out.append((dt.date(int(m[3]), int(mo), int(d)), order))
+        except ValueError:
+            pass
+    return out if len(out) < 2 or out[0][0] != out[1][0] else out[:1]
+
+
+def _resolve_dates(planting, harvest, season):
+    """Sowing and harvest dates of a soil-health row, whose source mixes day/month and month/day order (even within a
+    row: Bungoma '3/12/2010' with a Long Rains harvest on '14/06/2010' is 12 Mar). Day first is kept unless it
+    contradicts the row's own harvest date (a season of SEASON_DAYS) or stated season (LR sown Feb-Jul, SR Aug-Jan);
+    then the first reading that agrees with them, both dates in one order before mixed orders (Machakos '4/08/2015'
+    to '7/12/2015', Long Rains: 8 Apr to 12 Jul, not 8 Apr to 7 Dec). → (sowing, harvest, date note): note None when day
+    first stands, 'month/day order inferred' when another reading is taken, 'order unresolved' when none agrees (the
+    dates are then dropped)."""
+    ps, hs = _readings(planting), _readings(harvest)
+    if not ps:
+        return None, (hs[0][0] if hs else None), None
+
+    def fits(p, h):
+        ok_season = season not in ("LR", "SR") or season_of(p.month) == season
+        ok_days = h is None or SEASON_DAYS[0] <= (h - p).days <= SEASON_DAYS[1]
+        return ok_season and ok_days
+
+    pairs = [(p, po, h, ho) for p, po in ps for h, ho in (hs or [(None, po)])]
+    pairs.sort(key=lambda x: (x[1] != x[3], x[1] != "day first"))   # one order for the row first, day first first
+    for p, po, h, ho in pairs:
+        if fits(p, h):
+            return p, h, None if (po, ho) == ("day first", "day first") else "month/day order inferred"
+    return None, None, "order unresolved"
+
+
 def _fix_text(s):
     return s if not isinstance(s, str) else s.replace("Â\x92", "'").replace("Â’", "'").strip()
 
@@ -117,13 +162,17 @@ def kenya_soil_health(root=YIELD_DATA):
     bad = lat.abs().gt(5) | lon.lt(33) | lon.gt(42)
     lat[bad], lon[bad] = np.nan, np.nan
     parsed = f.planting_date.map(_parse_date)
-    pdate = parsed.map(lambda p: p[0])
     dq = parsed.map(lambda p: p[1])
+    stated = f.Season.str.strip().where(f.Season.str.strip().isin(["LR", "SR"]))
+    resolved = [_resolve_dates(p, h, s) for p, h, s in zip(f.planting_date, f.harvest_date, stated)]
+    pdate = pd.Series([r[0] for r in resolved], index=f.index, dtype=object)
+    harvest = pd.Series([r[1] for r in resolved], index=f.index, dtype=object)
+    order = pd.Series([r[2] for r in resolved], index=f.index, dtype=object)
+    dq = dq.where(order.isna(), np.where(order.eq("order unresolved"), "unresolved day/month order", "day"))
     pyear = pd.to_numeric(f.planting_date.str.extract(r"(\d{4})")[0], errors="coerce")
     pmonth = pdate.map(lambda d: d.month if d else None)
-    season = f.Season.where(f.Season.isin(["LR", "SR"]), pmonth.map(season_of))
+    season = stated.where(stated.notna(), pmonth.map(season_of))
     year = [season_year(y, m) if pd.notna(y) else np.nan for y, m in zip(pyear, pmonth)]
-    harvest = f.harvest_date.map(lambda s: _parse_date(s)[0])
     irrig = f.irrigated.str.upper().map({"TRUE": True, "FALSE": False})
     soil = f[["soil_type", "soil_texture"]].apply(lambda r: "; ".join(str(v) for v in r if pd.notna(v)) or None, axis=1)
     df = pd.DataFrame(dict(
@@ -142,6 +191,10 @@ def kenya_soil_health(root=YIELD_DATA):
     inoculated = f.inoculated.str.upper().eq("TRUE") & f.crop.ne("bean")
     df.loc[inoculated, "quality_flag"] = "rhizobium-inoculated non-legume: crop label doubtful"
     df.loc[f.intercrops.notna(), "notes"] = "intercropped with " + f.intercrops
+    inferred = order.eq("month/day order inferred")
+    df.loc[inferred, "notes"] = df.loc[inferred, "notes"].fillna("").str.cat(
+        pd.Series("dates read month/day (day/month contradicts the harvest date or season)", index=df.index[inferred]),
+        sep="; ").str.strip("; ")
     df.loc[df.grain_yield_kg_ha.isna(), "quality_flag"] = "no yield"
     df = df[df.grain_yield_kg_ha.notna()]
     return _finish(df, "Kenya soil health (Alliance Bioversity-CIAT 2026)")
@@ -248,4 +301,19 @@ def load_all(root=YIELD_DATA, log=print):
             log(f"observations: {key}: {len(frames[-1])} rows")
         except FileNotFoundError as e:
             log(f"observations: {key}: skipped ({e.filename} not found)")
-    return pd.concat(frames, ignore_index=True)
+    obs = pd.concat(frames, ignore_index=True)
+    dup = n2africa_copies(obs)
+    if dup.any():
+        studies = ", ".join(sorted(obs.loc[dup, "study"].astype(str).unique()))
+        log(f"observations: {int(dup.sum())} soil-health rows are N2Africa's own plots ({studies}): kept once, as N2Africa")
+    return obs[~dup].reset_index(drop=True)
+
+
+def n2africa_copies(obs):
+    """The soil-health compilation carries the N2Africa trials again (doi 10.25502/VMVB-SN23/D: the same plots and yields; its
+    sowing dates are N2Africa's, some with day and month swapped, e.g. Migori '4/02/2011' for 2 Apr): its rows that
+    match an N2Africa plot on crop, year and yield (to 0.1 kg/ha) → bool mask."""
+    n2a = obs.source.astype(str).str.startswith("N2Africa")
+    ksh = obs.source.astype(str).str.startswith("Kenya soil health")
+    key = obs.crop.astype(str) + "|" + obs.year.astype(str) + "|" + obs.grain_yield_kg_ha.round(1).astype(str)
+    return ksh & key.isin(set(key[n2a])) & obs.grain_yield_kg_ha.notna()

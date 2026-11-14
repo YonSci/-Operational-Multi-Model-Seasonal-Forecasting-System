@@ -58,7 +58,7 @@ def site_levels(sid, levels, reported):
 
 def with_nitrogen(t, sid, lv, split):
     return dict(t, nitrogen={"rate_kg_ha": lv["rate_kg_ha"], "split": split.get(t["variety"]["aquacrop_crop"], [(0, 1.0)]),
-                             "organic_n_factor": dsa.soil_factor(sid)})
+                             **dsa.soil_nitrogen(sid)})
 
 
 def normal_hash(dhash):
@@ -173,9 +173,10 @@ def run(rid, workers=2, force=False, max_age_days=None):
             "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
             "levels": levels, "split": split, "assumed": assumed,
             "reported": {sid: site_levels(sid, levels, reported)["reported"] for sid in reported if sid in out},
-            "soil": {"organic_n_factor": dsa.soil_factor(), "c_to_n": dsa.C_TO_N,
-                     "sites": {sid: dsa.soil_factor(sid) for sid in (dsa.soil_settings().get("sites") or {})},
-                     "initial_mineral_n_ppm": {"NO3": dsa.INIT_NO3, "NH4": dsa.INIT_NH4}},
+            "soil": {**dsa.soil_nitrogen(), "c_to_n": dsa.C_TO_N,
+                     "sites": {sid: {**dsa.soil_nitrogen(sid),
+                                     "source": (dsa.soil_settings()["sites"][sid] or {}).get("source")}
+                               for sid in (dsa.soil_settings().get("sites") or {})}},
             "normal": NORMAL,
             "water_limited": "DSSAT's outlook of the same members: no nitrogen limitation",
             "varieties": {k: res["meta"]["varieties"][k] for k in varieties},
