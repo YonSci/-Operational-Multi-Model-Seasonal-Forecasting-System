@@ -52,7 +52,9 @@ OUTCOMES = [
     ("not_sown", "No sowing opportunity", "No onset by the rule's search end, 15 Jan (counted as no yield)"),
     ("error", "Model error", "AquaCrop failed for this member: no outcome, left out of every probability"),
 ]
-MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "rain_mm", "potential_t_ha", "sowings")
+# appended keys only: the page reads members by position
+MEMBER_KEYS = ("planting", "harvest", "yield_t_ha", "status", "stress_days", "rain_mm", "potential_t_ha", "sowings",
+               "et_mm", "runoff_mm", "drainage_mm")
 
 
 # the files kept in the tab's data folder beside each source's latest run; any other .json there is an older run's

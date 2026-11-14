@@ -55,6 +55,7 @@ from crop_engine.adapters import aquacrop_adapter as aq
 from crop_engine.adapters import dssat_adapter as dsa
 from crop_engine.adapters import wofost_adapter as wf
 from crop_engine.data import soil as soil_mod
+from crop_engine.data import soil_depth
 from crop_engine.data import weather as W
 from crop_engine.scenarios import planting as pl
 
@@ -107,6 +108,7 @@ def config_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(aq.__file__).read_bytes())
     h.update(aq.CO2_FILE.read_bytes())
+    h.update(json.dumps(soil_depth.restrictions()).encode())     # only the restrictions in effect (none: unchanged)
     h.update(Path(pl.__file__).read_bytes())
     return h.hexdigest()[:12]
 
@@ -121,6 +123,7 @@ def wofost_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(wf.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
+    h.update(json.dumps(soil_depth.restrictions()).encode())
     return h.hexdigest()[:12]
 
 
@@ -135,6 +138,7 @@ def dssat_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(dsa.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
+    h.update(json.dumps(soil_depth.restrictions()).encode())
     return h.hexdigest()[:12]
 
 
@@ -223,6 +227,31 @@ def outcome_rates(records, failure_t_ha):
             "p_failure": rate(int((ny < failure_t_ha).sum()), len(valid))}
 
 
+WATER_KEYS = ("et_mm", "transpiration_mm", "evaporation_mm", "runoff_mm", "drainage_mm", "capillary_rise_mm",
+              "water_productivity_kg_m3", "rain_lost_pct")
+
+
+def water_use(sown):
+    """Medians over the sown crops of where the season's water went (aquacrop_adapter.water_balance), or None when
+    the engine gives no water balance (WOFOST, DSSAT)."""
+    have = [m for m in sown if m.get("et_mm") is not None]
+    if not have:
+        return None
+    return {f"{k}_median": _q([m.get(k) for m in have], 0.5) for k in WATER_KEYS} | {"n": len(have)}
+
+
+LOW_HI = 0.15
+
+
+def low_harvest_index(members):
+    """Diagnostic: % of the matured members whose harvest index (yield / biomass) is below LOW_HI. A matured crop
+    with almost no grain is the sign of a season ended at the wrong time (the delayed-germination case,
+    aquacrop_adapter.patch_delayed_maturity): it should stay near 0. None when no matured member has a biomass."""
+    hi = [m["yield_t_ha"] / m["biomass_t_ha"] for m in members
+          if m["status"] == "ok" and (m.get("biomass_t_ha") or 0) > 0.5]
+    return round(100.0 * sum(h < LOW_HI for h in hi) / len(hi), 1) if hi else None
+
+
 def summarize(members, variety, bench=None):
     valid = [m for m in members if m["status"] != "error"]          # a model error is no outcome: left out
     y = np.array([effective_yield(m) for m in valid])
@@ -246,6 +275,22 @@ def summarize(members, variety, bench=None):
          "stress_days_median": _q([m["stress_days"] for m in sown], 0.5),
          "rain_mm_median": _q([m["rain_mm"] for m in sown], 0.5),
          "irrigation_mm_median": _q([m.get("irrigation_mm") or 0.0 for m in sown], 0.5)}
+    if s["irrigation_mm_median"]:                                  # what a farmer draws, losses included (config)
+        s["irrigation_drawn_mm_median"] = round(s["irrigation_mm_median"] / C.IRRIGATION_EFFICIENCY, 1)
+    wu = water_use(sown)
+    if wu:
+        s["water_use"] = wu
+    low = low_harvest_index(members)
+    if low is not None:
+        s["low_harvest_index_pct"] = low
+    fl = [m for m in sown if m.get("heat_days_flowering") is not None]
+    if fl:                                                         # aquacrop_adapter.flowering_temperature
+        s["flowering_temperature"] = {
+            "heat_days_median": _q([m["heat_days_flowering"] for m in fl], 0.5),
+            "members_with_heat_pct": round(100.0 * sum(m["heat_days_flowering"] > 0 for m in fl) / len(fl), 1),
+            "cold_days_median": _q([m["cold_days_flowering"] for m in fl], 0.5),
+            "members_with_cold_pct": round(100.0 * sum(m["cold_days_flowering"] > 0 for m in fl) / len(fl), 1),
+            "n": len(fl)}
     if bench and bench.get("t33") is not None:
         s["vs_benchmark"] = {"benchmark_p_failure": bench["p_failure"], "benchmark_median": bench["median"],
                              **{f"benchmark_{k}": bench.get(k) for k in ("p_sowing_opportunity", "p_establishment_failure",

@@ -44,6 +44,9 @@ MET_SOURCES = ["era5land", "climatology", "seasonal", "forecast"]   # seasonal: 
 
 # AquaCrop soil compartments: 2 m, finer near the surface (SoilGrids layers reach 200 cm)
 SOIL_DZ = [0.1] * 12 + [0.2] * 4
+# Irrigation: the engines give the net depth reaching the soil; the water drawn from a pan, tank or river is shown as
+# net / IRRIGATION_EFFICIENCY (furrow or bucket irrigation on smallholder fields, an assumed level)
+IRRIGATION_EFFICIENCY = 0.75
 
 # Water-stress day: transpiration below this fraction of its potential on a day with potential >= 0.5 mm
 STRESS_RATIO = 0.5

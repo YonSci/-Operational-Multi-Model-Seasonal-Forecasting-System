@@ -1,0 +1,428 @@
+# Rootable soil depth per site or grid cell (crop_engine/data/soil_depth.yaml): where a restrictive layer (bedrock, a
+# hardpan) lies within the 2 m profile, the crop's roots stop there. Every engine applies it (soil.profile carries it):
+# AquaCrop's maximum rooting depth (Zmax; AquaCrop-OSPy stores but never uses its own z_res, so the limit is applied to
+# the crop as FAO AquaCrop does), DSSAT's root depth and WOFOST's soil rooting depth (RDMSOL).
+# 
+# The table holds, per site id (or grid cell id, "g-<lat>_<lon>"), depth_cm and its source:
+#   isda      iSDAsoil v1 depth to bedrock (30 m, Africa; Google Earth Engine ISDASOIL/Africa/v1/bedrock_depth, band
+#             mean_0_200), the median over the site's 0.25 deg cell at 250 m. iSDAsoil stops at 200 cm: 200 means 2 m or
+#             deeper, no restriction. In November 2026 every site and grid cell was 200: public data show no shallow soils
+#             here, which may be because the model rarely predicts them
+#   measured  a depth reported by the site (the partners' questionnaire): kept when the table is refetched
+# A depth of 199 cm or more is no restriction.
+# 
+#   python -m crop_engine.data.soil_depth --fetch              # the registered sites
+#   python -m crop_engine.data.soil_depth --fetch --grid       # and the regional grid's cells (outputs/crop_engine/grid)
+sites:
+  el_karama_sahiwals_farm:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.125_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.125_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.125_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.125_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.125_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.375_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.375_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.375_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g+0.625_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.125_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.125_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.125_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.125_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.375_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.375_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.375_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.375_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.625_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.625_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.625_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.625_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.625_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.875_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.875_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.875_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.875_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.875_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-0.875_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.125_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_36.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.375_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_36.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.625_38.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_36.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_36.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-1.875_38.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_36.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_36.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.125_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.375_36.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.375_36.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.375_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.375_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.375_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.375_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.625_37.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.625_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.625_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.625_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.625_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.625_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.875_37.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-2.875_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.125_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.375_37.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.375_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.375_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.375_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.625_37.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.625_38.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.625_38.375:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.625_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.625_38.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.625_39.125:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.875_38.625:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  g-3.875_38.875:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  genco_ltd_maralal_samburu_farm:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  genco_ltd_tana_river_farm:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  kalro_kiboko_makueni_farm:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  kapiti_research_station_farm:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'
+  livemo_ltd_memerush_kajiado:
+    depth_cm: 200
+    source: isda
+    fetched: '2026-11-14'

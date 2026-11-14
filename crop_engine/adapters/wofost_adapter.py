@@ -169,6 +169,9 @@ def soil_parameters(layers, initial_frac, root_depth_cm=100.0):
     smfcf, smw = avg(lambda L: L.theta_fc, top), avg(lambda L: L.theta_wp, top)
     sm0 = max(avg(lambda L: sat_ks(L)[0], top), smfcf + 0.03)
     depth = float(layers[-1].bottom_cm)
+    from crop_engine.data.soil import restrictive_cm
+    if restrictive_cm(layers) is not None:                            # a restrictive layer stops the roots (soil_depth)
+        depth = min(depth, restrictive_cm(layers))
     soil = {"SMFCF": smfcf, "SMW": smw, "SM0": sm0, "CRAIRC": 0.06, "RDMSOL": depth, "K0": 10.0,
             "SOPE": float(np.clip(avg(lambda L: sat_ks(L)[1], top), 0.1, 10.0)),
             "KSUB": float(np.clip(avg(lambda L: sat_ks(L)[1], sub), 0.05, 10.0)), "SPADS": 0.1, "SPODS": 0.03,
@@ -216,6 +219,8 @@ def soil_profile(layers, initial_frac, split_at=()):
     that must be layer boundaries (PCSE's multi-layer balance needs one at the crop's maximum rooting depth); the
     SoilGrids layer holding one is split there, keeping every piece at least 5 cm."""
     from dataclasses import replace
+    from crop_engine.data.soil import restrictive_cm
+    rdmsol = min(float(layers[-1].bottom_cm), restrictive_cm(layers) or 1e9)
     cuts = sorted({float(d) for d in split_at})
     pieces = []
     for L in layers:
@@ -233,7 +238,7 @@ def soil_profile(layers, initial_frac, split_at=()):
     paw = sum((L.theta_fc - L.theta_wp) * (L.bottom_cm - L.top_cm) for L in layers)
     site = {"WAV": float(np.clip(initial_frac, 0, 1)) * paw, "SMLIM": float(layers[0].theta_fc), "IFUNRN": 0,
             "NOTINF": 0.0, "SSMAX": 0.0, "SSI": 0.0}
-    return {"SoilProfileDescription": profile, "RDMSOL": float(layers[-1].bottom_cm)}, site
+    return {"SoilProfileDescription": profile, "RDMSOL": rdmsol}, site
 
 
 def _weather(task, m, dates):

@@ -40,6 +40,7 @@ import xarray as xr
 from crop_engine import config as C
 from crop_engine import run_outlook as ro
 from crop_engine.data import soil as soil_mod
+from crop_engine.data import smap
 from crop_engine.data.sites import registered_sites
 from crop_engine.scenarios import management as mg
 from crop_engine.scenarios import planting as pl
@@ -47,7 +48,7 @@ from crop_engine.scenarios import planting as pl
 SCEN_OUT = C.OUT / "scenarios"
 SUMMARY_KEYS = ("yield_t_ha", "p_failure", "p_failure_if_sown", "p_establishment_failure", "p_sowing_opportunity",
                 "yield_if_sown_t_ha", "share", "planting", "harvest_median", "stress_days_median", "resown",
-                "irrigation_mm_median", "vs_benchmark")
+                "irrigation_mm_median", "irrigation_drawn_mm_median", "water_use", "vs_benchmark")
 WOFOST_SKIP = {"density"}  # scenario fields WOFOST cannot represent (management.py)
 REPRODUCE_TOL = 0.05      # t/ha: the outlook's member yields, re-simulated unchanged (AquaCrop moves ~0.01 t/ha with the 6th decimal of the initial water)
 
@@ -76,6 +77,11 @@ def compact(summary):
     return {k: summary.get(k) for k in SUMMARY_KEYS if k in summary}
 
 
+def available_keys(keys, season_year):
+    """The scenarios that can run: SMAP's soil water only when the season's values are on disk (data/smap.py)."""
+    return [k for k in keys if mg.SCENARIOS[k].get("initial_source") != "smap" or smap.available(season_year)]
+
+
 def base_tasks(res, ds, varieties, rules, site_ids):
     """The outlook's AquaCrop tasks of the run, sown on its members' first sowing dates → [(site, variety, rule), task]."""
     dates = ds.time.to_index()
@@ -100,7 +106,8 @@ def base_tasks(res, ds, varieties, rules, site_ids):
                 t = dict(dates=dates.values, rain=rain, tmax=ds.tmax_c.isel(site=k).values, tmin=ds.tmin_c.isel(site=k).values,
                          et0=ds.et0_mm.isel(site=k).values, source=ds.precip_source.values, planting=plant, resow=resow,
                          variety=varieties[vk], kw=varieties[vk]["kw"], layers=layers,
-                         initial_frac=float(s["initial_water_fraction"]))
+                         initial_frac=float(s["initial_water_fraction"]),
+                         smap_frac=smap.initial_fraction(sid, dates[0].year, layers))
                 if "rad_mj_m2" in ds:                                   # WOFOST's weather (AquaCrop ignores it)
                     t.update(rad=ds.rad_mj_m2.isel(site=k).values, vap=ds.vap_hpa.isel(site=k).values,
                              wind2=ds.wind2_ms.isel(site=k).values, lat=sites[sid].lat, lon=sites[sid].lon,
@@ -124,14 +131,15 @@ def wofost_plan(res, varieties, keys):
     if not any("wofost" in x for s in res["sites"].values() for rs in s["results"].values() for x in rs.values()):
         return set(), []
     return set(ro.wofost_varieties(varieties)), [k for k in keys if not WOFOST_SKIP & set(mg.SCENARIOS[k])
-                                                 and not mg.aquacrop_only(k)]
+                                                 and not mg.aquacrop_only(k)
+                                                 and not (mg.SCENARIOS[k].get("field") or {}).get("curve_number_adj_pct")]
 
 
 def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2, force=False, max_age_days=None,
         wofost=True, dssat=True):
     """Simulate the scenarios of run `rid` and write scenarios/<rid>.json → its path, or None when skipped."""
-    keys = list(keys or mg.SCENARIOS)
     res = json.loads((C.RESULTS_OUT / f"{rid}.json").read_text(encoding="utf-8"))
+    keys = available_keys(list(keys or mg.SCENARIOS), int(str(res["meta"]["run"])[:4]))
     shash = scenario_hash(res["meta"], keys) + ("-wofost" if wofost else "") + ("-dssat" if dssat else "")
     path = SCEN_OUT / f"{rid}.json"
     if path.exists() and not force:
