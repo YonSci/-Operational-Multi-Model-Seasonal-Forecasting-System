@@ -70,6 +70,13 @@ SCENARIOS = {
                    field=dict(sr_inhb=True)),
     "bunds": dict(label="Bunds 10 cm high (rain held on the field)", group="Water management",
                   field=dict(bunds=True, z_bund=0.10)),
+    # partial runoff reduction: AquaCrop's field-practice adjustment of the runoff curve number (AquaCrop-OSPy
+    # FieldMngt curve_number_adj_pct; DSSAT lowers its own curve number by the same share; WOFOST has none). Levels
+    # assumed: contour ridging and bunds or terraces cut runoff without stopping it, between bare soil and "ridges"
+    "contour_ridges": dict(label="Contour ridging (runoff curve number 15 % lower)", group="Water management",
+                           field=dict(curve_number_adj=True, curve_number_adj_pct=-15)),
+    "terraces": dict(label="Contour bunds or fanya juu terraces (curve number 30 % lower)", group="Water management",
+                     field=dict(curve_number_adj=True, curve_number_adj_pct=-30)),
     # irrigation methods other than soil-moisture targets (AquaCrop only)
     "irr_interval": dict(label="Irrigation every 7 days, to field capacity (up to 30 mm)", group="Irrigation method",
                          irrigation=dict(irrigation_method=2, IrrInterval=7, MaxIrr=30)),

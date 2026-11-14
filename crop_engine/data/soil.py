@@ -5,7 +5,8 @@ Saxton & Rawls (2006) pedotransfer functions, as used by the FAO water balance).
 
 These are 0.25° (≈ 28 km) averages of 250 m SoilGrids estimates, not field measurements: the crop results carry
 that uncertainty. Coarse fragments take water out of AquaCrop's layers (aquacrop_adapter.make_soil); DSSAT receives them
-(SLCF); WOFOST does not use them.
+(SLCF); WOFOST does not use them. A profile also carries the rootable depth (soil_depth.yaml: a restrictive layer within
+2 m, or None), which every engine applies.
 """
 from dataclasses import dataclass
 
@@ -15,6 +16,23 @@ import xarray as xr
 from crop_engine.config import BASE
 
 SOIL_FILE = BASE / "data" / "soilgrids" / "soil_hydraulics_kenya_p25.nc"
+
+
+class Profile(list):
+    """The layers, top to bottom, and the rootable depth (cm) where a restrictive layer stops the roots (None: the whole
+    profile). A list, so every caller that iterates the layers is unchanged."""
+    restrictive_cm = None
+
+
+def with_depth(layers, restrictive_cm):
+    p = Profile(layers)
+    p.restrictive_cm = restrictive_cm
+    return p
+
+
+def restrictive_cm(layers):
+    """The rootable depth of a profile (cm), or None (a plain list of layers has none)."""
+    return getattr(layers, "restrictive_cm", None)
 
 
 @dataclass
@@ -42,7 +60,8 @@ def profile(site, path=SOIL_FILE):
                         float(c.om_pct[k]), float(c.cfvo[k]), float(c.theta_fc[k]), float(c.theta_wp[k]))
                   for k in range(ds.sizes["depth"])]
     check(layers, site.name)
-    return layers
+    from crop_engine.data import soil_depth
+    return with_depth(layers, soil_depth.restrictive_cm(site.id))
 
 
 def check(layers, where=""):

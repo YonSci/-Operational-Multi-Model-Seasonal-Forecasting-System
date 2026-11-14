@@ -800,6 +800,21 @@ function PartnerAsk() {
   )
 }
 
+// Where the season's water went, sowing to harvest (AquaCrop's water balance, medians of the sown crops)
+function WaterUse({ w, rain }) {
+  const r = v => (v == null ? 'n/a' : Math.round(v))
+  return (
+    <>
+      {' '}Where the season&apos;s water went (AquaCrop, medians of the sown crops, sowing to harvest): of about {r(rain)} mm of rain, the crop
+      used {r(w.et_mm_median)} mm ({r(w.transpiration_mm_median)} mm through its leaves, {r(w.evaporation_mm_median)} mm evaporated from the soil),
+      {' '}{r(w.runoff_mm_median)} mm ran off and {r(w.drainage_mm_median)} mm drained below the roots
+      {w.rain_lost_pct_median != null ? ` (${r(w.rain_lost_pct_median)} % of the rain lost)` : ''}
+      {w.capillary_rise_mm_median > 0 ? `; ${r(w.capillary_rise_mm_median)} mm rose from a water table` : ''}.
+      {w.water_productivity_kg_m3_median != null ? ` Water productivity: ${w.water_productivity_kg_m3_median.toFixed(2)} kg of yield per m3 of water used.` : ''}
+    </>
+  )
+}
+
 function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg }) {
   const sub = 'The seasonal forecast’s crops grown again in the same weather members with one management choice changed. '
             + 'The first row is the outlook above.'
@@ -816,7 +831,8 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
       <td style={{ fontWeight: strong ? 600 : 400, color: strong ? 'var(--heading)' : undefined }}>
         {label}
         {s.irrigation_mm_median > 0 && <div style={{ fontSize: 12, color: 'var(--text-meta)' }}>
-          {Math.round(s.irrigation_mm_median)} mm of irrigation (median of the sown crops)</div>}
+          {Math.round(s.irrigation_mm_median)} mm of irrigation reaching the soil
+          {s.irrigation_drawn_mm_median ? `, about ${Math.round(s.irrigation_drawn_mm_median)} mm drawn from the source` : ''} (medians of the sown crops)</div>}
       </td>
       <td>{s.planting?.p10 === s.planting?.p90 ? fmtDate(s.planting?.median) : `${fmtDate(s.planting?.p10)} – ${fmtDate(s.planting?.p90)}`}</td>
       <td>{pct(s.p_sowing_opportunity)}</td>
@@ -857,7 +873,9 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         Kiboko. Soil water on 1 Aug replaces the ERA5-Land value. Supplementary irrigation waters the crop whenever its root zone
         falls below 30 % of its available water from canopy growth to flowering (not before the crop has emerged with rain), at most 100 mm a season reaching the soil (about 130 mm
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
-        covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
+        covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field;
+        contour ridging and contour bunds or fanya juu terraces lower the runoff curve number by 15 % and 30 % (assumed levels),
+        so less of a heavy rain runs off but some still does.
         Bunds hold up to 10 cm of rain on the field until it soaks in. The other irrigation methods water every 7 days
         to field capacity, on a fixed schedule from sowing, at a constant 3 mm a day (drip), or count the net water a crop needs
         to keep its root zone above 60 % (the requirement, not a practice). A water table feeds the root zone by capillary rise.
@@ -1168,6 +1186,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
           {summary.potential_t_ha?.median != null && <>
             {' '}Water stress: the sown crops yield a median {fmtT(summary.potential_t_ha.yield_median)} t/ha, against {fmtT(summary.potential_t_ha.median)} t/ha
             without water stress (AquaCrop’s potential yield).</>}
+          {summary.water_use?.et_mm_median != null && <WaterUse w={summary.water_use} rain={summary.rain_mm_median}/>}
           {' '}{run.members_kind?.startsWith('deterministic') ? `${run.model_label} is a single forecast, repeated in all 25 members: the spread comes from the observations and the seasonal forecast after it.` : ''}
         </p>
       )}

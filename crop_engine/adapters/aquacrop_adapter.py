@@ -256,6 +256,20 @@ def make_soil(layers):
     return s
 
 
+def rooting_limited(kw, aquacrop_crop, layers):
+    """The crop's parameters with its maximum rooting depth (Zmax, m) capped at the soil's rootable depth (a
+    restrictive layer, soil.Profile.restrictive_cm), as FAO AquaCrop limits the root zone; never below Zmin + 5 cm.
+    Unchanged without a restriction."""
+    from aquacrop.entities.crop import crop_params
+    from crop_engine.data.soil import restrictive_cm
+    lim = restrictive_cm(layers)
+    if lim is None:
+        return kw
+    p = crop_params[aquacrop_crop]
+    zmax, zmin = float(kw.get("Zmax", p["Zmax"])), float(kw.get("Zmin", p["Zmin"]))
+    return dict(kw, Zmax=round(max(min(zmax, lim / 100.0), zmin + 0.05), 3)) if lim / 100.0 < zmax else kw
+
+
 def _sow(task, m, plant, dates, g):
     """One sowing of member m on `plant` → outcome dict (status, yield, dates, stress)."""
     from aquacrop import AquaCropModel, Crop, FieldMngt, InitialWaterContent
@@ -278,7 +292,9 @@ def _sow(task, m, plant, dates, g):
     try:
         model = AquaCropModel(
             sim_start_time=f"{dates[0]:%Y/%m/%d}", sim_end_time=f"{dates[-1]:%Y/%m/%d}", weather_df=wdf,
-            soil=make_soil(task["layers"]), crop=Crop(task["variety"]["aquacrop_crop"], planting_date=f"{plant:%m/%d}", **task["kw"]),
+            soil=make_soil(task["layers"]),
+            crop=Crop(task["variety"]["aquacrop_crop"], planting_date=f"{plant:%m/%d}",
+                      **rooting_limited(task["kw"], task["variety"]["aquacrop_crop"], task["layers"])),
             initial_water_content=InitialWaterContent(wc_type="Pct", method="Depth", depth_layer=[0.05, 2.0],
                                                       value=[100 * task["initial_frac"]] * 2),
             irrigation_management=irrigation(task.get("irrigation"), plant),
@@ -311,6 +327,7 @@ def _sow(task, m, plant, dates, g):
     tr, trp = flux.Tr.values[: len(dates)], flux.TrPot.values[: len(dates)]
     with np.errstate(invalid="ignore", divide="ignore"):
         stressed = (trp[season] >= 0.5) & (tr[season] < STRESS_RATIO * trp[season])
+    wb = water_balance(flux, len(dates), season, yld, float(task["rain"][m][season].sum()))
     src = np.bincount(task["source"][season].astype(int), minlength=6)
     ccs = np.nan_to_num(growth.canopy_cover.values[: len(dates)].astype(np.float32))
     ccs = np.pad(ccs, (0, len(dates) - len(ccs)))                     # zero after the season ends
@@ -323,8 +340,22 @@ def _sow(task, m, plant, dates, g):
              max_canopy=round(cc, 3), stress_days=int(stressed.sum()),
              irrigation_mm=round(float(np.nansum(flux.IrrDay.values[: len(dates)][season])), 1) if "IrrDay" in flux else 0.0,
              rain_mm=round(float(task["rain"][m][season].sum()), 1), sources=src.tolist(),
-             _canopy=ccs[::CANOPY_STEP])
+             _canopy=ccs[::CANOPY_STEP], **wb)
     return r
+
+
+def water_balance(flux, n_days, season, yield_t_ha, rain_mm):
+    """Where the season's water went, sowing to harvest (AquaCrop-OSPy's daily water flux, mm): crop transpiration
+    (Tr), soil evaporation (Es), their sum the crop's evapotranspiration, surface runoff, drainage below the profile
+    (DeepPerc) and capillary rise from a water table (CR); the water productivity, kg of yield per m3 of
+    evapotranspiration (1 t/ha over 1 mm = 100 kg/m3); and the share of the season's rain lost to runoff and drainage."""
+    col = lambda c: float(np.nansum(flux[c].values[:n_days][season])) if c in flux else 0.0
+    tr, es, ro, dp, cr = (col(c) for c in ("Tr", "Es", "Runoff", "DeepPerc", "CR"))
+    et = tr + es
+    return {"et_mm": round(et, 1), "transpiration_mm": round(tr, 1), "evaporation_mm": round(es, 1),
+            "runoff_mm": round(ro, 1), "drainage_mm": round(dp, 1), "capillary_rise_mm": round(cr, 1),
+            "water_productivity_kg_m3": round(100.0 * yield_t_ha / et, 2) if et > 1 else None,
+            "rain_lost_pct": round(100.0 * (ro + dp) / rain_mm, 1) if rain_mm > 1 else None}
 
 
 def simulate(task):

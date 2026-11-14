@@ -47,7 +47,7 @@ from crop_engine.scenarios import planting as pl
 SCEN_OUT = C.OUT / "scenarios"
 SUMMARY_KEYS = ("yield_t_ha", "p_failure", "p_failure_if_sown", "p_establishment_failure", "p_sowing_opportunity",
                 "yield_if_sown_t_ha", "share", "planting", "harvest_median", "stress_days_median", "resown",
-                "irrigation_mm_median", "vs_benchmark")
+                "irrigation_mm_median", "irrigation_drawn_mm_median", "water_use", "vs_benchmark")
 WOFOST_SKIP = {"density"}  # scenario fields WOFOST cannot represent (management.py)
 REPRODUCE_TOL = 0.05      # t/ha: the outlook's member yields, re-simulated unchanged (AquaCrop moves ~0.01 t/ha with the 6th decimal of the initial water)
 
@@ -124,7 +124,8 @@ def wofost_plan(res, varieties, keys):
     if not any("wofost" in x for s in res["sites"].values() for rs in s["results"].values() for x in rs.values()):
         return set(), []
     return set(ro.wofost_varieties(varieties)), [k for k in keys if not WOFOST_SKIP & set(mg.SCENARIOS[k])
-                                                 and not mg.aquacrop_only(k)]
+                                                 and not mg.aquacrop_only(k)
+                                                 and not (mg.SCENARIOS[k].get("field") or {}).get("curve_number_adj_pct")]
 
 
 def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2, force=False, max_age_days=None,

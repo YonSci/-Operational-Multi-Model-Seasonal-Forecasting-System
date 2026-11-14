@@ -270,9 +270,10 @@ def _slni_field(v):
     return f"{f'{v:.4f}'[1:] if v < 1 else f'{v:.3f}':>6s}"
 
 
-def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0, curve_number=None):
+def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0, curve_number=None,
+              cn_adj_pct=0.0):
     """A DSSAT soil file (.SOL) with one profile (nitrogen: the layers' organic nitrogen, SLNI = SLOC / C_TO_N ×
-    organic_n_factor)."""
+    organic_n_factor; cn_adj_pct: the texture's runoff curve number changed by that %, as AquaCrop's field practices)."""
     rows = soil_layers(layers, root_depth_cm)
     top = rows[0]
     sand0 = 100 - top["SLCL"] - top["SLSI"]
@@ -280,6 +281,8 @@ def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_
     slu1 = 6.0 if sand0 > 70 else 9.0 if top["SLCL"] < 35 else 12.0
     sldr = 0.6 if sand0 > 70 else 0.4 if top["SLCL"] < 35 else 0.25
     slro = float(curve_number) if curve_number else 70.0 if sand0 > 70 else 76.0 if top["SLCL"] < 35 else 82.0
+    if not curve_number and cn_adj_pct:
+        slro = round(slro * (1.0 + float(cn_adj_pct) / 100.0), 1)
     out = ["*SOILS: crop engine (SoilGrids)", "",
            f"*{soil_id:10s}  SoilGrids   -99   {rows[-1]['SLB']:5d} crop engine SoilGrids profile",
            "@SITE        COUNTRY          LAT     LONG SCS FAMILY",
@@ -544,6 +547,9 @@ def run_members(task, members, plantings, water=None):
     cultivar = cfg.pop("cultivar")
     dates = pd.DatetimeIndex(task["dates"])
     root = float((v.get("parameters") or {}).get("Zmax", 2.0)) * 100
+    from crop_engine.data.soil import restrictive_cm
+    if restrictive_cm(task["layers"]) is not None:                   # a restrictive layer stops the roots (soil_depth)
+        root = min(root, restrictive_cm(task["layers"]))
     folder = _run_folder()
     try:
         cul_id = cultivar
@@ -554,7 +560,8 @@ def run_members(task, members, plantings, water=None):
         nit = task.get("nitrogen")
         (folder / "SOIL.SOL").write_text(soil_file(soil_id, task["lat"], task.get("lon", 0.0), task["layers"], root,
                                                    nitrogen=bool(nit), organic_n_factor=float((nit or {}).get("organic_n_factor", 1.0)),
-                                                   curve_number=RIDGES_CN if (task.get("field") or {}).get("sr_inhb") else None),
+                                                   curve_number=RIDGES_CN if (task.get("field") or {}).get("sr_inhb") else None,
+                                                   cn_adj_pct=(task.get("field") or {}).get("curve_number_adj_pct", 0.0)),
                                          encoding="ascii")
         stations = []
         for m in members:

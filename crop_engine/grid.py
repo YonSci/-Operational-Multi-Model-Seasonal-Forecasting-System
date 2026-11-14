@@ -435,7 +435,13 @@ def seasonal_run(inp, soils, varieties, rules, bench, workers, dbench=None):
         members.setdefault(cid, {}).setdefault(vk, {})[rk] = outcomes
         summ.setdefault(cid, {}).setdefault(vk, {})[rk] = ro.summarize(outcomes, varieties[vk],
                                                                        bench["cells"][cid][vk][rk])
+    every = [m for outcomes in res for m in outcomes]
+    low = ro.low_harvest_index(every)
+    if low is not None:
+        log(f"{rid}: {low:g} % of the matured member seasons have a harvest index below {ro.LOW_HI:g} "
+            f"(should stay near 0: the delayed-germination check)")
     meta = {"id": rid, "source": "seasonal", "model_label": attrs["model_label"], "run": f"{b.lead0}",
+            "low_harvest_index_pct": low,
             "obs_end": f"{b.obs_end}", "members": int(P.shape[0]), "engine": ro.ENGINE, "config_hash": bench["config_hash"],
             "created": _now(), "march_rain": ds.attrs.get("march_rain"), "temperature": ds.attrs.get("temperature_forecast"),
             "dssat_config_hash": (dbench or {}).get("config_hash")}
