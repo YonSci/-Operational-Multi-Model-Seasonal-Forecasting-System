@@ -148,3 +148,18 @@ def test_figures_never_reach_the_translator(monkeypatch):
         translate._cache.clear()
         _enable(monkeypatch, bad)
         assert translate.translate({"s": ["Onset 29 Oct, 68%."]}, "am")[0] is None
+
+
+def test_numbers_written_in_words_may_become_digits(monkeypatch):
+    # "Eight in ten" -> "8 kati ya 10": allowed, the English spells out both numbers
+    _enable(monkeypatch, lambda t: "[sw] " + t.replace("Eight in ten", "8 kati ya 10"))
+    out, note = translate.translate({"s": ["Eight in ten members fall before 12 Nov."]}, "sw")
+    assert out["s"][0] == "[sw] 8 kati ya 10 members fall before 12 Nov." and note is None
+    # a digit the English does not spell out is still rejected
+    translate._cache.clear()
+    _enable(monkeypatch, lambda t: "[sw] " + t.replace("Eight in ten", "9 kati ya 10"))
+    assert translate.translate({"s": ["Eight in ten members fall before 12 Nov."]}, "sw")[0] is None
+    # Ge'ez numerals are never accepted
+    translate._cache.clear()
+    _enable(monkeypatch, lambda t: t.replace("Eight in ten", "\u1370 \u1372"))
+    assert translate.translate({"s": ["Eight in ten members fall before 12 Nov."]}, "am")[0] is None
