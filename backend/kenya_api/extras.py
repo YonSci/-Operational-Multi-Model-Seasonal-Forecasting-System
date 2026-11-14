@@ -60,7 +60,7 @@ def lessons(lat: float = Query(...), lon: float = Query(...), season: str = Quer
         tr, err = translate.translate(rec["lessons"], language)
         if tr:
             rec = {**rec, "lessons": tr, "language": language, "translation_notice": translate.NOTICE.get(language)}
-        else:
+        if err:
             rec = {**rec, "translation_note": err}
     return _json(rec)
 

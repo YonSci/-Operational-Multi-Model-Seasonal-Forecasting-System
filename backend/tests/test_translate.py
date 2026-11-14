@@ -85,7 +85,7 @@ def test_translation_used_only_when_numbers_match(monkeypatch):
     out, err = translate.translate({"summary": ["Onset 29 Oct, 68%."], "n": {"x": "8 in 10"}}, "sw")
     assert err is None and out["summary"][0].startswith("[sw] ") and out["n"]["x"] == "[sw] 8 in 10"
     translate._cache.clear()
-    _enable(monkeypatch, lambda t: "[sw] " + t.replace("68", "86"))
+    _enable(monkeypatch, lambda t: "[sw] " + t.replace("⟦1⟧", "86"))       # a figure written by the translator
     out, err = translate.translate({"summary": ["Onset 29 Oct, 68%."]}, "sw")
     assert out is None and "figures" in err
 
@@ -116,3 +116,35 @@ def test_chat_in_swahili(monkeypatch):
     monkeypatch.setattr(chat, "_claude_reply", lambda *a, **k: None)          # the answer is the template's
     out = chat.reply([{"role": "user", "content": "When will the rains start?"}], ctx, language="sw")
     assert out["language"] == "sw" and out["reply"].startswith("[sw] ")
+
+
+def test_decimal_comma_and_partial_fallback(monkeypatch):
+    assert translate.same_numbers(["0.87 of the time"], ["0,87 ya wakati"])
+    # one sentence of three changes a figure: only that one stays in English
+    _enable(monkeypatch, lambda t: "[sw] " + (t.replace("⟦1⟧", "35") if "chance" in t else t))
+    out, note = translate.translate({"s": ["Onset 29 Oct.", "End 26 Dec, chance 53%.", "Normal 12 Nov."]}, "sw")
+    assert out["s"][0].startswith("[sw] ") and out["s"][1] == "End 26 Dec, chance 53%." and out["s"][2].startswith("[sw] ")
+    assert note and "1 sentence" in note
+    ex = translate.localise({"sections": {"summary": ["Onset 29 Oct.", "End 26 Dec, chance 53%.", "Normal 12 Nov."]}}, "sw")
+    assert ex["language"] == "sw" and ex["translation_note"]
+    # most sentences change: no translation at all
+    translate._cache.clear()
+    _enable(monkeypatch, lambda t: "[sw] " + t.replace("⟦0⟧", "7"))
+    assert translate.translate({"s": ["Onset 29 Oct.", "End 26 Dec.", "12 Nov."]}, "sw")[0] is None
+
+
+def test_figures_never_reach_the_translator(monkeypatch):
+    seen = []
+
+    def oktoba(t):                       # moves the marker, as Kiswahili word order does
+        seen.append(t)
+        return t.replace("Onset ⟦0⟧ Oct", "Mvua kuanza Oktoba ⟦0⟧").replace("hit rate", "kiwango")
+    _enable(monkeypatch, oktoba)
+    out, note = translate.translate({"s": ["Onset 29 Oct, hit rate 0.87, 44.0 days."]}, "sw")
+    assert seen and not any(ch.isdigit() for t in seen for ch in translate._MARK.sub('', t))   # markers only
+    assert out["s"][0] == "Mvua kuanza Oktoba 29, kiwango 0.87, 44.0 days." and note is None
+    # a marker dropped, repeated, or an Ethiopic numeral added: that text stays in English
+    for bad in (lambda t: t.replace("⟦1⟧", ""), lambda t: t + " ⟦0⟧", lambda t: t + " ፩"):
+        translate._cache.clear()
+        _enable(monkeypatch, bad)
+        assert translate.translate({"s": ["Onset 29 Oct, 68%."]}, "am")[0] is None

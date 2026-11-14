@@ -58,7 +58,7 @@ def compose(body: ComposeIn):
         tr, err = translate.translate({k: b[k] for k in ("title", "sections", "sms", "audio_script")}, body.language)
         if tr:
             b.update(tr, language=body.language, translation_notice=translate.NOTICE.get(body.language))
-        else:
+        if err:
             b["translation_note"] = err
     return _json({"bulletin": b, "snapshot": snap, "quality": bulletins.check(b, snap)})
 

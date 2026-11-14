@@ -86,8 +86,9 @@ def snapshot(fmt, season, model, lat=None, lon=None, area_name=None, crop="maize
         if not area_name:
             raise ValueError("Choose a county or region for this bulletin")
         recs["area"] = areas.area(season, model, name=area_name)
-        recs["attention_onset"] = areas.attention(season, model, "late_onset")
-        recs["attention_season"] = areas.attention(season, model, "short_season")
+        top = 999 if fmt == "regional" else 10                  # a county bulletin quotes the county's own rank
+        recs["attention_onset"] = areas.attention(season, model, "late_onset", top=top)
+        recs["attention_season"] = areas.attention(season, model, "short_season", top=top)
     else:
         country = areas.country_of(season)
         for s in _sites(country):
@@ -181,9 +182,7 @@ def template(snap, audience="general", length="standard") -> dict:
         att = R[key]
         if snap["format"] == "regional" and "area" in R:          # how this county or region ranks
             nm = R["area"]["scope"]["name"]
-            rows = att["ranked_areas"]
-            mine = next((i for i, r in enumerate(rows) if r["area"] == nm), None)
-            full = areas.attention(snap["season"], snap["model"], att["criterion"]["id"], top=999)["ranked_areas"] if mine is None else rows
+            full = att["ranked_areas"]                            # the whole ranking is in the snapshot
             mine = next((i for i, r in enumerate(full) if r["area"] == nm), None)
             if mine is not None:
                 r = full[mine]

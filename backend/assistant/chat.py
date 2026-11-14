@@ -342,7 +342,7 @@ def reply(messages, context, audience="general", language="en") -> dict:
         if tr:
             out.update(reply=tr["reply"], cautions=tr["cautions"], language=language,
                        translation_notice=translate.NOTICE.get(language))
-        else:
+        if err:
             out["translation_note"] = err
     return out
 

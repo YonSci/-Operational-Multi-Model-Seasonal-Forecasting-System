@@ -15,6 +15,8 @@ os.environ.setdefault("LOAD_BC_DAILY", "0")
 import mam_loader as dl  # noqa: E402
 from assistant import advisory, crop_data, narrate  # noqa: E402
 
+REAL_SCENARIOS_CURRENT = advisory.scenarios_current      # before conftest patches it for the engine tests
+
 KIBOKO = (-2.21046, 37.7190)
 FAO = "ECMWF SEAS5 (Oct+Obs latest) - FAO water balance (agricultural)"
 EARLY = dt.date(2026, 9, 1)           # before every modelled sowing: no option is past
@@ -141,6 +143,7 @@ def test_advisory_endpoint():
 
 
 def test_scenarios_of_another_configuration_are_not_used(monkeypatch):
+    monkeypatch.setattr(advisory, "scenarios_current", REAL_SCENARIOS_CURRENT)
     real = crop_data.load
     scen = real("scenarios.json")
     stale = {**scen, "meta": {**scen["meta"], "config_hash": "not-the-current-one"}}
@@ -155,5 +158,5 @@ def test_scenarios_of_another_configuration_are_not_used(monkeypatch):
 
 def test_scenarios_check():
     run = {"id": "seasonal_20261001"}
-    assert advisory.scenarios_current({"meta": {"id": "seasonal_20261001"}}, run) in (True, False)
-    assert advisory.scenarios_current({"meta": {"id": "seasonal_20260901"}}, run) is False
+    assert REAL_SCENARIOS_CURRENT({"meta": {"id": "seasonal_20261001"}}, run) in (True, False)
+    assert REAL_SCENARIOS_CURRENT({"meta": {"id": "seasonal_20260901"}}, run) is False
