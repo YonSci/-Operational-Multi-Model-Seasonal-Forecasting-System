@@ -530,6 +530,15 @@ function AdvisoryEvidence({ ev }) {
         <KV k="Sowing rule" v={a.sowing_rule}/>
         <KV k="Crop outlook" v={ev.crop_outlook.available ? `${ev.crop_outlook.engine}, ${ev.crop_outlook.run}, observations to ${fdate(ev.crop_outlook.observations_through)}` : ev.crop_outlook.reason}/>
       </div>
+      {ev.water_timing && Object.keys(ev.water_timing).length > 0 && (
+        <div style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Timing of water</div>
+          <KV k="Expected flowering" v={ev.water_timing.flowering_date ? `${fdate(ev.water_timing.flowering_date)} (${ev.water_timing.days_to_flowering} days from today)` : null}/>
+          <KV k="Soil water now" v={ev.water_timing.soil_water_pct != null ? `${ev.water_timing.soil_water_pct}% of available (${fdate(ev.water_timing.soil_water_date)})` : null}/>
+          <KV k="Rain in the next days" v={ev.water_timing.next_days_rain_mm != null ? `${ev.water_timing.next_days_rain_mm} mm over ${ev.water_timing.next_days} days (median of the weather models)` : null}/>
+          <KV k="Supplementary irrigation" v={ev.water_timing.irrigated_yield_t_ha != null ? `median yield ${ev.water_timing.rainfed_yield_t_ha} -> ${ev.water_timing.irrigated_yield_t_ha} t/ha with about ${ev.water_timing.irrigation_mm} mm` : null}/>
+        </div>
+      )}
       <div style={{ ...box, marginTop: 8 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Rules used</div>
         {ev.rules_used.length ? ev.rules_used.map(r => <KV key={r.id} k={r.id} v={r.status === 'reviewed' ? `Reviewed by ${r.reviewed_by}` : 'Draft: not yet reviewed'}/>)

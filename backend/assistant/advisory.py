@@ -220,7 +220,46 @@ def tradeoffs(ranked: list, objective: dict) -> list:
 
 
 # ---------------------------------------------------------------------------- context and rules
-def context(loc: dict, profile: dict, crop: dict, variety: str) -> tuple:
+# Days from sowing to flowering as a share of the days to maturity: the AquaCrop crop files' start of yield
+# formation (HIstart) over maturity, in growing degree days (maize 880 / 1700, sorghum 1041 / 1760, bean 556 / 1298)
+FLOWERING_SHARE = {"maize_early": 0.52, "maize_medium": 0.52, "sorghum": 0.59, "bean": 0.43}
+
+
+def water_timing(profile: dict, crop: dict, variety: str, today: dt.date) -> dict:
+    """The evidence for "is now the time for supplementary water?" for a sown field: when it should flower (its
+    sowing date and the crop's typical days to flowering), the soil water now at the crop site (the FAO water
+    balance the crop outlook starts from), the weather models' rain over the next days there (rainfall tracking),
+    and the supplementary-irrigation scenario's yield against the outlook's. Missing pieces are left out."""
+    out = {}
+    if profile.get("planted") != "yes" or not profile.get("sowing_date") or not crop.get("available"):
+        return out
+    v = crop["varieties"].get(variety) or {}
+    if v.get("maturity_days") and variety in FLOWERING_SHARE:
+        fl = dt.date.fromisoformat(profile["sowing_date"]) + dt.timedelta(days=round(v["maturity_days"] * FLOWERING_SHARE[variety]))
+        out.update(flowering_date=fl.isoformat(), days_to_flowering=(fl - today).days)
+    run = crop.get("run") or {}
+    site = ((crop_data.load(run.get("file") or "seasonal.json") or {}).get("sites") or {}).get(crop.get("site_id")) or {}
+    sw = site.get("soil_water") or {}
+    if sw.get("paw_fraction") is not None:
+        out.update(soil_water_pct=round(100 * sw["paw_fraction"]), soil_water_date=sw.get("date"))
+    try:
+        from . import tracker
+        wm = tracker.status(crop["site"])["weather_models"] or {}
+        if wm.get("median_total_mm") is not None:
+            out.update(next_days_rain_mm=wm["median_total_mm"], next_days=wm["window_days"])
+    except Exception:                                         # no tracking site or no data: left out
+        pass
+    res = ((crop.get("scenarios") or {}).get(variety) or {}).get(crop.get("rule")) or {}
+    base = metrics(res.get("baseline") or (crop["summaries"].get(variety) or {}).get(crop.get("rule")))
+    irr = metrics(res.get("irr_supplementary"))
+    if base.get("yield_median") is not None and irr.get("yield_median") is not None:
+        out.update(rainfed_yield_t_ha=base["yield_median"], irrigated_yield_t_ha=irr["yield_median"],
+                   irrigation_gain_t_ha=round(irr["yield_median"] - base["yield_median"], 2),
+                   irrigation_mm=irr.get("irrigation_mm"))
+    return out
+
+
+def context(loc: dict, profile: dict, crop: dict, variety: str, today: dt.date = None) -> tuple:
     """Flat values for the rule conditions (numbers) and for the text (formatted)."""
     q = loc["quantities"]
     on, cs, lg = q["onset"], q["cessation"], q["lgp"]
@@ -256,6 +295,8 @@ def context(loc: dict, profile: dict, crop: dict, variety: str) -> tuple:
         put("sowing_rule", crop["rules"].get(crop["rule"], crop["rule"]))
         for k in ("p_failure_if_sown_pct", "p_establishment_failure_pct", "p_mature_pct", "yield_median"):
             put("crop_" + k, m.get(k))
+    for k, v in water_timing(profile, crop, variety, today or dt.date.today()).items():
+        put(k, v, _fd(v) if k.endswith("_date") else None)
     return val, txt
 
 
@@ -304,7 +345,7 @@ def card(lat: float, lon: float, season: str, model: str, profile: dict, year=No
     loc = ev.location(lat, lon, season, model, year)
     crop = _crop(lat, lon, p["crop"], sowing_rule_of(loc["run"]["method"]["id"])) if season == "short_rains" else {
         "available": False, "reason": "Crop options are modelled for the Kenya Short Rains only."}
-    val, txt = context(loc, p, crop, p["crop"])
+    val, txt = context(loc, p, crop, p["crop"], today or dt.date.today())
     rules = apply_rules(lib, p["decision"], val, txt)
     today = (today or dt.date.today()).isoformat()
     opts = options(dec, crop, p["crop"], lib)
@@ -374,6 +415,7 @@ def card(lat: float, lon: float, season: str, model: str, profile: dict, year=No
         "could_change": list(dict.fromkeys(r["could_change"] for r in rules if r["could_change"])),
         "review": list(dict.fromkeys(r["review"] for r in rules if r["review"])),
         "rules_used": [{"id": r["id"], "status": r["status"], "reviewed_by": r["reviewed_by"]} for r in rules],
+        "water_timing": water_timing(p, crop, p["crop"], dt.date.fromisoformat(today)) if p["decision"] == "water" else None,
         "crop_outlook": {"available": crop.get("available", False), "run": (crop.get("run") or {}).get("model_label"),
                          "observations_through": (crop.get("run") or {}).get("obs_end"), "engine": crop.get("engine"),
                          "reason": None if crop.get("available") else crop.get("reason")},
