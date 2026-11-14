@@ -9,7 +9,7 @@ from fastapi.responses import Response
 import mam_loader as dl
 from pydantic import BaseModel
 
-from assistant import advisory, areas, charts, chat, evidence as ev, tracker
+from assistant import advisory, areas, charts, chat, crop, evidence as ev, tracker
 from assistant import narrate, translate
 from kenya_api.pixel import _clean
 import json
@@ -236,3 +236,37 @@ def explain_tracker_changes(
     except ValueError as e:
         raise HTTPException(404, str(e))
     return _reply("tracker_changes", rec, audience, language)
+
+
+@router.get("/crop")
+def explain_crop(
+    site: str = Query("", description="crop site id or name (whole or part), or give lat/lon"),
+    lat: float = Query(None), lon: float = Query(None),
+    crop_id: str = Query("maize_early", alias="crop", description="maize_early | maize_medium | sorghum | bean"),
+    rule: str = Query("", description="sowing rule: rule1 | fao-agricultural (default: the site's first)"),
+    run: str = Query("", description="crop outlook run id or source (default: the seasonal run)"),
+    audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
+):
+    """The crop outlook for one crop and sowing rule at a crop site (experimental): outcomes, sowing, yields, failure,
+    past seasons, the other crop models, past skill and the change since the previous update."""
+    try:
+        rec = crop.outlook(site or None, crop_id, rule or None, run or None, lat, lon)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return _reply("crop", rec, audience, language)
+
+
+@router.get("/crop/compare")
+def explain_crop_compare(
+    site: str = Query(""), lat: float = Query(None), lon: float = Query(None),
+    run: str = Query(""),
+    audience: str = Query("general"),
+    language: str = Query("en", description="en | sw | am"),
+):
+    """Every crop and sowing rule at a crop site, side by side (experimental)."""
+    try:
+        rec = crop.compare(site or None, run or None, lat, lon)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return _reply("crop_compare", rec, audience, language)

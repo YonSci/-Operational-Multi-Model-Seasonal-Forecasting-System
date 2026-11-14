@@ -980,7 +980,7 @@ function NitrogenPanel({ data, seasonal, sid, vk, rk, ruleLabel, msg }) {
 }
 
 export default function CropOutlookTab({ country, selectedSite, season, initId, initLabel, onsetDef, onsetLabel,
-                                         forecastType, mrfModel, s2sModel, onOpenTab }) {
+                                         forecastType, mrfModel, s2sModel, onOpenTab, onSelection }) {
   const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000 })
   const bench = useQuery({ queryKey: ['crop-benchmark'], queryFn: () => getJSON(DATA + 'benchmark.json'), staleTime: 30 * 60_000 })
   const ix = idx.data
@@ -1023,6 +1023,13 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                            queryFn: () => getJSON(DATA + 'history.json').catch(() => null) })
   const trackerQ = useTrackerSites()
   const skillQ = useSkill()
+  // the selection on screen, for the forecast assistant (App.jsx CropAssistantBar)
+  const selSite = ix?.sites?.[sid]
+  useEffect(() => {
+    if (!onSelection || !selSite || !run) return
+    onSelection({ site_id: sid, site_name: selSite.name, lat: selSite.lat, lon: selSite.lon, variety: vk, rule: rk,
+                  run_id: run.id, run_label: runLabel(run) })
+  }, [onSelection, sid, selSite, vk, rk, run?.id])                      // eslint-disable-line react-hooks/exhaustive-deps
 
   const msg = t => <div className="flex items-center justify-center min-h-[300px] p-6 text-center" style={{ fontSize: 15, color: 'var(--text-meta)' }}>{t}</div>
   if (country !== 'kenya') return msg('The crop outlook covers the Kenya monitored sites for now. Switch the country to Kenya to see it.')

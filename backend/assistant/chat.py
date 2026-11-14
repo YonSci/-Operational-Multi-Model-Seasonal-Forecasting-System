@@ -10,7 +10,8 @@ or advisory) and returns its standard text.
 
 Request (POST /explain/chat): {"messages": [{"role": "user"|"assistant", "content": str}, ...],
                                "context": {"lat", "lon", "season", "model", "variable", "layer", "site_name",
-                                           "page", "tracker_site"},
+                                           "page", "tracker_site", "crop_site", "crop_variety", "crop_rule",
+                                           "crop_run"},
                                "audience": "general"|...}
 """
 import json
@@ -18,7 +19,7 @@ import logging
 import os
 import re
 
-from . import advisory, areas, charts, knowledge as kn, narrate, tracker
+from . import advisory, areas, charts, crop, knowledge as kn, narrate, tracker
 from . import evidence as ev
 
 log = logging.getLogger("assistant")
@@ -101,6 +102,22 @@ TOOLS = [
                     "days both runs cover, model by model) and the rain observed in the last 3 days.",
      "input_schema": {"type": "object", "additionalProperties": False, "required": ["site"],
                       "properties": {"site": _nullable("string")}}},
+    {"name": "get_crop_outlook", "strict": True,
+     "description": "The experimental crop outlook for one crop at a crop site (Kenya Short Rains): how the forecast "
+                    "members end (matured, died, failed to establish, too late, no sowing opportunity), the sowing "
+                    "window, yield if sown and over all members, the chance of a failed crop, harvest, past seasons, the "
+                    "other crop models (WOFOST, DSSAT) and their agreement, past forecast skill, the change since the "
+                    "previous update, and trial yields. Null arguments mean the crop page's selection or the site "
+                    "nearest the selected place.",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["site", "crop", "rule"],
+                      "properties": {"site": _nullable("string", description="crop site name or part of it"),
+                                     "crop": _nullable("string", enum=["maize_early", "maize_medium", "sorghum", "bean", None]),
+                                     "rule": _nullable("string", enum=["rule1", "fao-agricultural", None])}}},
+    {"name": "compare_crops", "strict": True,
+     "description": "Every crop and sowing rule at a crop site side by side: share maturing, yield if sown, chance of "
+                    "a failed crop, sowing date. Experimental.",
+     "input_schema": {"type": "object", "additionalProperties": False, "required": ["site"],
+                      "properties": {"site": _nullable("string")}}},
     {"name": "search_notes", "strict": True,
      "description": "The platform's method notes: onset methods, terciles, skill-weighted chances, hit rate, RPSS, "
                     "medians and ranges, map layers. Use for definitions and how to read a figure.",
@@ -114,7 +131,8 @@ TOOLS = [
                       "properties": {"action": {"type": "string", "enum": ["open_tab", "open_panel", "show_place"]},
                                      "label": {"type": "string", "description": "button text, at most 6 words"},
                                      "tab": _nullable("string", enum=TABS + [None]),
-                                     "kind": _nullable("string", enum=["location", "changes", "map", "advisory", "tracker", "tracker_changes", None]),
+                                     "kind": _nullable("string", enum=["location", "changes", "map", "advisory", "tracker", "tracker_changes",
+                                                                         "crop", "crop_compare", None]),
                                      "lat": _nullable("number"), "lon": _nullable("number")}}},
 ]
 
@@ -133,6 +151,8 @@ skill-weighted, and model agreement is not the same as skill. Say when skill is 
 - The onset methods define different events; name the method when it matters.
 - Rainfall tracking: observed rain comes from satellite estimates, not gauges on the farm; when the products \
 disagree, give their range. Weather-model rain is raw model output. Keep observed rain and forecasts apart.
+- Crop outlooks are experimental model results with water-limited yields (an upper bound for smallholder \
+fields); say which yield you give (if sown, or over all members) and when the crop models disagree.
 - Advisory cards are DRAFT guidance that no agronomist has reviewed, and the crop figures are experimental: say so \
 whenever you use them, and present options as options to consider, never as instructions.
 - If a question is outside what the platform covers (pests, prices, other countries, weather today), say so \
@@ -156,6 +176,8 @@ class Session:
         self.model = c.get("model") or ""
         self.variable, self.layer = c.get("variable") or "onset", c.get("layer") or "median"
         self.page, self.tracker_site = c.get("page"), c.get("tracker_site")
+        self.crop_site, self.crop_variety = c.get("crop_site"), c.get("crop_variety")
+        self.crop_rule, self.crop_run = c.get("crop_rule"), c.get("crop_run")
         self.records, self.actions, self.notes = [], [], []
 
     def _base(self):
@@ -203,6 +225,16 @@ class Session:
                 rec = fn(site, None, None) if site else fn(None, self.lat, self.lon)
             except ValueError as e:
                 return {"error": str(e)}
+        elif name in ("get_crop_outlook", "compare_crops"):
+            site = args.get("site") or self.crop_site
+            try:
+                if name == "get_crop_outlook":
+                    rec = crop.outlook(site, args.get("crop") or self.crop_variety or "maize_early",
+                                       args.get("rule") or self.crop_rule, self.crop_run, self.lat, self.lon)
+                else:
+                    rec = crop.compare(site, self.crop_run, self.lat, self.lon)
+            except ValueError as e:
+                return {"error": str(e)}
         elif name == "search_notes":
             return {"notes": search_notes(args.get("query", ""))}
         elif name == "suggest_action":
@@ -234,6 +266,8 @@ def search_notes(query: str, k: int = 5) -> list:
 # ---------------------------------------------------------------------------- without Claude
 _TRACKER = (r"\b(rain(ed|fall)? so far|has it rained|did it rain|how much rain|rained|dry (spell|days?)|planting rains?|"
             r"next (few|\d+|seven|ten) days|this week|satellite|chirps|observed rain)\b")
+_CROP = r"\b(yields?|harvest\w*|t/ha|tonnes?|matur\w*|crop (outlook|model)s?|aquacrop|wofost|dssat)\b"
+_COMPARE = r"\b(which crop|what crop|compare|best crop|other crops|crops|sowing rules?)\b"
 _ROUTES = [("changes", r"\b(chang\w*|differ\w*|previous|earlier run|update[ds]?|moved|shift\w*)\b"),
            ("map", r"\b(map|layer|colou?rs?|legend|where)\b"),
            ("advisory", r"\b(sow\w*|plant\w*|crop\w*|maize|sorghum|beans?|irrigat\w*|replant\w*|advi[cs]e\w*|mulch|ridges?|variet\w*)\b")]
@@ -244,8 +278,12 @@ def route(text: str, page: str = None) -> str:
     changed = re.search(_ROUTES[0][1], low)
     if page == "tracker":
         return "tracker_changes" if changed else "tracker"
+    if page == "crop":
+        return "crop_compare" if re.search(_COMPARE, low) else "crop"
     if not changed and re.search(_TRACKER, low):
         return "tracker"
+    if not changed and re.search(_CROP, low):
+        return "crop"
     for kind, pat in _ROUTES:
         if re.search(pat, low):
             return kind
@@ -257,7 +295,13 @@ def template_reply(session: Session, text: str, audience: str) -> dict:
     if kind in ("changes", "advisory") and session.season != "short_rains":
         kind = "location"
     try:
-        if kind in ("tracker", "tracker_changes"):
+        if kind in ("crop", "crop_compare"):
+            named = re.search(r"sorghum|bean|maize|duma|katumani", (text or "").lower())
+            res = (session.run("get_crop_outlook", {"site": None, "crop": _crop_of(text) if named else None, "rule": None})
+                   if kind == "crop" else session.run("compare_crops", {"site": None}))
+            if "error" in res and session.page != "crop" and session.lat is not None:
+                kind, res = "location", session.run("get_place_outlook", {"lat": None, "lon": None, "method": None})
+        elif kind in ("tracker", "tracker_changes"):
             res = session.run("get_rain_tracking" if kind == "tracker" else "compare_weather_runs", {"site": None})
             if "error" in res and session.page != "tracker" and session.lat is not None:
                 kind, res = "location", session.run("get_place_outlook", {"lat": None, "lon": None, "method": None})
@@ -326,6 +370,10 @@ def _clean_history(messages):
 
 
 def _context_note(s: Session, site_name):
+    if s.page == "crop":
+        return (f"Dashboard now: the crop outlook page, Kenya Short Rains, crop site {s.crop_site or 'not reported'}, "
+                f"crop {s.crop_variety or 'not reported'}, sowing rule {s.crop_rule or 'not reported'}, run "
+                f"{s.crop_run or 'seasonal'}.")
     if s.page == "tracker":
         return (f"Dashboard now: the near real-time rainfall tracking page, Kenya Short Rains, monitoring site "
                 f"{s.tracker_site or 'not reported'}.")

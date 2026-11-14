@@ -93,9 +93,9 @@ function WatchCard({ w, q, onRemove, onOpenAdvisory }) {
   )
 }
 
-export default function WatchPanel({ place, season, model, onClose, onOpenAdvisory, list, setList, tracking }) {
+export default function WatchPanel({ place, season, model, onClose, onOpenAdvisory, list, setList, tracking, initialCrop }) {
   const statuses = useWatchStatuses(list)
-  const [form, setForm] = useState({ name: '', crop: 'maize_early', planted: 'no', sowing_date: '', decision: 'sowing', objective: 'maturity' })
+  const [form, setForm] = useState({ name: '', crop: CROPS.some(c => c[0] === initialCrop) ? initialCrop : 'maize_early', planted: 'no', sowing_date: '', decision: 'sowing', objective: 'maturity' })
   const [dryDays, setDryDays] = useState(10)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
