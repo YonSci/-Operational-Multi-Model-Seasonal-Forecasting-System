@@ -56,6 +56,19 @@ def same_numbers(src: list, dst: list) -> bool:
 # changed. A translated text is used only if it has every marker exactly once and no digit of its own.
 _MARK = re.compile(r"⟦(\d+)⟧")
 _ANY_DIGIT = re.compile(r"[0-9፩-፼]")             # Western digits and Ethiopic numerals
+_ETHIOPIC_NUM = re.compile(r"[፩-፼]")
+# A number the English writes in words ("eight in ten members", "one in three") may come back as digits ("8 kati ya
+# 10"): such digits are accepted when the English text spells out that number, as often as it does.
+_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+          "eleven": 11, "twelve": 12, "half": 2, "third": 3, "thirds": 3, "quarter": 4}
+
+
+def _word_numbers(text):
+    out = {}
+    for w in re.findall(r"[a-z]+", (text or "").lower()):
+        if w in _WORDS:
+            out[_WORDS[w]] = out.get(_WORDS[w], 0) + 1
+    return out
 
 
 def _mask(text):
@@ -67,12 +80,19 @@ def _mask(text):
     return _NUM.sub(sub, text or ""), nums
 
 
-def _unmask(text, nums):
-    """The translated text with its figures back, or None if a marker is missing, repeated or new, or a digit was added."""
+def _unmask(text, nums, source=""):
+    """The translated text with its figures back, or None if a marker is missing, repeated or new, or the translator
+    wrote a number of its own (other than one the English source spells out in words)."""
     found = [int(k) for k in _MARK.findall(text)]
     if sorted(found) != list(range(len(nums))):
         return None
-    if _ANY_DIGIT.search(_MARK.sub("", text)):
+    rest = _MARK.sub(" ", text)
+    if _ETHIOPIC_NUM.search(rest):
+        return None
+    allowed, extra = _word_numbers(source), {}
+    for d in re.findall(r"\d+", rest):
+        extra[int(d)] = extra.get(int(d), 0) + 1
+    if any(n > allowed.get(k, 0) for k, n in extra.items()):
         return None
     return _MARK.sub(lambda m: nums[int(m.group(1))], text)
 
@@ -127,8 +147,9 @@ def translate(obj, lang: str):
     system = (f"You translate agricultural weather-forecast text from English into {langs[lang]['name']} for farmers and "
               f"extension staff in {'Kenya' if lang == 'sw' else 'Ethiopia'}. Use the glossary's terms. Every number in the "
               f"texts has been replaced by a marker such as ⟦0⟧ or ⟦12⟧: copy each marker exactly once, unchanged, into "
-              f"the place its number belongs in your sentence, and write no digits or numerals of your own (write "
-              f"'first', 'third' and the like in words). Keep percent signs and units next to their markers. Dates are a "
+              f"the place its number belongs in your sentence, and write no other digits or numerals (write 'first', "
+              f"'third' and the like in words; a number the English writes in words, such as 'eight in ten', may stay "
+              f"in words or be written in Western digits, never in Ge'ez numerals). Keep percent signs and units next to their markers. Dates are a "
               f"marker and a Gregorian month (⟦3⟧ Oct): translate the month name and never convert to another calendar. "
               f"Keep acronyms (RPSS, CHIRPS, ECMWF, SEAS5) and place names. Keep the meaning and the "
               f"caution of each sentence; do not add or drop information. Return the texts in the same order, one "
@@ -149,8 +170,8 @@ def translate(obj, lang: str):
     if len(out) != len(texts):
         log.warning("translate: %d texts in, %d out (%s)", len(texts), len(out), lang)
         return None, "The translation could not be made; the text is shown in English."
-    out = [_unmask(t, nums) for t, (_, nums) in zip(out, masked)]
-    bad = [k for k, (a, b) in enumerate(zip(texts, out)) if b is None or not same_numbers([a], [b])]
+    out = [_unmask(t, nums, src) for t, (_, nums), src in zip(out, masked, texts)]
+    bad = [k for k, b in enumerate(out) if b is None]          # _unmask put every figure back exactly
     for k in bad[:3]:                                         # what went wrong, for the logs
         log.warning("translate (%s): figures not kept in text %d of %d (%d markers)", lang, k + 1, len(texts),
                     len(masked[k][1]))
