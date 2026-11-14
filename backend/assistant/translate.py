@@ -51,6 +51,32 @@ def same_numbers(src: list, dst: list) -> bool:
     return _numbers(src) == _numbers(dst)
 
 
+# Figures never pass through the translator: each number is replaced by a marker (⟦0⟧, ⟦1⟧ ...) before translation
+# and put back afterwards, so a figure cannot be reformatted (0,87; 44 for 44.0), converted (Ethiopic numerals) or
+# changed. A translated text is used only if it has every marker exactly once and no digit of its own.
+_MARK = re.compile(r"⟦(\d+)⟧")
+_ANY_DIGIT = re.compile(r"[0-9፩-፼]")             # Western digits and Ethiopic numerals
+
+
+def _mask(text):
+    nums = []
+
+    def sub(m):
+        nums.append(m.group(0))
+        return f"⟦{len(nums) - 1}⟧"
+    return _NUM.sub(sub, text or ""), nums
+
+
+def _unmask(text, nums):
+    """The translated text with its figures back, or None if a marker is missing, repeated or new, or a digit was added."""
+    found = [int(k) for k in _MARK.findall(text)]
+    if sorted(found) != list(range(len(nums))):
+        return None
+    if _ANY_DIGIT.search(_MARK.sub("", text)):
+        return None
+    return _MARK.sub(lambda m: nums[int(m.group(1))], text)
+
+
 def _flatten(d):
     """[(path, text)] of every string in a nested dict/list of strings."""
     out = []
@@ -95,13 +121,16 @@ def translate(obj, lang: str):
     g = glossary()
     terms = "\n".join(f"- {en}: {t.get(lang)}" for en, t in g["terms"].items() if t.get(lang))
     texts = [t for _, t in items]
+    masked = [_mask(t) for t in texts]
     schema = {"type": "object", "additionalProperties": False, "required": ["texts"],
               "properties": {"texts": {"type": "array", "items": {"type": "string"}}}}
     system = (f"You translate agricultural weather-forecast text from English into {langs[lang]['name']} for farmers and "
-              f"extension staff in {'Kenya' if lang == 'sw' else 'Ethiopia'}. Use the glossary's terms. Keep every number "
-              f"exactly as written, in Western digits (0-9): do not convert, round or spell out numbers, and keep "
-              f"percent signs. Keep dates in the Gregorian calendar exactly as given (day number and month; never convert to "
-              f"another calendar). Keep acronyms (RPSS, CHIRPS, ECMWF, SEAS5) and place names. Keep the meaning and the "
+              f"extension staff in {'Kenya' if lang == 'sw' else 'Ethiopia'}. Use the glossary's terms. Every number in the "
+              f"texts has been replaced by a marker such as ⟦0⟧ or ⟦12⟧: copy each marker exactly once, unchanged, into "
+              f"the place its number belongs in your sentence, and write no digits or numerals of your own (write "
+              f"'first', 'third' and the like in words). Keep percent signs and units next to their markers. Dates are a "
+              f"marker and a Gregorian month (⟦3⟧ Oct): translate the month name and never convert to another calendar. "
+              f"Keep acronyms (RPSS, CHIRPS, ECMWF, SEAS5) and place names. Keep the meaning and the "
               f"caution of each sentence; do not add or drop information. Return the texts in the same order, one "
               f"translation per input text.\n\nGlossary (English: {langs[lang]['name']}):\n{terms}")
     try:
@@ -109,7 +138,7 @@ def translate(obj, lang: str):
         resp = client.messages.create(
             model=os.environ.get("ASSISTANT_MODEL", "claude-opus-5-5"), max_tokens=16000,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": json.dumps({"texts": texts}, ensure_ascii=False)}],
+            messages=[{"role": "user", "content": json.dumps({"texts": [m for m, _ in masked]}, ensure_ascii=False)}],
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}})
         if resp.stop_reason != "end_turn":
             return None, "The translation could not be made; the text is shown in English."
@@ -120,9 +149,11 @@ def translate(obj, lang: str):
     if len(out) != len(texts):
         log.warning("translate: %d texts in, %d out (%s)", len(texts), len(out), lang)
         return None, "The translation could not be made; the text is shown in English."
-    bad = [k for k, (a, b) in enumerate(zip(texts, out)) if not same_numbers([a], [b])]
-    for k in bad[:3]:                                         # what changed, for the logs
-        log.warning("translate (%s): figures changed: %s -> %s", lang, _numbers([texts[k]]), _numbers([out[k]]))
+    out = [_unmask(t, nums) for t, (_, nums) in zip(out, masked)]
+    bad = [k for k, (a, b) in enumerate(zip(texts, out)) if b is None or not same_numbers([a], [b])]
+    for k in bad[:3]:                                         # what went wrong, for the logs
+        log.warning("translate (%s): figures not kept in text %d of %d (%d markers)", lang, k + 1, len(texts),
+                    len(masked[k][1]))
     if len(bad) > len(texts) / 2:
         return None, "The translation changed some figures, so the English text is shown."
     res = json.loads(json.dumps(obj))
