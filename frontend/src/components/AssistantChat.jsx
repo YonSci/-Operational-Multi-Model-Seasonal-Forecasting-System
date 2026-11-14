@@ -20,7 +20,14 @@ const TRACKER_SUGGESTIONS = [
   'What changed since the previous weather-model run?',
   'Why do the satellite products disagree?',
 ]
-const KIND_LABEL = { location: 'Place outlook', changes: 'Run comparison', map: 'Map layer', advisory: 'Advisory (draft)',
+const CROP_SUGGESTIONS = [
+  'What yield can I expect if I sow this crop?',
+  'What is the chance this crop fails here?',
+  'Which crop and sowing rule do best here?',
+  'Do the three crop models agree?',
+  'What changed since the previous update?',
+]
+const KIND_LABEL = { crop: 'Crop outlook', crop_compare: 'Crop comparison', location: 'Place outlook', changes: 'Run comparison', map: 'Map layer', advisory: 'Advisory (draft)',
                      tracker: 'Rainfall tracking', tracker_changes: 'Weather-model runs' }
 
 export default function AssistantChat({ messages, setMessages, context, onClose, onAction }) {
@@ -94,13 +101,15 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
         {messages.length === 0 && (
           <>
             <p style={{ marginTop: 0, lineHeight: 1.55 }}>
-              {context?.page === 'tracker'
+              {context?.page === 'crop'
+                ? `Ask about the crop outlook at ${context.site_name ?? 'the crop site on screen'}: outcomes, yields, the chance of a failed crop and how the crops compare. The crop figures are experimental model results.`
+                : context?.page === 'tracker'
                 ? `Ask about the rain at ${context.tracker_site ?? 'the monitoring site on screen'}: observed rain so far, the planting onset, dry days and the weather models' next days. Answers use the page's own figures.`
                 : <>Ask about the forecast on screen: the place, run, method and map layer you have selected. Answers use the
                   platform&apos;s own figures; advisories are drafts that no agronomist has reviewed yet.</>}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(context?.page === 'tracker' ? TRACKER_SUGGESTIONS : SUGGESTIONS).map(s => <button key={s} type="button" style={chip} onClick={() => send(s)}>{s}</button>)}
+              {(context?.page === 'tracker' ? TRACKER_SUGGESTIONS : context?.page === 'crop' ? CROP_SUGGESTIONS : SUGGESTIONS).map(s => <button key={s} type="button" style={chip} onClick={() => send(s)}>{s}</button>)}
             </div>
           </>
         )}
@@ -138,7 +147,7 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
             style={{ display: 'flex', gap: 8, padding: '10px 16px 14px', borderTop: '1px solid var(--border-primary)' }}>
         <label htmlFor="chat-input" style={{ position: 'absolute', left: -9999 }}>Your question</label>
         <input id="chat-input" ref={inputRef} value={text} onChange={e => setText(e.target.value)} maxLength={2000}
-               placeholder={context?.page === 'tracker' ? 'Ask about the rain at this site' : 'Ask about this forecast'} autoComplete="off"
+               placeholder={context?.page === 'tracker' ? 'Ask about the rain at this site' : context?.page === 'crop' ? 'Ask about this crop outlook' : 'Ask about this forecast'} autoComplete="off"
                style={{ flex: 1, minWidth: 0, background: 'var(--select-bg)', color: 'var(--heading)', border: '1px solid var(--border-primary)',
                         borderRadius: 8, padding: '8px 10px', fontSize: 14 }}/>
         {dict.supported && (

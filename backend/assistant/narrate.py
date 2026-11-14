@@ -434,11 +434,96 @@ def template_tracker_changes(rec, audience="general"):
     return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
 
 
+def _t(v):
+    return "n/a" if v is None else f"{v:g} t/ha"
+
+
+def template_crop(rec, audience="general"):
+    o, run, c = rec["outlook"], rec["run"], rec["crop"]
+    summary = [f"{c['label']} at {rec['scope']['site']}, sown by the {rec['sowing_rule']['label']}, with the {run['label']} "
+               f"{run['kind']}" + (f" (observations to {fdate(run['observations_through'])})" if run.get("observations_through") else "")
+               + f"; crop model AquaCrop (experimental)"
+               + (f", with {' and '.join(n for n in rec['engines'] if n != 'AquaCrop')} for comparison" if len(rec["engines"]) > 1 else "")
+               + "."]
+    parts = [f"{v}% {k}" for k, v in (o.get("outcomes_pct") or {}).items() if v]
+    if parts:
+        summary.append(f"Of the {o['members']} forecast members: " + ", ".join(parts) + ".")
+    sw = o.get("sowing")
+    if sw:
+        summary.append(f"A sowing opportunity comes in {o['chance_of_sowing_opportunity_pct']}% of members, typically "
+                       f"{fdate(sw['median'])} (8 in 10 between {fdate(sw['p10'])} and {fdate(sw['p90'])}).")
+    ys, ya = o.get("yield_if_sown_t_ha"), o.get("yield_all_members_t_ha")
+    if ys and ys.get("median") is not None:
+        s = (f"Yield if sown: median {_t(ys['median'])}, 8 in 10 between {_t(ys['p10'])} and {_t(ys['p90'])}")
+        if ya and ya.get("median") is not None:
+            s += f"; over all members, counting no sowing as no yield, the median is {_t(ya['median'])}"
+        summary.append(s + ".")
+    if o.get("chance_of_failure_pct") is not None:
+        summary.append(f"Chance of a failed crop (below {o['failure_means_below_t_ha']:g} t/ha): {o['chance_of_failure_pct']}% "
+                       f"of all members (no sowing counts as a failure), {o['chance_of_failure_if_sown_pct']}% of those sown.")
+    if o.get("harvest_median"):
+        summary.append(f"Typical harvest: {fdate(o['harvest_median'])}.")
+    local = []
+    p = rec.get("past_seasons")
+    if p and p["yield_if_sown_t_ha"].get("median") is not None:
+        a, b = (ys or {}).get("median"), p["yield_if_sown_t_ha"]["median"]
+        s = (f"In {p['seasons']} past seasons (the same crop grown in the observed weather) the median yield if sown was "
+             f"{_t(b)}, and the crop failed or could not be sown in {p['chance_of_failure_pct']}% of seasons")
+        if a is not None and a != b:
+            s += f"; this season's median if sown, {_t(a)}, is {'higher' if a > b else 'lower'}"
+        local.append(s + ".")
+    for name, x in (rec.get("other_crop_models") or {}).items():
+        y = (x.get("yield_if_sown_t_ha") or {}).get("median")
+        s = f"{name}: median yield if sown {_t(y)}, failed or not sown in {x.get('chance_of_failure_pct')}% of members"
+        ag = x.get("agreement_with_aquacrop")
+        if ag:
+            s += f"; it agrees with AquaCrop on failure in {ag['same_verdict_pct']}% of members"
+        local.append(s + ".")
+    sk = rec.get("skill")
+    if sk:
+        rc, auc = sk["rank_correlation"], sk["failure_roc_area"]
+        local.append(f"How past forecasts did ({sk['forecast']}, {sk['years'][0]}-{sk['years'][1]}, {sk['seasons']} seasons): "
+                     "rank correlation " + ", ".join(f"{v} ({k})" for k, v in rc.items() if v is not None)
+                     + "; failure ROC area " + ", ".join(f"{v} ({k})" for k, v in auc.items() if v is not None)
+                     + f" ({sk['how_to_read']}).")
+    sp = rec.get("since_previous_update")
+    if sp:
+        y0, y1 = sp["yield_if_sown_median_t_ha"]
+        f0, f1 = sp["chance_of_failure_if_sown_pct"]
+        local.append(f"Since the update of {fdate(sp['previous_update'])}: median yield if sown {_t(y0)} -> {_t(y1)}, chance "
+                     f"of failure if sown {f0}% -> {f1}% (observations to {fdate(sp['observations_through'][0])} -> "
+                     f"{fdate(sp['observations_through'][1])}).")
+    for t in rec.get("trial_yields_at_site") or []:
+        local.append(f"Measured {t['crop']} trials at the site: median {_t(t['median_t_ha'])} ({t['trials']} plots, "
+                     f"{t['studies']} studies, {t['years']}).")
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
+def template_crop_compare(rec, audience="general"):
+    run = rec["run"]
+    summary = [f"Crops and sowing rules at {rec['scope']['site']}, {run['label']} {run['kind']}:"]
+    for r in rec["rows"]:
+        s = f"{r['crop']}, {r['sowing_rule']}: matures in {r['matured_pct']}% of members"
+        if r.get("yield_if_sown_median_t_ha") is not None:
+            p10 = r.get("yield_if_sown_p10_t_ha")
+            s += f", yield if sown {_t(r['yield_if_sown_median_t_ha'])}" + (
+                " (at least 1 in 10 sown members yield nothing)" if p10 == 0 else f" (1 in 10 below {_t(p10)})" if p10 is not None else "")
+        s += f", failed or not sown {r['chance_of_failure_pct']}%"
+        if r.get("sowing_median"):
+            s += f", sown about {fdate(r['sowing_median'])}"
+        summary.append(s + ".")
+    hm, lf, hy = rec["highest_maturity"], rec["lowest_failure"], rec["highest_yield_if_sown"]
+    local = [f"Most often matures: {hm['crop']} with the {hm['sowing_rule']} ({hm['matured_pct']}%).",
+             f"Least often fails: {lf['crop']} with the {lf['sowing_rule']} ({lf['chance_of_failure_pct']}%).",
+             f"Highest median yield if sown: {hy['crop']} with the {hy['sowing_rule']} ({_t(hy['yield_if_sown_median_t_ha'])})."]
+    return {"summary": summary, "local_implications": local, "cautions": list(rec["caveats"])}
+
+
 TEMPLATES = {"location": template_location, "changes": template_changes, "map": template_map,
              "advisory": template_advisory, "area": template_area, "attention": template_attention,
              "chart": template_chart, "analogues": template_analogues, "season_review": template_season_review,
              "outlook_comparison": template_outlook_comparison, "tracker": template_tracker,
-             "tracker_changes": template_tracker_changes}
+             "tracker_changes": template_tracker_changes, "crop": template_crop, "crop_compare": template_crop_compare}
 
 # ---------------------------------------------------------------------------- number checks
 _NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -565,6 +650,17 @@ TASKS = {
     "tracker_changes": "Explain what changed between the two latest weather-model runs at this site, model by model "
                        "and overall, and what rain was observed in the last days. Say that day-to-day changes are "
                        "normal and that a steady shift over several runs matters more.",
+    "crop": "Explain this crop outlook: how the forecast members end (matured, died, failed to establish, too late, no "
+            "sowing opportunity), the sowing window, the yield if sown and over all members (say which is which), the "
+            "chance of a failed crop, the harvest, how it compares with past seasons, whether the other crop models "
+            "agree, how well past forecasts did, and what changed since the previous update (if the crop "
+            "configuration changed in between, say part of the change comes from the model setup). The crop figures "
+            "are experimental model results and the yields are water-limited upper bounds: say both in cautions. Do "
+            "not give farming instructions.",
+    "crop_compare": "Compare the crops and sowing rules at this site: which matures most often, which fails least, "
+                    "which yields most if sown, and the trade-offs between them. Present them as options to consider, "
+                    "not instructions; failure is judged against each crop's own threshold, so do not rank crops on "
+                    "yield alone. The figures are experimental: say so in cautions.",
     "advisory": "Write the advisory card's text: the current assessment (summary) and, in local_implications, why "
                 "these options, their trade-offs, what could change the assessment and when to look again. Present "
                 "the options as options to consider, never as instructions. The guidance is a draft that no "

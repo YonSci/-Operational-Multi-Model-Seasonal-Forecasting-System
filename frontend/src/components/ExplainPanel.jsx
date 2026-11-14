@@ -15,7 +15,8 @@ export const AUDIENCES = [
 ]
 const TITLES = { location: 'Explain this location', changes: 'What changed?', map: 'Explain this map', advisory: 'Advisory (draft)',
                  area: 'Explain an area', attention: 'Areas needing attention', chart: 'Explain a chart',
-                 tracker: 'How is the season going here?', tracker_changes: 'What changed since the last run?' }
+                 tracker: 'How is the season going here?', tracker_changes: 'What changed since the last run?',
+                 crop: 'Explain this crop outlook', crop_compare: 'Compare crops and sowing rules' }
 const CRITERIA = [['late_onset', 'Higher chance of a late onset'], ['early_cessation', 'Higher chance of an early end of the rains'],
                   ['short_season', 'Higher chance of a short season'], ['onset_delay', 'Onset later than normal'],
                   ['season_shorter', 'Season shorter than normal'], ['no_onset', 'Members finding no onset']]
@@ -37,7 +38,7 @@ const STATUS = { estimated_from_observations: 'Estimated from observations so fa
 async function fetchExplain(req) {
   const { kind, ...params } = req
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]))
-  const path = kind === 'tracker_changes' ? 'tracker/changes' : kind
+  const path = { tracker_changes: 'tracker/changes', crop_compare: 'crop/compare' }[kind] ?? kind
   const res = await fetch(`${API_BASE}/explain/${path}?${q}`)
   if (!res.ok) {
     let msg = `The explanation could not be made (HTTP ${res.status}).`
@@ -250,6 +251,84 @@ function TrackerEvidence({ ev }) {
         </div>
       )}
     </>
+  )
+}
+
+const tha = v => v == null ? 'n/a' : `${v} t/ha`
+const pc = v => v == null ? 'n/a' : `${v}%`
+
+function CropEvidence({ ev }) {
+  const o = ev.outlook, p = ev.past_seasons
+  const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
+  const td = { padding: '4px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }
+  const ys = o.yield_if_sown_t_ha
+  const cols = [['AquaCrop', { yield_if_sown_t_ha: ys, chance_of_failure_pct: o.chance_of_failure_pct, harvest_median: o.harvest_median }],
+                ...Object.entries(ev.other_crop_models ?? {})]
+  return (
+    <>
+      <div style={box}>
+        <KV k="Crop" v={`${ev.crop.label} (${ev.crop.examples ?? ''}, about ${ev.crop.maturity_days} days)`}/>
+        <KV k="Site" v={ev.scope.site}/>
+        <KV k="Sowing rule" v={ev.sowing_rule.label}/>
+        <KV k="Forecast" v={`${ev.run.label} (${ev.run.kind}${ev.run.observations_through ? `, observations to ${fdate(ev.run.observations_through)}` : ''})`}/>
+        <KV k="Outcomes (members)" v={Object.entries(o.outcomes_pct ?? {}).map(([k, v]) => `${k} ${v}%`).join(', ')}/>
+        <KV k="Sowing" v={o.sowing ? `${pc(o.chance_of_sowing_opportunity_pct)} of members; ${dm(o.sowing.median)} (8 in 10: ${dm(o.sowing.p10)} - ${dm(o.sowing.p90)})` : 'no sowing opportunity'}/>
+        <KV k="Yield if sown" v={ys ? `median ${tha(ys.median)}; 8 in 10: ${tha(ys.p10)} - ${tha(ys.p90)}` : null}/>
+        <KV k="Failed crop (all / if sown)" v={`${pc(o.chance_of_failure_pct)} / ${pc(o.chance_of_failure_if_sown_pct)} (below ${o.failure_means_below_t_ha} t/ha)`}/>
+        <KV k="Season rain (median)" v={o.season_rain_mm_median != null ? `${o.season_rain_mm_median} mm` : null}/>
+        <KV k="Days of water stress (median)" v={o.water_stress_days_median}/>
+      </div>
+      <div style={{ ...box, marginTop: 8, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>The three crop models on the same members</caption>
+          <thead><tr><th style={th} scope="col">Model</th><th style={th} scope="col">Yield if sown (median)</th><th style={th} scope="col">Failed or not sown</th><th style={th} scope="col">Agrees with AquaCrop</th></tr></thead>
+          <tbody>{cols.map(([name, x]) => (
+            <tr key={name}><td style={td}>{name}</td><td style={td}>{tha(x.yield_if_sown_t_ha?.median)}</td><td style={td}>{pc(x.chance_of_failure_pct)}</td>
+              <td style={td}>{x.agreement_with_aquacrop ? `${x.agreement_with_aquacrop.same_verdict_pct}% of members` : '-'}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+      {p && (
+        <div style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Past seasons ({p.seasons}, the crop grown in the observed weather)</div>
+          <KV k="Yield if sown" v={`median ${tha(p.yield_if_sown_t_ha.median)}; 8 in 10: ${tha(p.yield_if_sown_t_ha.p10)} - ${tha(p.yield_if_sown_t_ha.p90)}`}/>
+          <KV k="Failed or not sown" v={pc(p.chance_of_failure_pct)}/>
+        </div>
+      )}
+      {ev.skill && (
+        <div style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>How past forecasts did ({ev.skill.forecast}, {ev.skill.years?.join('-')})</div>
+          <KV k="Rank correlation" v={Object.entries(ev.skill.rank_correlation).map(([k, v]) => `${k} ${v}`).join(', ')}/>
+          <KV k="Failure ROC area" v={Object.entries(ev.skill.failure_roc_area).map(([k, v]) => `${k} ${v}`).join(', ')}/>
+        </div>
+      )}
+      {ev.since_previous_update && (
+        <div style={{ ...box, marginTop: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Since the update of {fdate(ev.since_previous_update.previous_update)}</div>
+          <KV k="Yield if sown (median)" v={ev.since_previous_update.yield_if_sown_median_t_ha.map(tha).join(' -> ')}/>
+          <KV k="Failure if sown" v={ev.since_previous_update.chance_of_failure_if_sown_pct.map(pc).join(' -> ')}/>
+          <KV k="Sowing opportunity" v={ev.since_previous_update.chance_of_sowing_opportunity_pct.map(pc).join(' -> ')}/>
+        </div>
+      )}
+    </>
+  )
+}
+
+function CropCompareTable({ ev }) {
+  const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
+  const td = { padding: '4px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }
+  return (
+    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <caption style={{ ...lbl, textAlign: 'left', marginBottom: 4 }}>Crops and sowing rules, {ev.run.label} (experimental)</caption>
+        <thead><tr><th style={th} scope="col">Crop and sowing rule</th><th style={th} scope="col">Matures</th><th style={th} scope="col">Yield if sown</th>
+          <th style={th} scope="col">Failed or not sown</th><th style={th} scope="col">Sown about</th></tr></thead>
+        <tbody>{ev.rows.map(r => (
+          <tr key={r.crop_id + r.rule_id}><td style={td}>{r.crop}<div style={{ ...lbl, fontSize: 11.5 }}>{r.sowing_rule}</div></td><td style={td}>{pc(r.matured_pct)}</td>
+            <td style={td}>{tha(r.yield_if_sown_median_t_ha)}</td><td style={td}>{pc(r.chance_of_failure_pct)}</td><td style={td}>{r.sowing_median ? dm(r.sowing_median) : '-'}</td></tr>
+        ))}</tbody>
+      </table>
+    </div>
   )
 }
 
@@ -552,6 +631,12 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
         {ex && tab === 'summary' && <Para lines={ex.sections.summary}/>}
         {ev?.kind === 'advisory' && tab === 'summary' && <OptionsTable ev={ev}/>}
         {ev?.kind === 'attention' && tab === 'summary' && <AttentionTable ev={ev}/>}
+        {ev?.kind === 'crop_compare' && tab === 'summary' && <CropCompareTable ev={ev}/>}
+        {(ev?.kind === 'crop' || ev?.kind === 'crop_compare') && tab !== 'evidence' && (
+          <p style={{ margin: '8px 0', padding: '6px 10px', borderRadius: 6, background: 'var(--exp-bg)', color: 'var(--exp-text)', fontSize: 13, fontWeight: 600 }}>
+            Experimental crop model results, not verified against observed crop outcomes. Follows the selection on the crop outlook page.
+          </p>
+        )}
         {ex && tab === 'local' && <Para lines={ex.sections.local_implications}/>}
         {ex && tab !== 'evidence' && ex.sections.cautions?.length > 0 && (
           <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: 'var(--caution-bg)', color: 'var(--caution-text)', fontSize: 13, lineHeight: 1.5 }}>
@@ -570,6 +655,8 @@ export default function ExplainPanel({ request, onClose, onAudience, compareOpti
             {ev.kind === 'chart' && <ChartEvidence ev={ev}/>}
             {ev.kind === 'tracker' && <TrackerEvidence ev={ev}/>}
             {ev.kind === 'tracker_changes' && <TrackerChangesEvidence ev={ev}/>}
+            {ev.kind === 'crop' && <CropEvidence ev={ev}/>}
+            {ev.kind === 'crop_compare' && <CropCompareTable ev={ev}/>}
             <div style={{ ...box, marginTop: 8 }}>
               <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Sources</div>
               {(ev.sources ?? []).map((s, i) => <KV key={i} k={s.what} v={s.detail}/>)}
