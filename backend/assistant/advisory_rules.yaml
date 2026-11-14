@@ -239,6 +239,57 @@ rules:
     could_change: The next crop outlook update (weekly).
     review: Re-check when the crop outlook is next updated.
 
+  - id: water-timing-now
+    decision: water
+    status: draft
+    when:
+      - {key: planted, op: eq, value: "yes"}
+      - {key: days_to_flowering, op: ge, value: -10}
+      - {key: days_to_flowering, op: le, value: 21}
+      - {key: soil_water_pct, op: lt, value: 50}
+      - {key: next_days_rain_mm, op: lt, value: 20}
+      - {key: irrigation_gain_t_ha, op: ge, value: 0.3}
+    assessment: >-
+      Your crop should flower around {flowering_date}. The soil at {crop_site} holds {soil_water_pct}% of its
+      available water ({soil_water_date}), and the weather models give a median of {next_days_rain_mm} mm over the
+      next {next_days} days. If you can irrigate, the weeks around flowering are when supplementary water makes the
+      most difference: in the crop outlook, about {irrigation_mm} mm raises the median yield from
+      {rainfed_yield_t_ha} to {irrigated_yield_t_ha} t/ha.
+    why: >-
+      Maize, sorghum and beans are most sensitive to water shortage at flowering and early grain filling; with a dry
+      soil and little rain expected, that is when added water counts most.
+    could_change: Rain in the next days (rainfall tracking) and the next crop outlook update.
+    review: Look again in a few days, or as soon as more than 20 mm of rain falls.
+
+  - id: water-timing-wet-enough
+    decision: water
+    status: draft
+    when:
+      - {key: planted, op: eq, value: "yes"}
+      - {key: days_to_flowering, op: ge, value: -10}
+      - {key: days_to_flowering, op: le, value: 21}
+      - {key: soil_water_pct, op: ge, value: 50}
+    assessment: >-
+      Your crop should flower around {flowering_date}. The soil at {crop_site} holds {soil_water_pct}% of its
+      available water ({soil_water_date}), so added water is not needed now; a dry spell around flowering would
+      change that.
+    why: Water shortage at flowering costs most yield; a soil above half its available water carries the crop for a while.
+    could_change: A dry spell in the next weeks (rainfall tracking).
+    review: Look again in a week, or after ten days without rain.
+
+  - id: water-timing-not-urgent
+    decision: water
+    status: draft
+    when:
+      - {key: planted, op: eq, value: "yes"}
+      - {key: days_to_flowering, op: gt, value: 21}
+    assessment: >-
+      Your crop should flower around {flowering_date}, more than three weeks away: supplementary water matters most
+      from then on.
+    why: Before flowering a crop recovers from a short dry spell better than at flowering.
+    could_change: A long dry spell before flowering, or a change in the rain forecast.
+    review: Look again about a week before flowering.
+
   - id: water-dry-season
     decision: water
     status: draft

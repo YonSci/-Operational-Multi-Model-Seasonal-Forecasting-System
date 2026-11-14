@@ -160,3 +160,26 @@ def test_scenarios_check():
     run = {"id": "seasonal_20261001"}
     assert REAL_SCENARIOS_CURRENT({"meta": {"id": "seasonal_20261001"}}, run) in (True, False)
     assert REAL_SCENARIOS_CURRENT({"meta": {"id": "seasonal_20260901"}}, run) is False
+
+
+def test_irrigation_timing_rules(monkeypatch):
+    """Water decision for a sown field: flowering date, soil water now, rain ahead, and the irrigation scenario."""
+    import datetime as dt
+    from assistant import advisory
+    ev = {"flowering_date": "2026-11-30", "days_to_flowering": 10, "soil_water_pct": 35, "soil_water_date": "2026-11-10",
+          "next_days_rain_mm": 8.0, "next_days": 7, "rainfed_yield_t_ha": 2.9, "irrigated_yield_t_ha": 5.5,
+          "irrigation_gain_t_ha": 2.6, "irrigation_mm": 100}
+    lib = advisory.library()
+
+    def rules(e):
+        val, txt = {"planted": "yes", "crop_site": "Kiboko"}, {"crop_site": "Kiboko"}
+        for k, v in e.items():
+            val[k], txt[k] = v, (advisory._fd(v) if k.endswith("_date") else f"{v:g}" if isinstance(v, float) else str(v))
+        return [r["id"] for r in advisory.apply_rules(lib, "water", val, txt)]
+    assert "water-timing-now" in rules(ev)
+    assert "water-timing-now" not in rules(dict(ev, next_days_rain_mm=40.0))       # rain on the way
+    assert "water-timing-wet-enough" in rules(dict(ev, soil_water_pct=70))
+    assert "water-timing-not-urgent" in rules(dict(ev, days_to_flowering=40))
+    assert not {"water-timing-now", "water-timing-wet-enough", "water-timing-not-urgent"} & set(rules({}))   # not sown
+    t = advisory.water_timing({"planted": "no"}, {"available": True}, "maize_early", dt.date(2026, 11, 14))
+    assert t == {}
