@@ -114,3 +114,77 @@ def test_a_shallow_soil_limits_every_engine(wet):
     limited = aq.simulate(t)[0]
     assert limited["status"] in ("ok", "died", "failed_establishment")
     assert limited["transpiration_mm"] <= deep["transpiration_mm"] + 1      # less soil water within reach of the roots
+
+
+# ── temperature at flowering and the temperature spread ────────────────────
+def test_heat_and_cold_days_at_flowering(wet):
+    m = aq.simulate(_task(wet, [SOW]))[0]                              # synthetic weather: tmax 29, tmin 16 every day
+    assert m["heat_days_flowering"] == 0 and m["cold_days_flowering"] == 0
+    hot = dict(_task(wet, [SOW]))
+    hot["tmax"] = hot["tmax"] * 0 + 37.0                              # above maize's ~35 °C every day
+    h = aq.simulate(hot)[0]
+    assert h["heat_days_flowering"] > 0
+    s = ro.summarize([m, h], VARIETY)
+    assert s["flowering_temperature"]["members_with_heat_pct"] == 50.0
+
+
+def test_temperature_spread_ratio():
+    import numpy as np
+    import pandas as pd
+    from crop_engine.data import seas5
+    rng = np.random.default_rng(0)
+    years, sites = [2001, 2002, 2003, 2004, 2005, 2006], ["a"]
+    n = len(seas5.lead_dates(2001))
+    hind = {y: {"tmax": (28 + 2.0 * rng.standard_normal((10, n, 1))).astype(np.float32)} for y in years}
+    temps = {"a": pd.concat([pd.DataFrame({"tmax": 26 + 1.0 * rng.standard_normal(n)}, index=seas5.lead_dates(y))
+                             for y in years])}
+    r = seas5.spread_ratio(hind, temps, sites, years, "tmax")
+    assert r.shape == (n, 1) and 0.4 < float(np.median(r)) < 0.6     # ERA5-Land's spread is half the members'
+    assert seas5.TEMPERATURE_SPREAD is False                            # off until the hindcast shows it helps
+
+
+# ── crop-parameter uncertainty ──────────────────────────────────────────────
+def test_parameter_draws_are_seeded_and_bounded():
+    kw, _ = aq.crop_parameters(VARIETY, 23.0)
+    p = mg.SCENARIOS["parameters"]["perturb"]
+    a = mg.parameter_draws(kw, "MaizeGDD", 25, p)
+    assert a == mg.parameter_draws(kw, "MaizeGDD", 25, p) and len({x["HI0"] for x in a}) > 20
+    from aquacrop.entities.crop import crop_params
+    hi0 = kw.get("HI0", crop_params["MaizeGDD"]["HI0"])
+    assert all(hi0 * (1 - 2 * p["HI0"]) - 1e-6 <= x["HI0"] <= hi0 * (1 + 2 * p["HI0"]) + 1e-6 for x in a)
+    assert all(x["CCx"] <= 0.99 for x in a) and all("Maturity" not in x for x in a)
+    assert mg.aquacrop_only("parameters")
+
+
+def test_parameter_uncertainty_widens_the_yields(wet):
+    t = _task(weather(4, True), [SOW] * 4)
+    base = aq.simulate(t)
+    drawn = aq.simulate(mg.apply(t, "parameters"))
+    assert len(mg.apply(t, "parameters")["kw_member"]) == 4
+    assert [m["status"] for m in drawn] and any(abs(a["yield_t_ha"] - b["yield_t_ha"]) > 0.01 for a, b in zip(base, drawn))
+    assert [m["planting"] for m in base] == [m["planting"] for m in drawn]          # same sowing, same weather
+
+
+# ── soil water on 1 Aug from SMAP ───────────────────────────────────────────
+def test_smap_fraction_and_scenario(tmp_path, wet):
+    import json
+    from crop_engine import run_scenarios as rs
+    from crop_engine.data import smap
+    # LAYERS: field capacity 0.22, wilting point 0.12 → 0.17 m3/m3 is half the available water
+    assert smap.available_fraction(0.17, LAYERS) == pytest.approx(0.5, abs=1e-6)
+    assert smap.available_fraction(0.05, LAYERS) == 0.0 and smap.available_fraction(0.40, LAYERS) == 1.0
+    f = tmp_path / "smap.json"
+    f.write_text(json.dumps({"sites": {"s1": {"2026": 0.17}}}))
+    assert smap.initial_fraction("s1", 2026, LAYERS, f) == pytest.approx(0.5)
+    assert smap.initial_fraction("s1", 2025, LAYERS, f) is None and smap.available(2026, f) and not smap.available(2025, f)
+    t = dict(_task(wet, [SOW]), smap_frac=0.5)
+    assert mg.apply(t, "soil_smap")["initial_frac"] == 0.5
+    assert mg.apply(dict(t, smap_frac=None), "soil_smap")["initial_frac"] == t["initial_frac"]   # no value: the outlook's
+    assert "soil_smap" not in rs.available_keys(["soil_smap", "soil_dry"], 1990)                   # no SMAP before 2015
+
+
+def test_smap_comparison():
+    from crop_engine.data import smap
+    r = smap.compare({"a": [(2016, 0.1, 0.3), (2017, 0.2, 0.4), (2018, 0.15, 0.35)], "b": [(2016, None, 0.2)]})
+    assert r["a"]["mean_difference"] == pytest.approx(0.2) and r["a"]["correlation"] == pytest.approx(1.0)
+    assert "b" not in r

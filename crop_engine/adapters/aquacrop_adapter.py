@@ -256,6 +256,13 @@ def make_soil(layers):
     return s
 
 
+def member_kw(task, m):
+    """Member m's crop parameters: the task's, with the member's own draw where the task carries one (kw_member: the
+    crop-parameter uncertainty scenario, scenarios.management.parameter_draws); phenology is never drawn."""
+    extra = (task.get("kw_member") or [None] * (m + 1))[m]
+    return {**task["kw"], **extra} if extra else task["kw"]
+
+
 def rooting_limited(kw, aquacrop_crop, layers):
     """The crop's parameters with its maximum rooting depth (Zmax, m) capped at the soil's rootable depth (a
     restrictive layer, soil.Profile.restrictive_cm), as FAO AquaCrop limits the root zone; never below Zmin + 5 cm.
@@ -294,7 +301,7 @@ def _sow(task, m, plant, dates, g):
             sim_start_time=f"{dates[0]:%Y/%m/%d}", sim_end_time=f"{dates[-1]:%Y/%m/%d}", weather_df=wdf,
             soil=make_soil(task["layers"]),
             crop=Crop(task["variety"]["aquacrop_crop"], planting_date=f"{plant:%m/%d}",
-                      **rooting_limited(task["kw"], task["variety"]["aquacrop_crop"], task["layers"])),
+                      **rooting_limited(member_kw(task, m), task["variety"]["aquacrop_crop"], task["layers"])),
             initial_water_content=InitialWaterContent(wc_type="Pct", method="Depth", depth_layer=[0.05, 2.0],
                                                       value=[100 * task["initial_frac"]] * 2),
             irrigation_management=irrigation(task.get("irrigation"), plant),
@@ -328,6 +335,7 @@ def _sow(task, m, plant, dates, g):
     with np.errstate(invalid="ignore", divide="ignore"):
         stressed = (trp[season] >= 0.5) & (tr[season] < STRESS_RATIO * trp[season])
     wb = water_balance(flux, len(dates), season, yld, float(task["rain"][m][season].sum()))
+    wb.update(flowering_temperature(task, m, k0, kh, cum))
     src = np.bincount(task["source"][season].astype(int), minlength=6)
     ccs = np.nan_to_num(growth.canopy_cover.values[: len(dates)].astype(np.float32))
     ccs = np.pad(ccs, (0, len(dates) - len(ccs)))                     # zero after the season ends
@@ -342,6 +350,29 @@ def _sow(task, m, plant, dates, g):
              rain_mm=round(float(task["rain"][m][season].sum()), 1), sources=src.tolist(),
              _canopy=ccs[::CANOPY_STEP], **wb)
     return r
+
+
+# Heat at flowering (diagnostic). AquaCrop's crop files start pollination heat stress at 40 °C (Tmax_up) for maize,
+# sorghum and the bean, above the thresholds reported for these crops, so the model rarely applies it here. The
+# members count their flowering days above the published thresholds instead (approximate; not used by the model):
+# maize ~35 °C (pollen viability), sorghum ~36 °C (Prasad et al. 2006), dry bean ~32 °C (flower and pod abortion).
+HEAT_AT_FLOWERING_C = {"MaizeGDD": 35.0, "SorghumGDD": 36.0, "DryBeanGDD": 32.0}
+
+
+def flowering_temperature(task, m, k0, kh, cum):
+    """Days of flowering (HIstart to HIstart + Flowering growing degree days from sowing, within the season) with a
+    maximum above HEAT_AT_FLOWERING_C, and with a minimum below the crop file's cold-stress start (Tmin_up)."""
+    from aquacrop.entities.crop import crop_params
+    crop = task["variety"]["aquacrop_crop"]
+    kw, p = task["kw"], crop_params[crop]
+    a, b = float(kw.get("HIstart", p["HIstart"])), float(kw.get("HIstart", p["HIstart"])) + float(kw.get("Flowering", p["Flowering"]))
+    n = min(kh - k0 + 1, len(cum))
+    days = [k0 + i for i in range(n) if a <= cum[i] <= b]
+    if not days or crop not in HEAT_AT_FLOWERING_C:
+        return {"heat_days_flowering": None, "cold_days_flowering": None}
+    tx, tn = task["tmax"][m][days], task["tmin"][m][days]
+    return {"heat_days_flowering": int((tx > HEAT_AT_FLOWERING_C[crop]).sum()),
+            "cold_days_flowering": int((tn < float(p["Tmin_up"])).sum())}
 
 
 def water_balance(flux, n_days, season, yield_t_ha, rain_mm):

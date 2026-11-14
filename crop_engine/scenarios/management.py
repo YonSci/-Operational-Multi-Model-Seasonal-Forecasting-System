@@ -59,6 +59,9 @@ SCENARIOS = {
     "density_high": dict(label="Plant density × 1.2", group="Plant density", density=1.2),
     "soil_dry": dict(label="Dry soil on 1 Aug (wilting point)", group="Initial soil water", initial_frac=0.0),
     "soil_wet": dict(label="Wet soil on 1 Aug (field capacity)", group="Initial soil water", initial_frac=1.0),
+    # the satellite's estimate (crop_engine.data.smap): run only when the season's SMAP values are on disk
+    # (run_scenarios.available_keys); a site without a value keeps the outlook's ERA5-Land soil water
+    "soil_smap": dict(label="Soil water on 1 Aug from SMAP (satellite)", group="Initial soil water", initial_source="smap"),
     "irr_supplementary": dict(label="Supplementary irrigation, up to 100 mm a season", group="Water management",
                               irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100,
                                              start_stage=2)),
@@ -106,9 +109,35 @@ SCENARIOS = {
     "saline_water_table": dict(label="Saline water table at 1.5 m (ECgw 4 dS/m)", group="Salinity",
                                groundwater=dict(depth_m=1.5), salinity=dict(ecgw=4.0)),
 }
-KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "irrigation", "field", "groundwater", "fertility", "weeds",
-        "salinity")
-AQUACROP_KEYS = ("groundwater", "fertility", "weeds", "salinity")     # processes only AquaCrop has
+# Crop-model uncertainty: each member grown with its own draw of the calibrated parameters (relative standard
+# deviations, normal, truncated at ±2 SD; seeded, so the draws repeat): maximum canopy cover CCx (capped at 0.99),
+# the reference harvest index HI0 and the normalised water productivity WP. Phenology is not drawn (the maturity
+# classes are defined by it). The spread of this scenario beside the outlook's shows what the parameters add to the
+# weather's uncertainty. The levels are assumptions, of the order of the parameters' calibration uncertainty.
+SCENARIOS["parameters"] = dict(label="Crop parameters uncertain (canopy ±10 %, harvest index ±15 %, water productivity ±8 %)",
+                               group="Crop model uncertainty", perturb=dict(CCx=0.10, HI0=0.15, WP=0.08, seed=20261))
+KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "initial_source", "irrigation", "field", "groundwater", "fertility", "weeds",
+        "salinity", "perturb")
+AQUACROP_KEYS = ("groundwater", "fertility", "weeds", "salinity", "perturb")     # only AquaCrop has (or is drawn for)
+
+
+def parameter_draws(kw, aquacrop_crop, n, perturb):
+    """n members' parameter overrides: each of perturb's parameters × (1 + sd × z), z standard normal truncated at
+    ±2, from the variety's value (kw, else the crop file's)."""
+    from aquacrop.entities.crop import crop_params
+    p = crop_params[aquacrop_crop]
+    rng = np.random.default_rng(int(perturb.get("seed", 0)))
+    out = []
+    for _ in range(n):
+        d = {}
+        for k, sd in perturb.items():
+            if k == "seed":
+                continue
+            z = float(np.clip(rng.standard_normal(), -2.0, 2.0))
+            v = float(kw.get(k, p[k])) * (1.0 + float(sd) * z)
+            d[k] = round(min(v, 0.99) if k == "CCx" else v, 4)
+        out.append(d)
+    return out
 
 
 def aquacrop_only(key):
@@ -148,7 +177,12 @@ def apply(task, key):
         out["kw"] = dict(task["kw"], PlantPop=float(np.round(pop * scen["density"])))
     if "initial_frac" in scen:
         out["initial_frac"] = float(scen["initial_frac"])
+    if scen.get("initial_source") == "smap" and task.get("smap_frac") is not None:
+        out["initial_frac"] = float(task["smap_frac"])
     for k in ("irrigation", "field") + AQUACROP_KEYS:
-        if k in scen:
+        if k in scen and k != "perturb":
             out[k] = dict(scen[k])
+    if "perturb" in scen:
+        out["kw_member"] = parameter_draws(task["kw"], task["variety"]["aquacrop_crop"], len(out["planting"]),
+                                           scen["perturb"])
     return out

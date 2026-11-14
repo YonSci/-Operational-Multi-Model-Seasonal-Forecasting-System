@@ -283,6 +283,14 @@ def summarize(members, variety, bench=None):
     low = low_harvest_index(members)
     if low is not None:
         s["low_harvest_index_pct"] = low
+    fl = [m for m in sown if m.get("heat_days_flowering") is not None]
+    if fl:                                                         # aquacrop_adapter.flowering_temperature
+        s["flowering_temperature"] = {
+            "heat_days_median": _q([m["heat_days_flowering"] for m in fl], 0.5),
+            "members_with_heat_pct": round(100.0 * sum(m["heat_days_flowering"] > 0 for m in fl) / len(fl), 1),
+            "cold_days_median": _q([m["cold_days_flowering"] for m in fl], 0.5),
+            "members_with_cold_pct": round(100.0 * sum(m["cold_days_flowering"] > 0 for m in fl) / len(fl), 1),
+            "n": len(fl)}
     if bench and bench.get("t33") is not None:
         s["vs_benchmark"] = {"benchmark_p_failure": bench["p_failure"], "benchmark_median": bench["median"],
                              **{f"benchmark_{k}": bench.get(k) for k in ("p_sowing_opportunity", "p_establishment_failure",

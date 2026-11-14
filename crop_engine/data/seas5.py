@@ -36,6 +36,7 @@ anomaly and spread are kept as fractions. With them the forecast's ET0 is FAO-56
 member's weather to the climatological weather (pm_ratio), in place of the Hargreaves ratio of temperature alone.
 """
 
+import os
 from functools import lru_cache
 
 import numpy as np
@@ -147,6 +148,27 @@ def _load_kept(kind, year, where, mtime, lats, lons):
     return out
 
 
+# Temperature spread (variance) correction, off by default: CROP_TEMPERATURE_SPREAD=1 scales each member's anomaly
+# about the members' smoothed mean by spread_ratio, so the forecast's day-to-day spread matches ERA5-Land's over the
+# calibration years (mean-and-variance adjustment); with a ratio of 1 it is the mean-bias correction alone. Off until
+# the hindcast shows it helps (python -m crop_engine.hindcast with and without CROP_TEMPERATURE_SPREAD=1).
+TEMPERATURE_SPREAD = os.environ.get("CROP_TEMPERATURE_SPREAD", "0") == "1"
+SPREAD_RATIO = (0.5, 2.0)
+
+
+def spread_ratio(hind, temps, sites, cal, key):
+    """ERA5-Land's over the members' standard deviation of daily `key` about their ±SMOOTH-day smoothed means, per
+    lead day and site (variances ±SMOOTH-day smoothed), clipped to SPREAD_RATIO; 1 where either is missing."""
+    model_mean = _smooth(np.nanmean(np.stack([hind[y][key].mean(axis=0) for y in cal]), axis=0))
+    var_m = _smooth(np.nanmean(np.stack([np.nanmean((hind[y][key] - model_mean[None]) ** 2, axis=0) for y in cal]), axis=0))
+    obs = np.stack([np.stack([temps[s][key].reindex(lead_dates(y)).values for s in sites], axis=1) for y in cal])
+    with np.errstate(invalid="ignore"):
+        obs_mean = _smooth(np.nanmean(obs, axis=0))
+        var_o = _smooth(np.nanmean((obs - obs_mean[None]) ** 2, axis=0))
+        r = np.sqrt(var_o / var_m)
+    return np.clip(np.where(np.isfinite(r), r, 1.0), *SPREAD_RATIO).astype(np.float32)
+
+
 def _smooth(a, k=SMOOTH):
     """Running mean ±k days along axis 0, NaN-aware, shorter at the ends."""
     out = np.full_like(a, np.nan)
@@ -181,8 +203,16 @@ class Seas5:
             with np.errstate(invalid="ignore"):
                 diff = np.nanmean(model - obs, axis=0)
             self.bias[key] = _smooth(diff)
-        self.tmax = (run["tmax"] - self.bias["tmax"][None]).astype(np.float32)
-        self.tmin = np.minimum(run["tmin"] - self.bias["tmin"][None], self.tmax).astype(np.float32)
+        # the spread: the ratio of ERA5-Land's to the members' day-to-day standard deviation about their own
+        # (smoothed) means, per lead day and site; applied only with CROP_TEMPERATURE_SPREAD=1 (module doc)
+        self.spread_ratio = {k: spread_ratio(hind, temps, sites, cal, k) for k in ("tmax", "tmin")}
+        self.spread_applied = TEMPERATURE_SPREAD
+        adj = {k: self.spread_ratio[k] if TEMPERATURE_SPREAD else np.ones_like(self.bias[k]) for k in ("tmax", "tmin")}
+        mean = {k: _smooth(np.nanmean(np.stack([hind[y][k].mean(axis=0) for y in cal]), axis=0)) for k in ("tmax", "tmin")}
+        self.tmax = ((run["tmax"] - mean["tmax"][None]) * adj["tmax"][None] + mean["tmax"][None]
+                     - self.bias["tmax"][None]).astype(np.float32)
+        self.tmin = np.minimum((run["tmin"] - mean["tmin"][None]) * adj["tmin"][None] + mean["tmin"][None]
+                               - self.bias["tmin"][None], self.tmax).astype(np.float32)
         # March rain: quantile mapping per site and lead day
         mar = np.where(self.dates.month == 3)[0]
         w = orl.EXT_QM_WINDOW
@@ -258,8 +288,11 @@ def describe(s, year=None):
     n, all_ = len(s.cal_years), C.CAL_YEARS[1] - C.CAL_YEARS[0] + 1
     met = (f"; radiation, humidity and wind corrected to ERA5-Land from {len(s.met_cal_years)} calibration years, ET0 "
            f"by Penman-Monteith" if s.met is not None else f"; ET0 scaled by temperature ({s.met_note})")
+    spread = ("its day-to-day spread scaled to ERA5-Land's (median ratio tmax "
+              f"{float(np.median(s.spread_ratio['tmax'])):.2f}, tmin {float(np.median(s.spread_ratio['tmin'])):.2f}), "
+              if getattr(s, "spread_applied", False) else "")
     return (f"ECMWF SEAS5 1 Oct {year or s.year} ({s.n_members} members), temperature bias-corrected to ERA5-Land by "
-            f"lead day and March rain quantile-mapped to CHIRPS, from {n} of the {all_} calibration years "
+            f"lead day, {spread}and March rain quantile-mapped to CHIRPS, from {n} of the {all_} calibration years "
             f"{C.CAL_YEARS[0]}–{C.CAL_YEARS[1]}{met}")
 
 

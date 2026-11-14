@@ -414,6 +414,49 @@ a fresh soil (FAO 29: 0.96, 0.72, 0.48, 0.24; root zone alone: 0.95, 0.76, 0.51,
 wetter, less saline compartments near its limit; the rest of the gap at 8 dS/m is AquaCrop 7's own root-zone cap.
 Without the redistribution, the compartments' limits alone only threw water away (6 dS/m: 0.19).
 
+### More of AquaCrop, part 2 (November 2026)
+
+Eight additions made with code and public data only. None changes the outlook's numbers except where noted.
+
+- **Water use** (`aquacrop_adapter.water_balance`). Every simulated member records where its season's water went,
+  sowing to harvest, from AquaCrop-OSPy's daily water flux: transpiration, soil evaporation (their sum the crop's
+  evapotranspiration), surface runoff, drainage below the profile, capillary rise, the water productivity (kg of
+  yield per m3 of evapotranspiration) and the share of the season's rain lost to runoff and drainage. The summaries
+  carry their medians (`water_use`); the Crop outlook tab says where the rain went.
+- **The regional grid first** (`run_all.py`). The grid now runs before the weekly scenarios and nitrogen levels.
+  The scenarios could take the whole time left, so on 13 Nov the published map was still the 11 Nov build, made
+  before the delayed-germination fix. Each summary and the grid's log carry the share of matured members with a
+  harvest index below 0.15 (`run_outlook.low_harvest_index`): the sign of that fault, which should stay near 0.
+- **Partial runoff reduction** (scenarios `contour_ridges`, `terraces`). AquaCrop's field-practice adjustment of
+  the runoff curve number, 15 % and 30 % lower (assumed levels): between bare soil and tied ridges (no runoff at
+  all). DSSAT lowers its own curve number by the same share; WOFOST has none and skips them.
+- **Water drawn for irrigation.** The summaries give, beside the net depth reaching the soil, the water drawn from
+  the source at 75 % efficiency (`config.IRRIGATION_EFFICIENCY`, an assumed level for furrow or bucket irrigation).
+- **Rootable soil depth** (`data/soil_depth.py`, `data/soil_depth.yaml`). A restrictive layer stops the roots in
+  every engine: AquaCrop's Zmax (AquaCrop-OSPy stores its own `z_res` but never uses it), DSSAT's root depth and
+  WOFOST's RDMSOL. iSDAsoil's depth to bedrock (Earth Engine `ISDASOIL/Africa/v1/bedrock_depth`, the median over
+  each 0.25 deg cell) is 2 m or more at all six sites and all 97 grid cells, so nothing changes until a site
+  reports a shallower soil (source `measured` in the table). The configuration hashes include only the
+  restrictions in effect, so recording iSDAsoil's values rebuilt nothing.
+- **Soil water on 1 Aug from SMAP** (`data/smap.py`, scenario `soil_smap`). NASA SMAP Level 4 root-zone soil
+  moisture (0-100 cm, 9 km, from 2015), the mean of 29 Jul to 3 Aug, turned into the site's plant-available
+  fraction. `--compare` scores ERA5-Land against it per site (`outputs/crop_engine/verification/initial_water_smap.json`);
+  the scenario grows the season from SMAP's value when the season's values are on disk.
+- **Heat and cold at flowering** (`aquacrop_adapter.flowering_temperature`). AquaCrop's crop files start pollination
+  heat stress at 40 °C for maize, sorghum and the bean, above the thresholds reported for them, so the model rarely
+  applies it here. Each member counts its flowering days above about 35 °C (maize), 36 °C (sorghum) and 32 °C
+  (bean), and its nights below the crop file's cold threshold; the summaries carry the share of members with any.
+  Counted, not modelled: changing the model's thresholds needs evidence of heat damage at these sites.
+- **Temperature spread** (`data/seas5.py`, off by default). With `CROP_TEMPERATURE_SPREAD=1`, SEAS5 temperature is
+  corrected for its day-to-day spread as well as its mean (mean-and-variance adjustment per lead day and site,
+  ratio clipped to 0.5-2). It stays off until the hindcast shows it helps:
+  `CROP_TEMPERATURE_SPREAD=1 python -m crop_engine.hindcast --temperature seas5 --tag _spread` against the run
+  without it.
+- **Crop-parameter uncertainty** (scenario `parameters`, AquaCrop only). Each member is grown with its own draw of
+  the maximum canopy cover (±10 %), the reference harvest index (±15 %) and the normalised water productivity
+  (±8 %): relative standard deviations, truncated at ±2, seeded. Phenology is not drawn. Its yield range beside the
+  outlook's shows what the calibration adds to the weather's uncertainty.
+
 ### Questions for partners (November 2026)
 
 The water-management amounts above are the engine's assumptions. A questionnaire to the managers of the six sites
@@ -1673,5 +1716,5 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   tests in `dssat_cultivars.yaml` (the questionnaire asks for them), then phosphorus where soil data allow. SARRA-Py where partner data support
   it; the Long Rains (MAM) and Ethiopia; crop
   bulletins. Gridded regional yield forecasts: a pilot for the eastern Kenya Short Rains maize counties is in place
-  (*Gridded regional outlook*); next, a hindcast of the grid against HarvestStat, the AquaCrop dry-sowing fix, then
+  (*Gridded regional outlook*); next, a hindcast of the grid against HarvestStat (the dry-sowing fix is in place; the grid now runs first), then
   sorghum and the other Short Rains counties.

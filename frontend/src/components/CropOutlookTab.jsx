@@ -815,6 +815,19 @@ function WaterUse({ w, rain }) {
   )
 }
 
+// Heat and cold at flowering (diagnostic: the model's own heat stress starts at 40 C, above these crops' thresholds)
+function FloweringTemperature({ f, crop }) {
+  const thr = { maize_early: 35, maize_medium: 35, sorghum: 36, bean: 32 }[crop]
+  if (!f || thr == null) return null
+  return (
+    <>
+      {' '}At flowering, {f.members_with_heat_pct} % of the sown members have at least one day above about {thr} C, where flowers and
+      pollen start to suffer (median {f.heat_days_median} days); {f.members_with_cold_pct} % have a night cold enough to slow the crop.
+      AquaCrop applies heat stress only from 40 C, so these days are counted, not modelled.
+    </>
+  )
+}
+
 function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg }) {
   const sub = 'The seasonal forecast’s crops grown again in the same weather members with one management choice changed. '
             + 'The first row is the outlook above.'
@@ -870,12 +883,15 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         Median yield over all members counts a member with no crop as zero; in brackets, the change from the outlook. A shifted sowing
         keeps members with no sowing opportunity unsown; a calendar sowing sows every member on that date, rain or not. Plant density
         changes only how fast the canopy closes (AquaCrop-OSPy sets the initial canopy from it), not the maximum canopy calibrated at
-        Kiboko. Soil water on 1 Aug replaces the ERA5-Land value. Supplementary irrigation waters the crop whenever its root zone
+        Kiboko. Soil water on 1 Aug replaces the ERA5-Land value (from SMAP: the satellite mission&apos;s root-zone estimate, where it
+        is on disk). Supplementary irrigation waters the crop whenever its root zone
         falls below 30 % of its available water from canopy growth to flowering (not before the crop has emerged with rain), at most 100 mm a season reaching the soil (about 130 mm
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
         covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field;
         contour ridging and contour bunds or fanya juu terraces lower the runoff curve number by 15 % and 30 % (assumed levels),
-        so less of a heavy rain runs off but some still does.
+        so less of a heavy rain runs off but some still does. Crop parameters uncertain grows each member with its own draw of
+        the maximum canopy, harvest index and water productivity (assumed spreads of 10, 15 and 8 %): where its yield range is much
+        wider than the outlook&apos;s, the crop model&apos;s calibration matters as much as the weather.
         Bunds hold up to 10 cm of rain on the field until it soaks in. The other irrigation methods water every 7 days
         to field capacity, on a fixed schedule from sowing, at a constant 3 mm a day (drip), or count the net water a crop needs
         to keep its root zone above 60 % (the requirement, not a practice). A water table feeds the root zone by capillary rise.
@@ -1187,6 +1203,7 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
             {' '}Water stress: the sown crops yield a median {fmtT(summary.potential_t_ha.yield_median)} t/ha, against {fmtT(summary.potential_t_ha.median)} t/ha
             without water stress (AquaCrop’s potential yield).</>}
           {summary.water_use?.et_mm_median != null && <WaterUse w={summary.water_use} rain={summary.rain_mm_median}/>}
+          {summary.flowering_temperature && <FloweringTemperature f={summary.flowering_temperature} crop={vk}/>}
           {' '}{run.members_kind?.startsWith('deterministic') ? `${run.model_label} is a single forecast, repeated in all 25 members: the spread comes from the observations and the seasonal forecast after it.` : ''}
         </p>
       )}
