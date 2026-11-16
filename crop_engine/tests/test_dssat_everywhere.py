@@ -81,9 +81,14 @@ def test_soil_factor_and_nitrogen_levels_per_site(monkeypatch):
     assert set(k) == {"n0", "n50", "reported"} and k["reported"]["rate_kg_ha"] == 18
     assert set(rn.site_levels("kapiti", levels, reported)) == {"n0", "n50"}
     t = rn.with_nitrogen({"variety": {"aquacrop_crop": "MaizeGDD"}}, "kiboko", levels["n50"], split)
-    assert t["nitrogen"] == {"rate_kg_ha": 50, "split": [(0, 0.4), (30, 0.6)], "organic_n_factor": 0.2}
+    assert t["nitrogen"] == {"rate_kg_ha": 50, "split": [(0, 0.4), (30, 0.6)], "organic_n_factor": 0.2,
+                             "initial_no3_ppm": ds.INIT_NO3, "initial_nh4_ppm": ds.INIT_NH4}
     assert rn.with_nitrogen({"variety": {"aquacrop_crop": "DryBeanGDD"}}, "kapiti", levels["n0"],
                             split)["nitrogen"]["split"] == [(0, 1.0)]
+    monkeypatch.setattr(ds, "soil_settings", lambda: {"organic_n_factor": 0.06, "initial_no3_ppm": 2.0, "sites": {
+        "kiboko": {"organic_n_factor": 0.02, "initial_no3_ppm": 0.5, "initial_nh4_ppm": 0.2}}})
+    assert ds.soil_nitrogen("kiboko") == {"organic_n_factor": 0.02, "initial_no3_ppm": 0.5, "initial_nh4_ppm": 0.2}
+    assert ds.soil_nitrogen("kapiti") == {"organic_n_factor": 0.06, "initial_no3_ppm": 2.0, "initial_nh4_ppm": ds.INIT_NH4}
     h = rn.normal_hash("abc")
     assert h == rn.normal_hash("abc") and h != rn.normal_hash("abd")
 

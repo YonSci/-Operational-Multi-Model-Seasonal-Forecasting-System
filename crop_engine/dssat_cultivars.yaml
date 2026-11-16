@@ -21,17 +21,27 @@ varieties:
   bean:         {cultivar: IB0014, EM-FL: 24.94, FL-SH: 3.636, FL-SD: 10.39, SD-PM: 20.26, FL-LF: 10.39}   # Canadian Wonder
 
 # The soil with DSSAT's nitrogen balance on (crop_engine/run_nitrogen.py): the factor on the soil's organic nitrogen
-# (SLNI = organic carbon / 10 × organic_n_factor), fitted by `python -m crop_engine.calibration.dssat --nitrogen`
-# (outputs/crop_engine/calibration/dssat/nitrogen.json, 12 Nov 2026) so that early maize without fertiliser yields
-# what Kenyan maize nitrogen trials give against 60 kg N/ha (about 0.6) over the observed Short Rains 1993-2016 at
-# Kiboko and Kapiti. The SoilGrids carbon mineralises far more nitrogen than a cropped dryland field: at the fitted
-# 0.06, the lower bound of the fit, the ratio is still 0.67 (1.0 at the factor 1, no response to fertiliser at all).
+# (SLNI = organic carbon / 10 × organic_n_factor) and the mineral nitrogen at the start (1 Aug; ppm in the top 30 cm,
+# half below). The starting mineral nitrogen is half the adapter's default (3 and 1 ppm): the KALRO Kiboko 2013
+# irrigated nitrogen trial, the only one whose response is the field's nitrogen alone, is fitted only with half the
+# default or less (`--nitrogen-sites`, outputs/crop_engine/calibration/dssat/nitrogen_sites.json, 12 Nov 2026); at
+# the default it had set a floor that kept the regional fit at its lower bound (0.06, ratio 0.67). With it, the
+# organic factor is fitted by `python -m crop_engine.calibration.dssat --nitrogen --initial-scale 0.5`
+# (nitrogen.json, 12 Nov 2026) so that early maize without fertiliser yields what Kenyan maize nitrogen trials give
+# against 60 kg N/ha (0.62) over the observed Short Rains 1993-2016 at Kiboko and Kapiti: 0.20 (ratio 0.628).
 soil:
-  organic_n_factor: 0.06
-  # a site's own measured fields replace the regional factor: site id → {organic_n_factor: f, source: "..."} (from a
-  # soil test's organic carbon and total nitrogen, or a nitrogen trial at the site; CROP_ENGINE.md "Questions for
-  # partners"). None yet.
-  sites: {}
+  organic_n_factor: 0.20
+  initial_no3_ppm: 1.5
+  initial_nh4_ppm: 0.5
+  # a site's own fields replace the regional values: site id → {organic_n_factor, initial_no3_ppm, initial_nh4_ppm,
+  # source} (a nitrogen trial on the site's fields, `--nitrogen-sites`; or a soil test's organic carbon and total
+  # nitrogen, CROP_ENGINE.md "Questions for partners")
+  sites:
+    kalro_kiboko_makueni_farm:
+      organic_n_factor: 0.1
+      initial_no3_ppm: 1.5
+      initial_nh4_ppm: 0.5
+      source: "KALRO Kiboko 2013, irrigated, 0/40/80/160 kg N/ha with 20 kg P/ha (Kenya soil health compilation: doi 10.7910/DVN/SOAWL6 and its Dryad copy 10.5061/dryad.j3tx95xhc): the best organic factor at the regional starting mineral nitrogen (nitrogen_sites.json); the station's field may be more depleted than farmers' fields near it"
 
 # The nitrogen levels of crop_engine/run_nitrogen.py: assumed rates until the sites' managers report theirs.
 # levels: kg N/ha of urea; split: (days after sowing, share) per AquaCrop crop key; sites: a site's reported practice,

@@ -189,7 +189,12 @@ def test_nitrogen_files():
     fert = [ln for ln in lines if ln.startswith(" 1 ") and ds.UREA in ln]
     assert [ln.split()[1] for ln in fert] == ["0", "30"] and [ln.split()[5] for ln in fert] == ["20", "30"]
     ic = lines[lines.index("@C  ICBL  SH2O  SNH4  SNO3") + 1:][:2]
-    assert ic[0].split()[3:] == [f"{ds.INIT_NH4:.1f}", f"{ds.INIT_NO3:.1f}"] and float(ic[1].split()[4]) == ds.INIT_NO3 / 2
+    assert ic[0].split()[3:] == [f"{ds.INIT_NH4:.2f}", f"{ds.INIT_NO3:.2f}"] and float(ic[1].split()[4]) == ds.INIT_NO3 / 2
+    low = ds.experiment_file("CE000001", "MZ", "KY0018", "CESOIL0001", dt.date(2026, 8, 1), plant, ["W0012601"],
+                             [(30, 0.2), (60, 0.25)], 5.3, dt.date(2027, 3, 30),
+                             nitrogen={"rate_kg_ha": 0, "initial_no3_ppm": 0.5, "initial_nh4_ppm": 0.25}).splitlines()
+    ic = low[low.index("@C  ICBL  SH2O  SNH4  SNO3") + 1:][:2]
+    assert ic[0].split()[3:] == ["0.25", "0.50"] and ic[1].split()[3:] == ["0.12", "0.25"]   # the task's own start
     none = ds.experiment_file("CE000001", "BN", "IB0014", "CESOIL0001", dt.date(2026, 8, 1), plant, ["W0012602"],
                               [(5, 0.2)], 13.2, dt.date(2027, 3, 30), nitrogen={"rate_kg_ha": 0})
     assert " 1 OP              Y     Y     Y" in none and "*FERTILIZERS" not in none    # the bean fixes N; no urea
@@ -199,7 +204,11 @@ def test_nitrogen_files():
     sol = ds.soil_file("CESOIL0001", -2.21, 37.72, LAYERS, 150, nitrogen=True, organic_n_factor=0.5).splitlines()
     head = next(ln for ln in sol if ln.startswith("@  SLB"))
     r0 = sol[sol.index(head) + 1]
-    assert r0[:_col(head, "SLNI") + 1].split()[-1] == f"{2.0 / 1.724 / ds.C_TO_N * 0.5:.3f}"
+    field = r0[_col(head, "SLNI") - 5:_col(head, "SLNI") + 1]
+    assert field[0] == " " and float(field) == pytest.approx(2.0 / 1.724 / ds.C_TO_N * 0.5, abs=5e-5)
+    tiny = ds.soil_file("CESOIL0001", -2.21, 37.72, LAYERS, 150, nitrogen=True, organic_n_factor=0.0001).splitlines()
+    assert tiny[tiny.index(head) + 1][:_col(head, "SLNI") + 1].split()[-1] == ".0001"   # never 0 (DSSAT: missing)
+    assert ds._slni_field(1.2345) == " 1.234" and ds._slni_field(0.058) == " .0580"
     plain = ds.soil_file("CESOIL0001", -2.21, 37.72, LAYERS, 150).splitlines()
     assert plain[plain.index(head) + 1][:_col(head, "SLNI") + 1].split()[-1] == "-99"
     assert 0 < ds.soil_settings()["organic_n_factor"] <= 1

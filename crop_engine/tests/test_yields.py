@@ -35,6 +35,32 @@ def test_date_parsing():
     assert observations._parse_date("nan") == (None, None)
 
 
+def test_day_month_order_resolved():
+    r = observations._resolve_dates
+    d = dt.date
+    # day first stands when it agrees with the harvest date and the season
+    assert r("20/09/2011", "16/12/2011", "SR") == (d(2011, 9, 20), d(2011, 12, 16), None)
+    # Bungoma: '3/12/2010' with a Long Rains harvest in June is 12 Mar
+    assert r("3/12/2010", "14/06/2010", "LR") == (d(2010, 3, 12), d(2010, 6, 14), "month/day order inferred")
+    # Machakos: both dates month first (8 Apr to 12 Jul), not a mixed reading (8 Apr to 7 Dec)
+    assert r("4/08/2015", "7/12/2015", "LR") == (d(2015, 4, 8), d(2015, 7, 12), "month/day order inferred")
+    # no harvest date: the stated season decides
+    assert r("4/08/2015", None, "LR") == (d(2015, 4, 8), None, "month/day order inferred")
+    assert r("4/08/2015", None, None) == (d(2015, 8, 4), None, None)
+    # nothing agrees (a harvest before the sowing either way): the dates are dropped
+    assert r("3/09/2010", "7/01/2010", "SR") == (None, None, "order unresolved")
+    assert r("2015", "7/12/2015", "LR")[0] is None
+
+
+def test_n2africa_copies_dropped():
+    obs = pd.DataFrame({
+        "source": ["N2Africa agronomy trials (IITA)", "Kenya soil health (Alliance Bioversity-CIAT 2026)",
+                   "Kenya soil health (Alliance Bioversity-CIAT 2026)"],
+        "crop": ["bean"] * 3, "year": [2011.0] * 3, "planting_date": ["2011-04-02", "2011-02-04", "2011-04-02"],
+        "grain_yield_kg_ha": [570.21, 570.21, 571.0]})
+    assert observations.n2africa_copies(obs).tolist() == [False, True, False]
+
+
 def test_iita_maturity_class():
     assert observations._iita_maturity("INTERNATIONAL MAIZE TRIAL - RUVT EXTRA-EARLY") == ("extra-early", "maize_early")
     assert observations._iita_maturity("INTERNATIONAL MAIZE TRIAL - RUVT EARLY") == ("early", "maize_early")

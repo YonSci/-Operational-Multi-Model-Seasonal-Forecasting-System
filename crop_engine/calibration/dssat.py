@@ -187,13 +187,15 @@ def fit_yield(variety, phen, target, site, elev, plantings, tol=0.02):
                 lambda y: abs(y - target) < tol)
 
 
-def nitrogen_ratio(tasks, factor, workers):
-    """Median, over the seasons whose crop matures with 60 kg N/ha, of the yield without N over the yield with it."""
+def nitrogen_ratio(tasks, factor, workers, initial=None):
+    """Median, over the seasons whose crop matures with 60 kg N/ha, of the yield without N over the yield with it.
+    initial: {initial_no3_ppm, initial_nh4_ppm} (default: the adapter's)."""
     from crop_engine import run_outlook as ro_
     runs = []
     for t in tasks:
         for rate in (0, 60):
-            runs.append(dict(t, nitrogen={"rate_kg_ha": rate, "split": N_SPLIT, "organic_n_factor": factor}))
+            runs.append(dict(t, nitrogen={"rate_kg_ha": rate, "split": N_SPLIT, "organic_n_factor": factor,
+                                          **(initial or {})}))
     res = ro_.run_tasks(runs, workers, engine="dssat")
     ratios = []
     for k in range(0, len(res), 2):
@@ -203,7 +205,9 @@ def nitrogen_ratio(tasks, factor, workers):
     return (float(np.median(ratios)) if ratios else None), len(ratios)
 
 
-def calibrate_nitrogen(workers):
+def calibrate_nitrogen(workers, initial_scale=None, factors=(1.0, 0.5, 0.25, 0.12, 0.06)):
+    """The regional organic-nitrogen factor (module doc), with the starting mineral nitrogen × initial_scale of the
+    adapter's INIT_NO3 / INIT_NH4 (default: the regional value of dssat_cultivars.yaml soil)."""
     from crop_engine import compare_engines as ce
     from crop_engine.data import soil as soil_mod
     from crop_engine.data import weather as W
@@ -215,16 +219,21 @@ def calibrate_nitrogen(workers):
     tasks, _ = ce.tasks_for(inp, list(range(N_YEARS[0], N_YEARS[1] + 1)), rep, vs, ["fao-agricultural"], soils)
     tasks = [t for t in tasks if t["planting"][0] is not None]
     log(f"nitrogen: {len(tasks)} observed seasons at {', '.join(N_SITES)}, early maize, 0 and 60 kg N/ha")
+    reg = ds.soil_nitrogen()
+    initial = ({"initial_no3_ppm": reg["initial_no3_ppm"], "initial_nh4_ppm": reg["initial_nh4_ppm"]}
+               if initial_scale is None else
+               {"initial_no3_ppm": ds.INIT_NO3 * initial_scale, "initial_nh4_ppm": ds.INIT_NH4 * initial_scale})
+    log(f"nitrogen: starting mineral N {initial}")
     target = N_TARGET["ratio_0_60"]
     scan = {}
-    ratio = lambda f: scan.setdefault(f, nitrogen_ratio(tasks, f, workers))[0]        # noqa: E731
-    for f in (1.0, 0.5, 0.25, 0.12, 0.06):
+    ratio = lambda f: scan.setdefault(f, nitrogen_ratio(tasks, f, workers, initial))[0]        # noqa: E731
+    for f in factors:
         log(f"  organic N × {f}: ratio {ratio(f)} ({scan[f][1]} seasons)")
     f, r, reached = _fit(ratio, target, sorted(scan), lambda v: abs(v - target) < 0.01)
     log(f"nitrogen: organic_n_factor {f} → ratio {r:.3f} (target {target}{'' if reached else ', not reached'})")
     out = {"created": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "target": N_TARGET,
            "sites": list(N_SITES), "years": list(N_YEARS), "split": N_SPLIT, "c_to_n": ds.C_TO_N,
-           "initial_ppm": {"NO3": ds.INIT_NO3, "NH4": ds.INIT_NH4},
+           "initial_ppm": {"NO3": initial["initial_no3_ppm"], "NH4": initial["initial_nh4_ppm"]},
            "scan": {str(k): {"ratio": v[0], "seasons": v[1]} for k, v in sorted(scan.items())},
            "organic_n_factor": f, "ratio": r, "reached": reached}
     OUT.mkdir(parents=True, exist_ok=True)
@@ -233,10 +242,169 @@ def calibrate_nitrogen(workers):
     return 0
 
 
+# ── the sites' own fields (--nitrogen-sites) ───────────────────────────────────────────────────────────────────────
+# Nitrogen trials on or beside a monitored site's own fields (crop_engine/yields observations). Each is grown in its
+# own season and the site's soil nitrogen (dssat_cultivars.yaml soil.sites) fitted to its measured response: the yield
+# at each rate over the yield at the trial's top rate (reference "top"), or, where the response is flat above the
+# lowest rate (reference "fertilised"), the unfertilised yield over the mean of the fertilised rates; so the trial's
+# own yield level (variety, phosphorus, pests) does not enter.
+SITE_TRIALS = {
+    "kalro_kiboko_makueni_farm": dict(
+        studies=("doi_10.7910_DVN_SOAWL6", "doi_10.5061_dryad.j3tx95xhc"), location="Kiboko", year=2013,
+        rates=(0, 40, 80, 160), variety="maize_medium", irrigated=True, sowings="dry season, Jun-Jul (not reported)",
+        fit=("organic_n_factor", "initial"),
+        source="KALRO Kiboko 2013, irrigated, 0/40/80/160 kg N/ha with 20 kg P/ha (Kenya soil health compilation: "
+               "doi 10.7910/DVN/SOAWL6 and its Dryad copy 10.5061/dryad.j3tx95xhc)"),
+    "kapiti_research_station_farm": dict(
+        studies=("doi_10.5061_dryad.fg15tg2",), location="Machakos", year=2015, rates=(0, 30, 60, 90, 120),
+        variety="maize_early", irrigated=False, sowings="2015-04-08", fit=("organic_n_factor",),
+        reference="fertilised",       # a poor season: the yield peaks at 30 kg N/ha and is flat above
+        source="Machakos 2015 Long Rains, rainfed, 0-120 kg N/ha x 0-22 kg P/ha, sown 8 Apr 2015, about 15 km from "
+               "Kapiti (Kenya soil health compilation: doi 10.5061/dryad.fg15tg2)"),
+}
+SITE_FACTORS = (0.01, 0.02, 0.04, 0.06, 0.1, 0.2, 0.3, 0.5)
+SITE_INITIAL = (0.0, 0.25, 0.5, 1.0)          # × INIT_NO3 / INIT_NH4, the starting mineral nitrogen
+IRRIGATED = {"irrigation_method": 1, "SMT": [70, 70, 70, 70]}
+RAINFED_START_DAYS, RAINFED_INITIAL_FRAC = 60, 0.25
+
+
+def observed_response(obs, trial):
+    """The trial's yield at each rate over its yield at the top rate: the mean of its studies' (copies') ratios of
+    their mean yields per rate → ({rate: relative yield}, {rate: mean t/ha per study})."""
+    o = obs[obs.study.isin(trial["studies"]) & (obs.crop == "maize")
+            & obs.location.astype(str).str.contains(trial["location"]) & obs.n_kg_ha.isin(trial["rates"])]
+    if trial.get("year"):
+        o = o[(o.year == trial["year"]) | o.year.isna()]
+    per = o.groupby(["study", "n_kg_ha"]).grain_yield_dry_kg_ha.mean().unstack() / 1000.0
+    per = per.dropna(subset=[max(trial["rates"])])
+    if per.empty:
+        raise ValueError(f"no yields at {trial['location']} for {trial['studies']}")
+    rel = per.div(_reference(per, trial), axis=0).mean()
+    return ({int(k): round(float(v), 3) for k, v in rel.items()},
+            {s: {int(k): round(float(v), 2) for k, v in r.dropna().items()} for s, r in per.iterrows()})
+
+
+def _reference(y, trial):
+    """The yield the response is relative to: the top rate's, or the mean of the fertilised rates' (SITE_TRIALS)."""
+    if trial.get("reference", "top") == "fertilised":
+        return y[[r for r in trial["rates"] if r > 0]].mean(axis=1) if isinstance(y, pd.DataFrame) else             float(np.mean([y[r] for r in trial["rates"] if r > 0]))
+    return y[max(trial["rates"])]
+
+
+def _fitted_rates(trial):
+    return [0] if trial.get("reference", "top") == "fertilised" else [r for r in trial["rates"] if r != max(trial["rates"])]
+
+
+def _trial_tasks(trial, site, variety, elev):
+    """One DSSAT task per rate (members: the trial's sowings), without the nitrogen settings being fitted."""
+    from crop_engine.data import soil as soil_mod
+    from crop_engine.data.sites import Site
+    layers = soil_mod.profile(Site(site.id, site.name, site.lat, site.lon, site.country, cell_lat=site.lat,
+                                   cell_lon=site.lon))
+    if trial["irrigated"]:
+        plants = cw.sowings(trial["year"])
+        w = site_weather(site, plants[0] - dt.timedelta(days=5))
+        rain, frac, extra = np.zeros(len(w)), 0.7, {"irrigation": IRRIGATED}
+    else:
+        plants = [dt.date.fromisoformat(trial["sowings"])]
+        w = site_weather(site, plants[0] - dt.timedelta(days=RAINFED_START_DAYS))
+        from crop_engine.calibration import bean as cb
+        r = cb._rain({site.id: Site(site.id, site.name, site.lat, site.lon, site.country, cell_lat=site.lat,
+                                    cell_lon=site.lon)})
+        rain = r[site.id].reindex(w.index).values
+        if np.isnan(rain).any():
+            raise ValueError(f"CHIRPS missing at {site.id} from {w.index[0].date()}")
+        frac, extra = RAINFED_INITIAL_FRAC, {}
+    M = len(plants)
+    base = dict(dates=w.index.values, rain=np.tile(rain, (M, 1)), tmax=w.tmax.values, tmin=w.tmin.values,
+                rad=w.rad_mj_m2.values, vap=w.vap_hpa.values, wind2=w.wind2_ms.values, et0=np.zeros(len(w)),
+                source=np.zeros(len(w), int), planting=plants, resow=None, variety=variety, kw=variety["kw"],
+                layers=layers, initial_frac=frac, lat=site.lat, lon=site.lon, elev=elev, potential=False, **extra)
+    return base, plants
+
+
+def site_response(base, trial, factor, initial, workers):
+    """Simulated yield at each rate relative to the trial's reference (_reference; means over the sowings)."""
+    rates = trial["rates"]
+    runs = [dict(base, nitrogen={"rate_kg_ha": r, "split": N_SPLIT, "organic_n_factor": factor,
+                                 "initial_no3_ppm": ds.INIT_NO3 * initial, "initial_nh4_ppm": ds.INIT_NH4 * initial})
+            for r in rates]
+    res = ro.run_tasks(runs, workers, engine="dssat")
+    y = {r: float(np.mean([m["yield_t_ha"] if m["status"] in ("ok", "died") else 0.0 for m in out]))
+         for r, out in zip(rates, res)}
+    top = _reference(y, trial)
+    return ({r: (round(v / top, 3) if top > 0 else None) for r, v in y.items()}, {r: round(v, 2) for r, v in y.items()})
+
+
+def calibrate_site_nitrogen(workers, only=None):
+    """Each SITE_TRIALS site's soil nitrogen fitted to its trial (the comment above SITE_TRIALS): a grid over the
+    organic factor (and, where the trial is irrigated, the starting mineral nitrogen), the least squares of the
+    relative yields below the top rate. Writes calibration/dssat/nitrogen_sites.json and prints the soil.sites rows."""
+    from crop_engine.yields import observations
+    obs = observations.load_all(log=lambda m: None)
+    import fao_water_balance as fw  # noqa: E402
+    out = {"created": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "split": N_SPLIT,
+           "c_to_n": ds.C_TO_N, "default_initial_ppm": {"NO3": ds.INIT_NO3, "NH4": ds.INIT_NH4}, "sites": {}}
+    regional = ds.soil_nitrogen()
+    for sid, trial in SITE_TRIALS.items():
+        if only and sid not in only:
+            continue
+        site = next(s for s in registered_sites() if s.id == sid)
+        _, vs = ro.load_varieties([trial["variety"]])
+        ds.attach(vs)
+        met = era5land.site_met([site], refresh=False)[site.id]
+        elev = float(fw.elevation_from_pressure(float(met.sp_kpa.mean())))
+        target, per_study = observed_response(obs, trial)
+        base, plants = _trial_tasks(trial, site, vs[trial["variety"]], elev)
+        below = _fitted_rates(trial)
+        inits = SITE_INITIAL if "initial" in trial["fit"] else (regional["initial_no3_ppm"] / ds.INIT_NO3,)
+        scan = []
+        for f in SITE_FACTORS:
+            for i in inits:
+                rel, y = site_response(base, trial, f, i, workers)
+                sse = (sum((rel[r] - target[r]) ** 2 for r in below) if all(rel[r] is not None for r in below)
+                       else None)
+                scan.append({"organic_n_factor": f, "initial_scale": i, "relative": rel, "yield_t_ha": y, "sse": sse})
+                log(f"{sid}: organic N × {f}, starting mineral N × {i}: relative {rel} (observed {target}), "
+                    f"yields {y}")
+        ok = [s for s in scan if s["sse"] is not None]
+        best = min(ok, key=lambda s: s["sse"])
+        edge = [k for k, v, grid in (("organic_n_factor", best["organic_n_factor"], SITE_FACTORS),
+                                     ("initial_scale", best["initial_scale"], inits))
+                if len(grid) > 1 and v in (min(grid), max(grid))]
+        # the organic factor and the starting mineral nitrogen trade off along a ridge (one trial fixes the field's
+        # supply, not its split): the row adopted is the best organic factor at the regional starting nitrogen
+        reg_scale = regional["initial_no3_ppm"] / ds.INIT_NO3
+        at_reg = [s for s in ok if np.isclose(s["initial_scale"], reg_scale)]
+        chosen = min(at_reg, key=lambda s: s["sse"]) if at_reg else best
+        row = {"organic_n_factor": chosen["organic_n_factor"],
+               "initial_no3_ppm": round(ds.INIT_NO3 * chosen["initial_scale"], 3),
+               "initial_nh4_ppm": round(ds.INIT_NH4 * chosen["initial_scale"], 3), "source": trial["source"]}
+        out["sites"][sid] = {"trial": {k: v for k, v in trial.items() if k != "studies"} | {"studies": list(trial["studies"])},
+                             "sowings": [p.isoformat() for p in plants], "observed_relative": target,
+                             "observed_t_ha": per_study, "best": best, "at_grid_edge": edge,
+                             "at_regional_initial": chosen, "regional": regional, "scan": scan,
+                             "dssat_cultivars_row": row}
+        log(f"{sid}: best organic N × {best['organic_n_factor']}, starting mineral N × {best['initial_scale']} "
+            f"(sse {best['sse']:.4f}): {best['relative']} against {target}" + (f"; at the grid's edge: {edge}" if edge else ""))
+        log(f"{sid}: at the regional starting mineral N (× {reg_scale:g}): organic N × {chosen['organic_n_factor']} "
+            f"(sse {chosen['sse']:.4f}), against the regional factor {regional['organic_n_factor']}")
+        log(f"dssat_cultivars.yaml soil.sites.{sid}: {row}")
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "nitrogen_sites.json").write_text(json.dumps(out, indent=1, default=str), encoding="utf-8")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--varieties", nargs="+", default=["maize_early", "maize_medium", "sorghum", "bean"])
     ap.add_argument("--nitrogen", action="store_true", help="fit the soil's organic nitrogen factor instead")
+    ap.add_argument("--nitrogen-sites", nargs="*", metavar="SITE",
+                    help="fit the sites' own soil nitrogen to the trials on their fields (SITE_TRIALS; all if none named)")
+    ap.add_argument("--initial-scale", type=float,
+                    help="--nitrogen: the starting mineral nitrogen × this (default: dssat_cultivars.yaml soil's)")
+    ap.add_argument("--factors", type=float, nargs="+", default=[1.0, 0.5, 0.25, 0.12, 0.06],
+                    help="--nitrogen: the organic-nitrogen factors scanned before the fit")
     ap.add_argument("--workers", type=int, default=2)
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
@@ -244,8 +412,10 @@ def main():
     if not ds.installed():
         log(f"DSSAT is not installed ({ds.EXE}): python -m crop_engine.adapters.dssat_adapter --install")
         return 1
+    if a.nitrogen_sites is not None:
+        return calibrate_site_nitrogen(a.workers, only=a.nitrogen_sites or None)
     if a.nitrogen:
-        return calibrate_nitrogen(a.workers)
+        return calibrate_nitrogen(a.workers, a.initial_scale, tuple(a.factors))
     tref, varieties = ro.load_varieties(a.varieties)
     ds.attach(varieties)
     site = next(s for s in registered_sites() if s.id == SITE)
