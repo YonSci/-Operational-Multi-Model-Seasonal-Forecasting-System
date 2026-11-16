@@ -96,3 +96,18 @@ def test_whole_seasons():
     assert irr["irrigation_mm"] > 100
     bunded = wf.prepare(dict(task(), field={"bunds": True, "z_bund": 0.1}))
     assert bunded["site"]["SSMAX"] == pytest.approx(10.0)
+
+
+def test_nitrogen_levels():
+    ev = wf.nitrogen_events({"rate_kg_ha": 50, "split": [[0, 0.4], [30, 0.6]], "recovery": 0.6}, dt.date(2026, 10, 20))
+    tab = ev[0]["events_table"]
+    assert ev[0]["event_signal"] == "apply_n" and len(tab) == 2
+    assert tab[1] == {dt.date(2026, 11, 19): {"N_amount": 30.0, "N_recovery": 0.6}}
+    assert wf.nitrogen_events({"rate_kg_ha": 0}, dt.date(2026, 10, 20)) is None
+    soil = {"NSOILBASE": 10.0, "NSOILBASE_FR": 0.025, "NAVAILI": 5.0, "BG_N_SUPPLY": 0.02}
+    y = [wf.simulate(dict(task(30.0, n=1), nitrogen={"rate_kg_ha": r, "split": [[0, 0.4], [30, 0.6]], **soil}))[0]
+         for r in (0, 60)]
+    assert y[0]["status"] == "ok" and y[1]["yield_t_ha"] > y[0]["yield_t_ha"]
+    sorghum = dict(task(30.0, n=1), variety={"label": "Sorghum", "aquacrop_crop": "SorghumGDD", "maturity_days": 100,
+                                              "failure_t_ha": 0.5, "kw": {}}, nitrogen={"rate_kg_ha": 0, **soil})
+    assert wf.simulate(sorghum)[0]["status"] == "error"                    # no WOFOST 8.1 nitrogen parameters

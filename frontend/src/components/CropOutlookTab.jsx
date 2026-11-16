@@ -1030,18 +1030,23 @@ function OtherCropsPanel({ data, seasonal, sid, rk, ruleLabel, msg }) {
   )
 }
 
-function NitrogenPanel({ data, seasonal, sid, vk, rk, ruleLabel, msg }) {
-  const sub = 'DSSAT grows the same members again with its nitrogen balance on: no fertiliser, and urea at two rates, beside its '
-    + 'outlook with no nitrogen limitation. AquaCrop and WOFOST, like DSSAT’s outlook, have no nitrogen limit.'
+function NitrogenPanel({ data, seasonal, sid, vk, rk, ruleLabel, msg, engine = 'dssat' }) {
+  const wof = engine === 'wofost'
+  const title = wof ? 'Nitrogen (WOFOST 8.1)' : 'Nitrogen (DSSAT)'
+  const sub = wof
+    ? 'WOFOST 8.1 grows the same maize members with its nitrogen balance: no fertiliser, and urea at the same two rates, '
+      + 'beside WOFOST 8.1 with no nitrogen limit. A second model of the same question as DSSAT above.'
+    : 'DSSAT grows the same members again with its nitrogen balance on: no fertiliser, and urea at two rates, beside its '
+      + 'outlook with no nitrogen limitation. AquaCrop and WOFOST, like the DSSAT outlook, have no nitrogen limit.'
   if (!data?.sites) return null                                       // not made yet: the panel stays hidden
-  if (!seasonal) return <Panel title="Nitrogen (DSSAT)" sub={sub}>{msg('Made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
+  if (!seasonal) return <Panel title={title} sub={sub}>{msg('Made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
   const cell = data.sites?.[sid]?.results?.[vk]?.[rk]
   const meta = data.meta
-  if (!cell) return <Panel title="Nitrogen (DSSAT)" sub={sub}>{msg('No nitrogen levels for this site, crop and rule.')}</Panel>
-  const rows = [['water_limited', 'No nitrogen limit (DSSAT’s outlook)'], ...Object.entries(meta.levels).map(([k, l]) => [k, l.label])]
+  if (!cell) return <Panel title={title} sub={sub}>{msg(wof ? 'No WOFOST nitrogen levels for this site, crop and rule (maize only).' : 'No nitrogen levels for this site, crop and rule.')}</Panel>
+  const rows = [['water_limited', wof ? 'No nitrogen limit (WOFOST 8.1)' : 'No nitrogen limit (the DSSAT outlook)'], ...Object.entries(meta.levels).map(([k, l]) => [k, l.label])]
   const top = cell.water_limited?.yield_if_sown_t_ha?.median
   return (
-    <Panel title="Nitrogen (DSSAT)" sub={sub}>
+    <Panel title={title} sub={sub}>
       <div style={{ overflowX: 'auto' }}>
         <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th>Fertiliser</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Share of the no-limit yield</th><th>Failure if sown</th></tr></thead>
@@ -1064,6 +1069,7 @@ function NitrogenPanel({ data, seasonal, sid, vk, rk, ruleLabel, msg }) {
       <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
         {meta.assumed}. {ruleLabel}. The soil’s nitrogen is set so that maize without fertiliser yields about 0.6 of its yield
         with 60 kg N/ha, as Kenyan maize nitrogen trials do (a first, regional calibration: the fields here are not measured).
+        {wof ? ' In WOFOST this is a fitted parameter: its maize crop file lets nitrogen concentrations fall lower than measured maize, so read the response, not the nitrogen.' : ''}
         {cropOf(vk) === 'bean' ? ' The bean fixes its own nitrogen, so fertiliser changes little.' : ''}
         {' '}Made {fmtDate(meta.created?.slice(0, 10))} from the outlook of {fmtDate(meta.run)} (observations to {fmtDate(meta.obs_end)}); refreshed weekly.
       </p>
@@ -1108,6 +1114,9 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
   // DSSAT's nitrogen levels of the seasonal run (crop_engine/run_nitrogen.py); absent until first made
   const nitQ = useQuery({ queryKey: ['crop-nitrogen'], staleTime: 30 * 60_000, retry: false,
                           queryFn: () => getJSON(DATA + 'nitrogen.json').catch(() => null) })
+  // WOFOST 8.1's nitrogen levels (crop_engine/run_nitrogen_wofost.py); absent until first made
+  const nitWQ = useQuery({ queryKey: ['crop-nitrogen-wofost'], staleTime: 30 * 60_000, retry: false,
+                           queryFn: () => getJSON(DATA + 'nitrogen_wofost.json').catch(() => null) })
   const scenQ = useQuery({ queryKey: ['crop-scenarios'], staleTime: 30 * 60_000, retry: false,
                            queryFn: () => getJSON(DATA + 'scenarios.json').catch(() => null) })
   // the WOFOST-only crops of the seasonal run (crop_engine/run_other_crops.py); absent until first made
@@ -1396,6 +1405,12 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
       {nitQ.data && (
         <div id="crop-nitrogen" style={{ marginTop: 18, scrollMarginTop: 12 }}>
           <NitrogenPanel data={nitQ.data} seasonal={run.source === 'seasonal'} sid={sid} vk={vk} rk={rk} ruleLabel={rules[rk]} msg={msg}/>
+        </div>
+      )}
+
+      {nitWQ.data && (
+        <div id="crop-nitrogen-wofost" style={{ marginTop: 18, scrollMarginTop: 12 }}>
+          <NitrogenPanel engine="wofost" data={nitWQ.data} seasonal={run.source === 'seasonal'} sid={sid} vk={vk} rk={rk} ruleLabel={rules[rk]} msg={msg}/>
         </div>
       )}
 

@@ -65,6 +65,15 @@ Not possible in PCSE: a water table (neither water balance has groundwater: the 
 implemented"), AquaCrop 7's soil fertility stress (WOFOST 8.1's nitrogen is its own route), pollination heat stress and
 transplanting. A member records the irrigation it received (irrigation_mm).
 
+Nitrogen (task "nitrogen": {"rate_kg_ha", "split": [[days after sowing, share], ...], "recovery", and the soil's
+NSOILBASE, NSOILBASE_FR, NAVAILI, BG_N_SUPPLY}): WOFOST 8.1's nitrogen- and water-limited production with the classic
+water balance and its simple soil nitrogen (Wofost81_NWLP_CWB_CNB): the soil supplies NSOILBASE kg N/ha at NSOILBASE_FR
+of it a day, NAVAILI at the start and BG_N_SUPPLY a day from the air; urea at the rate and split as DSSAT's
+(dssat_cultivars.yaml "nitrogen"), recovered at "recovery" (default N_RECOVERY). The soil's values are fitted to the
+Kenyan maize nitrogen trials (calibration/wofost_nitrogen.py, wofost_nitrogen.yaml). Maize and the legumes only:
+PCSE's sorghum and millet sets have no WOFOST 8.1 nitrogen parameters. The phenology and the yield factor are the
+variety's, as in WOFOST 7.2.
+
 Coarse fragments (stones): each layer's saturation, field capacity and wilting point are scaled by (1 − coarse
 fragments % / 100), as AquaCrop's (FAO AquaCrop 7's GravelVol) and DSSAT's SLCF: stony soil holds less water.
 
@@ -133,9 +142,25 @@ WB73 = ("cwb73", "mlwb")
 
 def _model(water_balance):
     """cwb: WOFOST 7.2, classic water balance; cwb73: WOFOST 7.3, classic (the version alone, for comparisons);
-    mlwb: WOFOST 7.3, multi-layer."""
-    from pcse.models import Wofost72_WLP_CWB, Wofost73_WLP_CWB, Wofost73_WLP_MLWB
-    return {"cwb": Wofost72_WLP_CWB, "cwb73": Wofost73_WLP_CWB, "mlwb": Wofost73_WLP_MLWB}[water_balance]
+    mlwb: WOFOST 7.3, multi-layer; nwlp: WOFOST 8.1 with nitrogen, classic water balance (module doc)."""
+    from pcse.models import Wofost72_WLP_CWB, Wofost73_WLP_CWB, Wofost73_WLP_MLWB, Wofost81_NWLP_CWB_CNB
+    return {"cwb": Wofost72_WLP_CWB, "cwb73": Wofost73_WLP_CWB, "mlwb": Wofost73_WLP_MLWB,
+            "nwlp": Wofost81_NWLP_CWB_CNB}[water_balance]
+
+
+N_RECOVERY = 0.6                 # share of the urea's nitrogen the crop can take up (assumed)
+NITROGEN_CROPS = {"maize", "cowpea", "mungbean", "pigeonpea", "groundnut"}   # WOFOST 8.1 sets with nitrogen parameters
+
+
+def nitrogen_events(spec, plant):
+    """PCSE's apply_n events of a task's nitrogen spec for a sowing on `plant` (module doc), or None."""
+    rate = float(spec.get("rate_kg_ha", 0.0))
+    if rate <= 0:
+        return None
+    rec = float(spec.get("recovery", N_RECOVERY))
+    table = [{plant + dt.timedelta(days=int(d)): {"N_amount": rate * float(f), "N_recovery": rec}}
+             for d, f in spec.get("split", [[0, 1.0]]) if float(f) > 0]
+    return [{"event_signal": "apply_n", "name": "urea", "comment": "", "events_table": table}]
 
 
 def _cropdata(water_balance="cwb"):
@@ -337,10 +362,15 @@ def _sow(task, m, plant, dates, dev):
         return dict(r, status="too_late")
     expected_maturity = dates[ke + int(np.argmax(cum > need))]
     try:
-        wb = task.get("water_balance") or WATER_BALANCE
+        wb = "nwlp" if task.get("nitrogen") else (task.get("water_balance") or WATER_BALANCE)
+        if wb == "nwlp" and crop not in NITROGEN_CROPS:
+            raise ValueError(f"{crop}: no WOFOST 8.1 nitrogen parameters")
         p = _cropdata(wb)
         p.set_active_crop(crop, name)
-        site = dict(task["site"], **({"CO2": CO2_PPM} if wb in WB73 else {}))
+        site = dict(task["site"], **({"CO2": CO2_PPM} if wb in WB73 + ("nwlp",) else {}))
+        if wb == "nwlp":
+            n = task["nitrogen"]
+            site.update({k: float(n[k]) for k in ("NSOILBASE", "NSOILBASE_FR", "NAVAILI", "BG_N_SUPPLY")})
         params = ParameterProvider(cropdata=p, soildata=task["soil"], sitedata=site)
         for k, v in over.items():
             params.set_override(k, v, check=False)
@@ -349,13 +379,16 @@ def _sow(task, m, plant, dates, dev):
         agro = [{dates[0].date(): {"CropCalendar": {
             "crop_name": crop, "variety_name": name, "crop_start_date": plant, "crop_start_type": "sowing",
             "crop_end_date": None, "crop_end_type": "maturity", "max_duration": int((dates[-1] - pd.Timestamp(plant)).days)},
-            "TimedEvents": None, "StateEvents": None}}, {dates[-1].date(): None}]
+            "TimedEvents": nitrogen_events(task["nitrogen"], plant) if task.get("nitrogen") else None,
+            "StateEvents": None}}, {dates[-1].date(): None}]
         model = _model(wb)(params, _weather(task, m, dates, plant), agro)
         irrigated = _run(model, task, plant) if task.get("irrigation") else model.run_till_terminate() or 0.0
         out = pd.DataFrame(model.get_output()).set_index("day")
     except Exception as exc:                                             # one member must not stop the others
         return dict(r, status="error", error=f"{type(exc).__name__}: {str(exc)[:160]}")
     out.index = pd.DatetimeIndex(out.index)
+    if "TWSO" not in out and "WSO" in out:                              # WOFOST 8.1's daily output (nitrogen)
+        out = out.assign(TWSO=out.WSO)
     grow = out[out.DVS.notna()]
     if grow.empty:
         return dict(r, status="error", error="the crop did not start")
