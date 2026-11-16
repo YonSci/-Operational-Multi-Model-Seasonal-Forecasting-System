@@ -29,11 +29,20 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
 Scenarios only AquaCrop can grow (aquacrop_only; WOFOST and DSSAT leave them out):
   irrigation    methods 2-5: every 7 days to field capacity; a fixed schedule from each member's sowing; the net
                 irrigation requirement (the water counted, not applied); drip at a constant 3 mm a day
-  groundwater   a water table at a constant depth (1.5 or 2.5 m): capillary rise into the root zone
+  groundwater   a water table at a constant depth (1.5 or 2.5 m): capillary rise into the root zone; or one that
+                rises with the rains and falls after them (gw_seasonal: 3 m in Aug-Sep, 1.5 m in Dec-Jan, 2.5 m in
+                Mar; assumed, for a site near a river or a valley bottom)
   fertility     AquaCrop 7's soil fertility stress (%), its generic crop response (adapters/aquacrop_stress.py); "no
                 fertiliser" at the level fitted to the Kenyan maize nitrogen trials (aquacrop_fertility.yaml: maize
                 and sorghum 74 %, the bean none as it fixes its nitrogen)
-  weeds         AquaCrop 7's weeds, their relative cover of the canopy (%)
+  weeds         AquaCrop 7's weeds, their relative cover of the canopy (%); with weeding, the weeds start from a
+                clean seedbed, regrow over 4 weeks and each weeding removes 90 % of them (aquacrop_stress module doc):
+                once at 4 weeks, or twice at 3 and 6 weeks, the usual hand weeding
+  heat          pollination heat stress from the crops' published thresholds (maize 35, sorghum 36, bean 32 °C) in
+                place of the crop files' 40 °C (aquacrop_adapter.HEAT_POLLINATION)
+  transplant    seedlings raised 3 weeks in a nursery and set out on the sowing date, each covering about 50 cm2
+                (FAO AquaCrop's transplanted crops; aquacrop_adapter.transplant_kw): gap filling or a nursery sown
+                before the rains
   salinity      AquaCrop 7's salinity: a saline soil (initial ECe), saline irrigation water (ECw) or a saline water
                 table (ECgw), dS/m; one season from the stated start (salt builds up over years: ECe ≈ 1.5 ECw)
 These are assumed levels, to show what the practice or condition would change, not measured at any site.
@@ -92,6 +101,8 @@ SCENARIOS = {
     # a water table (AquaCrop only)
     "gw_1_5m": dict(label="Water table at 1.5 m", group="Groundwater", groundwater=dict(depth_m=1.5)),
     "gw_2_5m": dict(label="Water table at 2.5 m", group="Groundwater", groundwater=dict(depth_m=2.5)),
+    "gw_seasonal": dict(label="Water table rising with the rains (3 m to 1.5 m)", group="Groundwater",
+                        groundwater=dict(monthly_m={8: 3.0, 9: 3.0, 10: 2.5, 11: 1.8, 12: 1.5, 1: 1.5, 2: 2.0, 3: 2.5})),
     # AquaCrop 7's soil fertility stress, weeds and salinity (adapters/aquacrop_stress.py; AquaCrop only)
     "fert_no_n": dict(label="No fertiliser (fertility stress fitted to Kenyan maize nitrogen trials)",
                       group="Soil fertility", fertility=dict(stress_pct_by_crop=dict(FERTILITY["no_fertiliser"]))),
@@ -101,6 +112,10 @@ SCENARIOS = {
                     fertility=dict(stress_pct=50)),
     "weeds_20": dict(label="Weeds: 20 % of the canopy", group="Weeds", weeds=dict(rc_pct=20)),
     "weeds_50": dict(label="Weeds: 50 % of the canopy", group="Weeds", weeds=dict(rc_pct=50)),
+    "weeds_50_weeded_1": dict(label="Weeds 50 %, weeded once at 4 weeks", group="Weeds",
+                              weeds=dict(rc_pct=50, weeding_das=[28])),
+    "weeds_50_weeded_2": dict(label="Weeds 50 %, weeded at 3 and 6 weeks", group="Weeds",
+                              weeds=dict(rc_pct=50, weeding_das=[21, 42])),
     "saline_soil": dict(label="Saline soil (ECe 4 dS/m at the start)", group="Salinity",
                         salinity=dict(ece_initial=4.0)),
     "saline_irrigation": dict(label="Full irrigation with saline water (ECw 2 dS/m)", group="Salinity",
@@ -108,6 +123,11 @@ SCENARIOS = {
                               salinity=dict(ecw=2.0)),
     "saline_water_table": dict(label="Saline water table at 1.5 m (ECgw 4 dS/m)", group="Salinity",
                                groundwater=dict(depth_m=1.5), salinity=dict(ecgw=4.0)),
+    # pollination heat stress at the published thresholds, and transplanted seedlings (AquaCrop only)
+    "heat_literature": dict(label="Heat at flowering from published thresholds (maize 35, sorghum 36, bean 32 °C)",
+                            group="Heat stress", heat=dict(thresholds="literature")),
+    "transplanted": dict(label="Seedlings transplanted from a nursery (3 weeks old)", group="Sowing date",
+                         transplant=dict(nursery_days=21, seedling_cm2=50)),
 }
 # Crop-model uncertainty: each member grown with its own draw of the calibrated parameters (relative standard
 # deviations, normal, truncated at ±2 SD; seeded, so the draws repeat): maximum canopy cover CCx (capped at 0.99),
@@ -117,8 +137,8 @@ SCENARIOS = {
 SCENARIOS["parameters"] = dict(label="Crop parameters uncertain (canopy ±10 %, harvest index ±15 %, water productivity ±8 %)",
                                group="Crop model uncertainty", perturb=dict(CCx=0.10, HI0=0.15, WP=0.08, seed=20261))
 KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "initial_source", "irrigation", "field", "groundwater", "fertility", "weeds",
-        "salinity", "perturb")
-AQUACROP_KEYS = ("groundwater", "fertility", "weeds", "salinity", "perturb")     # only AquaCrop has (or is drawn for)
+        "salinity", "perturb", "heat", "transplant")
+AQUACROP_KEYS = ("groundwater", "fertility", "weeds", "salinity", "perturb", "heat", "transplant")  # only AquaCrop has
 
 
 def parameter_draws(kw, aquacrop_crop, n, perturb):

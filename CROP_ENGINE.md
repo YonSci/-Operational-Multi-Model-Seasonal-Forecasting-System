@@ -286,9 +286,9 @@ outlook is unchanged. Each follows AquaCrop's equations, in growing degree days 
   soil dries below field capacity (AquaCrop 7's own cap, kept). (With the root-zone rule alone, the first port: 0.95,
   0.76, 0.51 and 0.01; *Salinity in each compartment* below.) Saline irrigation water acts slowly from a fresh profile (ECw 4:
   0.97 in one season): the salt builds up over years (FAO 29's ECe ≈ 1.5 ECw is that steady state).
-- **Simplified from AquaCrop 7**: no salt cells inside a compartment (incoming water mixes with all of it, so ECe
-  answers each rain or irrigation faster than AquaCrop's, alike in the long run), no salt moved up with
-  evaporation.
+- **Salt cells** (since *More of AquaCrop, part 3*): each compartment holds its salt in AquaCrop 7's cells, and the
+  salt evaporation and the roots leave behind is gathered in the wettest cells, as AquaCrop 7 does. The first port
+  mixed incoming water with the whole compartment; the yields above hardly moved (0.93, 0.74, 0.51, 0.11).
   AquaCrop's quirks are kept where they are its behaviour (no salinity effect on the first canopy day; the time to
   full canopy recomputed for fertility only; no weed expansion under fertility stress).
 
@@ -459,7 +459,8 @@ Eight additions made with code and public data only. None changes the outlook's 
   comparison says nothing there. Neither is a measurement; soil moisture readings at the sites would settle it.
 - **Heat and cold at flowering** (`aquacrop_adapter.flowering_temperature`). AquaCrop's crop files start pollination
   heat stress at 40 °C for maize, sorghum and the bean, above the thresholds reported for them, so the model rarely
-  applies it here. Each member counts its flowering days above about 35 °C (maize), 36 °C (sorghum) and 32 °C
+  applies it here (and AquaCrop-OSPy applied it only above 45 °C, a bug fixed in *part 3*, which also adds the
+  published thresholds as an option). Each member counts its flowering days above about 35 °C (maize), 36 °C (sorghum) and 32 °C
   (bean), and its nights below the crop file's cold threshold; the summaries carry the share of members with any.
   Counted, not modelled: changing the model's thresholds needs evidence of heat damage at these sites.
 - **Temperature spread** (`data/seas5.py`, off by default). With `CROP_TEMPERATURE_SPREAD=1`, SEAS5 temperature is
@@ -471,6 +472,52 @@ Eight additions made with code and public data only. None changes the outlook's 
   the maximum canopy cover (±10 %), the reference harvest index (±15 %) and the normalised water productivity
   (±8 %): relative standard deviations, truncated at ±2, seeded. Phenology is not drawn. Its yield range beside the
   outlook's shows what the calibration adds to the weather's uncertainty.
+
+### More of AquaCrop, part 3 (November 2026)
+
+- **Weeding** (`aquacrop_stress`, scenarios `weeds_50_weeded_1`, `weeds_50_weeded_2`). AquaCrop's weeds keep one
+  relative cover all season. With weeding days the weeds start from a clean seedbed, regrow towards the season's
+  cover at 1/28 of it a day in the open, slowed by the crop's own cover (weeds under a closed canopy hardly grow), and
+  each weeding removes 90 % of them. Assumed levels; AquaCrop has no weeding events. Irrigated early maize on the
+  tests' synthetic season, weeds at 50 %:
+
+  | Weed-free | No weeding | Weeded once at 4 weeks | Twice, at 3 and 6 weeks | Once, late (60 days) |
+  |---|---|---|---|---|
+  | 6.87 t/ha | 0.61 of it | 0.87 | 0.95 | 0.73 |
+
+  Weeding in the crop's first six weeks recovers most of the loss; a late weeding much less.
+- **Salt in AquaCrop 7's cells** (`aquacrop_stress.SaltProfile`): the port of `calculate_saltcontent`,
+  `ConcentrateSalts` and the capillary rise's salt. Each compartment holds its salt in cells (fine pores and one
+  macropore cell), in solution and deposited above 100 g/L; infiltrating irrigation water's salt enters the wettest
+  cell, the wet cells mix, drainage empties the wettest cells first, neighbouring compartments exchange salt by their
+  soil water's ECsw, a water table's salt rises with capillary rise, and the salt that evaporation and the roots leave
+  behind gathers in the wettest cells at the end of each day, so it stays in the drying topsoil. Not ported: a water
+  table's horizontal inflow (the compartments under it are set to its ECgw). Irrigated maize on a saline soil, share
+  of the fresh soil's yield at ECe 2, 4, 6 and 8 dS/m: 0.93, 0.74, 0.51, 0.11 (before 0.92, 0.74, 0.53, 0.10; FAO 29
+  0.96, 0.72, 0.48, 0.24).
+- **A water table that rises and falls** (`aquacrop_adapter.groundwater`, scenario `gw_seasonal`): a depth per month,
+  interpolated daily (AquaCrop-OSPy's "Variable" method). The scenario's course is assumed (3 m in Aug-Sep, 1.5 m in
+  Dec-Jan, 2.5 m in Mar: a site near a river or a valley bottom); measured depths go in the site conditions below.
+- **A site's measured conditions in the outlook** (`data/site_conditions.py`, `site_conditions.yaml`). A site's
+  soil fertility stress, weeds and weeding, salinity or water table, once its managers or a soil test report them,
+  reach that site's AquaCrop outlook, benchmark and scenarios through its soil profile, so the forecast is still read
+  against a normal grown the same way; a scenario's own setting replaces the site's. The table is empty: nothing
+  changes until a site reports. AquaCrop only.
+- **Pollination heat stress** (`aquacrop_adapter.patch_pollination_heat`, `HEAT_POLLINATION`). AquaCrop-OSPy 3.1.0
+  compares the day's maximum with its two thresholds the wrong way round: no stress up to 45 °C, complete failure
+  above. FAO AquaCrop 7 lowers pollination from 40 °C to none at 45 °C; the patch applies that order in every run (an
+  outlook day above 40 °C at flowering is rare at these sites). The crops' published thresholds (maize 35, sorghum
+  36, bean 32 °C, complete failure 5 °C above) are a scenario (`heat_literature`) and, for every run,
+  `CROP_HEAT_THRESHOLDS=literature`, off until the hindcast shows it helps. Irrigated maize with 38 °C every day:
+  6.43 t/ha with the crop file's thresholds, 1.92 with the published ones (6.87 at 28 °C).
+- **Transplanting** (`aquacrop_adapter.transplant_kw`, scenario `transplanted`): seedlings raised 3 weeks in a nursery
+  and set out on the sowing date, about 50 cm2 each (FAO AquaCrop's transplanted crops; AquaCrop-OSPy reads the
+  planting method but never uses it): no germination to wait for (a patch germinates them at once), the canopy starts
+  from the seedlings' cover and every stage comes the nursery days' growing degree days sooner. On a synthetic rain-fed
+  season early maize that died when sown matured when transplanted (5.86 t/ha); sorghum matured either way (5.83 sown,
+  5.65 transplanted, three weeks sooner).
+- **Not done.** Perennial forage: AquaCrop-OSPy has no perennial crops; DSSAT's forage models are the better route.
+  Frost and tile drainage: FAO AquaCrop has neither process (frost is only its cold stress at pollination, which runs).
 
 ### Questions for partners (November 2026)
 

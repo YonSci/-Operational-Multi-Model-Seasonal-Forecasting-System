@@ -894,7 +894,12 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         wider than the outlook&apos;s, the crop model&apos;s calibration matters as much as the weather.
         Bunds hold up to 10 cm of rain on the field until it soaks in. The other irrigation methods water every 7 days
         to field capacity, on a fixed schedule from sowing, at a constant 3 mm a day (drip), or count the net water a crop needs
-        to keep its root zone above 60 % (the requirement, not a practice). A water table feeds the root zone by capillary rise.
+        to keep its root zone above 60 % (the requirement, not a practice). A water table feeds the root zone by capillary rise;
+        the rising one goes from 3 m in August to 1.5 m in December and January (assumed, as near a river). Weeding: the weeds
+        start from a clean seedbed and regrow, slowly under the crop&apos;s canopy, and each weeding removes 90 % of them.
+        Heat at flowering from published thresholds lowers pollination from 35 C (maize), 36 C (sorghum) or 32 C (bean) in
+        place of the crop files&apos; 40 C. Transplanted seedlings are set out 3 weeks old on the sowing date, with no
+        germination to wait for.
         Soil fertility, weeds and salinity are FAO AquaCrop 7&apos;s methods, added to AquaCrop-OSPy: a fertility stress level
         (its generic crop response), the weeds&apos; share of the canopy, and salt from the soil, the irrigation water or the
         water table (one season from that start: salt builds up over years). These levels are assumed, not measured at the site;

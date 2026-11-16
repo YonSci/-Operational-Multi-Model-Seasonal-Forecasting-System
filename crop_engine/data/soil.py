@@ -19,9 +19,11 @@ SOIL_FILE = BASE / "data" / "soilgrids" / "soil_hydraulics_kenya_p25.nc"
 
 
 class Profile(list):
-    """The layers, top to bottom, and the rootable depth (cm) where a restrictive layer stops the roots (None: the whole
-    profile). A list, so every caller that iterates the layers is unchanged."""
+    """The layers, top to bottom, the rootable depth (cm) where a restrictive layer stops the roots (None: the whole
+    profile) and the site's measured growing conditions (data/site_conditions.py; {} without any). A list, so every
+    caller that iterates the layers is unchanged."""
     restrictive_cm = None
+    conditions = {}
 
 
 def with_depth(layers, restrictive_cm):
@@ -60,8 +62,10 @@ def profile(site, path=SOIL_FILE):
                         float(c.om_pct[k]), float(c.cfvo[k]), float(c.theta_fc[k]), float(c.theta_wp[k]))
                   for k in range(ds.sizes["depth"])]
     check(layers, site.name)
-    from crop_engine.data import soil_depth
-    return with_depth(layers, soil_depth.restrictive_cm(site.id))
+    from crop_engine.data import site_conditions, soil_depth
+    p = with_depth(layers, soil_depth.restrictive_cm(site.id))
+    p.conditions = site_conditions.conditions(site.id)
+    return p
 
 
 def check(layers, where=""):

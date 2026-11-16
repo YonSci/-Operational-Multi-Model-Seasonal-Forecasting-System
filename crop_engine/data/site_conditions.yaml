@@ -1,0 +1,12 @@
+# A site's measured growing conditions for the outlook itself (crop_engine/data/site_conditions.py): soil fertility,
+# weeds, salinity, water table. Empty until a site's managers or a soil test report them; an entry changes that site's
+# AquaCrop outlook, benchmark and scenarios (and rebuilds them once).
+#
+# Example (not in effect):
+#   kalro_kiboko:
+#     fertility: {stress_pct: 40}
+#     weeds: {rc_pct: 30, weeding_das: [21, 42]}
+#     salinity: {ece_initial: 1.5}
+#     groundwater: {monthly_m: {8: 3.0, 11: 2.0, 1: 2.0, 3: 3.0}}
+#     source: site manager, questionnaire of November 2026
+sites: {}

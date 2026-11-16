@@ -26,14 +26,26 @@ canopy: CCx, CCo and CDC × fWeed (none under fertility stress, as AquaCrop); th
 the soil, and the crop gets the share of transpiration CCw* / CCtot* (its cover, CCtot × (1 - RC/100), in AquaCrop's
 CC* form): its biomass grows from that share only.
 
-Soil salinity. Salt (g/m2) per soil compartment, carried by OSPy's own water fluxes: irrigation water at ECw, capillary
-rise from a water table at ECgw, drained water at the compartment's mixed concentration (capped at the solubility, 100
-g/L), compartments below the water table set to ECgw, and AquaCrop's daily diffusion between neighbouring
-compartments (its salt mobility of the compartment's wettest active cell, SaltDiff 20 %). Rain carries none. ECe and
-ECsw from salt mass and water content as AquaCrop's (ECeComp, ECswComp; 0.64 g/L per dS/m). Simplified from
-AquaCrop: no salt cells inside a compartment (incoming water mixes with all of it; AquaCrop's fine pores exchange
-slowly, so its ECe answers each event more slowly; the long-run levels are alike), no upward transport with
-evaporation. The stress, as AquaCrop's: the root zone's ECe gives KsSalt (linear from ECemin to ECemax); its running
+Weeding (an extension of AquaCrop's weeds, which keep one relative cover all season; assumed, not from AquaCrop): with
+"weeding_das" the weeds start from a clean seedbed at sowing and regrow towards the season's cover, at 1/regrowth_days
+of it a day (default 28 days) in the open, slowed in proportion to the crop's own cover (its canopy over its maximum:
+weeds coming back under a closed canopy hardly grow, which is why early weeding counts most); each weeding, on those
+days after sowing, removes "efficacy_pct" (default 90) of the cover there was. The day's cover sets both the total
+canopy's expansion (fWeed of that cover) and the crop's share of transpiration.
+
+Soil salinity, as AquaCrop 7's salt balance (simul.f90 calculate_saltcontent, ConcentrateSalts, calculate_CapillaryRise;
+global.f90 DetermineSaltContent, SaltSolutionDeposit, ActiveCells). Each soil compartment holds its salt in cells
+(SCP1 of them: SC fine-pore cells of size Dx and one macropore cell of 2 Dx, Calculate_Saltmobility), as salt in
+solution and salt deposited above the solubility (100 g/L). Each day: capillary rise from a water table brings salt
+at ECgw into the wettest active cell; the infiltrated irrigation water's salt (ECw) enters the top compartment's
+active cell; inside each compartment the wet cells mix by their salt mobility (SaltDiff 20 %); drainage carries salt
+out of the wettest cells first, down to the next compartment; neighbouring compartments exchange salt by their soil
+water's ECsw and the mobility of their active cells; compartments below the water table are set to ECgw; at the end
+of the day, salt left in cells that evaporation and the roots have dried is gathered into the wettest active cell
+(ConcentrateSalts), so salt stays behind in the topsoil as it dries and moves up with capillary rise. Rain carries
+none. ECe and ECsw from salt mass and water content as AquaCrop's (ECeComp, ECswComp; 0.64 g/L per dS/m). Not
+ported: horizontal inflow from a water table (HorizontalInflowGWTable; the compartments under it are set to ECgw
+instead). The stress, as AquaCrop's: the root zone's ECe gives KsSalt (linear from ECemin to ECemax); its running
 mean over the canopy days gives the CCx reduction through the crop's salinity regression (calibrated by the
 reference season, preparefertilitysalinity.f90 519-741), and from it the reductions of CGC, the canopy's decline
 (CCsaltDistortion 25 %) and the stomata (RedKsSto); the soil water's ECsw closes the stomata further each day
@@ -302,19 +314,188 @@ def active_cell(th, scp1, ul, dx):
     return max(1, min(scp1, math.ceil(th / dx - 1e-9))) if th <= ul else scp1
 
 
+def deposit(mm, s, d):
+    """SaltSolutionDeposit: a cell's salt in solution and deposited (g/m2) for its water mm (L/m2)."""
+    s = s + d
+    cap = SALT_SOLUB * mm
+    return (cap, s - cap) if s > cap else (s, 0.0)
+
+
+class SaltProfile:
+    """A soil profile's salt in AquaCrop 7's cells (module doc): per compartment i, cells 1..SCP1 (index c - 1)."""
+
+    def __init__(self, prof, th0, ece0):
+        self.dz = np.asarray(prof.dz, float)
+        self.m = 1000.0 * self.dz                                   # L/m2 per unit of volumetric water
+        self.th_s = np.asarray(prof.th_s, float)
+        self.cells = [salt_cells(prof.th_s[i], prof.th_fc[i], prof.Ksat[i]) for i in range(len(self.dz))]
+        self.salt = [np.zeros(c[0]) for c in self.cells]
+        self.depo = [np.zeros(c[0]) for c in self.cells]
+        for i in range(len(self.dz)):
+            self.set_ece(i, ece0, th0[i])
+
+    def cell_mm(self, i, c):
+        scp1, _, dx, _ = self.cells[i]
+        return dx * self.m[i] * (2.0 if c == scp1 else 1.0)
+
+    def total(self, i):
+        return float(self.salt[i].sum() + self.depo[i].sum())
+
+    def totals(self):
+        return np.array([self.total(i) for i in range(len(self.dz))])
+
+    def set_ece(self, i, ece, th):
+        """DetermineSaltContent: ECe's salt over the cells wet at water content th, by their mobility."""
+        scp1, ul, dx, mob = self.cells[i]
+        tot = ece * EQUIV * self.th_s[i] * self.m[i]
+        celn = active_cell(th, scp1, ul, dx)
+        w = mob[1:celn + 1]
+        self.salt[i][:], self.depo[i][:] = 0.0, 0.0
+        for c in range(1, celn + 1):
+            self.salt[i][c - 1] = tot * w[c - 1] / w.sum() if w.sum() > 0 else tot / celn
+            self.salt[i][c - 1], self.depo[i][c - 1] = deposit(self.cell_mm(i, c), self.salt[i][c - 1], 0.0)
+
+    def saturate(self, i, ece):
+        """A compartment under the water table: every cell at the water table's ECgw."""
+        for c in range(1, self.cells[i][0] + 1):
+            self.salt[i][c - 1], self.depo[i][c - 1] = ece * EQUIV * self.cell_mm(i, c), 0.0
+
+    def add(self, i, c, ds):
+        self.salt[i][c - 1], self.depo[i][c - 1] = deposit(self.cell_mm(i, c), self.salt[i][c - 1] + ds, self.depo[i][c - 1])
+
+    def move_to(self, i, celx, ds):
+        """MoveSaltTo: ds g/m2 into compartment i's cell celx, or (ds < 0) out of it from the macropore cell down."""
+        scp1, _, dx, _ = self.cells[i]
+        if ds >= 1e-7:
+            self.add(i, celx, ds)
+            return
+        c = scp1
+        self.salt[i][c - 1] += ds
+        self.salt[i][c - 1], self.depo[i][c - 1] = deposit(2 * dx * self.m[i], self.salt[i][c - 1], self.depo[i][c - 1])
+        while self.salt[i][c - 1] < 0:
+            if c == 1:                                              # nothing left to take: the deficit is dropped
+                self.salt[i][0] = 0.0
+                break
+            self.salt[i][c - 2] += self.salt[i][c - 1]
+            self.salt[i][c - 1] = 0.0
+            c -= 1
+            self.salt[i][c - 1], self.depo[i][c - 1] = deposit(dx * self.m[i], self.salt[i][c - 1], self.depo[i][c - 1])
+
+    def ecsw(self, i, th):
+        return min(self.total(i) / (th * self.m[i]), SALT_SOLUB) / EQUIV if th > 0 else SALT_SOLUB / EQUIV
+
+    def ece(self, i):
+        return min(self.total(i) / (self.th_s[i] * self.m[i]), SALT_SOLUB) / EQUIV
+
+    def capillary_rise(self, th, cr_mm, ecgw):
+        """calculate_CapillaryRise's salt: the rising water's salt into each compartment's wettest active cell."""
+        for i in np.nonzero(cr_mm > 0)[0]:
+            scp1, ul, dx, _ = self.cells[i]
+            self.add(i, active_cell(th[i], scp1, ul, dx), EQUIV * ecgw * float(cr_mm[i]))
+
+    def content(self, th, flux_out, mm_in, salt_in):
+        """calculate_saltcontent: the infiltrated water's salt, mixing inside each compartment, drainage's salt down
+        the profile, diffusion between compartments. th: the water content now (after infiltration, drainage and
+        capillary rise); flux_out: each compartment's outflow (mm); mm_in, salt_in: what entered the top. Returns the
+        salt drained out of the profile (g/m2)."""
+        for i in range(len(self.dz)):
+            scp1, ul, dx, mob = self.cells[i]
+            sc, sat, m = scp1 - 1, self.th_s[i], self.m[i]
+            d_theta = mm_in / m
+            theta = th[i] + flux_out[i] / m
+            celi = active_cell(theta, scp1, ul, dx)
+            if d_theta > 0:
+                self.salt[i][celi - 1] += salt_in
+            for n in range(1, celi):                                # mixing of the wet cells (Mixing)
+                mm1 = dx * m
+                mm2 = mm1 if n < sc else ((theta - ul) * m if theta > sat else (sat - ul) * m)
+                s1, d1 = deposit(mm1, self.salt[i][n - 1], self.depo[i][n - 1])
+                s2, d2 = deposit(mm2, self.salt[i][n], self.depo[i][n])
+                e1, e2 = s1 / (mm1 * EQUIV), s2 / (mm2 * EQUIV)
+                emix = (e1 * mm1 + e2 * mm2) / (mm1 + mm2)
+                e1, e2 = e1 + (emix - e1) * mob[n], e2 + (emix - e2) * mob[n]
+                self.salt[i][n - 1], self.depo[i][n - 1] = deposit(mm1, e1 * mm1 * EQUIV, d1)
+                self.salt[i][n], self.depo[i][n] = deposit(mm2, e2 * mm2 * EQUIV, d2)
+            salt_out = 0.0
+            if flux_out[i] > 0:                                     # drainage: the wettest cells empty first
+                d_theta = flux_out[i] / m
+                while d_theta > 0 and celi > 0:
+                    limit = (celi - 1) * dx if celi < scp1 else ul
+                    k = celi - 1
+                    if theta - d_theta < limit:
+                        salt_out += self.salt[i][k] + self.depo[i][k]
+                        self.salt[i][k] = 0.0
+                        mm1 = (theta - limit) * m
+                        if salt_out > SALT_SOLUB * mm1:
+                            self.depo[i][k] = salt_out - SALT_SOLUB * mm1
+                            salt_out = SALT_SOLUB * mm1
+                        else:
+                            self.depo[i][k] = 0.0
+                        d_theta -= theta - limit
+                        theta = limit
+                        celi -= 1
+                    else:
+                        f = d_theta / (theta - limit)
+                        salt_out += (self.salt[i][k] + self.depo[i][k]) * f
+                        self.salt[i][k] *= 1 - f
+                        self.depo[i][k] *= 1 - f
+                        mm1 = d_theta * m
+                        if salt_out > SALT_SOLUB * mm1:
+                            self.depo[i][k] += salt_out - SALT_SOLUB * mm1
+                            salt_out = SALT_SOLUB * mm1
+                        d_theta = 0.0
+                        self.salt[i][k], self.depo[i][k] = deposit(self.cell_mm(i, celi), self.salt[i][k], self.depo[i][k])
+            mm_in, salt_in = float(flux_out[i]), salt_out
+        drained = salt_in
+        # diffusion between neighbouring compartments, by their soil water's ECsw
+        prev = None
+        for i in range(len(self.dz)):
+            scp1, ul, dx, mob = self.cells[i]
+            celi = active_cell(th[i], scp1, ul, dx)
+            cur = (celi, mob[celi] / 4.0, self.ecsw(i, th[i]), th[i] * self.m[i])
+            if prev is not None:
+                c1, sm1, ec1, mm1 = prev
+                c2, sm2, ec2, mm2 = cur
+                if mm1 > 0 and mm2 > 0:
+                    ec = (ec1 * mm1 + ec2 * mm2) / (mm1 + mm2)
+                    ds = min(abs((ec - ec1) * sm1 * mm1 * EQUIV), abs((ec - ec2) * sm2 * mm2 * EQUIV))
+                    if ds > 0:
+                        ds = -ds if ec1 > ec else ds
+                        self.move_to(i - 1, c1, ds)
+                        self.move_to(i, c2, -ds)
+            prev = cur
+        return drained
+
+    def concentrate(self, th):
+        """ConcentrateSalts: the salt of cells the day has dried gathered into the wettest active cell."""
+        for i in range(len(self.dz)):
+            scp1, ul, dx, _ = self.cells[i]
+            wet = active_cell(th[i], scp1, ul, dx)
+            if wet < scp1:
+                tot = float(self.salt[i][wet:].sum() + self.depo[i][wet:].sum())
+                self.salt[i][wet:], self.depo[i][wet:] = 0.0, 0.0
+                if tot > 0:
+                    self.salt[i][wet - 1], self.depo[i][wet - 1] = deposit(dx * self.m[i], self.salt[i][wet - 1] + tot,
+                                                                           self.depo[i][wet - 1])
+
+
 # ── a model run's state ─────────────────────────────────────────────────────────────────────────────────────────────
 class Context:
     """One AquaCrop-OSPy run's settings and state (module doc). fertility: {"stress_pct"} or {"stress_pct_by_crop":
-    {AquaCrop crop: level}}; weeds: {"rc_pct",
-    "delta_rc_pct"}; salinity: {"ecw", "ecgw", "ece_initial"} (dS/m; ecgw with the task's water table)."""
+    {AquaCrop crop: level}}; weeds: {"rc_pct", "delta_rc_pct", "weeding_das", "efficacy_pct", "regrowth_days"};
+    salinity: {"ecw", "ecgw", "ece_initial"} (dS/m; ecgw with the task's water table)."""
 
     def __init__(self, crop_key, cg, fertility=None, weeds=None, salinity=None):
         self.crop_key, self.cg = crop_key, np.asarray(cg, float)
         fert = fertility or {}
         by_crop = fert.get("stress_pct_by_crop")                 # a calibrated level per crop (aquacrop_fertility.yaml)
         self.sf0 = int(round(float(by_crop.get(crop_key, 0) if by_crop else fert.get("stress_pct", 0))))
-        self.rc = float((weeds or {}).get("rc_pct", 0.0))
-        self.drc = float((weeds or {}).get("delta_rc_pct", 0.0))
+        w = weeds or {}
+        self.rc = float(w.get("rc_pct", 0.0))
+        self.drc = float(w.get("delta_rc_pct", 0.0))
+        self.weeding = sorted(float(d) for d in w["weeding_das"]) if w.get("weeding_das") is not None else None
+        self.efficacy = float(w.get("efficacy_pct", 90.0)) / 100.0
+        self.regrowth = max(float(w.get("regrowth_days", 28.0)), 1.0)
         self.sal = salinity or None
         self.salt = None                         # salt per compartment (g/m2), from the season's start
         self.ready = False
@@ -326,10 +507,8 @@ class Context:
                                     "HIstart", "Flowering", "WP", "WPy", "Kcb")}
         self.c["Determinant"] = bool(crop.Determinant)
         self.orig = {k: getattr(crop, k) for k in ("CGC", "CCx", "CC0", "CDC")}
-        # weeds: total canopy (none under fertility stress, as AquaCrop)
-        self.fweed = 1.0 if (self.sf0 > 0 or self.rc <= 0) else cc_multiplier_weed(self.rc, self.c["CCx"])
-        self.ccx_tot, self.cco_tot = self.fweed * self.c["CCx"], self.fweed * self.c["CC0"]
-        self.cdc_tot = self.c["CDC"] * (self.fweed * self.c["CCx"] + 2.29) / (self.c["CCx"] + 2.29)
+        # weeds: total canopy (none under fertility stress, as AquaCrop); with weeding, the day's (canopy_cover)
+        self.set_weed_cover(self.rc if self.weeding is None else 0.0)
         # fertility
         self.sf, self.sf_prev, self.sum_kci, self.bio_tot = self.sf0, self.sf0, 0.0, 0.0
         self.bfert, self.kc_top, self.frac = (0.0, 0.0, 0.0), 0.0, 1.0
@@ -343,11 +522,30 @@ class Context:
         if self.sal:
             self.ecemin, self.ecemax = SALT_TOLERANCE[self.crop_key]
             self.bsalt = salinity_regression(self.c, self.cg)
-            self.cells = [salt_cells(prof.th_s[i], prof.th_fc[i], prof.Ksat[i]) for i in range(len(prof.dz))]
-            ece0 = float(self.sal.get("ece_initial", 0.0))
-            self.salt = np.array([ece0 * EQUIV * prof.th_s[i] * 1000 * prof.dz[i] for i in range(len(prof.dz))])
+            self.salt = SaltProfile(prof, np.asarray(newcond.th, float), float(self.sal.get("ece_initial", 0.0)))
         self.red = self._reductions()
         self.ready = True
+
+    def set_weed_cover(self, rc):
+        """The total canopy (crop and weeds) for the weeds' relative cover rc (%): AquaCrop's CCmultiplierWeed."""
+        self.rc_now = rc
+        self.fweed = 1.0 if (self.sf0 > 0 or rc <= 0) else cc_multiplier_weed(rc, self.c["CCx"])
+        self.ccx_tot, self.cco_tot = self.fweed * self.c["CCx"], self.fweed * self.c["CC0"]
+        self.cdc_tot = self.c["CDC"] * (self.fweed * self.c["CCx"] + 2.29) / (self.c["CCx"] + 2.29)
+
+    def weed_fraction(self, das, crop_cover=0.0):
+        """With weeding: the weeds' cover as a fraction of the season's on day `das` after sowing (module doc), advanced
+        once a day; crop_cover: the crop's own canopy as a fraction of its maximum (yesterday's)."""
+        if self.weeding is None:
+            return 1.0
+        if not hasattr(self, "_wg"):
+            self._wg, self._wday = 0.0, 0.0                           # a clean seedbed at sowing
+        while self._wday < das:
+            self._wday += 1
+            self._wg = min(1.0, self._wg + (1 - float(np.clip(crop_cover, 0, 1))) / self.regrowth)
+            if any(abs(self._wday - d) < 0.5 for d in self.weeding):
+                self._wg *= 1 - self.efficacy
+        return self._wg
 
     # today's reductions
     def _reductions(self):
@@ -377,11 +575,13 @@ class Context:
         return self.sf0 > 0 or self.rc > 0 or self.sal is not None
 
     # weeds
-    def weed_rc(self, t):
+    def weed_rc(self, t, das=None, crop_cover=0.0):
         rc = self.rc
         if rc > 0 and self.drc != 0 and t > self.red["L12SF"]:
             L12, L123 = self.red["L12SF"], self.c["Senescence"]
             rc = rc * (1 + self.drc / 100.0) if t >= L123 else rc * (1 + self.drc / 100.0 * (t - L12) / (L123 - L12))
+        if self.weeding is not None and das is not None:
+            rc = rc * self.weed_fraction(das, crop_cover)
         return float(np.clip(rc, 0, 100))
 
     # salinity in the root zone
@@ -393,9 +593,10 @@ class Context:
             f = 1.0 if cum + dz <= zr else max(0.0, zr - cum) / dz
             w = f * dz / zr
             m = 1000 * dz
-            ece += w * min(self.salt[i] / (m * prof.th_s[i]), SALT_SOLUB) / EQUIV
-            ecsw += w * min(self.salt[i] / (m * max(th[i], 1e-6)), SALT_SOLUB) / EQUIV
-            ecsw_fc += w * min(self.salt[i] / (m * prof.th_fc[i]), SALT_SOLUB) / EQUIV
+            tot = self.salt.total(i)
+            ece += w * min(tot / (m * prof.th_s[i]), SALT_SOLUB) / EQUIV
+            ecsw += w * min(tot / (m * max(th[i], 1e-6)), SALT_SOLUB) / EQUIV
+            ecsw_fc += w * min(tot / (m * prof.th_fc[i]), SALT_SOLUB) / EQUIV
             wrel += w * float(np.clip((prof.th_fc[i] - th[i]) / max(prof.th_fc[i] - prof.th_wp[i], 1e-6), 0, 1))
             cum += dz
             if cum >= zr:
@@ -456,6 +657,11 @@ def install():
         _route_salt(x, prof, th_post, np.array(newcond.th, float), np.asarray(flux_out, float))
         return newcond, cr
 
+    def _canopy_weeds(x, cond):
+        if x.weeding is not None and x.rc > 0:
+            crop = float(cond.canopy_cover) * (1 - x.rc_now / 100.0) / max(x.c["CCx"], 1e-6)   # yesterday's crop cover
+            x.set_weed_cover(x.weed_rc(float(cond.gdd_cum - cond.delayed_gdds), float(cond.dap), crop))
+
     def canopy_cover(crop, prof, z_top, cond, gdd, et0, gs):
         x = current()
         if x is None or not gs:
@@ -468,6 +674,7 @@ def install():
         rz = x.root_zone(prof, cond.th, float(cond.z_root))
         if rz is not None:
             x.ks_salt = ks_salinity(rz[0], x.ecemin, x.ecemax)
+        _canopy_weeds(x, cond)
         x.red = x._reductions()
         ns = copy.copy(cond)
         o["canopy_cover"](crop, prof, z_top, ns, gdd, et0, gs)        # no stress: the potential canopy
@@ -526,9 +733,10 @@ def install():
             ks = _ks_comp(crop, prof, th0, i, et0)
             if ks <= 0:
                 continue
-            ece = min(x.salt[i] / (m[i] * prof.th_s[i]), SALT_SOLUB) / EQUIV
-            ecsw = min(x.salt[i] / (m[i] * max(th0[i], 1e-6)), SALT_SOLUB) / EQUIV
-            ecsw_fc = min(x.salt[i] / (m[i] * prof.th_fc[i]), SALT_SOLUB) / EQUIV
+            tot = x.salt.total(i)
+            ece = min(tot / (m[i] * prof.th_s[i]), SALT_SOLUB) / EQUIV
+            ecsw = min(tot / (m[i] * max(th0[i], 1e-6)), SALT_SOLUB) / EQUIV
+            ecsw_fc = min(tot / (m[i] * prof.th_fc[i]), SALT_SOLUB) / EQUIV
             wrel = float(np.clip((prof.th_fc[i] - th0[i]) / max(prof.th_fc[i] - prof.th_wp[i], 1e-6), 0, 1))
             alfa = adjusted_ks_sto(x.ecemin, x.ecemax, ece, ecsw, ecsw_fc, wrel, x.bsalt, ks_in=sto * ks)
             f_comp[i] = min(1.0, alfa / ks)
@@ -557,11 +765,13 @@ def install():
     def groundwater_inflow(prof, cond):
         cond, gw_in = o["groundwater_inflow"](prof, cond)
         x = current()
-        if x is not None and x.ready and x.salt is not None and getattr(cond, "wt_in_soil", False):
-            ecgw = float(x.sal.get("ecgw", 0.0))
-            for i in range(len(prof.dz)):
-                if prof.zMid[i] >= float(cond.z_gw):
-                    x.salt[i] = ecgw * EQUIV * prof.th_s[i] * 1000 * prof.dz[i]
+        if x is not None and x.ready and x.salt is not None:
+            if getattr(cond, "wt_in_soil", False):
+                ecgw = float(x.sal.get("ecgw", 0.0))
+                for i in range(len(prof.dz)):
+                    if prof.zMid[i] >= float(cond.z_gw):
+                        x.salt.saturate(i, ecgw)
+            x.salt.concentrate(np.asarray(cond.th, float))           # the end of AquaCrop's day (ConcentrateSalts)
         return cond, gw_in
 
     def biomass_accumulation(crop, dap, delayed_cds, hi_ref, pct_lag, b, b_ns, tr, tr_pot_ns, et0, gs):
@@ -586,7 +796,7 @@ def install():
         f_crop = 1.0
         if cond is not None and x.rc > 0 and round(cond.canopy_cover * 10000) > 0:
             cc = cond.canopy_cover
-            rc = x.weed_rc(float(cond.gdd_cum - cond.delayed_gdds))
+            rc = x.rc_now if x.weeding is not None else x.weed_rc(float(cond.gdd_cum - cond.delayed_gdds))
             ccw = cc * (1 - rc / 100.0)
             star = float(np.clip(1.72 * cc - cc ** 2 + 0.3 * cc ** 3, 0, 1))
             wstar = ccw + (star - cc) if ccw > 0.0001 else 0.0
@@ -624,41 +834,14 @@ def _ks_comp(crop, prof, th, i, et0):
 
 
 def _route_salt(x, prof, th_post, th_cr, flux_out):
-    """The day's salt transport (module doc): irrigation salt into the top, drainage at the mixed concentration,
-    capillary rise's salt, diffusion between neighbours."""
+    """The day's salt transport, in AquaCrop 7's order (module doc): capillary rise's salt, then the infiltrated
+    irrigation water's salt, mixing, drainage and diffusion (SaltProfile.content)."""
     th_pre = _STEP.pop("th_pre", th_post)
     irr = _STEP.pop("irr", 0.0)
     m = 1000 * np.asarray(prof.dz, float)
-    w_pre, w_post = th_pre * m, th_post * m
-    s_in = EQUIV * float(x.sal.get("ecw", 0.0)) * irr
-    for i in range(len(m)):
-        w_in = max(0.0, w_post[i] - w_pre[i] + flux_out[i])
-        conc = min((x.salt[i] + s_in) / max(w_pre[i] + w_in, 1e-6), SALT_SOLUB)
-        s_out = min(flux_out[i] * conc, x.salt[i] + s_in)
-        x.salt[i] = x.salt[i] + s_in - s_out
-        s_in = s_out
-    cr = np.maximum(th_cr - th_post, 0.0) * m
-    x.salt += EQUIV * float(x.sal.get("ecgw", 0.0)) * cr
-    th = th_cr
-    for i in range(len(m) - 1):                                   # diffusion between neighbours (AquaCrop's step 5)
-        sm = []
-        for k in (i, i + 1):
-            scp1, ul, dx, mob = x.cells[k]
-            sm.append(mob[active_cell(th[k], scp1, ul, dx)] / 4.0)
-        mm1, mm2 = th[i] * m[i], th[i + 1] * m[i + 1]
-        if mm1 <= 0 or mm2 <= 0:
-            continue
-        e1, e2 = x.salt[i] / (mm1 * EQUIV), x.salt[i + 1] / (mm2 * EQUIV)
-        emix = (e1 * mm1 + e2 * mm2) / (mm1 + mm2)
-        ds = min(abs((emix - e1) * sm[0] * mm1 * EQUIV), abs((emix - e2) * sm[1] * mm2 * EQUIV))
-        if e1 > e2:
-            ds = min(ds, x.salt[i])
-            x.salt[i] -= ds
-            x.salt[i + 1] += ds
-        elif e2 > e1:
-            ds = min(ds, x.salt[i + 1])
-            x.salt[i + 1] -= ds
-            x.salt[i] += ds
+    x.salt.capillary_rise(th_cr, np.maximum(th_cr - th_post, 0.0) * m, float(x.sal.get("ecgw", 0.0)))
+    mm_in = max(0.0, (th_post[0] - th_pre[0]) * m[0] + flux_out[0])   # water that entered the top compartment
+    x.salt.content(th_cr, flux_out, mm_in, EQUIV * float(x.sal.get("ecw", 0.0)) * irr)
 
 
 def _after_day(x, cond, b_unlim):
