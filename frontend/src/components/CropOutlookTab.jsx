@@ -984,47 +984,94 @@ function EnginePanel({ aqua, others, v, vk, why, past }) {
 }
 
 // ── Nitrogen: DSSAT's crop with its nitrogen balance on, at assumed fertiliser rates (crop_engine/run_nitrogen.py) ────
+// DSSAT's models of the WOFOST-only crops (crop_engine/adapters/dssat_adapter.py OTHER_CROPS)
+const DSSAT_OTHER = { cowpea: 'CROPGRO-Cowpea', peanut: 'CROPGRO-Peanut', pigeonpea: 'CROPGRO-Pigeonpea', millet: 'CERES-Millet' }
+
 function OtherCropsPanel({ data, seasonal, sid, rk, ruleLabel, msg }) {
-  const sub = 'WOFOST alone grows the dryland legumes and millet that AquaCrop has no crop file for, in the same forecast '
-    + 'members, sown on the same rule. Only their days to flowering and maturity are set (Kenyan varieties); their yield '
-    + 'level is WOFOST\'s own crop file, not calibrated here: read the chances and the normal, not the tonnes.'
+  const sub = 'WOFOST grows the dryland legumes and millet that AquaCrop has no crop file for, in the same forecast '
+    + 'members, sown on the same rule; DSSAT grows cowpea, pigeonpea, groundnut and millet beside it as a second model. '
+    + 'Only their days to flowering and maturity are set (Kenyan varieties); their yield levels are the models\' own '
+    + 'crop files, not calibrated here: read the chances and each model\'s normal, not the tonnes.'
   if (!data?.sites) return null                                       // not made yet: the panel stays hidden
-  const title = 'Other crops (WOFOST only, uncalibrated)'
+  const title = 'Other crops (WOFOST and DSSAT, uncalibrated)'
   if (!seasonal) return <Panel title={title} sub={sub}>{msg('Made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
   const meta = data.meta
   const site = data.sites?.[sid]
   const rule = site && (site[meta.crops[0]]?.[rk] ? rk : meta.rules?.find(r => site[meta.crops[0]]?.[r]))
   if (!site || !rule) return <Panel title={title} sub={sub}>{msg('No other crops for this site and rule.')}</Panel>
+  const dssat = data.dssat?.[sid] ?? {}
+  const nit = data.nitrogen?.[sid] ?? {}
+  const levels = Object.entries(meta.nitrogen?.levels ?? {})
+  const nCrops = meta.crops.filter(ck => nit[ck]?.[rule])
+  const cells = (x, model, first, ck, L, n) => {
+    const y = x?.yield_if_sown_t_ha, vb = x?.vs_benchmark ?? {}
+    return (
+      <tr key={ck + model}>
+        {first && (
+          <td rowSpan={n}><span style={{ fontWeight: 600, color: 'var(--heading)' }}>{L.label ?? ck}</span>
+            {L.examples ? <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-meta)' }}>{L.examples}</span> : null}</td>
+        )}
+        <td style={{ fontSize: 13 }}>{model}</td>
+        <td>{y ? `${fmtT(y.median)} t/ha` : '-'}</td>
+        <td>{y ? `${fmtT(y.p10)} to ${fmtT(y.p90)} t/ha` : '-'}</td>
+        <td>{pct(x?.p_failure_if_sown)}</td>
+        <td>{vb.p_below_normal == null ? '-' : `${pct(vb.p_below_normal)} / ${pct(vb.p_above_normal)}`}</td>
+        {first && <td rowSpan={n}>{L.maturity_days ?? '-'}</td>}
+      </tr>
+    )
+  }
   return (
     <Panel title={title} sub={sub}>
       <div style={{ overflowX: 'auto' }}>
         <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th>Crop</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Failure if sown</th><th>Below / above normal</th><th>Days to maturity</th></tr></thead>
+          <thead><tr><th>Crop</th><th>Model</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Failure if sown</th><th>Below / above normal</th><th>Days to maturity</th></tr></thead>
           <tbody>
             {meta.crops.map(ck => {
-              const x = site[ck]?.[rule], y = x?.yield_if_sown_t_ha, vb = x?.vs_benchmark ?? {}
               const L = meta.labels?.[ck] ?? {}
-              return (
-                <tr key={ck}>
-                  <td><span style={{ fontWeight: 600, color: 'var(--heading)' }}>{L.label ?? ck}</span>
-                    {L.examples ? <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-meta)' }}>{L.examples}</span> : null}</td>
-                  <td>{y ? `${fmtT(y.median)} t/ha` : '-'}</td>
-                  <td>{y ? `${fmtT(y.p10)} to ${fmtT(y.p90)} t/ha` : '-'}</td>
-                  <td>{pct(x?.p_failure_if_sown)}</td>
-                  <td>{vb.p_below_normal == null ? '-' : `${pct(vb.p_below_normal)} / ${pct(vb.p_above_normal)}`}</td>
-                  <td>{L.maturity_days ?? '-'}</td>
-                </tr>
-              )
+              const d = dssat[ck]?.[rule], dm = meta.dssat?.crops?.[ck]
+              const n = d ? 2 : 1
+              return [cells(site[ck]?.[rule], 'WOFOST', true, ck, L, n),
+                      d ? cells(d, `DSSAT ${DSSAT_OTHER[dm?.crop] ?? ''}`.trim(), false, ck, L, n) : null]
             })}
           </tbody>
         </table>
       </div>
+      {nCrops.length > 0 && levels.length > 0 && (
+        <div style={{ overflowX: 'auto', marginTop: 14 }}>
+          <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <caption style={{ textAlign: 'left', fontWeight: 600, color: 'var(--heading)', padding: '0 0 6px' }}>
+              Nitrogen, WOFOST 8.1: yield if sown (median) and the chance of a below-normal yield
+            </caption>
+            <thead><tr><th>Crop</th>{levels.map(([lk, l]) => <th key={lk}>{l.label}</th>)}</tr></thead>
+            <tbody>
+              {nCrops.map(ck => (
+                <tr key={ck}>
+                  <td style={{ fontWeight: 600, color: 'var(--heading)' }}>{meta.labels?.[ck]?.label ?? ck}</td>
+                  {levels.map(([lk]) => {
+                    const x = nit[ck][rule][lk], y = x?.yield_if_sown_t_ha, vb = x?.vs_benchmark ?? {}
+                    return (
+                      <td key={lk}>{y ? `${fmtT(y.median)} t/ha` : '-'}
+                        <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-meta)' }}>
+                          {vb.p_below_normal == null ? '' : `below normal ${pct(vb.p_below_normal)}`}
+                        </span>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
-        {ruleLabel ?? rule}. Below / above normal compares each crop with the same crop grown by WOFOST in the observed weather
-        of {meta.years?.[0]} to {meta.years?.[1]}. The days to maturity are the varieties' at the warm sites where they were
-        measured (cowpea M66 at Kiboko, green gram at Kitui, pigeonpea ICPL 87091 at Kiboko); cooler sites take longer. The
-        legumes' yield is their pods. Cassava does not fit a season ending in March, and WOFOST has no dry bean or finger
-        millet. Made {fmtDate(meta.created?.slice(0, 10))} from the outlook of {fmtDate(meta.run)} (observations to {fmtDate(meta.obs_end)}); refreshed weekly.
+        {ruleLabel ?? rule}. Below / above normal compares each crop with the same crop grown by the same model in the observed
+        weather of {meta.years?.[0]} to {meta.years?.[1]}. The days to maturity are the varieties' at the warm sites where they were
+        measured (cowpea M66 at Kiboko, green gram at Kitui, pigeonpea ICPL 87091 at Kiboko); cooler sites take longer. WOFOST's
+        legume yield is their pods, DSSAT's their seed. DSSAT's cultivars are the nearest in its files (cowpea TVU3644, pigeonpea
+        76W, groundnut Chico, pearl millet BK 560), their phases fitted to the varieties' days; DSSAT has no mung bean.
+        {nCrops.length > 0 && ' The nitrogen levels grow the legumes again with WOFOST 8.1\'s nitrogen balance (they fix nitrogen; urea at sowing; the soil\'s nitrogen fitted to maize trials), each against the same level\'s normal; WOFOST has no nitrogen parameters for pearl millet.'}
+        {' '}Cassava does not fit a season ending in March, and WOFOST has no dry bean or finger millet. Made {fmtDate(meta.created?.slice(0, 10))} from
+        the outlook of {fmtDate(meta.run)} (observations to {fmtDate(meta.obs_end)}); refreshed weekly.
       </p>
     </Panel>
   )

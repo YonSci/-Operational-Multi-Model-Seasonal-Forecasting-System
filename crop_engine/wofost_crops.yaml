@@ -21,6 +21,13 @@
 #               maturity 66-80 d at SEKU Kitui (Akuja et al. 2016, abstract); flowering not found: the crop file's ratio
 #   groundnut   Red Valencia: maturity 90-100 d (Infonet catalogue); flowering 41-44 d in western Kenya (Njoki et al.
 #               2023, Toxins 15:111, Nyakach, 1100-1800 m; the temperature assumed 22 C)
+#
+# DSSAT as a second model (run_other_crops, `dssat`: dssat_adapter OTHER_CROPS): DSSAT 4.8's CROPGRO-Cowpea, -Peanut,
+# -Pigeonpea and CERES-Millet (it has no mung bean), the cultivar of its file closest to the variety's maturity, its
+# phases scaled by one factor to maturity_days at reference_tmean_c, within the file's MINIMA / MAXIMA
+# (python -m crop_engine.calibration.dssat --other-crops: outputs/crop_engine/calibration/dssat/other_crops.json,
+# 16 Nov 2026); root_depth_cm the WOFOST crop's maximum rooting depth (the profile's 200 cm for millet). Yield level
+# DSSAT's own (uncalibrated); the legumes' yield is DSSAT's harvested seed, WOFOST's their pods.
 reference_tmean_c: 21.0
 
 crops:
@@ -32,6 +39,9 @@ crops:
     flowering_days: 57
     reference_tmean_c: 24.1
     failure_t_ha: 0.2
+    # DSSAT CROPGRO-Cowpea, TVU3644 (Nigeria): of the file's cultivars the closest to M66 at 24.1 C (87 d, anthesis 51 d;
+    # UCR 368 - Kenya matures in 103); phases x 1.0066 (SD-PM at the file's minimum)
+    dssat: {crop: cowpea, cultivar: CP0005, root_depth_cm: 120, EM-FL: 37.244, FL-SH: 2.516, FL-SD: 5.939, SD-PM: 23.0, FL-LF: 15.099}
   green_gram:
     label: Green gram (mung bean)
     examples: N26, KS20, Biashara
@@ -48,6 +58,9 @@ crops:
     flowering_days: 64
     reference_tmean_c: 23.3
     failure_t_ha: 0.2
+    # DSSAT CROPGRO-Pigeonpea, 76W (104 d at 23.3 C; ICPL 88039 155, Kpatinga 143): phases x 0.9615 -> 100 d; one factor
+    # keeps the cultivar's ratios, so it flowers at 40 d, not ICPL 87091's 64
+    dssat: {crop: pigeonpea, cultivar: PP0001, root_depth_cm: 180, EM-FL: 31.441, FL-SH: 16.73, FL-SD: 23.172, SD-PM: 36.268, FL-LF: 27.759}
   pearl_millet:
     label: Pearl millet
     examples: KAT/PM-1
@@ -55,6 +68,9 @@ crops:
     maturity_days: 80
     reference_tmean_c: 23.0
     failure_t_ha: 0.3
+    # DSSAT CERES-Millet, BK 560 (the file's earliest: 89 d at 23 C; ICTP 8203 96): P1 at the file's minimum (100), P5
+    # shortened -> 80 d, anthesis 55 d
+    dssat: {crop: millet, cultivar: IB0070, root_depth_cm: 200, P1: 100.0, P5: 109.089}
   groundnut:
     label: Groundnut
     examples: Red Valencia
@@ -63,3 +79,6 @@ crops:
     flowering_days: 42
     reference_tmean_c: 22.0
     failure_t_ha: 0.2
+    # DSSAT CROPGRO-Peanut, Chico (Spanish, the file's earliest with GH0001: 114 d at 22 C; Valencia 123): every phase at
+    # the file's minimum still matures in 101 d, not 95 (not reached), anthesis 28 d
+    dssat: {crop: peanut, cultivar: IB0008, root_depth_cm: 60, EM-FL: 15.0, FL-SH: 5.0, FL-SD: 13.0, SD-PM: 50.0, FL-LF: 70.0}
