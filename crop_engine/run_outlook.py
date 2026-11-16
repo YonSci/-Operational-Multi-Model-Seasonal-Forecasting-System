@@ -50,7 +50,7 @@ import numpy as np
 import yaml
 
 from crop_engine import config as C
-from crop_engine import dashboard
+from crop_engine import carryover, dashboard
 from crop_engine.adapters import aquacrop_adapter as aq
 from crop_engine.adapters import dssat_adapter as dsa
 from crop_engine.adapters import wofost_adapter as wf
@@ -108,7 +108,8 @@ def config_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(aq.__file__).read_bytes())
     h.update(aq.CO2_FILE.read_bytes())
-    h.update(json.dumps(soil_depth.restrictions()).encode())     # only the restrictions in effect (none: unchanged)
+    h.update(json.dumps(soil_depth.restrictions()).encode())
+    h.update(carryover.hash_part().encode())     # only the restrictions in effect (none: unchanged)
     h.update(Path(pl.__file__).read_bytes())
     cond = site_conditions.in_effect()                           # a site's measured conditions (none: unchanged)
     if cond:
@@ -131,6 +132,7 @@ def wofost_hash(rules, sites):
     h.update(Path(wf.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
     h.update(json.dumps(soil_depth.restrictions()).encode())
+    h.update(carryover.hash_part().encode())
     return h.hexdigest()[:12]
 
 
@@ -146,6 +148,7 @@ def dssat_hash(rules, sites):
     h.update(Path(dsa.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
     h.update(json.dumps(soil_depth.restrictions()).encode())
+    h.update(carryover.hash_part().encode())
     return h.hexdigest()[:12]
 
 

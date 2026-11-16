@@ -10,7 +10,9 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
   density       factor on the variety's plant population. AquaCrop-OSPy sets only the initial canopy cover from it
                 (CCo = plant population × seed size): the canopy closes sooner or later, its maximum (CCx, calibrated
                 at Kiboko) does not change
-  initial_frac  plant-available water on 1 Aug as a fraction of TAW, in place of the ERA5-Land value
+  initial_frac  plant-available water on 1 Aug as a fraction of TAW, in place of the ERA5-Land value; or from SMAP
+                (soil_smap), or AquaCrop's own soil water carried over from the Long Rains (soil_carryover: the
+                profile itself in AquaCrop, its 2 m fraction in WOFOST and DSSAT; crop_engine/carryover.py)
   irrigation    AquaCrop-OSPy IrrigationManagement: method 1 irrigates (up to MaxIrr mm a day) whenever the root
                 zone's water falls below SMT % of its available water, per growth stage (emergence, canopy growth,
                 maximum canopy and flowering, senescence), up to MaxIrrSeason mm a season. Supplementary: 30 % from
@@ -71,6 +73,10 @@ SCENARIOS = {
     # the satellite's estimate (crop_engine.data.smap): run only when the season's SMAP values are on disk
     # (run_scenarios.available_keys); a site without a value keeps the outlook's ERA5-Land soil water
     "soil_smap": dict(label="Soil water on 1 Aug from SMAP (satellite)", group="Initial soil water", initial_source="smap"),
+    # AquaCrop grown continuously through the seasons before (crop_engine/carryover.py): the soil the Long Rains crop
+    # and the dry season left, compartment by compartment; run when the season's values are on disk
+    "soil_carryover": dict(label="Soil water carried over from the Long Rains (AquaCrop, season after season)",
+                           group="Initial soil water", initial_source="carryover"),
     "irr_supplementary": dict(label="Supplementary irrigation, up to 100 mm a season", group="Water management",
                               irrigation=dict(irrigation_method=1, SMT=[30, 30, 30, 0], MaxIrr=25, MaxIrrSeason=100,
                                              start_stage=2)),
@@ -199,6 +205,10 @@ def apply(task, key):
         out["initial_frac"] = float(scen["initial_frac"])
     if scen.get("initial_source") == "smap" and task.get("smap_frac") is not None:
         out["initial_frac"] = float(task["smap_frac"])
+    if scen.get("initial_source") == "carryover" and task.get("carryover"):
+        c = task["carryover"]
+        out["initial_frac"] = float(c["frac_200cm"])                    # WOFOST's and DSSAT's one fraction
+        out["initial_profile"] = {"z_m": list(c["z_m"]), "th": list(c["th"])}
     for k in ("irrigation", "field") + AQUACROP_KEYS:
         if k in scen and k != "perturb":
             out[k] = dict(scen[k])

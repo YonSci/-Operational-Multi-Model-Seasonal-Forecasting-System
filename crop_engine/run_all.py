@@ -63,8 +63,11 @@ def main():
     # configuration changes), the management scenarios (weekly) and DSSAT's nitrogen levels (weekly). The grid goes
     # first: the weekly steps keep their previous results when stopped, and before it moved up the scenarios could
     # take the whole time left, so the published map stayed days behind the outlook (13 Nov 2026: the grid was
-    # still the 11 Nov build, made before the delayed-germination fix).
+    # still the 11 Nov build, made before the delayed-germination fix). The carried-over soil water
+    # (crop_engine/carryover.py) adds a year once a year, after 31 Jul, or rebuilds when AquaCrop's adapter changes.
     steps = [("regional outlook", ["crop_engine.grid", "--workers", str(max(a.workers, 2))], "the previous one kept"),
+             ("carried-over soil water", ["crop_engine.carryover", "--build", "--if-missing", "--workers",
+                                          str(max(a.workers, 2))], "the previous years kept"),
              ("management scenarios", ["crop_engine.run_scenarios", "--max-age-days", "7", "--workers",
                                        str(max(a.workers, 2)), "--no-dashboard"], "the previous ones kept"),
              ("nitrogen levels", ["crop_engine.run_nitrogen", "--max-age-days", "7", "--workers",

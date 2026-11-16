@@ -40,6 +40,7 @@ import xarray as xr
 from crop_engine import config as C
 from crop_engine import run_outlook as ro
 from crop_engine.data import soil as soil_mod
+from crop_engine import carryover
 from crop_engine.data import smap
 from crop_engine.data.sites import registered_sites
 from crop_engine.scenarios import management as mg
@@ -78,8 +79,11 @@ def compact(summary):
 
 
 def available_keys(keys, season_year):
-    """The scenarios that can run: SMAP's soil water only when the season's values are on disk (data/smap.py)."""
-    return [k for k in keys if mg.SCENARIOS[k].get("initial_source") != "smap" or smap.available(season_year)]
+    """The scenarios that can run: SMAP's soil water, and the carried-over soil water, only when the season's values are on disk
+    (data/smap.py, carryover.py)."""
+    src = lambda k: mg.SCENARIOS[k].get("initial_source")                                   # noqa: E731
+    return [k for k in keys if (src(k) != "smap" or smap.available(season_year))
+            and (src(k) != "carryover" or carryover.available(season_year))]
 
 
 def base_tasks(res, ds, varieties, rules, site_ids):
@@ -107,7 +111,8 @@ def base_tasks(res, ds, varieties, rules, site_ids):
                          et0=ds.et0_mm.isel(site=k).values, source=ds.precip_source.values, planting=plant, resow=resow,
                          variety=varieties[vk], kw=varieties[vk]["kw"], layers=layers,
                          initial_frac=float(s["initial_water_fraction"]),
-                         smap_frac=smap.initial_fraction(sid, dates[0].year, layers))
+                         smap_frac=smap.initial_fraction(sid, dates[0].year, layers),
+                         carryover=carryover.initial(sid, dates[0].year))
                 if "rad_mj_m2" in ds:                                   # WOFOST's weather (AquaCrop ignores it)
                     t.update(rad=ds.rad_mj_m2.isel(site=k).values, vap=ds.vap_hpa.isel(site=k).values,
                              wind2=ds.wind2_ms.isel(site=k).values, lat=sites[sid].lat, lon=sites[sid].lon,
