@@ -171,9 +171,10 @@ def test_layer_curves_are_anchored_and_monotonic():
     L = soil.Layer(0, 30, 45, 30, 1.5, 5, 0.30, 0.18)
     sm, cond = wf.layer_curves(L)
     pf, th, k = np.array(sm[0::2]), np.array(sm[1::2]), np.array(cond[1::2])
-    assert th[list(pf).index(wf.PF_FC)] == pytest.approx(0.30, abs=1e-4)
-    assert th[list(pf).index(wf.PF_WP)] == pytest.approx(0.18, abs=1e-4)
-    assert (np.diff(th) <= 1e-9).all() and (np.diff(k) <= 1e-9).all() and th[0] > 0.30
+    f = wf.fine(L)                                                    # 5 % stones hold no water
+    assert th[list(pf).index(wf.PF_FC)] == pytest.approx(0.30 * f, abs=1e-4)
+    assert th[list(pf).index(wf.PF_WP)] == pytest.approx(0.18 * f, abs=1e-4)
+    assert (np.diff(th) <= 1e-9).all() and (np.diff(k) <= 1e-9).all() and th[0] > 0.30 * f
 
 
 def test_soil_profile_splits_a_layer_at_the_rooting_depth():
@@ -182,7 +183,7 @@ def test_soil_profile_splits_a_layer_at_the_rooting_depth():
     soil_, site = wf.soil_profile(LAYERS, 0.5, split_at=[75])
     th = [L["Thickness"] for L in soil_["SoilProfileDescription"]["SoilLayers"]]
     assert np.cumsum(th).tolist() == [5, 15, 30, 60, 75, 100, 200]
-    paw = sum((L.theta_fc - L.theta_wp) * (L.bottom_cm - L.top_cm) for L in LAYERS)
+    paw = sum((L.theta_fc - L.theta_wp) * wf.fine(L) * (L.bottom_cm - L.top_cm) for L in LAYERS)
     assert site["WAV"] == pytest.approx(0.5 * paw) and soil_["RDMSOL"] == 200
 
 
@@ -204,7 +205,7 @@ def test_wofost_management_mulch_and_ridges():
     assert m["site"] == {"SSMAX": 10.0, "WAV": 5.0} and site["SSMAX"] == 0.0     # the task's site left unchanged
 
 
-def test_wofost_scenarios_leave_out_plant_density(monkeypatch):
+def test_wofost_scenarios_include_plant_density(monkeypatch):
     from crop_engine import run_scenarios as rs
     from crop_engine.scenarios import management as mg
     keys = ["sow_plus14", "density_low", "density_high", "irr_full", "mulch"]
@@ -214,5 +215,6 @@ def test_wofost_scenarios_leave_out_plant_density(monkeypatch):
     assert rs.wofost_plan(without, varieties, keys) == (set(), [])             # no WOFOST results: AquaCrop only
     with_w = {"sites": {"s": {"results": {"maize_early": {"rule1": {"summary": {}, "wofost": {}}}}}}}
     vs, ks = rs.wofost_plan(with_w, varieties, keys)
-    assert vs == {"maize_early"} and ks == ["sow_plus14", "irr_full", "mulch"]
-    assert all("density" not in mg.SCENARIOS[k] for k in ks)
+    # plant density through the initial dry weight since WOFOST part 2 (an approximation, wofost_adapter module doc)
+    assert vs == {"maize_early"} and ks == ["sow_plus14", "density_low", "density_high", "irr_full", "mulch"]
+    assert all(mg.wofost_can(k) for k in ks)
