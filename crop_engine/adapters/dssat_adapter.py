@@ -76,7 +76,8 @@ DSSAT part 2 (November 2026):
               irrigated almost every day
   bunds       field bunds (z_bund, m) as DSSAT's bund height (IR009, mm, IRRIG R): runoff held and ponded
   groundwater a water table (ICWD and dated IR007 depths, IRRIG R) only on a DSSAT build with the water-table module
-              (supports_water_table; the installed 4.8.0.28 build has none, so the scenario stays AquaCrop's)
+              (supports_water_table; the installed 4.8.0.28 build has none, so the scenario stays AquaCrop's; the
+              4.8.6.4 source build, CROP_ENGINE_DSSAT_HOME, has it)
   nitrogen extras (run_nitrogen levels, dssat_cultivars.yaml): manure_t_ha (farmyard manure RE003 at sowing, dry
               matter, with manure_n_pct / _p_pct / _k_pct), soil_p_mg_kg (Bray-1 extractable P, SA002, PHOSP Y: maize,
               sorghum and the bean; Olsen, SA001: Bray-1 hardly responded in this build), soil_k_cmol_kg
@@ -84,7 +85,12 @@ DSSAT part 2 (November 2026):
               days, from_das} (observed leaf area destroyed, PLAD in the T-file, DISES Y). The topsoil's P and K to
               30 cm, half below. Potassium and pest damage are written but do not work in the installed 4.8.0.28
               build (potassium: "not enabled for this crop", maize included; pests: the T-file is never read), so
-              no level uses them; a newer DSSAT build would.
+              no level uses them. The 4.8.6.4 source build (CROP_ENGINE_DSSAT_HOME) reads the pest damage; DSSAT's
+              own source still stops potassium for every crop (IPSIM error 7), so no release build runs it.
+
+A newer DSSAT (CROP_ENGINE.md "A newer DSSAT, built from source"): CROP_ENGINE_DSSAT_HOME, set before import, is
+another install's folder (bin/dscsm048.exe and Data/ under it), e.g. DSSAT CSM 4.8.6.4 built from dssat-csm-os;
+unset, the wheel's 4.8.0.28 in data/crop_engine/dssat. install() writes only the default folder.
 Not in DSSAT CSM: salinity and weed competition (no process for these crops)."""
 import argparse
 import datetime as dt
@@ -107,7 +113,10 @@ from crop_engine.config import RESOW_MAX
 # DSSAT's program and data: the DSSATTools wheel (it ships DSSAT CSM 4.8's open-source build for Windows and Linux)
 WHEEL = {"name": "DSSATTools", "version": "3.0.2",
          "sha256": "289906cc07cd2703f6a4ec6977c5451a3c1240e9cef0eb14a5cdf706ebe640d0"}
-HOME = C.CACHE / "dssat"
+DEFAULT_HOME = C.CACHE / "dssat"
+# another DSSAT install (a source build, CROP_ENGINE.md "A newer DSSAT"): bin/dscsm048(.exe) and Data/ under it;
+# read at import, the default (the wheel's 4.8.0.28 in data/crop_engine/dssat) when unset
+HOME = Path(os.environ.get("CROP_ENGINE_DSSAT_HOME") or DEFAULT_HOME)
 EXE = HOME / "bin" / ("dscsm048.exe" if os.name == "nt" else "dscsm048")
 DATA = HOME / "Data"
 RUNS = Path(os.environ.get("CROP_ENGINE_DSSAT_RUNS") or HOME / "run")   # each task's folder (removed after it)
@@ -196,7 +205,9 @@ def available(variety):
 # ── installation ────────────────────────────────────────────────────────────────────────────────────────────────────
 def install(wheel=None, log=print):
     """DSSAT's program and standard data into HOME, from the pinned DSSATTools wheel (downloaded with pip when no
-    local wheel is given; its SHA-256 is checked either way)."""
+    local wheel is given; its SHA-256 is checked either way). Not over another install (CROP_ENGINE_DSSAT_HOME)."""
+    if os.environ.get("CROP_ENGINE_DSSAT_HOME") and HOME == Path(os.environ["CROP_ENGINE_DSSAT_HOME"]) != DEFAULT_HOME:
+        raise RuntimeError(f"CROP_ENGINE_DSSAT_HOME is set ({HOME}): the wheel installs only into {DEFAULT_HOME}")
     with tempfile.TemporaryDirectory() as tmp:
         if wheel is None:
             subprocess.run([sys.executable, "-m", "pip", "download", f"{WHEEL['name']}=={WHEEL['version']}", "--no-deps",

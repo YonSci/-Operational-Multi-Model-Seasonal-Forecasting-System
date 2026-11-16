@@ -1865,6 +1865,58 @@ by running each input on a synthetic season (`tests/test_dssat_part2.py` for the
   and start the Short Rains from them, with the stover as surface residue. AquaCrop's carry-over (above) did not
   agree with SMAP better than ERA5-Land, so this waits for that question to be settled.
 
+#### A newer DSSAT, built from source (November 2026)
+
+DSSAT CSM 4.8.6.4 (`DSSAT/dssat-csm-os`, tag v4.8.6.4, commit 25c93b9, 2 Oct 2026) builds on Windows with
+conda-forge's gfortran (no admin rights, nothing on the system PATH) and is installed **beside** the operational
+4.8.0.28, never over it. The engine keeps using 4.8.0.28 unless `CROP_ENGINE_DSSAT_HOME` is set.
+
+```bash
+conda create -p C:/Users/ymersha/dssat_build/env -c conda-forge --override-channels gfortran cmake ninja
+export PATH=C:/Users/ymersha/dssat_build/env/Library/bin:$PATH        # this shell only
+git clone --depth 1 --branch v4.8.6.4 https://github.com/DSSAT/dssat-csm-os C:/Users/ymersha/dssat_build/src
+cmake -S src -B build -G Ninja -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_Fortran_COMPILER=gfortran
+cmake --build build -j 2                                  # gfortran 15.2, statically linked: no DLLs needed
+mkdir -p home/bin && cp build/bin/dscsm048.exe home/bin/ && cp -r src/Data home/Data
+```
+
+(DSSAT's own `cmake --install` puts the program and the data side by side; the adapter wants `bin/` and `Data/`, as
+the wheel's install.) Select it, for a run or the tests, with `CROP_ENGINE_DSSAT_HOME=C:/Users/ymersha/dssat_build/home`
+(read at import; `EXE`, `DATA` and the run folders, `run/`, go under it; `install()` refuses to write there). The run
+profile's paths stay short (8.3 names, under 80 characters). Its output header reads "DSSAT Cropping System Model
+Ver. 4.8.6.004 -develop" (the branch the tag sits on), and the program has the water-table module (`ADJWTD`, so
+`supports_water_table()` is true). The default build's tests and the new build's all pass (`tests/test_dssat*.py`;
+`tests/test_dssat_newer.py` runs only with the setting).
+With the setting, `dssat_hash` also takes the program's SHA-1, so its normals and runs are never taken for the
+default build's (without it the hash is as before); they are written to the same output files, so the setting is for
+trials, not for the daily update.
+
+What it changes, on synthetic seasons (sown 28 Oct, the test loam, 29 / 17 °C; members wet, moderate, dry):
+
+- **Water table: works.** Early maize in the dry member: 1.11 t/ha without, 5.32 with a water table at 1.5 m (the
+  same as the wet member: no water stress left, the roots reach it); at 3 m (below the 2 m profile) no change. The
+  old build ignored it (1.10 either way). `groundwater` scenarios would run in DSSAT on this build.
+- **Observed pest damage: works.** The T-file is read now. 50 % of the leaf area over 21 days from 40 days after
+  sowing, 50 kg N/ha, wet: 3.59 against 4.40 t/ha (maximum LAI lower); the adapter's default (20 % from day 21)
+  costs little, as maize regrows its leaves: 4.37 against 4.40 t/ha (at 100 kg N/ha 5.17
+  against 5.34); in a water-stressed member less leaf even saves water (0.58 against 0.56). The old build: no effect.
+- **Potassium: still stopped**, "Potassium model not enabled for this crop", for maize as before. It is DSSAT's own
+  source, not the build: `InputModule/IPSIM.FOR` ends the run (error 7) for CERES-Maize and CERES-Rice, with the
+  "tested for these crops" case commented out, and for every other model. CERES-Maize's K routine (`MZ_KUPTAK`)
+  is a placeholder (K uptake at most the N uptake, the stress their ratio). An experiment only: with that one stop turned into a warning
+  (`C:/Users/ymersha/dssat_build/home_kpatch`, not for use) maize runs with potassium; at 50 kg N/ha, wet, yield
+  4.40 t/ha at 2 to 0.3 cmol/kg exchangeable K (no response), 3.26 at 0.2, 1.28 at 0.1, 0.46 at 0.05; a cliff, not a
+  calibrated response (the moderate member rose at 0.2). Potassium stays out of the levels.
+- **Sequence runs:** the 4.8.6 initialization fix is in this build, but the engine writes no sequence (mode Q) runs
+  yet; the carry-over route above is unchanged.
+- **Ordinary results move a little** (old → new, t/ha). Water-limited: early maize 5.31 → 5.32, 0.52 → 0.53, 1.10
+  → 1.11; sorghum 5.40 → 5.43, 1.23 → 1.23, 0.30 → 0.30 (same dates); the bean 4.52 → 4.45, 0.48 → 0.40 (−17 %),
+  0.13 → 0.14, a day later to flower and mature. With nitrogen (25 kg N/ha; the bean fixing): maize 3.55 → 3.36
+  (−5 %), 0.55 → 0.56, 1.12 → 1.19; sorghum 1.95 → 1.78 (−9 %), 1.31 → 1.28, 0.37 → 0.37; the bean 3.59 → 3.46,
+  0.46 → 0.44, 0.10 → 0.13. The standard data differ too (MZCER048.ECO now gives TSEN 6 and CDAY 15, and ozone
+  columns). Adopting the build therefore means rebuilding every DSSAT normal, hindcast and run, and re-checking the
+  calibrations (`calibration/dssat*.py`); that is a separate decision, not taken here.
+
 ### DSSAT in the rest of the engine (November 2026)
 
 - **Management scenarios** (`run_scenarios`): DSSAT grows every scenario except the ones capped by a seasonal
