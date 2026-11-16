@@ -44,11 +44,28 @@ Management (the scenarios, crop_engine.scenarios.management), each a task key le
                "schedule_das": [[days after sowing, mm], ...], placed on each member's own sowing date
   field        FieldMngt arguments: mulches, runoff inhibition (sr_inhb), bunds (z_bund, m)
   groundwater  {"depth_m": d}: a water table at a constant depth d below the surface all season (AquaCrop-OSPy
-               GroundWater): capillary rise from it, and the field capacity above it raised as AquaCrop does
+               GroundWater): capillary rise from it, and the field capacity above it raised as AquaCrop does; or
+               {"monthly_m": {month: d}}: a water table that rises and falls through the season, the depth on the 15th
+               of each month given, linearly interpolated between them (AquaCrop-OSPy's "Variable" method)
+  heat         {"thresholds": "literature"}: pollination heat stress from the crops' published thresholds
+               (HEAT_POLLINATION) in place of the crop files' 40 °C
+  transplant   {"nursery_days": n, "seedling_cm2": a}: seedlings raised n days in a nursery and set out on the
+               sowing date (FAO AquaCrop's transplanted crops): no germination to wait for, the canopy starts from
+               the seedlings' cover (plant population × a), and every stage comes n days' growing degree days sooner
 Without them the crop is rain-fed on bare, free-draining soil, as the outlook. A member records the irrigation it
 received (`irrigation_mm`, the season's depth; net irrigation's requirement under method 4).
+
+Site conditions (crop_engine/data/site_conditions.py): a site's measured soil fertility, weeds, salinity or water table
+reach every AquaCrop run of that site, the outlook and its benchmark included, through its soil profile
+(soil.Profile.conditions); a scenario's own setting of the same key replaces the site's. AquaCrop only.
+
+Pollination heat stress (patch_pollination_heat). AquaCrop-OSPy 3.1.0's temperature_stress compares the day's maximum
+with its two thresholds the wrong way round: no stress up to Tmax_lo (45 °C, where pollination should fail
+completely), none at all between, full failure above it. FAO AquaCrop 7 (KsTemperature) lowers pollination from Tmax_up
+(40 °C, "above which pollination begins to fail") to none at Tmax_up + 5. The patch applies AquaCrop 7's order.
 """
 import datetime as dt
+import os
 import warnings
 from pathlib import Path
 
@@ -88,12 +105,102 @@ def irrigation(spec, plant):
     return IrrigationManagement(**spec)
 
 
-def groundwater(spec, start):
-    """AquaCrop-OSPy's GroundWater for a task's groundwater spec (module doc), or None (no water table)."""
+def groundwater(spec, start, end=None):
+    """AquaCrop-OSPy's GroundWater for a task's groundwater spec (module doc), or None (no water table). A monthly
+    table gives the depth on the 15th of each month of the season, and at its first and last day (the nearest month's),
+    since AquaCrop-OSPy's interpolation leaves days before its first date without a depth."""
     from aquacrop import GroundWater
     if not spec:
         return None
-    return GroundWater(water_table="Y", method="Constant", dates=[f"{start:%Y/%m/%d}"], values=[float(spec["depth_m"])])
+    if "monthly_m" not in spec:
+        return GroundWater(water_table="Y", method="Constant", dates=[f"{start:%Y/%m/%d}"],
+                           values=[float(spec["depth_m"])])
+    table = {int(k): float(v) for k, v in spec["monthly_m"].items()}
+    end = pd.Timestamp(end if end is not None else start)
+    days = [pd.Timestamp(start)] + [d for d in pd.date_range(start, end, freq="MS") + pd.Timedelta(days=14)
+                                     if pd.Timestamp(start) < d < end] + [end]
+    days = sorted(set(days))
+    depth = lambda d: table.get(d.month, table[min(table, key=lambda k: min(abs(k - d.month), 12 - abs(k - d.month)))])  # noqa: E731
+    return GroundWater(water_table="Y", method="Variable", dates=[f"{d:%Y/%m/%d}" for d in days],
+                       values=[depth(d) for d in days])
+
+
+# Pollination heat stress at the crops' published thresholds (task "heat", or CROP_HEAT_THRESHOLDS=literature for
+# every run, off by default until the hindcast shows it helps): (start, complete failure), °C of the day's maximum.
+# Maize: pollen viability falls above ~35 °C; sorghum: seed set falls above ~36 °C (Prasad et al. 2006); dry bean:
+# flower and pod abortion above ~32 °C. The complete failure 5 °C above, AquaCrop's own range (TempRange).
+HEAT_POLLINATION = {"MaizeGDD": (35.0, 40.0), "SorghumGDD": (36.0, 41.0), "DryBeanGDD": (32.0, 37.0)}
+HEAT_THRESHOLDS = os.environ.get("CROP_HEAT_THRESHOLDS", "file")       # "file" (the crop files') or "literature"
+
+
+def heat_kw(task):
+    """Tmax_up / Tmax_lo overrides for the task's pollination heat stress, or {} (the crop file's)."""
+    use = (task.get("heat") or {}).get("thresholds") or HEAT_THRESHOLDS
+    t = HEAT_POLLINATION.get(task["variety"]["aquacrop_crop"]) if use == "literature" else None
+    return {"Tmax_up": t[0], "Tmax_lo": t[1]} if t else {}
+
+
+def patch_pollination_heat():
+    """Pollination heat stress in AquaCrop 7's order (module doc), idempotent: harvest_index's temperature_stress."""
+    import aquacrop.solution.harvest_index as hi
+    if getattr(hi.temperature_stress, "_patched", False):
+        return
+    orig = hi.temperature_stress
+
+    def temperature_stress(crop, temp_max, temp_min):
+        _, cold = orig(crop, temp_max, temp_min)
+        if crop.PolHeatStress == 0:
+            return 1, cold
+        start, full = float(crop.Tmax_up), float(crop.Tmax_lo)          # 40 and 45 in the crop files
+        if temp_max <= start:
+            return 1, cold
+        if temp_max >= full:
+            return 0, cold
+        up, lo = 1.0, 0.001
+        trel = (temp_max - start) / (full - start)
+        return (up * lo) / (lo + (up - lo) * np.exp(-crop.fshape_b * (1 - trel))), cold
+    temperature_stress._patched = True
+    hi.temperature_stress = temperature_stress
+
+
+_TRANSPLANT = []                # set while a transplanted crop is simulated (patch_transplant)
+
+
+def patch_transplant():
+    """Germination at once for a transplanted crop (task "transplant"), idempotent: AquaCrop-OSPy reads the crop
+    file's PlantMethod but never uses it, so a seedling would wait for a wet topsoil to germinate."""
+    import aquacrop.timestep.run_single_timestep as rst
+    if getattr(rst.germination, "_patched", False):
+        return
+    orig = rst.germination
+
+    def germination(cond, z_germ, prof, germ_thr, plant_method, gdd, growing_season):
+        if _TRANSPLANT and growing_season and not cond.germination:
+            cond.germination = True
+            cond.prot_germ = False
+            return cond
+        return orig(cond, z_germ, prof, germ_thr, plant_method, gdd, growing_season)
+    germination._patched = True
+    rst.germination = germination
+
+
+def transplant_kw(kw, spec, aquacrop_crop, g_nursery):
+    """A transplanted crop's parameters (module doc): every stage sooner by the growing degree days of the nursery
+    days (g_nursery: the site's daily GDD before the sowing date), never below three days' recovery after setting
+    out, and the seedlings' cover as the initial canopy."""
+    from aquacrop.entities.crop import crop_params
+    p = crop_params[aquacrop_crop]
+    g_nursery = np.asarray(g_nursery, float)
+    n = int(spec.get("nursery_days", 21))
+    shift = float(g_nursery.mean() * n) if len(g_nursery) else 0.0
+    out = dict(kw)
+    rec = 3 * (float(g_nursery.mean()) if len(g_nursery) else 10.0)
+    out["Emergence"] = max(float(kw.get("Emergence", p["Emergence"])) - shift, rec)
+    for k in ("MaxRooting", "Senescence", "Maturity", "HIstart"):
+        out[k] = max(float(kw.get(k, p[k])) - shift, out["Emergence"] + rec)
+    out["SeedSize"] = float(spec.get("seedling_cm2", 25.0))
+    out["PlantMethod"] = 0
+    return out
 
 ESTABLISHED_CC = 0.05          # canopy cover a crop must reach to count as established
 CANOPY_STEP = 7                # days between the canopy values kept per member (from the season start, 1 Aug)
@@ -256,6 +363,17 @@ def make_soil(layers):
     return s
 
 
+CONDITION_KEYS = ("fertility", "weeds", "salinity", "groundwater")
+
+
+def with_conditions(task):
+    """The task with its site's measured conditions (soil.Profile.conditions, module doc) under its own keys: a
+    scenario's setting of a key replaces the site's."""
+    cond = getattr(task.get("layers"), "conditions", None) or {}
+    extra = {k: v for k, v in cond.items() if k in CONDITION_KEYS and not task.get(k)}
+    return dict(task, **extra) if extra else task
+
+
 def member_kw(task, m):
     """Member m's crop parameters: the task's, with the member's own draw where the task carries one (kw_member: the
     crop-parameter uncertainty scenario, scenarios.management.parameter_draws); phenology is never drawn."""
@@ -280,7 +398,9 @@ def rooting_limited(kw, aquacrop_crop, layers):
 def _sow(task, m, plant, dates, g):
     """One sowing of member m on `plant` → outcome dict (status, yield, dates, stress)."""
     from aquacrop import AquaCropModel, Crop, FieldMngt, InitialWaterContent
+    task = with_conditions(task)
     patch_delayed_maturity()
+    patch_pollination_heat()
     if task.get("groundwater"):
         patch_capillary_rise()
     if (task.get("field") or {}).get("bunds"):
@@ -290,32 +410,39 @@ def _sow(task, m, plant, dates, g):
     k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])
     if k0 < 0:
         return dict(r, status="error", error="planting date outside the weather period")
+    crop_key = task["variety"]["aquacrop_crop"]
+    kw = {**rooting_limited(member_kw(task, m), crop_key, task["layers"]), **heat_kw(task)}
+    if task.get("transplant"):
+        patch_transplant()
+        n = int(task["transplant"].get("nursery_days", 21))
+        kw = transplant_kw(kw, task["transplant"], crop_key, g[max(k0 - n, 0):k0] if k0 > 0 else g[:n])
     cum = np.cumsum(g[k0:])
-    if cum[-1] <= task["kw"]["Maturity"] * 1.01:
+    if cum[-1] <= kw["Maturity"] * 1.01:
         return dict(r, status="too_late")
-    expected_maturity = dates[k0 + int(np.argmax(cum > task["kw"]["Maturity"]))]
+    expected_maturity = dates[k0 + int(np.argmax(cum > kw["Maturity"]))]
     wdf = pd.DataFrame({"MinTemp": task["tmin"][m], "MaxTemp": task["tmax"][m], "Precipitation": task["rain"][m],
                         "ReferenceET": np.maximum(task["et0"][m], 0.1), "Date": dates})
     try:
         model = AquaCropModel(
             sim_start_time=f"{dates[0]:%Y/%m/%d}", sim_end_time=f"{dates[-1]:%Y/%m/%d}", weather_df=wdf,
             soil=make_soil(task["layers"]),
-            crop=Crop(task["variety"]["aquacrop_crop"], planting_date=f"{plant:%m/%d}",
-                      **rooting_limited(member_kw(task, m), task["variety"]["aquacrop_crop"], task["layers"])),
+            crop=Crop(crop_key, planting_date=f"{plant:%m/%d}", **kw),
             initial_water_content=InitialWaterContent(wc_type="Pct", method="Depth", depth_layer=[0.05, 2.0],
                                                       value=[100 * task["initial_frac"]] * 2),
             irrigation_management=irrigation(task.get("irrigation"), plant),
             field_management=FieldMngt(**task["field"]) if task.get("field") else None,
-            groundwater=groundwater(task.get("groundwater"), dates[0]), co2_concentration=co2())
+            groundwater=groundwater(task.get("groundwater"), dates[0], dates[-1]), co2_concentration=co2())
         stressed = any(task.get(k) for k in ("fertility", "weeds", "salinity"))
         if stressed:                                                 # AquaCrop 7's processes (aquacrop_stress)
             from crop_engine.adapters import aquacrop_stress as st
             st.install()
-            st.activate(st.Context(task["variety"]["aquacrop_crop"], cum, task.get("fertility"), task.get("weeds"),
-                                   task.get("salinity")))
+            st.activate(st.Context(crop_key, cum, task.get("fertility"), task.get("weeds"), task.get("salinity")))
+        if task.get("transplant"):
+            _TRANSPLANT.append(True)
         try:
             model.run_model(till_termination=True)
         finally:
+            _TRANSPLANT.clear()
             if stressed:
                 st.deactivate()
         res = model.get_simulation_results()

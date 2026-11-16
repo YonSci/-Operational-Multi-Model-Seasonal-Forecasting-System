@@ -55,7 +55,7 @@ from crop_engine.adapters import aquacrop_adapter as aq
 from crop_engine.adapters import dssat_adapter as dsa
 from crop_engine.adapters import wofost_adapter as wf
 from crop_engine.data import soil as soil_mod
-from crop_engine.data import soil_depth
+from crop_engine.data import site_conditions, soil_depth
 from crop_engine.data import weather as W
 from crop_engine.scenarios import planting as pl
 
@@ -99,8 +99,8 @@ def load_varieties(only=None):
 
 
 def config_hash(rules, sites):
-    """Changes when the varieties, rules, sites, season end, AquaCrop version, the adapter or its CO2 series change:
-    results made before are rebuilt."""
+    """Changes when the varieties, rules, sites, season end, AquaCrop version, the adapter or its CO2 series, a soil
+    depth restriction, a site's measured conditions or the heat thresholds change: results made before are rebuilt."""
     h = hashlib.sha1(C.VARIETIES_FILE.read_bytes())
     h.update(json.dumps(sorted(rules)).encode())
     h.update(json.dumps(sorted((s.id, s.lat, s.lon) for s in sites)).encode())
@@ -110,6 +110,13 @@ def config_hash(rules, sites):
     h.update(aq.CO2_FILE.read_bytes())
     h.update(json.dumps(soil_depth.restrictions()).encode())     # only the restrictions in effect (none: unchanged)
     h.update(Path(pl.__file__).read_bytes())
+    cond = site_conditions.in_effect()                           # a site's measured conditions (none: unchanged)
+    if cond:
+        from crop_engine.adapters import aquacrop_stress
+        h.update(json.dumps(cond).encode())
+        h.update(Path(aquacrop_stress.__file__).read_bytes())
+    if aq.HEAT_THRESHOLDS != "file":                             # CROP_HEAT_THRESHOLDS (off: unchanged)
+        h.update(aq.HEAT_THRESHOLDS.encode())
     return h.hexdigest()[:12]
 
 
