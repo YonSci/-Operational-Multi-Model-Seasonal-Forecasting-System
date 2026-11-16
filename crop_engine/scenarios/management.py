@@ -175,6 +175,20 @@ def aquacrop_only(key):
             or (bool(irr) and (irr.get("irrigation_method", 3 if "schedule_das" in irr else 1) != 1)))
 
 
+def dssat_can(key):
+    """True when DSSAT can grow the scenario (dssat_adapter module doc): every irrigation method and a seasonal cap,
+    mulch, ridges, contour ridges and terraces, bunds, plant density, the starting soil water, and a water table on a
+    build that has one; not AquaCrop 7's fertility, weeds or salinity (no such process in DSSAT CSM), the crop-parameter
+    draws, heat at pollination or transplanting."""
+    from crop_engine.adapters import dssat_adapter as dsa
+    s = SCENARIOS[key]
+    if any(k in s for k in ("fertility", "weeds", "salinity", "perturb", "heat", "transplant")):
+        return False
+    if "groundwater" in s and not dsa.supports_water_table():
+        return False
+    return True
+
+
 def wofost_can(key):
     """True when WOFOST can grow the scenario (wofost_adapter module doc): every irrigation method, mulch, ridges,
     bunds, plant density and weeds (approximations), a saline soil (FAO 29's response), the starting soil water; not a

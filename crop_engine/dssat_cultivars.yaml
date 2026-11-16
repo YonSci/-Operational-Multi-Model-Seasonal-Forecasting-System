@@ -7,17 +7,29 @@
 # MAXIMA:
 #   phenology  maturity in the variety's maturity_days at 21 °C with no water stress, as AquaCrop's and WOFOST's:
 #              maize P1 (the juvenile phase) scaled; sorghum P1 and P5, both at DSSAT's minimum, still mature in
-#              109 days, not the class's 100 (DSSAT's sorghum cannot be shorter; PANTH, P3, P4 are fixed); dry bean
-#              its five phases × 1.039
+#              109 days, not the class's 100 (PANTH, P3, P4 are fixed in DSSAT's file): replaced by the 100-day
+#              sorghum below (calibration/sorghum_dssat.py); dry bean its five phases × 1.039
 #   yield      medium maize with no water stress at Kiboko, 2012 dry-season sowings: Duma 43 well watered, 7.76
 #              t/ha (Ngugi et al. 2013), through G2 and G3 × 1.477 (early maize the same factor; checks: 4.96 and
 #              4.81 t/ha against the Local Katumani composite's 3.02 and the IITA 2013 median 4.5, upper bounds);
 #              sorghum matched to AquaCrop's no-water-stress yield at Kiboko, SR 2012 sowings (4.97 t/ha), G2 ×
-#              0.8595; the bean keeps DSSAT's yield level (no trial)
+#              0.8595, refitted to 5.7 with the 100-day phenology (below); the bean keeps DSSAT's yield level (no
+#              trial)
 varieties:
   maize_early:  {cultivar: KY0018, P1: 96.15, G2: 664.7, G3: 15.51}      # Katumani Composite B-II
   maize_medium: {cultivar: KY0010, P1: 298.8, G2: 812.5, G3: 11.08}      # H512, mid-altitude hybrid
-  sorghum:      {cultivar: IB0026, P1: 200.0, P5: 300.0, G2: 5.142}      # CSH-1, short-season tropical hybrid
+  # CSH-1, short-season tropical hybrid, as the class's 100-day crop (crop_engine/calibration/sorghum_dssat.py,
+  # outputs/crop_engine/calibration/dssat/sorghum_100d.json, 16 Nov 2026). PANTH (panicle initiation to anthesis) and
+  # P3 (flag leaf to anthesis, kept at the file's share of PANTH) go OUTSIDE DSSAT's file, where they are 617.5 and
+  # 152.5 for every cultivar (MINIMA = MAXIMA, "not used for calibration"): with them CERES-Sorghum cannot mature in
+  # under 109 days at 21 °C (P1, P5 at their minima, flowering at 79). Fitted at calibration/dssat.py's reference
+  # (21 °C constant, no water stress): PANTH to anthesis in 65 days (Gadam's 50 % flowering at Embu, 65.3 days;
+  # the AquaCrop class flowers at about 59), then P5 to maturity in 100; P1 stays at its minimum, P4 the file's 81.5.
+  # Shorter, the crop yielded 4.51 t/ha without water stress at Kiboko (SR 2012 sowings), so G2 was refitted: 5.7
+  # gives 5.00 against AquaCrop's 4.97 (DSSAT reads G2 to one decimal: the 5.142 before ran as 5.1, 4.95 t/ha). At
+  # Kiboko those sowings now flower in 52-53 days and mature in 82-83 (90 before; AquaCrop's class 84, the
+  # catalogues' 75-90). P5 and G2 within DSSAT's limits.
+  sorghum:      {cultivar: IB0026, P1: 200.0, P5: 362.5, G2: 5.7, PANTH: 433.2, P3: 107.0}
   bean:         {cultivar: IB0014, EM-FL: 24.94, FL-SH: 3.636, FL-SD: 10.39, SD-PM: 20.26, FL-LF: 10.39}   # Canadian Wonder
 
 # The soil with DSSAT's nitrogen balance on (crop_engine/run_nitrogen.py): the factor on the soil's organic nitrogen
@@ -52,8 +64,22 @@ nitrogen:
     n0:  {label: "No fertiliser", rate_kg_ha: 0}
     n25: {label: "25 kg N/ha (low)", rate_kg_ha: 25}
     n50: {label: "50 kg N/ha (moderate)", rate_kg_ha: 50}
+    # DSSAT's other inputs (dssat_adapter module doc), each at the low rate unless stated; assumed levels from the
+    # literature (CROP_ENGINE.md "DSSAT, part 2")
+    fym: {label: "Farmyard manure 2.5 t/ha, no urea", rate_kg_ha: 0, manure_t_ha: 2.5, manure_n_pct: 2.0, manure_p_pct: 0.36, manure_k_pct: 1.5}
+    n25_low_p: {label: "25 kg N/ha on a low-phosphorus soil (Olsen P 4 mg/kg)", rate_kg_ha: 25, soil_p_mg_kg: 4}
+    n25_p_mean: {label: "25 kg N/ha, soil phosphorus at the Machakos mean (Olsen P about 12 mg/kg)", rate_kg_ha: 25, soil_p_mg_kg: 12}
+    n25_plough: {label: "25 kg N/ha, ox plough at sowing (15 cm)", rate_kg_ha: 25, tillage: true}
+    # not used: low potassium and fall armyworm damage (soil_k_cmol_kg, pest) do not work in the installed DSSAT build
   split:
     MaizeGDD:   [[0, 0.4], [30, 0.6]]
     SorghumGDD: [[0, 0.4], [30, 0.6]]
     DryBeanGDD: [[0, 1.0]]
-  sites: {}
+  # a site's farmers' practice, from surveys (until its managers report): field-average kg N/ha on maize
+  sites:
+    kalro_kiboko_makueni_farm: {rate_kg_ha: 13, label: "Farmers' practice: 13 kg N/ha (Eastern Lowlands field average)", source: "Sheahan, Black & Jayne 2012 (MSU IDWP 125), Tegemeo panel 2010: 51 % of maize fields fertilised at 25.5 kg N/ha; an upper bound for Kiboko, drier than the sampled villages (Wote, Makueni: under 6 % of households use fertiliser, CCAFS baseline 2012)"}
+    kapiti_research_station_farm: {rate_kg_ha: 13, label: "Farmers' practice: 13 kg N/ha (Eastern Lowlands field average)", source: "Sheahan, Black & Jayne 2012 (MSU IDWP 125), Tegemeo panel 2010, Machakos and Makueni; an upper bound for the drier Kapiti plains"}
+    el_karama_sahiwals_farm: {rate_kg_ha: 3, label: "Farmers' practice: about 3 kg N/ha (Laikipia field average)", source: "Tegemeo panel 2010, Marginal Rain Shadow: 6 % of maize fields at 22.2 kg N/ha; ASDSP 2014 (Laikipia climate risk profile 2018): 16 % use basal fertiliser"}
+    livemo_ltd_memerush_kajiado: {rate_kg_ha: 0, label: "Farmers' practice: no fertiliser (Kajiado)", source: "Kajiado county climate risk profile 2018 (ASDSP 2014): under 2 % of households use fertiliser"}
+    genco_ltd_maralal_samburu_farm: {rate_kg_ha: 0, label: "Farmers' practice: no fertiliser (Samburu)", source: "Samburu county climate risk profile 2021: 1 % use planting fertiliser, 5.7 % top-dress"}
+    genco_ltd_tana_river_farm: {rate_kg_ha: 0, label: "Farmers' practice: no fertiliser, manure instead (Tana River)", source: "Tana River county climate risk profile 2016: farmers use manure rather than fertiliser (no rate given)"}
