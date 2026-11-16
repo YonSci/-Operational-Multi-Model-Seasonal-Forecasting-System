@@ -519,6 +519,36 @@ Eight additions made with code and public data only. None changes the outlook's 
 - **Not done.** Perennial forage: AquaCrop-OSPy has no perennial crops; DSSAT's forage models are the better route.
   Frost and tile drainage: FAO AquaCrop has neither process (frost is only its cold stress at pollination, which runs).
 
+### Soil water carried between seasons (November 2026, `crop_engine/carryover.py`)
+
+AquaCrop grown without a break at each site from 1 Aug 1993 (started from ERA5-Land's value) to 31 Jul 2026 in the
+observed weather (CHIRPS v2; ERA5-Land temperature, and the FAO-56 reference ET of the site's ERA5-Land radiation,
+humidity and wind for every day, since the platform's ET0 covers 1 Aug – 31 Mar only), in two stages a year: the Short
+Rains from 1 Aug (a crop sown on the first Agri rule 1 onset from 1 Oct to 15 Dec) and the Long Rains from 1 Mar (from
+1 Mar to 30 Apr), each starting from the soil water profile the stage before left. Two plans: early maize both seasons,
+or bare soil all year. The 1 Aug profile feeds the scenario `soil_carryover` (AquaCrop from the profile itself,
+compartment by compartment; WOFOST and DSSAT from its 2 m fraction) and, with `CROP_INITIAL_WATER=carryover`, every
+product's starting soil water. `run_all` adds a year once a year (about two minutes for both plans).
+
+**Checked against SMAP and ERA5-Land** (`--compare`, 0–100 cm, the plant-available fraction on 1 Aug; mean, and the
+correlation with SMAP over the SMAP years 2015–2026):
+
+| Site | ERA5-Land | Carried over, maize | Carried over, bare soil | SMAP |
+|---|---|---|---|---|
+| El Karama | 0.41 (r 0.85) | 0.17 (r 0.56) | 0.81 (r 0.92) | 0.66 |
+| Genco Maralal | 0.60 (r 0.83) | 0.38 (r 0.41) | 0.85 (r 0.66) | 0.62 |
+| Genco Tana River | 0.10 (r 0.52) | 0.51 (r 0.35) | 0.80 (r 0.53) | 0.06 |
+| Kapiti | 0.25 (r 0.82) | 0.24 (r −0.43) | 0.70 (r 0.13) | 0.51 |
+| Livemo Memerush | 0.13 (r 0.63) | 0.25 (r −0.56) | 0.66 (r 0.41) | 0.23 |
+
+(Kiboko: SMAP is below SoilGrids' wilting point every year, so the soils cannot be compared there.) ERA5-Land agrees
+with SMAP better than AquaCrop's own carried-over water at four of the five sites. A bare soil keeps far too much water
+(0.66–0.85): AquaCrop's fallow field loses only surface evaporation through the dry season, where real fields carry
+grass, weeds and trees drawing on the subsoil; with a Long Rains crop the level comes closer but the year-to-year
+pattern does not. `CROP_INITIAL_WATER` stays at ERA5-Land; the scenario stays, as "what if the soil kept what the Long
+Rains crop left". A dry-season cover (perennial grass or weeds transpiring from the subsoil) would be the next step if
+the carried-over water is to replace ERA5-Land.
+
 ### Questions for partners (November 2026)
 
 The water-management amounts above are the engine's assumptions. A questionnaire to the managers of the six sites
