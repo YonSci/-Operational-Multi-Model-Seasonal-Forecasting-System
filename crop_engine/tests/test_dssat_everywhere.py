@@ -137,7 +137,8 @@ def test_the_regional_map_publishes_dssat_beside_aquacrop(tmp_path, monkeypatch)
     dbench = {"years": [1993, 2025], "config_hash": "d1", "cells": {"name": "dssat"}}
     members = {"a": {"maize_early": {"fao-agricultural": []}}}
     meta = {"model_label": "SEAS5", "dssat": {"members": members, "summaries": {}}}
-    out = G.publish(cells, {}, members, bench, meta, var, ["fao-agricultural"], ["X"], {}, {}, tmp_path / "g.json", dbench)
+    out = G.publish(cells, {}, members, bench, meta, var, ["fao-agricultural"], ["X"], {}, {}, tmp_path / "g.json",
+                    {"dssat": dbench})
     assert out["meta"]["models"] == ["aquacrop", "dssat"] and "dssat" not in out["meta"]
     assert out["cells"][0]["from"] == "aquacrop" and out["cells_dssat"][0]["from"] == "dssat"
     assert out["counties_dssat"][0]["from"] == "dssat" and "verification" in out["counties_dssat"][0]
@@ -145,6 +146,12 @@ def test_the_regional_map_publishes_dssat_beside_aquacrop(tmp_path, monkeypatch)
     plain = G.publish(cells, {}, members, bench, {"model_label": "SEAS5"}, var, ["fao-agricultural"], ["X"], {}, {},
                       tmp_path / "h.json")
     assert plain["meta"]["models"] == ["aquacrop"] and "cells_dssat" not in plain
+    # WOFOST beside them, each against its own normal
+    wbench = {"years": [1993, 2025], "config_hash": "w1", "cells": {"name": "wofost"}}
+    both = G.publish(cells, {}, members, bench, dict(meta, wofost={"members": members, "summaries": {}}), var,
+                     ["fao-agricultural"], ["X"], {}, {}, tmp_path / "w.json", {"dssat": dbench, "wofost": wbench})
+    assert both["meta"]["models"] == ["aquacrop", "wofost", "dssat"] and "wofost" not in both["meta"]
+    assert both["cells_wofost"][0]["from"] == "wofost" and both["counties_wofost"][0]["from"] == "wofost"
 
 
 def test_the_bulletin_reports_the_weakest_agreement():

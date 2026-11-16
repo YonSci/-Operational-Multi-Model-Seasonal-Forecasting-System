@@ -131,6 +131,8 @@ def wofost_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(wf.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
+    if wf.RUNOFF != "none" or wf.SEEDLING_DEATH:                         # WOFOST's options (off: unchanged)
+        h.update(f"{wf.RUNOFF}{wf.SEEDLING_DEATH}".encode())
     h.update(json.dumps(soil_depth.restrictions()).encode())
     h.update(carryover.hash_part().encode())
     return h.hexdigest()[:12]
