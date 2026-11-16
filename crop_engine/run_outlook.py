@@ -151,6 +151,8 @@ def dssat_hash(rules, sites):
     h.update(Path(pl.__file__).read_bytes())
     h.update(json.dumps(soil_depth.restrictions()).encode())
     h.update(carryover.hash_part().encode())
+    if dsa.HOME != dsa.DEFAULT_HOME:              # another DSSAT build (CROP_ENGINE_DSSAT_HOME): never the default's
+        h.update(hashlib.sha1(dsa.EXE.read_bytes() if dsa.EXE.exists() else str(dsa.HOME).encode()).digest())
     return h.hexdigest()[:12]
 
 

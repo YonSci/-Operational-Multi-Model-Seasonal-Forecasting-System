@@ -145,6 +145,25 @@ def test_install_checks_the_wheel_hash(tmp_path, monkeypatch):
     assert np.isclose(ds.ESTABLISHED_LAI, 0.0855, atol=1e-3)
 
 
+def test_another_install_is_chosen_by_its_setting(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import sys
+    code = "from crop_engine.adapters import dssat_adapter as d; print(d.HOME); print(d.EXE); print(d.DATA)"
+    env = {k: v for k, v in os.environ.items() if k not in ("CROP_ENGINE_DSSAT_HOME", "CROP_ENGINE_DSSAT_RUNS")}
+    root = str(Path(ds.__file__).resolve().parents[2])
+    run = lambda e: subprocess.run([sys.executable, "-c", code], env=e, cwd=root, capture_output=True,  # noqa: E731
+                                   text=True, check=True).stdout.split()
+    home, exe, data = run(env)
+    assert Path(home) == ds.DEFAULT_HOME and Path(exe).parent == ds.DEFAULT_HOME / "bin"
+    home, exe, data = run(dict(env, CROP_ENGINE_DSSAT_HOME=str(tmp_path)))
+    assert Path(home) == tmp_path and Path(exe).parent == tmp_path / "bin" and Path(data) == tmp_path / "Data"
+    monkeypatch.setenv("CROP_ENGINE_DSSAT_HOME", str(tmp_path))            # the wheel never goes over it
+    monkeypatch.setattr(ds, "HOME", tmp_path)
+    with pytest.raises(RuntimeError, match="CROP_ENGINE_DSSAT_HOME"):
+        ds.install(tmp_path / "none.whl", log=lambda m: None)
+
+
 def test_cultivars_file_names_every_variety():
     from crop_engine import config as C
     import yaml
