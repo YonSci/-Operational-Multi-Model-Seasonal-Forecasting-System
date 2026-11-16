@@ -49,6 +49,8 @@ Management (the scenarios, crop_engine.scenarios.management), each a task key le
                of each month given, linearly interpolated between them (AquaCrop-OSPy's "Variable" method)
   heat         {"thresholds": "literature"}: pollination heat stress from the crops' published thresholds
                (HEAT_POLLINATION) in place of the crop files' 40 °C
+  initial_profile  {"z_m": [...], "th": [...]}: the soil water on 1 Aug compartment by compartment (m3/m3 at those
+               depths), in place of initial_frac's one fraction for the whole profile (crop_engine/carryover.py)
   transplant   {"nursery_days": n, "seedling_cm2": a}: seedlings raised n days in a nursery and set out on the
                sowing date (FAO AquaCrop's transplanted crops): no germination to wait for, the canopy starts from
                the seedlings' cover (plant population × a), and every stage comes n days' growing degree days sooner
@@ -427,8 +429,12 @@ def _sow(task, m, plant, dates, g):
             sim_start_time=f"{dates[0]:%Y/%m/%d}", sim_end_time=f"{dates[-1]:%Y/%m/%d}", weather_df=wdf,
             soil=make_soil(task["layers"]),
             crop=Crop(crop_key, planting_date=f"{plant:%m/%d}", **kw),
-            initial_water_content=InitialWaterContent(wc_type="Pct", method="Depth", depth_layer=[0.05, 2.0],
-                                                      value=[100 * task["initial_frac"]] * 2),
+            initial_water_content=(InitialWaterContent(wc_type="Num", method="Depth",
+                                                       depth_layer=list(task["initial_profile"]["z_m"]),
+                                                       value=list(task["initial_profile"]["th"]))
+                                   if task.get("initial_profile") else
+                                   InitialWaterContent(wc_type="Pct", method="Depth", depth_layer=[0.05, 2.0],
+                                                       value=[100 * task["initial_frac"]] * 2)),
             irrigation_management=irrigation(task.get("irrigation"), plant),
             field_management=FieldMngt(**task["field"]) if task.get("field") else None,
             groundwater=groundwater(task.get("groundwater"), dates[0], dates[-1]), co2_concentration=co2())

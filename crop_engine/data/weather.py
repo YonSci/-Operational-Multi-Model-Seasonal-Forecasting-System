@@ -233,11 +233,16 @@ class Inputs:
 
     def initial_water(self, year):
         """Plant-available water on 1 Aug as a fraction of the FAO bucket's TAW (ERA5-Land root-zone soil moisture,
-        as the FAO water balance starts), per site."""
+        as the FAO water balance starts), per site; with CROP_INITIAL_WATER=carryover, AquaCrop's own soil water
+        carried over from the seasons before where a site has it (crop_engine/carryover.py)."""
         paw = fw.initial_storage(self.cfg, year, self.t0, self.lat, self.lon, self.taw)[self.ii, self.jj]
         taw = self.taw[self.ii, self.jj]
         with np.errstate(invalid="ignore", divide="ignore"):
-            return np.clip(np.where(taw > 0, paw / taw, 0.0), 0, 1)
+            frac = np.clip(np.where(taw > 0, paw / taw, 0.0), 0, 1)
+        from crop_engine import carryover                    # CROP_INITIAL_WATER=carryover: AquaCrop's own (off)
+        if carryover.INITIAL_WATER == "carryover":
+            frac = carryover.fractions([s.id for s in self.sites], year, frac)
+        return frac
 
     def soil_water_now(self, until):
         """[(PAW/TAW, date) or None per site]: the FAO water balance's plant-available water on its last observed day
