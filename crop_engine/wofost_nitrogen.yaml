@@ -1,0 +1,11 @@
+note: WOFOST 8.1's soil nitrogen (wofost_adapter module doc), fitted by calibration/wofost_nitrogen.py
+  to the Kenyan maize trials' unfertilised / 60 kg N ratio 0.62 over the observed
+  Short Rains 1993-2016 at kalro_kiboko, kapiti; a calibration parameter, not a soil
+  measurement
+fitted: '2026-11-16'
+soil:
+  NSOILBASE: 6.1
+  NSOILBASE_FR: 0.025
+  NAVAILI: 5.0
+  BG_N_SUPPLY: 0.02
+recovery: 0.6

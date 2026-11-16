@@ -463,7 +463,7 @@ Eight additions made with code and public data only. None changes the outlook's 
   published thresholds as an option). Each member counts its flowering days above about 35 °C (maize), 36 °C (sorghum) and 32 °C
   (bean), and its nights below the crop file's cold threshold; the summaries carry the share of members with any.
   Counted, not modelled: changing the model's thresholds needs evidence of heat damage at these sites.
-- **Temperature spread** (`data/seas5.py`, off by default). With `CROP_TEMPERATURE_SPREAD=1`, SEAS5 temperature is
+- **Temperature spread** (`data/seas5.py`, off by default; tested in *WOFOST, part 2*: no gain, left off). With `CROP_TEMPERATURE_SPREAD=1`, SEAS5 temperature is
   corrected for its day-to-day spread as well as its mean (mean-and-variance adjustment per lead day and site,
   ratio clipped to 0.5-2). It stays off until the hindcast shows it helps:
   `CROP_TEMPERATURE_SPREAD=1 python -m crop_engine.hindcast --temperature seas5 --tag _spread` against the run
@@ -1425,6 +1425,83 @@ The multi-layer balance makes WOFOST's maize drier, failing in 70–85 % of the 
 (AquaCrop 36–55 %), and does not change Tana River's result; its sorghum lands closer to AquaCrop's level, and its
 rank agreement with AquaCrop is about the same (0.22–0.84 against 0.28–0.87). **Not adopted**: the outlook keeps
 WOFOST 7.2's one-zone balance, which agrees better with AquaCrop on maize; the option stays for tests.
+
+### WOFOST, part 2 (November 2026)
+
+- **Stones** (`wofost_adapter.fine`): each layer's saturation, field capacity and wilting point are scaled by the
+  fine-earth share (1 − coarse fragments), as AquaCrop's and DSSAT's soils already were. WOFOST's normal and runs are
+  rebuilt once. Over the observed seasons its median failure rate moves from 0.59 to 0.61 and its rank agreement with
+  AquaCrop from 0.67 to 0.68 (`compare_engines --tag _base`).
+- **Scenarios** (`management.wofost_can`): AquaCrop's irrigation methods 2–5 replayed day by day in PCSE; method 1
+  now waits for canopy growth (`start_stage` 2), as AquaCrop's supplementary irrigation; bunds as surface storage;
+  plant density through the initial dry weight (TDWI, from which WOFOST 7.2 derives the first leaf area: an
+  approximation); weeds as their share of the light and a saline soil as FAO 29's yield response (approximations, not
+  WOFOST processes, labelled in the adapter). Not possible in PCSE: a water table (neither water balance has
+  groundwater: the multi-layer one raises "not yet implemented"), AquaCrop 7's fertility stress, saline water,
+  pollination heat and transplanting.
+- **Two options, tested and left off.** Curve-number runoff (`CROP_WOFOST_RUNOFF=cn`, SCS runoff of the topsoil's
+  class, so the contour-ridge and terrace scenarios could run in WOFOST) and seedling death
+  (`CROP_WOFOST_SEEDLING_DEATH=1`: an emerged crop below 5 % cover with its root zone at the wilting point for 10 days
+  fails, as AquaCrop's seedlings do). Over the observed seasons 1993–2025 (48 site, crop and rule cells, medians):
+
+  | WOFOST | Failure rate | Agrees with AquaCrop on failure | Rank correlation with AquaCrop | Median yield |
+  |---|---|---|---|---|
+  | With stones (adopted) | 0.61 | 0.83 | 0.68 | 0.26 t/ha |
+  | + seedling death | 0.61 | 0.83 | 0.67 | 0.21 t/ha |
+  | + curve-number runoff | 0.61 | 0.83 | 0.68 | 0.26 t/ha |
+
+  Neither brings WOFOST closer to AquaCrop (AquaCrop's median failure rate 0.59), and no observed failure record can
+  say which is right: both stay off, and the difference in seedling death stays one of the reasons to show both models.
+- **The regional map** (`grid.py`): WOFOST grows the cells beside AquaCrop and DSSAT, against its own normal
+  (`benchmark_wofost.json`); the panel's model toggle lists every model the map has.
+- **Nitrogen, WOFOST 8.1** (`run_nitrogen_wofost.py`, `calibration/wofost_nitrogen.py`, `wofost_nitrogen.yaml`).
+  PCSE's WOFOST 8.1 with its simple soil nitrogen (Wofost81_NWLP_CWB_CNB), at DSSAT's fertiliser levels and split,
+  beside WOFOST 8.1 with no nitrogen limit, each against its own normal (`climatology_wofost_n.json`). Maize only:
+  PCSE's sorghum and millet sets have no 8.1 nitrogen parameters. The soil's base supply is fitted so unfertilised
+  early maize yields 0.62 of 60 kg N/ha over the observed Short Rains 1993–2016 at Kiboko and Kapiti (the trials'
+  ratio, as DSSAT's): **NSOILBASE 6.1 kg N/ha** (ratio 0.54 at 2, 0.60 at 5, 0.68 at 10, 0.91 at 100). A calibration
+  parameter, not a soil measurement: PCSE's tropical maize set lets its nitrogen concentrations fall far below measured
+  maize (6 t/ha of grain from 20 kg of nitrogen uptake in a synthetic season). First result (1 Oct 2026 run, early
+  maize, FAO onset, yield if sown): Kiboko 1.8, 2.5 and 2.9 t/ha at 0, 25 and 50 kg N/ha against 4.0 with no limit;
+  Kapiti 2.6, 3.1, 3.5 against 6.9.
+- **The bean against the Kenyan bean trials, AquaCrop** (`calibration.bean --engine aquacrop`): no East African
+  AquaCrop calibration of the common bean was found, so the lower-bound test DSSAT's bean passed is the one check.
+  AquaCrop's bean is at or above the best plots (90th percentile) in **13 of 14** bush-bean trial-seasons (rule: 75 %):
+  **kept**. Its median 1.92 t/ha (2.27 without water stress) is about half DSSAT's and near the highest plot measured
+  (2.2 t/ha); it ranks the seasons no better than DSSAT (Spearman −0.16) and matures 23 days earlier than the western
+  varieties, as expected of the eastern 75-day class. Its yield moves more with the starting soil water than DSSAT's
+  (up to 1.9 t/ha between a quarter and three quarters of the available water).
+- **Sorghum's level and the published calibrations** (literature search, November 2026). No fully irrigated Gadam
+  trial was found. The best water-supplied sorghum trial is Teshale at Kobo, Ethiopia (1,470 m, 5.40 t/ha with
+  supplementary irrigation, 2011; Wondatir and Getnet 2021): AquaCrop's and WOFOST's shared no-water-stress level at
+  Kiboko (4.97 t/ha) is plausible beside it, so it is kept. The one East African AquaCrop sorghum calibration (Habte et
+  al. 2021, South Omo) fitted a water productivity of about 9.5 g/m2, a quarter of the default, which absorbs
+  fertility and density limits: not adopted. Maize calibrations near full supply put water productivity at 28–32 g/m2
+  (Eshete et al. 2022; Brunvoll 2025, Embu) against AquaCrop's 33.7: the yield level here is set through the harvest
+  index (kiboko_v3), so canopy or water productivity alone cannot be refitted without canopy measurements.
+- **SEAS5 temperature spread: off, tested.** The 1 Oct SEAS5 hindcast 1993–2016 with and without the variance
+  correction (`CROP_TEMPERATURE_SPREAD=1`), the same code otherwise: median rank correlation 0.504 / 0.500, failure
+  Brier skill 0.301 / 0.301, failure ROC area 0.808 / 0.812 (48 cells; 18 better and 9 worse on rank correlation): no
+  difference beyond noise, so it stays off.
+
+### Other crops: WOFOST only (November 2026, `run_other_crops.py`, `wofost_crops.yaml`)
+
+Cowpea (M66), green gram (N26), short-duration pigeonpea (ICPL 87091), pearl millet (KAT/PM-1) and groundnut (Red
+Valencia): the dryland crops AquaCrop-OSPy has no crop file for, grown by WOFOST from PCSE's Van Heemst 1988 sets with
+the varieties' days to flowering and maturity at the temperature they were measured at (Kiboko, Kitui; the sources in
+the YAML). Nothing else is calibrated: no WOFOST calibration of these crops exists for East or West Africa. Each crop is
+read against its own normal (WOFOST in the observed weather of 1993–2025, the same sowing rules). Not included: cassava
+(9–24 months), the dry bean (PCSE has no Phaseolus set; another legume's file under the bean's name would be that
+legume), finger millet (no WOFOST set). Weekly from `run_all`; the Crop outlook tab's *Other crops* panel.
+
+First run (1 Oct 2026, FAO onset, yield if sown, median t/ha, chance of failure): Kiboko cowpea 1.9 (8 %), green gram
+1.0 (24 %), pigeonpea 1.3 (8 %), groundnut 1.1 (24 %); Kapiti 1.9–3.3 for all five (4–8 %); Genco Tana River green
+gram and groundnut fail in 68–72 % of members.
+
+**Open issue (millet).** In this forecast WOFOST's pearl millet hardly grows at El Karama (23 of 25 members fail to
+establish: leaf area never above 0.01) and at Genco Tana River (leaf area 0.09), where cowpea sown on the same dates
+grows; in the observed seasons the same crop at the same sites grows well (El Karama median 3.3 t/ha, 6 % failures).
+Something in the forecast weather or tasks holds millet back; its figures should not be read until this is resolved.
 
 ## Third engine: DSSAT (`crop_engine/adapters/dssat_adapter.py`)
 
