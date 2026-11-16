@@ -6,7 +6,8 @@ soil on 1 Aug is what the Long Rains, the crop and the dry season before it left
 The outlook starts every season on 1 Aug from ERA5-Land's root-zone soil moisture through the FAO water balance's
 bucket (weather.Inputs.initial_water): a separate model's estimate, one fraction of the available water for the whole
 profile. Here AquaCrop-OSPy runs the sites' years in observed weather (CHIRPS v2, ERA5-Land) without a break, from
-1 Aug 1993 (started from ERA5-Land's value) to 31 Jul of the latest year, in two stages a year:
+1 Aug 1993 (started from ERA5-Land's value) to 31 Jul of the latest year, with the FAO-56 reference ET of the
+sites' own ERA5-Land weather for every day (reference_et0), in two stages a year:
   Short Rains  1 Aug – end of Feb: a crop sown on the first day from 1 Oct to 15 Dec that meets Agri rule
                C.RESOW_RULE's onset criteria (or fallow), harvested when mature, the field bare after
   Long Rains   1 Mar – 31 Jul: a crop sown on the first such day from 1 Mar to 30 Apr (or fallow), then the dry season
@@ -186,6 +187,25 @@ def chain(job):
     return out
 
 
+def reference_et0(inp, dates, tmax, tmin):
+    """FAO-56 reference evapotranspiration (mm/day, site × day) for every day, Long Rains and dry season included:
+    the platform's ERA5-Land ET0 covers 1 Aug – 31 Mar only, so it is computed here (PCSE's reference_ET) from the
+    sites' ERA5-Land temperature, solar radiation, humidity and wind (their day-of-year climatology where missing)."""
+    from pcse.util import reference_ET
+    r = inp.radiation(dates)
+    if r is None:
+        raise RuntimeError("the carried-over soil water needs the sites' ERA5-Land radiation, humidity and wind")
+    met, _, elev = r
+    out = np.empty(tmax.shape, np.float32)
+    for k, s in enumerate(inp.sites):
+        for i, d in enumerate(dates):
+            tn = float(min(tmin[k, i], tmax[k, i]))
+            out[k, i] = reference_ET(d.date(), float(s.lat), float(elev[k]), tn, float(tmax[k, i]),
+                                     float(met["rad_mj_m2"][k, i]) * 1e6, float(met["vap_hpa"][k, i]),
+                                     float(met["wind2_ms"][k, i]), 0.25, 0.5)[2]
+    return np.maximum(out, 0.1)
+
+
 # ── build and compare ────────────────────────────────────────────────────────────────────────────────────────────
 def build(plans, workers=2, last_year=None):
     from crop_engine import run_outlook as ro
@@ -199,7 +219,10 @@ def build(plans, workers=2, last_year=None):
     dates = pd.date_range(f"{FIRST_YEAR}-08-01", f"{last_year}-07-31")
     rain = inp.observed_rain(dates)
     met = [inp.met(y, pd.date_range(f"{y}-08-01", f"{y + 1}-07-31")) for y in range(FIRST_YEAR, last_year)]
-    tmax, tmin, et0 = (np.concatenate([m[i] for m in met], axis=1) for i in (0, 1, 2))
+    tmax, tmin = (np.concatenate([m[i] for m in met], axis=1) for i in (0, 1))
+    et0 = reference_et0(inp, dates, tmax, tmin)
+    if not (rain.shape[1] == tmax.shape[1] == et0.shape[1] == len(dates)):
+        raise RuntimeError(f"weather of {tmax.shape[1]} days for {len(dates)} dates")
     frac0 = inp.initial_water(FIRST_YEAR)
     for plan in plans:
         h = config_hash(plan)
