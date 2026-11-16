@@ -1581,10 +1581,9 @@ file (its MINIMA and MAXIMA lines). A target out of reach there is reported, not
 
 - **Phenology**: the maturity_days at 21 °C with no water stress, as the other engines'. Maize: only the juvenile
   phase P1 is fitted. DSSAT's early and late Kenyan cultivars differ mostly there, and scaling P5 as well would put
-  it below DSSAT's minimum (580 °C d). Sorghum cannot be a 100-day crop in DSSAT: three of its phases (PANTH, P3,
-  P4) are fixed in DSSAT's file, and with P1 and P5 at their minimum it still takes 109 days at 21 °C, 9 days
-  longer than the class's 100 (about 22 days more to harvest than AquaCrop's at Kiboko, part of that AquaCrop's
-  dead crops ending early).
+  it below DSSAT's minimum (580 °C d). Sorghum: within DSSAT's file (PANTH, P3, P4 fixed) it took 109 days at
+  21 °C; since *DSSAT, part 2* it is a 100-day crop, its PANTH and P3 shortened beyond the file's values
+  (`calibration/sorghum_dssat.py`).
 - **Maize yield**: no water stress at KARI Kiboko, sown every 14 days from 1 Jun to 31 Jul 2012, against Duma 43
   well watered there (7.76 t/ha, Ngugi et al. 2013), WOFOST's calibration trial. G2 (kernels per plant) alone
   reaches only 6.9 t/ha at its maximum (990), so G2 and G3 (the kernel filling rate) take one factor together.
@@ -1841,6 +1840,24 @@ by running each input on a synthetic season (`tests/test_dssat_part2.py` for the
   included); observed pest damage (PLAD in the T-file, DISES Y: the file is never read, the yield unchanged). The
   files are written, so a newer DSSAT build (from source or a newer wheel) would run them.
 - **Not in DSSAT CSM at all:** salinity and weed competition, for these crops.
+- **Sorghum as a 100-day crop** (`calibration/sorghum_dssat.py`, adopted in `dssat_cultivars.yaml`). In DSSAT 4.8
+  sorghum's PANTH, P3 and P4 are cultivar columns the file fixes (617.5, 152.5, 81.5 °C d for every cultivar, flagged
+  not calibrated), so within the file's ranges CSH-1 took 109 days at 21 °C. PANTH is shortened (P3 kept at the
+  file's share of it) until anthesis is 65 days (Gadam at Embu, 65.3), then P5 fitted to maturity at 100 days: P1 200,
+  P5 362.5, PANTH 433.2, P3 107.0 (P4 81.5). At Kiboko's Short Rains 2012 sowings the crop flowers at 52–53 and
+  matures at 82–83 days (before: 65 / 90), as AquaCrop's class (84) and the catalogues (75–90). The yield level is kept
+  matched to AquaCrop's no-water-stress 4.97 t/ha by refitting G2 to 5.7 (5.00 t/ha; the old setting gave 4.51 with
+  the new phenology). DSSAT reads sorghum's G2 to one decimal, so the earlier 5.142 always ran as 5.1. DSSAT's sorghum
+  outlook, normal and hindcast are rebuilt once.
+- **A GLUE check of early maize** (`calibration/dssat_glue.py`). DSSAT's GLUE ships as R scripts, not installed; the
+  same idea in Python: 1,500 seeded Latin-hypercube draws of P1, P5, G2 and G3 within the cultivar file's limits,
+  each grown in DSSAT's calibration experiments, weighted by a Gaussian likelihood on maturity at 21 °C (σ 3 days) and
+  the no-water-stress yield at Kiboko (σ 10 %): effective sample size 50, 69 behavioural sets. Posterior 5–95 %: P1
+  13–145 (adopted 96), P5 593–865 (660), G2 438–978 (665), G3 8.4–16.4 (15.5); every adopted value inside. P1 and P5
+  trade off (r −0.92: maturity fixes their sum), G2 and G3 too (−0.54). Early maize's yield target is the level the
+  medium class's factor gives (4.96 t/ha), so the check is partly circular; scored against the Local Katumani
+  composite's observed 3.02 t/ha instead, the adopted G3 sits at the top of the posterior (quantile 0.99). The adopted
+  values are kept: the check measures how tightly the targets pin them.
 - **Sequence mode (multi-season), not done.** DSSAT's sequence runs (mode Q) carry soil water, nitrogen and residue
   from crop to crop, but the release notes of DSSAT 4.8.6 (July 2026) correct "an initialization issue affecting
   Sequence simulations", which the installed build predates. The way to do it on this build is the carry-over's
@@ -1871,8 +1888,8 @@ by running each input on a synthetic season (`tests/test_dssat_part2.py` for the
 
 **Checked, not changed.** The bean: DSSAT's CROPGRO Canadian Wonder yields 3.84 t/ha with no water stress at
 Kiboko, inside the range of the Kenyan bean trials, so its level is kept (no trial near the sites to fit it to).
-Sorghum: a 100-day class cannot be reached inside DSSAT's coefficient ranges (109 days, *DSSAT's calibration*):
-a limit of DSSAT's sorghum file, documented, not worked around. **Not modelled**: phosphorus and potassium (DSSAT
+Sorghum: a 100-day class could not be reached inside DSSAT's coefficient ranges (109 days, *DSSAT's calibration*);
+since *DSSAT, part 2* PANTH and P3 go beyond the file's fixed values and it is a 100-day crop. **Not modelled**: phosphorus and potassium (DSSAT
 4.8's phosphorus module exists for maize but needs the soil's P pools, which SoilGrids does not give; iSDAsoil's
 extractable phosphorus at 30 m is a candidate source), and pests and diseases (DSSAT's pest module needs observed
 damage per date). Yields remain water- (and, at the levels, nitrogen-) limited.

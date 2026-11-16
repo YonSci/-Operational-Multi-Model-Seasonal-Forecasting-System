@@ -7,17 +7,29 @@
 # MAXIMA:
 #   phenology  maturity in the variety's maturity_days at 21 °C with no water stress, as AquaCrop's and WOFOST's:
 #              maize P1 (the juvenile phase) scaled; sorghum P1 and P5, both at DSSAT's minimum, still mature in
-#              109 days, not the class's 100 (DSSAT's sorghum cannot be shorter; PANTH, P3, P4 are fixed); dry bean
-#              its five phases × 1.039
+#              109 days, not the class's 100 (PANTH, P3, P4 are fixed in DSSAT's file): replaced by the 100-day
+#              sorghum below (calibration/sorghum_dssat.py); dry bean its five phases × 1.039
 #   yield      medium maize with no water stress at Kiboko, 2012 dry-season sowings: Duma 43 well watered, 7.76
 #              t/ha (Ngugi et al. 2013), through G2 and G3 × 1.477 (early maize the same factor; checks: 4.96 and
 #              4.81 t/ha against the Local Katumani composite's 3.02 and the IITA 2013 median 4.5, upper bounds);
 #              sorghum matched to AquaCrop's no-water-stress yield at Kiboko, SR 2012 sowings (4.97 t/ha), G2 ×
-#              0.8595; the bean keeps DSSAT's yield level (no trial)
+#              0.8595, refitted to 5.7 with the 100-day phenology (below); the bean keeps DSSAT's yield level (no
+#              trial)
 varieties:
   maize_early:  {cultivar: KY0018, P1: 96.15, G2: 664.7, G3: 15.51}      # Katumani Composite B-II
   maize_medium: {cultivar: KY0010, P1: 298.8, G2: 812.5, G3: 11.08}      # H512, mid-altitude hybrid
-  sorghum:      {cultivar: IB0026, P1: 200.0, P5: 300.0, G2: 5.142}      # CSH-1, short-season tropical hybrid
+  # CSH-1, short-season tropical hybrid, as the class's 100-day crop (crop_engine/calibration/sorghum_dssat.py,
+  # outputs/crop_engine/calibration/dssat/sorghum_100d.json, 16 Nov 2026). PANTH (panicle initiation to anthesis) and
+  # P3 (flag leaf to anthesis, kept at the file's share of PANTH) go OUTSIDE DSSAT's file, where they are 617.5 and
+  # 152.5 for every cultivar (MINIMA = MAXIMA, "not used for calibration"): with them CERES-Sorghum cannot mature in
+  # under 109 days at 21 °C (P1, P5 at their minima, flowering at 79). Fitted at calibration/dssat.py's reference
+  # (21 °C constant, no water stress): PANTH to anthesis in 65 days (Gadam's 50 % flowering at Embu, 65.3 days;
+  # the AquaCrop class flowers at about 59), then P5 to maturity in 100; P1 stays at its minimum, P4 the file's 81.5.
+  # Shorter, the crop yielded 4.51 t/ha without water stress at Kiboko (SR 2012 sowings), so G2 was refitted: 5.7
+  # gives 5.00 against AquaCrop's 4.97 (DSSAT reads G2 to one decimal: the 5.142 before ran as 5.1, 4.95 t/ha). At
+  # Kiboko those sowings now flower in 52-53 days and mature in 82-83 (90 before; AquaCrop's class 84, the
+  # catalogues' 75-90). P5 and G2 within DSSAT's limits.
+  sorghum:      {cultivar: IB0026, P1: 200.0, P5: 362.5, G2: 5.7, PANTH: 433.2, P3: 107.0}
   bean:         {cultivar: IB0014, EM-FL: 24.94, FL-SH: 3.636, FL-SD: 10.39, SD-PM: 20.26, FL-LF: 10.39}   # Canadian Wonder
 
 # The soil with DSSAT's nitrogen balance on (crop_engine/run_nitrogen.py): the factor on the soil's organic nitrogen
