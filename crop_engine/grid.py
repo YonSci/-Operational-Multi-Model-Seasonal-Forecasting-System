@@ -8,9 +8,10 @@ onset as the sowing date, the SoilGrids profile of the cell, the ERA5-Land root-
 temperature averaged over the cell (data/grid_temperature.py; the sites take theirs at the point), then SEAS5
 member k, bias-corrected to it. Its normal is the same crop grown in the observed weather of 1993–2025.
 
-DSSAT (where the variety has a DSSAT cultivar, unless --no-dssat) grows the same cells and members beside AquaCrop,
-with the cells' ERA5-Land solar radiation, humidity and wind (era5land.site_met at the cell centres, cached per
-cell), against its own normal (benchmark_dssat.json); published as cells_dssat and counties_dssat.
+WOFOST and DSSAT (where the variety has a WOFOST calibration or a DSSAT cultivar, unless --no-wofost / --no-dssat)
+grow the same cells and members beside AquaCrop, with the cells' ERA5-Land solar radiation, humidity and wind
+(era5land.site_met at the cell centres, cached per cell), each against its own normal (benchmark_wofost.json,
+benchmark_dssat.json); published as cells_wofost / counties_wofost and cells_dssat / counties_dssat.
 
 Cells: MapSPAM 2020 rainfed maize harvested area (5 arc-min pixels) summed to the 0.25° cells, each pixel given to its
 HarvestStat county; a cell is kept when it holds at least MIN_HA in the counties. A county's yield is the mean of its
@@ -68,9 +69,9 @@ MIN_COUNTY_YEARS = 8
 CAVEATS = [
     "Pilot: the eastern Kenya Short Rains maize counties, early-maturing maize sown at the FAO agricultural onset "
     "of each cell's forecast.",
-    "Each 0.25° cell (about 28 km) is one field, grown by AquaCrop and by DSSAT, with the cell's average soil "
-    "(SoilGrids), rain (CHIRPS and the bias-corrected forecast) and temperature (ERA5-Land; DSSAT also its radiation, "
-    "humidity and wind): not any farmer's field.",
+    "Each 0.25° cell (about 28 km) is one field, grown by AquaCrop, WOFOST and DSSAT, with the cell's average soil "
+    "(SoilGrids), rain (CHIRPS and the bias-corrected forecast) and temperature (ERA5-Land; WOFOST and DSSAT also its "
+    "radiation, humidity and wind): not any farmer's field.",
     "Yields are water-limited, without nutrient stress, pests or management losses: read the percent of normal and "
     "the chances, not the tonnes per hectare.",
     "A county is the mean of its cells, weighted by their rainfed maize area (MapSPAM 2020).",
@@ -338,16 +339,23 @@ def benchmark(inp, soils, varieties, rules, workers, force=False):
     return b
 
 
-def dssat_benchmark(inp, soils, varieties, rules, workers, force=False):
-    """DSSAT's observed-weather benchmark of the cells (the same seasons and sowings as benchmark()), or None without
-    DSSAT or the cells' radiation, humidity and wind."""
+# The models beside AquaCrop on the map: (varieties they grow, their configuration hash, their label)
+ENGINES = {"wofost": (lambda v: ro.wofost_varieties(v), lambda r, s: ro.wofost_hash(r, s), lambda: ro.SECOND_ENGINE),
+           "dssat": (lambda v: ro.dssat_varieties(v), lambda r, s: ro.dssat_hash(r, s), lambda: ro.THIRD_ENGINE)}
+NAMES = {"wofost": "WOFOST", "dssat": "DSSAT"}
+
+
+def engine_benchmark(inp, soils, varieties, rules, workers, engine, force=False):
+    """An engine's observed-weather benchmark of the cells (the same seasons and sowings as benchmark()), or None
+    without the engine's varieties or the cells' radiation, humidity and wind (benchmark_<engine>.json)."""
     from crop_engine import compare_engines as ce
-    use = {vk: varieties[vk] for vk in ro.dssat_varieties(varieties)}
+    pick, eng_hash, label = ENGINES[engine]
+    use = {vk: varieties[vk] for vk in pick(varieties)}
     if not use or inp.met2 is None:
         return None
     years = list(range(C.HIST_YEARS[0], C.HIST_YEARS[1] + 1))
-    h = hashlib.sha1((grid_hash(rules, use, inp.sites, inp.year) + ro.dssat_hash(rules, inp.sites)).encode()).hexdigest()[:12]
-    path = GRID_OUT / "benchmark_dssat.json"
+    h = hashlib.sha1((grid_hash(rules, use, inp.sites, inp.year) + eng_hash(rules, inp.sites)).encode()).hexdigest()[:12]
+    path = GRID_OUT / f"benchmark_{engine}.json"
     if path.exists() and not force:
         b = json.loads(path.read_text(encoding="utf-8"))
         if b.get("config_hash") == h:
@@ -356,27 +364,32 @@ def dssat_benchmark(inp, soils, varieties, rules, workers, force=False):
     tasks, keys = ce.tasks_for(inp, years, rep, use, rules, soils)
     tasks = [dict(t, potential=False) for t in tasks]
     t0 = time.time()
-    cells = ro.bench_stats(ro.run_tasks(tasks, workers, engine="dssat"), keys, use, years)
+    cells = ro.bench_stats(ro.run_tasks(tasks, workers, engine=engine), keys, use, years)
     for vs in cells.values():
         for rs in vs.values():
             for r in rs.values():
                 r.pop("canopy", None)
-    b = {"config_hash": h, "years": years, "cal_years": list(C.CAL_YEARS), "created": _now(), "engine": ro.THIRD_ENGINE,
+    b = {"config_hash": h, "years": years, "cal_years": list(C.CAL_YEARS), "created": _now(), "engine": label(),
          "cells": cells}
     GRID_OUT.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(b), encoding="utf-8")
-    log(f"DSSAT benchmark: {len(inp.sites)} cells in {time.time() - t0:.0f} s → {path}")
+    log(f"{NAMES[engine]} benchmark: {len(inp.sites)} cells in {time.time() - t0:.0f} s → {path}")
     return b
+
+
+def dssat_benchmark(inp, soils, varieties, rules, workers, force=False):
+    return engine_benchmark(inp, soils, varieties, rules, workers, "dssat", force)
 
 
 def _now():
     return dt.datetime.now().astimezone().isoformat(timespec="minutes")
 
 
-def seasonal_run(inp, soils, varieties, rules, bench, workers, dbench=None):
+def seasonal_run(inp, soils, varieties, rules, bench, workers, ebench=None):
     """The seasonal forecast (SEAS5 1 Oct + the latest observations) at the cells → {cell: {variety: {rule: members}}},
-    the summaries per cell and the run's description; with DSSAT's benchmark (dbench), DSSAT grows the same members
-    too (meta "dssat": its members and summaries)."""
+    the summaries per cell and the run's description; with an engine's benchmark (ebench: {engine: benchmark}),
+    that engine grows the same members too (meta[engine]: its members and summaries)."""
+    ebench = {k: v for k, v in (ebench or {}).items() if v is not None}
     import forecast_runs as fr  # noqa: E402  (scripts/, on sys.path via config)
     b = inp.b
     P = b.seas
@@ -408,26 +421,32 @@ def seasonal_run(inp, soils, varieties, rules, bench, workers, dbench=None):
     t0 = time.time()
     res = ro.run_tasks(tasks, workers)
     log(f"{rid}: {len(tasks) * P.shape[0]} member seasons at {len(inp.sites)} cells in {time.time() - t0:.0f} s")
-    dssat = None
-    if dbench is not None and "rad_mj_m2" in ds:
+    extra = {}
+    for eng, eb in ebench.items():
+        if "rad_mj_m2" not in ds:
+            break
         ids = [x.id for x in inp.sites]
-        dt_, dk = [], []
+        use = set(ENGINES[eng][0](varieties))
+        et, ek = [], []
         for t, key in zip(tasks, keys):
+            if key[1] not in use:
+                continue
             k = ids.index(key[0])
             s = inp.sites[k]
-            dt_.append(dict(t, rad=ds.rad_mj_m2.values[:, k], vap=ds.vap_hpa.values[:, k], wind2=ds.wind2_ms.values[:, k],
-                            lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k]), potential=False))
-            dk.append(key)
+            et.append(dict(t, rad=ds.rad_mj_m2.values[:, k], vap=ds.vap_hpa.values[:, k], wind2=ds.wind2_ms.values[:, k],
+                           lat=s.lat, lon=s.lon, elev=float(ds.elev_m.values[k]), potential=False))
+            ek.append(key)
         t1 = time.time()
-        dres = ro.run_tasks(dt_, workers, engine="dssat")
-        dssat = {"members": {}, "summaries": {}}
-        for (cid, vk, rk), outcomes in zip(dk, dres):
+        eres = ro.run_tasks(et, workers, engine=eng)
+        out = {"members": {}, "summaries": {}}
+        for (cid, vk, rk), outcomes in zip(ek, eres):
             for m in outcomes:
                 m.pop("_canopy", None)
-            dssat["members"].setdefault(cid, {}).setdefault(vk, {})[rk] = outcomes
-            dssat["summaries"].setdefault(cid, {}).setdefault(vk, {})[rk] = ro.summarize(
-                outcomes, varieties[vk], dbench["cells"][cid][vk][rk])
-        log(f"{rid}: DSSAT {len(dt_) * P.shape[0]} member seasons in {time.time() - t1:.0f} s")
+            out["members"].setdefault(cid, {}).setdefault(vk, {})[rk] = outcomes
+            out["summaries"].setdefault(cid, {}).setdefault(vk, {})[rk] = ro.summarize(
+                outcomes, varieties[vk], eb["cells"][cid][vk][rk])
+        extra[eng] = out
+        log(f"{rid}: {NAMES[eng]} {len(et) * P.shape[0]} member seasons in {time.time() - t1:.0f} s")
     members, summ = {}, {}
     for (cid, vk, rk), outcomes in zip(keys, res):
         for m in outcomes:
@@ -444,9 +463,8 @@ def seasonal_run(inp, soils, varieties, rules, bench, workers, dbench=None):
             "low_harvest_index_pct": low,
             "obs_end": f"{b.obs_end}", "members": int(P.shape[0]), "engine": ro.ENGINE, "config_hash": bench["config_hash"],
             "created": _now(), "march_rain": ds.attrs.get("march_rain"), "temperature": ds.attrs.get("temperature_forecast"),
-            "dssat_config_hash": (dbench or {}).get("config_hash")}
-    if dssat:
-        meta["dssat"] = dssat
+            **{f"{e}_config_hash": (ebench.get(e) or {}).get("config_hash") for e in ENGINES}}
+    meta.update(extra)
     return members, summ, meta
 
 
@@ -472,13 +490,15 @@ def cell_rows(cells, summ, bench, vk, rk):
 
 
 def publish(cells, summ, members, bench, meta, varieties, rules, counties, verification, outlines, dest=PUBLISHED,
-            dbench=None):
+            ebench=None):
     vk, rk = next(iter(varieties)), rules[0]
     years = bench["years"]
     member_map = {cid: {vk: {rk: members[cid][vk][rk]}} for cid in members}
-    dss = meta.get("dssat")
-    meta = {k: v for k, v in meta.items() if k != "dssat"}
-    out = {"meta": {**meta, "variety": vk, "models": ["aquacrop"] + (["dssat"] if dss and dbench else []), "variety_label": varieties[vk]["label"], "rule": rk,
+    ebench = {k: v for k, v in (ebench or {}).items() if v is not None}
+    have = [e for e in ENGINES if meta.get(e) and ebench.get(e) and vk in next(iter(meta[e]["members"].values()), {})]
+    runs = {e: meta[e] for e in have}
+    meta = {k: v for k, v in meta.items() if k not in ENGINES}
+    out = {"meta": {**meta, "variety": vk, "models": ["aquacrop"] + have, "variety_label": varieties[vk]["label"], "rule": rk,
                     "rule_label": C.PLANTING_RULES[rk]["label"], "failure_t_ha": varieties[vk]["failure_t_ha"],
                     "cell_deg": 0.25, "counties": counties, "min_ha": MIN_HA,
                     "area_source": "MapSPAM 2020 V2r2 rainfed maize harvested area", "years": [years[0], years[-1]],
@@ -488,13 +508,14 @@ def publish(cells, summ, members, bench, meta, varieties, rules, counties, verif
                         for c, v in summarize_counties(member_map, bench["cells"], cells, varieties, vk, rk,
                                                        years).items()],
            "outlines": outlines}
-    if dss and dbench:                                                   # DSSAT's cells and counties, against its own normal
-        dmap = {cid: {vk: {rk: dss["members"][cid][vk][rk]}} for cid in dss["members"]}
-        out["cells_dssat"] = cell_rows(cells, dss["summaries"], dbench, vk, rk)
-        dv = verify(dbench["cells"], cells, vk, rk, dbench["years"])
-        out["counties_dssat"] = [{"name": c, **v, "verification": dv.get(c, {})}
-                                 for c, v in summarize_counties(dmap, dbench["cells"], cells, varieties, vk, rk,
-                                                                years).items()]
+    for e in have:                                                      # each model's cells and counties, against its own normal
+        run, eb = runs[e], ebench[e]
+        emap = {cid: {vk: {rk: run["members"][cid][vk][rk]}} for cid in run["members"]}
+        out[f"cells_{e}"] = cell_rows(cells, run["summaries"], eb, vk, rk)
+        ev = verify(eb["cells"], cells, vk, rk, eb["years"])
+        out[f"counties_{e}"] = [{"name": c, **v, "verification": ev.get(c, {})}
+                                for c, v in summarize_counties(emap, eb["cells"], cells, varieties, vk, rk,
+                                                               years).items()]
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part")
@@ -517,7 +538,8 @@ def main():
     ap.add_argument("--verify", action="store_true", help="print the county check against HarvestStat")
     ap.add_argument("--no-dashboard", action="store_true", help="do not write the tab's grid.json")
     ap.add_argument("--dashboard-file", default=str(PUBLISHED), help="where to write it (default: the tab's data)")
-    ap.add_argument("--no-dssat", action="store_true", help="AquaCrop only")
+    ap.add_argument("--no-dssat", action="store_true", help="no DSSAT")
+    ap.add_argument("--no-wofost", action="store_true", help="no WOFOST")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -527,13 +549,14 @@ def main():
     cells = crop_cells(a.counties, a.min_ha)
     log(f"{len(cells)} cells with at least {a.min_ha:.0f} ha of rainfed maize in {', '.join(a.counties)} "
         f"({cells.area_ha.sum():.0f} ha)")
-    use_dssat = not a.no_dssat and bool(ro.dssat_varieties(dict(varieties)))
-    inp, soils, cells = inputs(cells, refresh=not a.no_refresh, with_met=use_dssat)
+    want = [e for e in ENGINES if not getattr(a, f"no_{e}") and ENGINES[e][0](dict(varieties))]
+    inp, soils, cells = inputs(cells, refresh=not a.no_refresh, with_met=bool(want))
     log(f"{len(inp.sites)} cells with weather and soil; observations to {inp.b.obs_end}")
     bench = benchmark(inp, soils, varieties, a.rules, a.workers, a.benchmark)
-    dbench = dssat_benchmark(inp, soils, varieties, a.rules, a.workers, a.benchmark) if use_dssat else None
-    if use_dssat and dbench is None:
-        log(f"DSSAT left out: {inp.met2_note or 'no DSSAT variety'}")
+    ebench = {e: engine_benchmark(inp, soils, varieties, a.rules, a.workers, e, a.benchmark) for e in want}
+    for e in want:
+        if ebench[e] is None:
+            log(f"{NAMES[e]} left out: {inp.met2_note or 'no ' + NAMES[e] + ' variety'}")
     vk, rk = a.varieties[0], a.rules[0]
     site_b = C.OUT / "climatology.json"
     v = verify(bench["cells"], cells, vk, rk, bench["years"],
@@ -545,18 +568,18 @@ def main():
     if path.exists() and not a.force:
         old = json.loads(path.read_text(encoding="utf-8"))
         if (old["meta"].get("obs_end") == f"{inp.b.obs_end}" and old["meta"].get("config_hash") == bench["config_hash"]
-                and old["meta"].get("dssat_config_hash") == (dbench or {}).get("config_hash")):
+                and all(old["meta"].get(f"{e}_config_hash") == (ebench.get(e) or {}).get("config_hash") for e in ENGINES)):
             log(f"{rid}: already made from these observations")
             if not a.no_dashboard:
                 publish(cells, old["summaries"], old["members"], bench, old["meta"], varieties, a.rules, a.counties, v,
-                        county_outlines(a.counties), a.dashboard_file, dbench)
+                        county_outlines(a.counties), a.dashboard_file, ebench)
             return 0
-    members, summ, meta = seasonal_run(inp, soils, varieties, a.rules, bench, a.workers, dbench)
+    members, summ, meta = seasonal_run(inp, soils, varieties, a.rules, bench, a.workers, ebench)
     GRID_OUT.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"meta": meta, "summaries": summ, "members": members}), encoding="utf-8")
     if not a.no_dashboard:
         out = publish(cells, summ, members, bench, meta, varieties, a.rules, a.counties, v, county_outlines(a.counties),
-                      a.dashboard_file, dbench)
+                      a.dashboard_file, ebench)
         for c in out["counties"]:
             log(f"  {c['name']:14s} {c['pct_normal']}% of normal, below {c['p_below_normal']}, above "
                 f"{c['p_above_normal']}, failed area {c['failed_area_share_median']} "

@@ -110,6 +110,7 @@ def main():
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--water-balance", choices=["cwb", "cwb73", "mlwb"], default="cwb")
     ap.add_argument("--engine", choices=["wofost", "dssat"], default="wofost", help="the second engine")
+    ap.add_argument("--tag", default="", help="suffix of the output file (e.g. _seedling, for WOFOST's options)")
     a = ap.parse_args()
     eng = {"wofost": wf, "dssat": dsa}[a.engine]
     label = {"wofost": "WOFOST", "dssat": "DSSAT"}[a.engine]
@@ -162,6 +163,7 @@ def main():
         name = "engines.json" if a.water_balance == "cwb" else f"engines_{a.water_balance}.json"
         what = {"cwb": "Wofost72_WLP_CWB", "cwb73": "Wofost73_WLP_CWB", "mlwb": "Wofost73_WLP_MLWB"}[a.water_balance] \
             + " (PCSE), adapters/wofost_adapter.py"
+    name = name.replace(".json", f"{a.tag}.json")
     (OUT / name).write_text(json.dumps({
         "years": years, "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
         "aquacrop": "the benchmark (climatology.json)", a.engine: what,

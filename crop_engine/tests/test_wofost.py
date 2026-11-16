@@ -45,7 +45,7 @@ def test_phenology_matures_in_the_variety_days_at_the_reference_temperature():
 def test_soil_parameters_are_ordered_and_hold_the_initial_water():
     s, site = wf.soil_parameters(LAYERS, 0.5)
     assert 0 < s["SMW"] < s["SMFCF"] < s["SM0"] < 0.7 and s["RDMSOL"] == 200
-    assert site["WAV"] == pytest.approx(0.5 * (0.26 - 0.13) * 200)
+    assert site["WAV"] == pytest.approx(0.5 * (0.26 - 0.13) * 0.95 * 200)      # 5 % stones hold no water
     assert 0.1 <= s["SOPE"] <= 10 and 0.05 <= s["KSUB"] <= 10
 
 

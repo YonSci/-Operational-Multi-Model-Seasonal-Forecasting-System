@@ -175,6 +175,23 @@ def aquacrop_only(key):
             or (bool(irr) and (irr.get("irrigation_method", 3 if "schedule_das" in irr else 1) != 1)))
 
 
+def wofost_can(key):
+    """True when WOFOST can grow the scenario (wofost_adapter module doc): every irrigation method, mulch, ridges,
+    bunds, plant density and weeds (approximations), a saline soil (FAO 29's response), the starting soil water; not a
+    water table, AquaCrop 7's fertility, saline water, the crop-parameter draws, heat at pollination or transplanting;
+    the curve-number scenarios only with CROP_WOFOST_RUNOFF=cn."""
+    from crop_engine.adapters import wofost_adapter as wf
+    s = SCENARIOS[key]
+    sal = s.get("salinity") or {}
+    if any(k in s for k in ("groundwater", "fertility", "perturb", "heat", "transplant")):
+        return False
+    if sal and (set(sal) - {"ece_initial"}):
+        return False
+    if (s.get("field") or {}).get("curve_number_adj_pct") and wf.RUNOFF != "cn":
+        return False
+    return True
+
+
 def describe(key):
     """The scenario's label, group and settings, for the results' meta."""
     s = SCENARIOS[key]
@@ -198,6 +215,7 @@ def apply(task, key):
     dates = pd.DatetimeIndex(task["dates"])
     out = dict(task, planting=_sowing(list(task["planting"]), scen, dates))
     if "density" in scen:
+        out["density"] = float(scen["density"])                        # WOFOST's approximation (wofost_adapter)
         from aquacrop.entities.crop import crop_params
         pop = task["kw"].get("PlantPop", crop_params[task["variety"]["aquacrop_crop"]]["PlantPop"])
         out["kw"] = dict(task["kw"], PlantPop=float(np.round(pop * scen["density"])))

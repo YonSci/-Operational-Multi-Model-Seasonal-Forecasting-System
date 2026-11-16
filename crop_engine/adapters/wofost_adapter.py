@@ -34,17 +34,53 @@ and re-sowing after a failed establishment as AquaCrop. Yield: storage organ dry
 
 Management (the scenarios, crop_engine.scenarios.management), with the classic water balance, as AquaCrop's where
 WOFOST has the process:
-  irrigation  task "irrigation" (AquaCrop's IrrigationManagement method 1 arguments): the model is stepped day by day
-              from sowing; whenever the root zone's water falls below SMT % of its available water (SMW to SMFCF) in
-              the crop's growth stage (emergence: before DVS 0; canopy growth: DVS 0–0.8; maximum canopy and flowering:
-              0.8–1.5; senescence: from 1.5), it is refilled to field capacity, at most MaxIrr mm a day and MaxIrrSeason
-              mm a season (net water: PCSE's irrigation signal with efficiency 1)
+  irrigation  task "irrigation" (AquaCrop's IrrigationManagement arguments), the model stepped day by day from sowing
+              (net water: PCSE's irrigation signal with efficiency 1), at most MaxIrrSeason mm a season:
+                method 1  whenever the root zone's water falls below SMT % of its available water (SMW to SMFCF) in
+                          the crop's growth stage (emergence: before DVS 0; canopy growth: DVS 0–0.8; maximum canopy
+                          and flowering: 0.8–1.5; senescence: from 1.5), refilled to field capacity, at most MaxIrr mm
+                          a day; none before growth stage start_stage (AquaCrop's: 2, canopy growth)
+                method 2  every IrrInterval days from sowing, to field capacity, at most MaxIrr mm
+                method 3  a fixed schedule (schedule_das: [[days after sowing, mm], ...])
+                method 4  the root zone kept at NetIrrSMT % of its available water (the net requirement)
+                method 5  a constant depth every day from sowing to maturity
   field       task "field" (FieldMngt arguments): mulches cut the open-soil evaporation ES0 by mulch_pct % × f_mulch, as
               AquaCrop's; sr_inhb (no surface runoff) gives the surface 10 cm of storage (SSMAX), so rain that cannot
-              infiltrate at once ponds and soaks in later instead of running off. The classic balance has no
-              curve-number runoff: its runoff is only that excess, so ridges change less than in AquaCrop
-  density     not represented: WOFOST has no plant population (the scenario is AquaCrop's only)
-A member records the irrigation it received (irrigation_mm).
+              infiltrate at once ponds and soaks in later instead of running off; bunds (z_bund, m) that much storage.
+              The classic balance has no curve-number runoff: its runoff is only that excess, so ridges change less
+              than in AquaCrop. With CROP_WOFOST_RUNOFF=cn (off) the rain first loses the SCS curve-number runoff of
+              the topsoil's class (AquaCrop's: from its saturated conductivity), adjusted for the 5 days' rain before
+              (SCS antecedent moisture), and lowered by a scenario's curve_number_adj_pct (contour ridges, terraces)
+  density     task "density" (a factor on the plant population): WOFOST has no plant population; the crop's
+              initial dry weight (TDWI, from which WOFOST 7.2 derives the first leaf area) is scaled by it, an
+              approximation (the canopy starts sparser or denser; its maximum follows from growth)
+  weeds       task "weeds" (as AquaCrop's: rc_pct, weeding_das, efficacy_pct, regrowth_days): an approximation, not a
+              WOFOST process: the weeds take their relative cover's share of the light (IRRAD × (1 - RC/100)); with
+              weeding, the cover regrows from a clean seedbed as aquacrop_stress's, without the crop canopy's feedback.
+              The weeds' own water use is not counted, so dry seasons understate the loss
+  salinity    task "salinity" with ece_initial only (a saline soil): an approximation, not a WOFOST process: the yield
+              and biomass reduced by FAO 29's response of the crop to that ECe (Maas and Hoffman: aquacrop_stress
+              SALT_TOLERANCE), with no salt dynamics; saline irrigation water and water tables stay AquaCrop's
+Not possible in PCSE: a water table (neither water balance has groundwater: the multi-layer one raises "not yet
+implemented"), AquaCrop 7's soil fertility stress (WOFOST 8.1's nitrogen is its own route), pollination heat stress and
+transplanting. A member records the irrigation it received (irrigation_mm).
+
+Nitrogen (task "nitrogen": {"rate_kg_ha", "split": [[days after sowing, share], ...], "recovery", and the soil's
+NSOILBASE, NSOILBASE_FR, NAVAILI, BG_N_SUPPLY}): WOFOST 8.1's nitrogen- and water-limited production with the classic
+water balance and its simple soil nitrogen (Wofost81_NWLP_CWB_CNB): the soil supplies NSOILBASE kg N/ha at NSOILBASE_FR
+of it a day, NAVAILI at the start and BG_N_SUPPLY a day from the air; urea at the rate and split as DSSAT's
+(dssat_cultivars.yaml "nitrogen"), recovered at "recovery" (default N_RECOVERY). The soil's values are fitted to the
+Kenyan maize nitrogen trials (calibration/wofost_nitrogen.py, wofost_nitrogen.yaml). Maize and the legumes only:
+PCSE's sorghum and millet sets have no WOFOST 8.1 nitrogen parameters. The phenology and the yield factor are the
+variety's, as in WOFOST 7.2.
+
+Coarse fragments (stones): each layer's saturation, field capacity and wilting point are scaled by (1 − coarse
+fragments % / 100), as AquaCrop's (FAO AquaCrop 7's GravelVol) and DSSAT's SLCF: stony soil holds less water.
+
+Seedling death (CROP_WOFOST_SEEDLING_DEATH=1, off): WOFOST's seedlings only slow in a dry spell, where AquaCrop's die,
+which is why WOFOST fails less. With it, a crop that has emerged but not reached 5 % cover and whose root zone stays at
+the wilting point for SEEDLING_DRY_DAYS days counts as a failed establishment, re-sown as AquaCrop's. An
+approximation of AquaCrop's behaviour, off until the engine comparison shows it agrees better with observed failures.
 
 Water balance (task "water_balance", default WATER_BALANCE): "cwb", WOFOST 7.2's classic one-zone balance above;
 "mlwb", WOFOST 7.3's multi-layer balance (Wofost73_WLP_MLWB), on the SoilGrids layers themselves: each layer's
@@ -55,6 +91,7 @@ last layer repeated below as the subsoil. Its initial water is the task's fracti
 layer (WAV over the profile), as AquaCrop's. The crop parameters are the same library's 7.3 sets.
 """
 import datetime as dt
+import os
 import warnings
 
 import numpy as np
@@ -70,10 +107,21 @@ CANOPY_STEP = 7
 NO_GRAIN_T_HA = 0.01             # a matured crop with less grain than this counts as died
 ANGST = (0.25, 0.50)              # Angstrom coefficients for PCSE's Penman E0 / ES0
 _CROPDATA = {}
+RUNOFF = os.environ.get("CROP_WOFOST_RUNOFF", "none")              # "none" (WOFOST's own) or "cn" (module doc)
+SEEDLING_DEATH = os.environ.get("CROP_WOFOST_SEEDLING_DEATH", "0") == "1"
+SEEDLING_DRY_DAYS = 10
 
 
 def available(variety):
-    return variety.get("aquacrop_crop") in CROPS
+    return variety.get("aquacrop_crop") in CROPS or bool(variety.get("wofost_crop"))
+
+
+def crop_of(variety):
+    """(PCSE crop, variety name): the AquaCrop crop's WOFOST set, or a WOFOST-only crop's own (wofost_crop:
+    [crop, variety], crop_engine/wofost_crops.yaml)."""
+    if variety.get("wofost_crop"):
+        return tuple(variety["wofost_crop"])
+    return CROPS[variety["aquacrop_crop"]]
 
 
 def _quiet():
@@ -94,9 +142,25 @@ WB73 = ("cwb73", "mlwb")
 
 def _model(water_balance):
     """cwb: WOFOST 7.2, classic water balance; cwb73: WOFOST 7.3, classic (the version alone, for comparisons);
-    mlwb: WOFOST 7.3, multi-layer."""
-    from pcse.models import Wofost72_WLP_CWB, Wofost73_WLP_CWB, Wofost73_WLP_MLWB
-    return {"cwb": Wofost72_WLP_CWB, "cwb73": Wofost73_WLP_CWB, "mlwb": Wofost73_WLP_MLWB}[water_balance]
+    mlwb: WOFOST 7.3, multi-layer; nwlp: WOFOST 8.1 with nitrogen, classic water balance (module doc)."""
+    from pcse.models import Wofost72_WLP_CWB, Wofost73_WLP_CWB, Wofost73_WLP_MLWB, Wofost81_NWLP_CWB_CNB
+    return {"cwb": Wofost72_WLP_CWB, "cwb73": Wofost73_WLP_CWB, "mlwb": Wofost73_WLP_MLWB,
+            "nwlp": Wofost81_NWLP_CWB_CNB}[water_balance]
+
+
+N_RECOVERY = 0.6                 # share of the urea's nitrogen the crop can take up (assumed)
+NITROGEN_CROPS = {"maize", "cowpea", "mungbean", "pigeonpea", "groundnut"}   # WOFOST 8.1 sets with nitrogen parameters
+
+
+def nitrogen_events(spec, plant):
+    """PCSE's apply_n events of a task's nitrogen spec for a sowing on `plant` (module doc), or None."""
+    rate = float(spec.get("rate_kg_ha", 0.0))
+    if rate <= 0:
+        return None
+    rec = float(spec.get("recovery", N_RECOVERY))
+    table = [{plant + dt.timedelta(days=int(d)): {"N_amount": rate * float(f), "N_recovery": rec}}
+             for d, f in spec.get("split", [[0, 1.0]]) if float(f) > 0]
+    return [{"event_signal": "apply_n", "name": "urea", "comment": "", "events_table": table}]
 
 
 def _cropdata(water_balance="cwb"):
@@ -113,12 +177,14 @@ def _afgen(table, x):
     return np.interp(x, t[:, 0], t[:, 1])
 
 
-def phenology(variety, reference_tmean=REFERENCE_TMEAN):
+def phenology(variety, reference_tmean=None):
     """The variety's WOFOST crop, variety and TSUM overrides: TSUM1 + TSUM2 scaled to maturity_days at
-    reference_tmean (after emergence) → (crop, variety name, overrides, base parameters)."""
+    reference_tmean (after emergence; the variety's own reference_tmean_c where its days were observed elsewhere,
+    else the varieties' 21 °C) → (crop, variety name, overrides, base parameters)."""
     if not available(variety):
         raise ValueError(f"{variety.get('label', variety.get('aquacrop_crop'))}: no WOFOST crop parameter set")
-    crop, name = CROPS[variety["aquacrop_crop"]]
+    reference_tmean = float(reference_tmean or variety.get("reference_tmean_c") or REFERENCE_TMEAN)
+    crop, name = crop_of(variety)
     p = _cropdata()
     p.set_active_crop(crop, name)
     base = {k: p[k] for k in ("TSUMEM", "TBASEM", "TEFFMX", "TSUM1", "TSUM2", "DTSMTB", "AMAXTB", "RDMCR")}
@@ -166,8 +232,8 @@ def soil_parameters(layers, initial_frac, root_depth_cm=100.0):
     top = w(0, root_depth_cm)
     sub = w(root_depth_cm, 1e9) or top
     avg = lambda f, part: sum(f(L) * d for L, d in part) / sum(d for _, d in part)
-    smfcf, smw = avg(lambda L: L.theta_fc, top), avg(lambda L: L.theta_wp, top)
-    sm0 = max(avg(lambda L: sat_ks(L)[0], top), smfcf + 0.03)
+    smfcf, smw = avg(lambda L: L.theta_fc * fine(L), top), avg(lambda L: L.theta_wp * fine(L), top)
+    sm0 = max(avg(lambda L: sat_ks(L)[0] * fine(L), top), smfcf + 0.03)
     depth = float(layers[-1].bottom_cm)
     from crop_engine.data.soil import restrictive_cm
     if restrictive_cm(layers) is not None:                            # a restrictive layer stops the roots (soil_depth)
@@ -179,6 +245,11 @@ def soil_parameters(layers, initial_frac, root_depth_cm=100.0):
     site = {"WAV": float(np.clip(initial_frac, 0, 1)) * (smfcf - smw) * depth, "SMLIM": smfcf, "IFUNRN": 0,
             "NOTINF": 0.0, "SSMAX": 0.0, "SSI": 0.0}
     return soil, site
+
+
+def fine(L):
+    """The fine-earth share of a layer's volume: 1 − coarse fragments (module doc)."""
+    return 1.0 - float(np.clip(getattr(L, "cfvo", 0.0) or 0.0, 0.0, 90.0)) / 100.0
 
 
 def _saxton(L):
@@ -209,7 +280,7 @@ def layer_curves(L):
         else:
             th = ts
         th = float(np.clip(th, 0.005, ts))
-        sm += [pf, round(th, 5)]
+        sm += [pf, round(th * fine(L), 5)]
         cond += [pf, round(float(np.log10(max(ks * (th / ts) ** (3 + 2 * B), 1e-12))), 5)]   # Eq. 18, 2/λ = 2B
     return sm, cond
 
@@ -235,13 +306,13 @@ def soil_profile(layers, initial_frac, split_at=()):
                "SurfaceConductivity": float(np.clip(_saxton(layers[0])[3], 1.0, 200.0)),
                "SoilLayers": [layer(L, L.bottom_cm - L.top_cm) for L in layers],
                "SubSoilType": layer(layers[-1], 200.0), "GroundWater": None}
-    paw = sum((L.theta_fc - L.theta_wp) * (L.bottom_cm - L.top_cm) for L in layers)
+    paw = sum((L.theta_fc - L.theta_wp) * fine(L) * (L.bottom_cm - L.top_cm) for L in layers)
     site = {"WAV": float(np.clip(initial_frac, 0, 1)) * paw, "SMLIM": float(layers[0].theta_fc), "IFUNRN": 0,
             "NOTINF": 0.0, "SSMAX": 0.0, "SSI": 0.0}
     return {"SoilProfileDescription": profile, "RDMSOL": rdmsol}, site
 
 
-def _weather(task, m, dates):
+def _weather(task, m, dates, plant=None):
     """PCSE weather of member m (WeatherDataProvider), with E0 / ES0 scaled to the task's ET0 (module doc)."""
     from pcse.base import WeatherDataContainer, WeatherDataProvider
     from pcse.util import reference_ET
@@ -253,6 +324,9 @@ def _weather(task, m, dates):
     lat, lon, elev = float(task["lat"]), float(task.get("lon", 0.0)), float(task["elev"])
     tx, tn, rr = task["tmax"][m], task["tmin"][m], task["rain"][m]
     rad, vap, wind, et0 = task["rad"][m], task["vap"][m], task["wind2"][m], task["et0"][m]
+    if task.get("runoff_cn"):                                           # CROP_WOFOST_RUNOFF=cn (module doc)
+        rr = rr - scs_runoff(rr, task["runoff_cn"])
+    light = weed_light(task, dates, m, plant)
     for k, d in enumerate(dates):
         day = d.date()
         tmin = float(min(tn[k], tx[k]))
@@ -261,7 +335,7 @@ def _weather(task, m, dates):
         r = float(et0[k]) / et0p if et0p > 0.05 else 1.0
         es_r = r * float(task.get("es0_factor", 1.0))                  # mulch: less open-soil evaporation
         wdp._store_WeatherDataContainer(WeatherDataContainer(
-            LAT=lat, LON=lon, ELEV=elev, DAY=day, IRRAD=float(rad[k]) * 1e6, TMIN=tmin, TMAX=float(tx[k]),
+            LAT=lat, LON=lon, ELEV=elev, DAY=day, IRRAD=float(rad[k]) * 1e6 * float(light[k]), TMIN=tmin, TMAX=float(tx[k]),
             VAP=float(np.clip(vap[k], 0.1, 199)), RAIN=float(np.clip(rr[k], 0, 249)) / 10.0, WIND=float(wind[k]),
             E0=float(np.clip(e0 * r, 0, 24.9)) / 10.0, ES0=float(np.clip(es0 * es_r, 0, 24.9)) / 10.0,
             ET0=float(np.clip(et0[k], 0, 24.9)) / 10.0), day)
@@ -288,23 +362,33 @@ def _sow(task, m, plant, dates, dev):
         return dict(r, status="too_late")
     expected_maturity = dates[ke + int(np.argmax(cum > need))]
     try:
-        wb = task.get("water_balance") or WATER_BALANCE
+        wb = "nwlp" if task.get("nitrogen") else (task.get("water_balance") or WATER_BALANCE)
+        if wb == "nwlp" and crop not in NITROGEN_CROPS:
+            raise ValueError(f"{crop}: no WOFOST 8.1 nitrogen parameters")
         p = _cropdata(wb)
         p.set_active_crop(crop, name)
-        site = dict(task["site"], **({"CO2": CO2_PPM} if wb in WB73 else {}))
+        site = dict(task["site"], **({"CO2": CO2_PPM} if wb in WB73 + ("nwlp",) else {}))
+        if wb == "nwlp":
+            n = task["nitrogen"]
+            site.update({k: float(n[k]) for k in ("NSOILBASE", "NSOILBASE_FR", "NAVAILI", "BG_N_SUPPLY")})
         params = ParameterProvider(cropdata=p, soildata=task["soil"], sitedata=site)
         for k, v in over.items():
             params.set_override(k, v, check=False)
+        if task.get("density"):                                         # module doc: an approximation
+            params.set_override("TDWI", float(p["TDWI"]) * float(task["density"]), check=False)
         agro = [{dates[0].date(): {"CropCalendar": {
             "crop_name": crop, "variety_name": name, "crop_start_date": plant, "crop_start_type": "sowing",
             "crop_end_date": None, "crop_end_type": "maturity", "max_duration": int((dates[-1] - pd.Timestamp(plant)).days)},
-            "TimedEvents": None, "StateEvents": None}}, {dates[-1].date(): None}]
-        model = _model(wb)(params, _weather(task, m, dates), agro)
+            "TimedEvents": nitrogen_events(task["nitrogen"], plant) if task.get("nitrogen") else None,
+            "StateEvents": None}}, {dates[-1].date(): None}]
+        model = _model(wb)(params, _weather(task, m, dates, plant), agro)
         irrigated = _run(model, task, plant) if task.get("irrigation") else model.run_till_terminate() or 0.0
         out = pd.DataFrame(model.get_output()).set_index("day")
     except Exception as exc:                                             # one member must not stop the others
         return dict(r, status="error", error=f"{type(exc).__name__}: {str(exc)[:160]}")
     out.index = pd.DatetimeIndex(out.index)
+    if "TWSO" not in out and "WSO" in out:                              # WOFOST 8.1's daily output (nitrogen)
+        out = out.assign(TWSO=out.WSO)
     grow = out[out.DVS.notna()]
     if grow.empty:
         return dict(r, status="error", error="the crop did not start")
@@ -325,6 +409,14 @@ def _sow(task, m, plant, dates, dev):
     # maturity with no grain counts as died, as AquaCrop's would
     status = ("failed_establishment" if lai[lai.index <= harvest].max() < ESTABLISHED_LAI
               else "ok" if len(matured) and yld >= NO_GRAIN_T_HA else "died")
+    if task.get("seedling_death", SEEDLING_DEATH) and status != "failed_establishment":
+        died = seedling_died(grow, task["soil"])
+        if died is not None and died <= harvest:
+            harvest, yld, status = died, 0.0, "failed_establishment"
+            upto = grow[grow.index <= harvest]
+    if task.get("salinity") and yld > 0:                                # module doc: FAO 29's response, an approximation
+        f = salt_factor(task["variety"]["aquacrop_crop"], float(task["salinity"].get("ece_initial", 0.0)))
+        yld, upto = yld * f, upto.assign(TAGP=upto.TAGP * f)
     kh = int(dates.get_indexer([harvest])[0])
     kh = kh if kh >= 0 else len(dates) - 1
     season = slice(k0, kh + 1)
@@ -343,26 +435,105 @@ def _sow(task, m, plant, dates, dev):
 STAGE_DVS = (0.0, 0.8, 1.5)      # DVS where AquaCrop's growth stages 2, 3, 4 start (module doc)
 
 
+def irrigation_today(irr, day, plant, dvs, sm, rd, smw, smfc):
+    """The day's irrigation (mm) of AquaCrop's methods 1-5 (module doc), before the seasonal cap."""
+    method = int(irr.get("irrigation_method", 3 if "schedule_das" in irr else 1))
+    das = (day - plant).days
+    room = max((smfc - sm) * rd * 10.0, 0.0) if sm is not None else 0.0      # mm to field capacity in the root zone
+    if method == 1:
+        smt = list(irr.get("SMT", [100, 100, 100, 100]))
+        stage = 0 if dvs is None or dvs < STAGE_DVS[0] else 1 if dvs < STAGE_DVS[1] else 2 if dvs < STAGE_DVS[2] else 3
+        if stage < int(irr.get("start_stage", 1)) - 1 or sm is None or smt[stage] <= 0:
+            return 0.0
+        return min(float(irr.get("MaxIrr", 25.0)), room) if sm < smw + smt[stage] / 100.0 * (smfc - smw) else 0.0
+    if method == 2:
+        every = int(irr.get("IrrInterval", 7))
+        return min(float(irr.get("MaxIrr", 25.0)), room) if das >= 0 and das % every == 0 else 0.0
+    if method == 3:
+        return float(sum(mm for d, mm in irr.get("schedule_das", []) if int(d) == das))
+    if method == 4:
+        target = smw + float(irr.get("NetIrrSMT", 80)) / 100.0 * (smfc - smw)
+        return max((target - sm) * rd * 10.0, 0.0) if sm is not None and sm < target else 0.0
+    if method == 5:
+        return float(irr.get("depth", 0.0)) if dvs is not None and dvs < 2.0 else 0.0
+    return 0.0
+
+
 def _run(model, task, plant):
-    """Step the model day by day, irrigating as AquaCrop's method 1 (module doc) → the season's irrigation (mm)."""
+    """Step the model day by day, irrigating as AquaCrop's methods (module doc) → the season's irrigation (mm)."""
     from pcse import signals
     irr = task["irrigation"]
-    smt = list(irr.get("SMT", [100, 100, 100, 100]))
-    max_day, cap = float(irr.get("MaxIrr", 25.0)), float(irr.get("MaxIrrSeason", 1e9))
+    cap = float(irr.get("MaxIrrSeason", 1e9))
     smw, smfc = task["soil"]["SMW"], task["soil"]["SMFCF"]
     total = 0.0
     while not model.flag_terminate:
         if model.day >= plant and total < cap:
-            dvs = model.get_variable("DVS")
-            stage = 0 if dvs is None or dvs < STAGE_DVS[0] else 1 if dvs < STAGE_DVS[1] else 2 if dvs < STAGE_DVS[2] else 3
-            sm, rd = model.get_variable("SM"), model.get_variable("RD") or 10.0
-            if sm is not None and smt[stage] > 0 and sm < smw + smt[stage] / 100.0 * (smfc - smw):
-                mm = min(max_day, (smfc - sm) * rd * 10.0, cap - total)
-                if mm > 0.1:
-                    model._send_signal(signal=signals.irrigate, amount=mm / 10.0, efficiency=1.0)
-                    total += mm
+            mm = min(irrigation_today(irr, model.day, plant, model.get_variable("DVS"), model.get_variable("SM"),
+                                      model.get_variable("RD") or 10.0, smw, smfc), cap - total)
+            if mm > 0.1:
+                model._send_signal(signal=signals.irrigate, amount=mm / 10.0, efficiency=1.0)
+                total += mm
         model.run(days=1)
     return total
+
+
+def seedling_died(grow, soil, days=SEEDLING_DRY_DAYS):
+    """The day an emerged crop below 5 % cover had spent `days` days with its root zone at the wilting point
+    (module doc), or None."""
+    if "SM" not in grow:
+        return None
+    dry = (grow.DVS > 0) & (grow.LAI.fillna(0) < ESTABLISHED_LAI) & (grow.SM <= soil["SMW"] + 0.005)
+    run = 0
+    for day, d in dry.items():
+        run = run + 1 if d else 0
+        if run >= days:
+            return day
+    return None
+
+
+def salt_factor(aquacrop_crop, ece):
+    """FAO 29's relative yield at a soil's ECe (linear from the threshold to the zero-yield ECe)."""
+    from crop_engine.adapters.aquacrop_stress import SALT_TOLERANCE
+    lo, hi = SALT_TOLERANCE.get(aquacrop_crop, (99.0, 100.0))
+    return float(np.clip(1 - (ece - lo) / (hi - lo), 0.0, 1.0)) if ece > lo else 1.0
+
+
+def weed_light(task, dates, m, plant=None):
+    """The crop's share of the day's light under the task's weeds (module doc): 1 without weeds."""
+    w = task.get("weeds") or {}
+    rc = float(w.get("rc_pct", 0.0)) / 100.0
+    out = np.ones(len(dates))
+    if rc <= 0:
+        return out
+    plant = plant or task["planting"][m]
+    if w.get("weeding_das") is None or plant is None:
+        return out * (1 - rc)
+    from crop_engine.adapters.aquacrop_stress import Context
+    x = Context("MaizeGDD", np.arange(1.0), weeds=w)
+    k0 = int(dates.get_indexer([pd.Timestamp(plant)])[0])
+    for k in range(max(k0, 0), len(dates)):
+        out[k] = 1 - rc * x.weed_fraction(k - k0)
+    return out
+
+
+def curve_number(layers, adj_pct=0.0):
+    """The SCS curve number of the topsoil's class, as AquaCrop's from its saturated conductivity (mm/day: ≥ 864 →
+    46, ≥ 347 → 61, ≥ 36 → 72, else 77), lowered by adj_pct %."""
+    ks = _saxton(layers[0])[3] * 10.0
+    cn = 46 if ks >= 864 else 61 if ks >= 347 else 72 if ks >= 36 else 77
+    return cn * (1 + float(adj_pct) / 100.0)
+
+
+def scs_runoff(rain, cn):
+    """SCS runoff (mm) of each day's rain, the curve number adjusted for the 5 days' rain before (antecedent moisture:
+    dry below 36 mm, wet above 53 mm, the growing season's limits)."""
+    rain = np.asarray(rain, float)
+    ant = np.convolve(np.r_[np.zeros(5), rain], np.ones(5), "valid")[: len(rain)]
+    cn_dry, cn_wet = cn / (2.281 - 0.01281 * cn), cn / (0.427 + 0.00573 * cn)
+    c = np.where(ant < 36, cn_dry, np.where(ant > 53, cn_wet, cn))
+    s = 25400.0 / np.clip(c, 1, 99) - 254.0
+    ia = 0.2 * s
+    return np.where(rain > ia, (rain - ia) ** 2 / (rain + 0.8 * s), 0.0)
 
 
 def management(task):
@@ -373,6 +544,10 @@ def management(task):
         out["es0_factor"] = 1.0 - float(f.get("mulch_pct", 50)) / 100.0 * float(f.get("f_mulch", 0.5))
     if f.get("sr_inhb"):
         out["site"] = dict(task["site"], SSMAX=10.0)
+    if f.get("bunds"):
+        out["site"] = dict(task["site"], SSMAX=100.0 * float(f.get("z_bund", 0.1)))
+    if RUNOFF == "cn" and not f.get("sr_inhb") and not f.get("bunds"):
+        out["runoff_cn"] = curve_number(task["layers"], f.get("curve_number_adj_pct", 0.0) if f.get("curve_number_adj") else 0.0)
     return out
 
 

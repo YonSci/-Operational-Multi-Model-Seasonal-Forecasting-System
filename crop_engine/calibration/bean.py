@@ -27,8 +27,13 @@ kept if the water-limited yield is at least that in UPPER_BOUND_SHARE of the tri
 A yield far above the plots is not evidence against it (the plots' limits are not modelled). The phenology: DSSAT's
 days to flowering and to maturity against N2Africa's dates (50 % flowering, full maturity) of the same trials.
 
-Writes outputs/crop_engine/calibration/dssat/bean.json and bean_trials.csv. Usage:
-python -m crop_engine.calibration.bean [--workers 2]
+--engine aquacrop runs the same test on AquaCrop's bean (DryBeanGDD, the outlook's bean class): no East African
+AquaCrop calibration of the common bean was found (literature search, November 2026), so this lower bound is the one
+check its yield level has. AquaCrop is given the FAO-56 reference evapotranspiration of the same radiation, humidity and
+wind (PCSE's reference_ET), as DSSAT computes its own; no nitrogen run (AquaCrop has none).
+
+Writes outputs/crop_engine/calibration/<engine>/bean.json and bean_trials.csv. Usage:
+python -m crop_engine.calibration.bean [--workers 2] [--engine aquacrop]
 """
 import argparse
 import datetime as dt
@@ -150,14 +155,25 @@ def point_weather(sites, start, end):
     return out
 
 
-def build_tasks(trials, variety, sites, initial_frac=INITIAL_FRAC):
+def _et0(task):
+    """FAO-56 reference evapotranspiration (mm/day) of a task's weather (PCSE's reference_ET), for AquaCrop."""
+    from pcse.util import reference_ET
+    out = []
+    for k, d in enumerate(pd.DatetimeIndex(task["dates"])):
+        tmin = float(min(task["tmin"][k], task["tmax"][k]))
+        out.append(reference_ET(d.date(), task["lat"], task["elev"], tmin, float(task["tmax"][k]),
+                                float(task["rad"][k]) * 1e6, float(task["vap"][k]), float(task["wind2"][k]), 0.25, 0.5)[2])
+    return np.maximum(np.array(out, float), 0.1)
+
+
+def build_tasks(trials, variety, sites, initial_frac=INITIAL_FRAC, engine="dssat"):
     """The DSSAT tasks of the trial-seasons (module doc): water-limited (with its potential) and nitrogen-limited."""
     import fao_water_balance as fw  # noqa: E402  (scripts/, on sys.path via config)
     rain = _rain(sites)
     wx = point_weather(sites, *window(trials))
     temps = met = wx
     soils = {p: soil_mod.profile(s) for p, s in sites.items()}
-    soil_n = ds.soil_nitrogen()                      # the regional soil nitrogen: these fields are not the sites'
+    soil_n = ds.soil_nitrogen() if engine == "dssat" else {}   # the regional soil nitrogen: not the sites'
     tasks, nitro = [], []
     for r in trials.itertuples():
         s, sown = sites[r.point], dt.date.fromisoformat(r.planting_date)
@@ -172,6 +188,9 @@ def build_tasks(trials, variety, sites, initial_frac=INITIAL_FRAC):
                     vap=w.vap.values, wind2=w.wind2.values, et0=np.zeros(len(d)), source=np.zeros(len(d), int),
                     planting=[sown], resow=None, variety=variety, kw=variety["kw"], layers=soils[r.point],
                     initial_frac=initial_frac, lat=s.lat, lon=s.lon, elev=elev)
+        if engine == "aquacrop":
+            task["et0"] = _et0(task)
+            task["rain"] = np.asarray(task["rain"], float)[None]       # AquaCrop's tasks carry a member axis
         tasks.append(task)
         nitro.append(dict(task, potential=False,
                           nitrogen={"rate_kg_ha": 0, "split": [[0, 1.0]], **soil_n}))
@@ -184,9 +203,10 @@ def _days(m, key):
     return None
 
 
-def simulate(trials, variety, sites, workers, initial_frac=INITIAL_FRAC, nitrogen=True):
-    tasks, nitro = build_tasks(trials, variety, sites, initial_frac)
-    res = ro.run_tasks(tasks + (nitro if nitrogen else []), workers, engine="dssat")
+def simulate(trials, variety, sites, workers, initial_frac=INITIAL_FRAC, nitrogen=True, engine="dssat"):
+    tasks, nitro = build_tasks(trials, variety, sites, initial_frac, engine)
+    nitrogen = nitrogen and engine == "dssat"
+    res = ro.run_tasks(tasks + (nitro if nitrogen else []), workers, engine=engine)
     out = trials.copy()
     wl = [r[0] for r in res[:len(tasks)]]
     out["status"] = [m["status"] for m in wl]
@@ -238,10 +258,11 @@ def summarize(t):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--engine", choices=["dssat", "aquacrop"], default="dssat")
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    if not ds.installed():
+    if a.engine == "dssat" and not ds.installed():
         log(f"DSSAT is not installed ({ds.EXE}): python -m crop_engine.adapters.dssat_adapter --install")
         return 1
     from crop_engine.yields import observations
@@ -250,14 +271,15 @@ def main():
     log(f"{len(trials)} trial-seasons ({trials.groupby('habit').size().to_dict()}), "
         f"{trials.point.nunique()} points, {int(trials.plots.sum())} plots")
     _, vs = ro.load_varieties(["bean"])
-    ds.attach(vs)
+    if a.engine == "dssat":
+        ds.attach(vs)
     bean = vs["bean"]
     sites = _sites(trials)
-    t = simulate(trials, bean, sites, a.workers)
+    t = simulate(trials, bean, sites, a.workers, engine=a.engine)
     summary, verdict = summarize(t)
     sens = {}
     for f in INITIAL_SENSITIVITY:
-        s = simulate(trials, bean, sites, a.workers, initial_frac=f, nitrogen=False)
+        s = simulate(trials, bean, sites, a.workers, initial_frac=f, nitrogen=False, engine=a.engine)
         sens[str(f)] = {"sim_median_t_ha_bush": round(float(s[s.habit == "bush"].sim_t_ha.median()), 2),
                         "max_change_t_ha": round(float((s.sim_t_ha - t.sim_t_ha).abs().max()), 2)}
         log(f"initial water {f}: bush median {sens[str(f)]['sim_median_t_ha_bush']} t/ha, "
@@ -266,13 +288,16 @@ def main():
         log(f"{h}: {s}")
     log(f"yield level {verdict}")
     res = {"created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),
-           "variety": {"cultivar": bean["dssat"]}, "initial_frac": INITIAL_FRAC, "spinup_days": SPINUP_DAYS,
+           "engine": a.engine, "variety": ({"cultivar": bean["dssat"]} if a.engine == "dssat" else
+                                           {"aquacrop_crop": bean["aquacrop_crop"], "parameters": bean.get("parameters")}),
+           "initial_frac": INITIAL_FRAC, "spinup_days": SPINUP_DAYS,
            "rule": {"upper_bound": "the trial-season's 90th-percentile plot yield", "share": UPPER_BOUND_SHARE},
            "summary": summary, "verdict": verdict, "initial_water_sensitivity": sens}
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "bean.json").write_text(json.dumps(res, indent=1, default=str), encoding="utf-8")
-    t.to_csv(OUT / "bean_trials.csv", index=False)
-    log(f"written to {OUT / 'bean.json'} and bean_trials.csv")
+    out = C.OUT / "calibration" / a.engine
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "bean.json").write_text(json.dumps(res, indent=1, default=str), encoding="utf-8")
+    t.to_csv(out / "bean_trials.csv", index=False)
+    log(f"written to {out / 'bean.json'} and bean_trials.csv")
     return 0
 
 

@@ -71,7 +71,11 @@ def main():
              ("management scenarios", ["crop_engine.run_scenarios", "--max-age-days", "7", "--workers",
                                        str(max(a.workers, 2)), "--no-dashboard"], "the previous ones kept"),
              ("nitrogen levels", ["crop_engine.run_nitrogen", "--max-age-days", "7", "--workers",
-                                  str(max(a.workers, 2)), "--no-dashboard"], "the previous ones kept")]
+                                  str(max(a.workers, 2)), "--no-dashboard"], "the previous ones kept"),
+             ("nitrogen levels (WOFOST)", ["crop_engine.run_nitrogen_wofost", "--max-age-days", "7", "--workers",
+                                           str(max(a.workers, 2))], "the previous ones kept"),
+             ("other crops (WOFOST)", ["crop_engine.run_other_crops", "--max-age-days", "7", "--workers",
+                                       str(max(a.workers, 2))], "the previous ones kept")]
     for name, args, kept in steps:
         left = end - time.monotonic() if end else None
         if "seasonal" not in sources or "seasonal" in failed:
