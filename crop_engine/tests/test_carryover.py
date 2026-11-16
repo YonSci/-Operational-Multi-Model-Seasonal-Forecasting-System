@@ -78,3 +78,14 @@ def test_the_season_starts_from_the_profile(varieties):
     dry = aq.simulate(dict(base, initial_profile={"z_m": z, "th": [0.15] * 6 + [0.135] * (len(z) - 6)}))[0]
     wet_deep = aq.simulate(dict(base, initial_profile={"z_m": z, "th": [0.15] * 6 + [0.26] * (len(z) - 6)}))[0]
     assert wet_deep["yield_t_ha"] > dry["yield_t_ha"]      # water stored deep, carried over, feeds the crop
+
+
+def test_a_dry_season_cover_dries_the_subsoil(varieties):
+    wx = _wx()
+    cover = dict(co.COVER)
+    cover["kw"], cover["scale"] = aq.crop_parameters(cover, 21.0)
+    a, b = dt.date(2025, 3, 1), dt.date(2025, 7, 31)
+    fallow, _ = co.stage(wx, a, b, LOAM, varieties["maize_early"], None, {"frac": 0.6})
+    grass, _ = co.stage(wx, a, b, LOAM, cover, a, {"frac": 0.6})
+    assert grass["frac_200cm"] < fallow["frac_200cm"] - 0.05          # the cover draws on the subsoil, bare soil does not
+    assert "grass" in co.PLANS and co.PLANS["grass"]["short_rains"] == "cover"

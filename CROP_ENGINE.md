@@ -549,6 +549,14 @@ pattern does not. `CROP_INITIAL_WATER` stays at ERA5-Land; the scenario stays, a
 Rains crop left". A dry-season cover (perennial grass or weeds transpiring from the subsoil) would be the next step if
 the carried-over water is to replace ERA5-Land.
 
+**With a dry-season cover** (plan `grass`, `carryover.COVER`): grass and weeds standing at each stage's start (a sparse
+canopy, CCx 0.4, rooting to 1.5 m, set out established: an approximation, AquaCrop has no perennial grass), drawing on
+the subsoil until it dries. The mean level comes close to SMAP where SMAP is wet (El Karama 0.60 against SMAP's 0.66,
+Genco Maralal 0.57 against 0.62) but the year-to-year pattern is lost (correlation with SMAP 0.04 and 0.25; −0.75 to
+−0.08 at Genco Tana River, Kapiti and Livemo), and Genco Tana River stays far too wet (0.70 against 0.06). ERA5-Land
+(r 0.52–0.85) stays the outlook's starting soil water: the carried-over water misses how 1 Aug differs from year to
+year, not only its dry-season level.
+
 ### Questions for partners (November 2026)
 
 The water-management amounts above are the engine's assumptions. A questionnaire to the managers of the six sites
