@@ -104,7 +104,15 @@ SEEDLING_DRY_DAYS = 10
 
 
 def available(variety):
-    return variety.get("aquacrop_crop") in CROPS
+    return variety.get("aquacrop_crop") in CROPS or bool(variety.get("wofost_crop"))
+
+
+def crop_of(variety):
+    """(PCSE crop, variety name): the AquaCrop crop's WOFOST set, or a WOFOST-only crop's own (wofost_crop:
+    [crop, variety], crop_engine/wofost_crops.yaml)."""
+    if variety.get("wofost_crop"):
+        return tuple(variety["wofost_crop"])
+    return CROPS[variety["aquacrop_crop"]]
 
 
 def _quiet():
@@ -144,12 +152,14 @@ def _afgen(table, x):
     return np.interp(x, t[:, 0], t[:, 1])
 
 
-def phenology(variety, reference_tmean=REFERENCE_TMEAN):
+def phenology(variety, reference_tmean=None):
     """The variety's WOFOST crop, variety and TSUM overrides: TSUM1 + TSUM2 scaled to maturity_days at
-    reference_tmean (after emergence) → (crop, variety name, overrides, base parameters)."""
+    reference_tmean (after emergence; the variety's own reference_tmean_c where its days were observed elsewhere,
+    else the varieties' 21 °C) → (crop, variety name, overrides, base parameters)."""
     if not available(variety):
         raise ValueError(f"{variety.get('label', variety.get('aquacrop_crop'))}: no WOFOST crop parameter set")
-    crop, name = CROPS[variety["aquacrop_crop"]]
+    reference_tmean = float(reference_tmean or variety.get("reference_tmean_c") or REFERENCE_TMEAN)
+    crop, name = crop_of(variety)
     p = _cropdata()
     p.set_active_crop(crop, name)
     base = {k: p[k] for k in ("TSUMEM", "TBASEM", "TEFFMX", "TSUM1", "TSUM2", "DTSMTB", "AMAXTB", "RDMCR")}

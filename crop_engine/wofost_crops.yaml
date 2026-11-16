@@ -1,0 +1,65 @@
+# Crops grown by WOFOST only (crop_engine/run_other_crops.py): the dryland legumes and cereals of eastern Kenya that
+# AquaCrop-OSPy has no crop file for. WOFOST's own tropical crop sets (Van Heemst 1988, PCSE's crop parameter library),
+# with the phenology scaled so the crop flowers and matures in the variety's days at the temperature where those days
+# were observed (reference_tmean_c; wofost_adapter.phenology). Nothing else is calibrated: no published WOFOST
+# calibration exists for these crops in East or West Africa (literature search, November 2026), so the yields are
+# WOFOST's water-limited levels for these crop sets, read as relative (against each crop's own simulated normal), not
+# as tonnes a farmer would harvest. Yield is WOFOST's storage-organ weight (TWSO): grain, or pods for the legumes.
+#
+# Not here: cassava (9 to 24 months: it does not fit a season ending on 31 Mar), the dry bean (PCSE has no Phaseolus
+# set; another legume's file under the bean's name would be that legume), finger millet (no WOFOST set).
+#
+# Sources of the days (catalogue values are weaker than trials):
+#   cowpea      M66 (Machakos 66): flowering 55-60 d, maturity 85-95 d (KALRO / Infonet catalogue); harvested 87 d after
+#               sowing at KALRO Kiboko, Long Rains 2017, 975 m, mean 24.1 C (Binacchi et al. 2022, Front. Agron. 4:988090)
+#   green gram  N26: maturity 75-77 d at SEKU Kitui, Short Rains 2018-19, mean about 22.9 C (Mugo et al. 2023, Front.
+#               Sustain. Food Syst. 7); flowering from that study's APSIM thermal times (emergence 95 + juvenile 508
+#               C d above 7.5 C: about 40 d)
+#   pigeonpea   ICPL 87091 (KARI Mbaazi 1): flowering 63-65 d, maturity 99-102 d at Kiboko, Short Rains, 980 m, mean 23.3 C
+#               (Silim et al. 1995, ICRISAT); photoperiod-insensitive (Gwata and Siambi 2009)
+#   millet      pearl millet KAT/PM-1: maturity 2.5-3 months (KALRO millet extension manual 2021, catalogue); days to 50 %
+#               maturity 66-80 d at SEKU Kitui (Akuja et al. 2016, abstract); flowering not found: the crop file's ratio
+#   groundnut   Red Valencia: maturity 90-100 d (Infonet catalogue); flowering 41-44 d in western Kenya (Njoki et al.
+#               2023, Toxins 15:111, Nyakach, 1100-1800 m; the temperature assumed 22 C)
+reference_tmean_c: 21.0
+
+crops:
+  cowpea:
+    label: Cowpea
+    examples: M66 (Machakos 66), K80
+    wofost_crop: [cowpea, Cowpea_VanHeemst_1988]
+    maturity_days: 87
+    flowering_days: 57
+    reference_tmean_c: 24.1
+    failure_t_ha: 0.2
+  green_gram:
+    label: Green gram (mung bean)
+    examples: N26, KS20, Biashara
+    wofost_crop: [mungbean, Mungbean_VanHeemst_1988]
+    maturity_days: 76
+    flowering_days: 40
+    reference_tmean_c: 22.9
+    failure_t_ha: 0.15
+  pigeonpea:
+    label: Pigeonpea (short-duration)
+    examples: ICPL 87091 (KARI Mbaazi 1)
+    wofost_crop: [pigeonpea, Pigeonpea_VanHeemst_1988]
+    maturity_days: 100
+    flowering_days: 64
+    reference_tmean_c: 23.3
+    failure_t_ha: 0.2
+  pearl_millet:
+    label: Pearl millet
+    examples: KAT/PM-1
+    wofost_crop: [millet, Millet_VanHeemst_1988]
+    maturity_days: 80
+    reference_tmean_c: 23.0
+    failure_t_ha: 0.3
+  groundnut:
+    label: Groundnut
+    examples: Red Valencia
+    wofost_crop: [groundnut, Groundnut_VanHeemst_1988]
+    maturity_days: 95
+    flowering_days: 42
+    reference_tmean_c: 22.0
+    failure_t_ha: 0.2

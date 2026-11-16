@@ -984,6 +984,52 @@ function EnginePanel({ aqua, others, v, vk, why, past }) {
 }
 
 // ── Nitrogen: DSSAT's crop with its nitrogen balance on, at assumed fertiliser rates (crop_engine/run_nitrogen.py) ────
+function OtherCropsPanel({ data, seasonal, sid, rk, ruleLabel, msg }) {
+  const sub = 'WOFOST alone grows the dryland legumes and millet that AquaCrop has no crop file for, in the same forecast '
+    + 'members, sown on the same rule. Only their days to flowering and maturity are set (Kenyan varieties); their yield '
+    + 'level is WOFOST\'s own crop file, not calibrated here: read the chances and the normal, not the tonnes.'
+  if (!data?.sites) return null                                       // not made yet: the panel stays hidden
+  const title = 'Other crops (WOFOST only, uncalibrated)'
+  if (!seasonal) return <Panel title={title} sub={sub}>{msg('Made for the seasonal forecast only: choose ECMWF SEAS5 under Forecast.')}</Panel>
+  const meta = data.meta
+  const site = data.sites?.[sid]
+  const rule = site && (site[meta.crops[0]]?.[rk] ? rk : meta.rules?.find(r => site[meta.crops[0]]?.[r]))
+  if (!site || !rule) return <Panel title={title} sub={sub}>{msg('No other crops for this site and rule.')}</Panel>
+  return (
+    <Panel title={title} sub={sub}>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="crop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th>Crop</th><th>Yield if sown</th><th>8 in 10 sown</th><th>Failure if sown</th><th>Below / above normal</th><th>Days to maturity</th></tr></thead>
+          <tbody>
+            {meta.crops.map(ck => {
+              const x = site[ck]?.[rule], y = x?.yield_if_sown_t_ha, vb = x?.vs_benchmark ?? {}
+              const L = meta.labels?.[ck] ?? {}
+              return (
+                <tr key={ck}>
+                  <td><span style={{ fontWeight: 600, color: 'var(--heading)' }}>{L.label ?? ck}</span>
+                    {L.examples ? <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-meta)' }}>{L.examples}</span> : null}</td>
+                  <td>{y ? `${fmtT(y.median)} t/ha` : '-'}</td>
+                  <td>{y ? `${fmtT(y.p10)} to ${fmtT(y.p90)} t/ha` : '-'}</td>
+                  <td>{pct(x?.p_failure_if_sown)}</td>
+                  <td>{vb.p_below_normal == null ? '-' : `${pct(vb.p_below_normal)} / ${pct(vb.p_above_normal)}`}</td>
+                  <td>{L.maturity_days ?? '-'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '10px 0 0', lineHeight: 1.5 }}>
+        {ruleLabel ?? rule}. Below / above normal compares each crop with the same crop grown by WOFOST in the observed weather
+        of {meta.years?.[0]} to {meta.years?.[1]}. The days to maturity are the varieties' at the warm sites where they were
+        measured (cowpea M66 at Kiboko, green gram at Kitui, pigeonpea ICPL 87091 at Kiboko); cooler sites take longer. The
+        legumes' yield is their pods. Cassava does not fit a season ending in March, and WOFOST has no dry bean or finger
+        millet. Made {fmtDate(meta.created?.slice(0, 10))} from the outlook of {fmtDate(meta.run)} (observations to {fmtDate(meta.obs_end)}); refreshed weekly.
+      </p>
+    </Panel>
+  )
+}
+
 function NitrogenPanel({ data, seasonal, sid, vk, rk, ruleLabel, msg }) {
   const sub = 'DSSAT grows the same members again with its nitrogen balance on: no fertiliser, and urea at two rates, beside its '
     + 'outlook with no nitrogen limitation. AquaCrop and WOFOST, like DSSAT’s outlook, have no nitrogen limit.'
@@ -1064,6 +1110,9 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
                           queryFn: () => getJSON(DATA + 'nitrogen.json').catch(() => null) })
   const scenQ = useQuery({ queryKey: ['crop-scenarios'], staleTime: 30 * 60_000, retry: false,
                            queryFn: () => getJSON(DATA + 'scenarios.json').catch(() => null) })
+  // the WOFOST-only crops of the seasonal run (crop_engine/run_other_crops.py); absent until first made
+  const otherQ = useQuery({ queryKey: ['crop-other'], staleTime: 30 * 60_000, retry: false,
+                            queryFn: () => getJSON(DATA + 'other_crops.json').catch(() => null) })
   // each outlook's summary on every day it was rebuilt (crop_engine/dashboard.py write_history); absent until first made
   const histQ = useQuery({ queryKey: ['crop-history'], staleTime: 30 * 60_000, retry: false,
                            queryFn: () => getJSON(DATA + 'history.json').catch(() => null) })
@@ -1347,6 +1396,12 @@ export default function CropOutlookTab({ country, selectedSite, season, initId, 
       {nitQ.data && (
         <div id="crop-nitrogen" style={{ marginTop: 18, scrollMarginTop: 12 }}>
           <NitrogenPanel data={nitQ.data} seasonal={run.source === 'seasonal'} sid={sid} vk={vk} rk={rk} ruleLabel={rules[rk]} msg={msg}/>
+        </div>
+      )}
+
+      {otherQ.data && (
+        <div id="crop-other" style={{ marginTop: 18, scrollMarginTop: 12 }}>
+          <OtherCropsPanel data={otherQ.data} seasonal={run.source === 'seasonal'} sid={sid} rk={rk} ruleLabel={rules[rk]} msg={msg}/>
         </div>
       )}
 
