@@ -13,7 +13,7 @@ sites' own ERA5-Land weather for every day (reference_et0), in two stages a year
   Long Rains   1 Mar – 31 Jul: a crop sown on the first such day from 1 Mar to 30 Apr (or fallow), then the dry season
 Each stage starts from the soil water profile the one before left (compartment by compartment), so water stored deep
 in a wet year carries into the next. The plan says what grows: "maize" (early maize both seasons, the variety of the
-outlook) or "fallow" (bare soil all year). The result per site and year: the profile on 1 Aug (compartment depths and
+outlook), "fallow" (bare soil all year) or "grass" (a dry-season cover of grass and weeds all year, COVER). The result per site and year: the profile on 1 Aug (compartment depths and
 volumetric water) and two fractions of the plant-available water, over 0–100 cm (comparable with SMAP's root zone,
 data/smap.py) and over the whole 2 m (the outlook's measure).
 
@@ -48,7 +48,15 @@ from crop_engine.adapters import aquacrop_adapter as aq
 
 OUT = C.OUT / "carryover"
 PLANS = {"maize": {"short_rains": "maize_early", "long_rains": "maize_early"},
-         "fallow": {"short_rains": None, "long_rains": None}}
+         "fallow": {"short_rains": None, "long_rains": None},
+         "grass": {"short_rains": "cover", "long_rains": "cover"}}
+# The dry-season cover of plan "grass" (an approximation: AquaCrop has no perennial grass): grass and weeds already
+# standing at each stage's start (set out as established plants: no germination to wait for), a sparse canopy (CCx
+# 0.4) rooting to 1.5 m, long-lived; it transpires from the subsoil while there is water and senesces as the soil dries,
+# as dry-season vegetation does. A bare fallow keeps the subsoil far too wet (checked against SMAP, CROP_ENGINE.md).
+COVER = {"aquacrop_crop": "MaizeGDD", "label": "Dry-season grass and weeds", "maturity_days": 260,
+         "parameters": {"CCx": 0.4, "Zmax": 1.5, "HI0": 0.01, "PlantPop": 44444}, "cover": True}
+COVER_ESTABLISHED = {"nursery_days": 30, "seedling_cm2": 300}
 DEFAULT_PLAN = "maize"
 FIRST_YEAR = C.HIST_YEARS[0]                     # 1 Aug 1993: started from ERA5-Land
 WINDOWS = {"short_rains": ((10, 1), (12, 15)), "long_rains": ((3, 1), (4, 30))}
@@ -139,6 +147,11 @@ def stage(wx, start, end, layers, variety, plant, init):
                         "Precipitation": np.r_[wx["rain"][k], np.zeros(PAD_DAYS)],
                         "ReferenceET": np.maximum(np.r_[wx["et0"][k], wx["et0"][rep]], 0.1), "Date": d.append(pad)})
     kw = aq.rooting_limited(variety["kw"], variety["aquacrop_crop"], layers)
+    cover = bool(variety.get("cover"))
+    if cover:                                                           # standing grass: established from the start
+        aq.patch_transplant()
+        g = np.clip((wx["tmax"][k] + wx["tmin"][k]) / 2 - 8.0, 0, None)
+        kw = aq.transplant_kw(kw, COVER_ESTABLISHED, variety["aquacrop_crop"], g[:COVER_ESTABLISHED["nursery_days"]])
     sow = plant or pad[0].date()                                         # fallow: "sown" the day after the stage
     if "z_m" in init:
         iwc = InitialWaterContent(wc_type="Num", method="Depth", depth_layer=list(init["z_m"]), value=list(init["th"]))
@@ -148,7 +161,12 @@ def stage(wx, start, end, layers, variety, plant, init):
                           soil=aq.make_soil(layers), crop=Crop(variety["aquacrop_crop"], planting_date=f"{sow:%m/%d}", **kw),
                           initial_water_content=iwc, off_season=True, co2_concentration=aq.co2())
     model._initialize()
-    model.run_model(num_steps=len(d))
+    if cover:
+        aq._TRANSPLANT.append(True)
+    try:
+        model.run_model(num_steps=len(d))
+    finally:
+        aq._TRANSPLANT.clear()
     prof = model._param_struct.Soil.profile
     th = np.asarray(model._init_cond.th, float)
     state = {"z_m": [round(float(z), 3) for z in prof.zMid], "th": [round(float(t), 4) for t in th]}
@@ -175,8 +193,11 @@ def chain(job):
                                 ("long_rains", (dt.date(y, 3, 1), dt.date(y, 7, 31)))):
             vk = PLANS[plan][st_name]
             rng = pd.date_range(a, b)
-            plant = sow_date(wx["rain"][wx["dates"].get_indexer(rng)], rng, WINDOWS[st_name]) if vk else None
-            v = varieties[vk] if vk else varieties["maize_early"]
+            if vk == "cover":
+                plant, v = a, varieties["_cover"]
+            else:
+                plant = sow_date(wx["rain"][wx["dates"].get_indexer(rng)], rng, WINDOWS[st_name]) if vk else None
+                v = varieties[vk] if vk else varieties["maize_early"]
             try:
                 state, yld = stage(wx, a, b, layers, v, plant, state)
             except Exception as exc:                                    # a stage that fails ends the site's chain
@@ -216,6 +237,9 @@ def build(plans, workers=2, last_year=None):
     years = list(range(FIRST_YEAR + 1, last_year + 1))
     inp = Inputs(refresh=False)
     _, varieties = ro.load_varieties(["maize_early"])
+    cover = dict(COVER)
+    cover["kw"], cover["scale"] = aq.crop_parameters(cover, 21.0)
+    varieties["_cover"] = cover
     dates = pd.date_range(f"{FIRST_YEAR}-08-01", f"{last_year}-07-31")
     rain = inp.observed_rain(dates)
     met = [inp.met(y, pd.date_range(f"{y}-08-01", f"{y + 1}-07-31")) for y in range(FIRST_YEAR, last_year)]
