@@ -66,7 +66,26 @@ Management (the scenarios, crop_engine.scenarios.management), where DSSAT has th
               DSSAT's mulch module turns into a cover that cuts soil evaporation; sr_inhb (no surface runoff, tied
               ridges or pits): the runoff curve number set to RIDGES_CN
 A member records the irrigation it received (irrigation_mm, IRCM).
-"""
+
+DSSAT part 2 (November 2026):
+  irrigation  every AquaCrop method: 1 automatic (IRRIG A) with the seasonal cap as DSSAT's AVWAT (mm) and the
+              threshold of the stage the scenario starts from; 2 automatic, to field capacity at most every
+              IrrInterval days (IFREQ); 3 the schedule of days after sowing; 4 automatic, the root zone kept above
+              NetIrrSMT %; 5 a constant depth every day for SCHEDULE_DAYS days. Schedules are written as calendar
+              dates (IRRIG R, IR001), one irrigation level per member from its own sowing: this build's IRRIG D
+              irrigated almost every day
+  bunds       field bunds (z_bund, m) as DSSAT's bund height (IR009, mm, IRRIG R): runoff held and ponded
+  groundwater a water table (ICWD and dated IR007 depths, IRRIG R) only on a DSSAT build with the water-table module
+              (supports_water_table; the installed 4.8.0.28 build has none, so the scenario stays AquaCrop's)
+  nitrogen extras (run_nitrogen levels, dssat_cultivars.yaml): manure_t_ha (farmyard manure RE003 at sowing, dry
+              matter, with manure_n_pct / _p_pct / _k_pct), soil_p_mg_kg (Bray-1 extractable P, SA002, PHOSP Y: maize,
+              sorghum and the bean; Olsen, SA001: Bray-1 hardly responded in this build), soil_k_cmol_kg
+              (exchangeable K, POTAS Y), tillage (an ox plough, TI003 at 15 cm, at sowing, TILL Y), pest {total_pct,
+              days, from_das} (observed leaf area destroyed, PLAD in the T-file, DISES Y). The topsoil's P and K to
+              30 cm, half below. Potassium and pest damage are written but do not work in the installed 4.8.0.28
+              build (potassium: "not enabled for this crop", maize included; pests: the T-file is never read), so
+              no level uses them; a newer DSSAT build would.
+Not in DSSAT CSM: salinity and weed competition (no process for these crops)."""
 import argparse
 import datetime as dt
 import hashlib
@@ -114,6 +133,7 @@ SOIL_PH = 6.5                    # SoilGrids pH is not in the profile; neutral (
 TIMEOUT_S = 600
 STRESS_WSPD = 0.5                 # PlantGro WSPD above this: transpiration below half its potential (a stress day)
 IRR_DEPTH_CM = 30                 # automatic irrigation: the managed depth
+SCHEDULE_DAYS = 120               # a constant daily irrigation's days after sowing (AquaCrop's method 5)
 MULCH_KG_HA = 3000                # the mulch scenario's surface residue (about half the soil covered by maize stover)
 RIDGES_CN = 35                    # the ridges scenario's runoff curve number (rain infiltrates where it falls)
 RETRIES = 3
@@ -271,7 +291,7 @@ def _slni_field(v):
 
 
 def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_n_factor=1.0, curve_number=None,
-              cn_adj_pct=0.0):
+              cn_adj_pct=0.0, soil_p_mg_kg=None, soil_k_cmol_kg=None):
     """A DSSAT soil file (.SOL) with one profile (nitrogen: the layers' organic nitrogen, SLNI = SLOC / C_TO_N ×
     organic_n_factor; cn_adj_pct: the texture's runoff curve number changed by that %, as AquaCrop's field practices)."""
     rows = soil_layers(layers, root_depth_cm)
@@ -288,13 +308,21 @@ def soil_file(soil_id, lat, lon, layers, root_depth_cm, nitrogen=False, organic_
            "@SITE        COUNTRY          LAT     LONG SCS FAMILY",
            f" -99         KE          {lat:8.3f} {lon:8.3f} -99",
            "@ SCOM  SALB  SLU1  SLDR  SLRO  SLNF  SLPF  SMHB  SMPX  SMKE",
-           f"   -99  0.13{slu1:6.1f}{sldr:6.2f}{slro:6.1f}  1.00  1.00 IB001 IB001 IB001",
+           f"   -99  0.13{slu1:6.1f}{sldr:6.2f}{slro:6.1f}  1.00  1.00 IB001 "
+           f"{'SA001' if soil_p_mg_kg is not None else 'IB001'} {'SA015' if soil_k_cmol_kg is not None else 'IB001'}",
            "@  SLB  SLMH  SLLL  SDUL  SSAT  SRGF  SSKS  SBDM  SLOC  SLCL  SLSI  SLCF  SLNI  SLHW  SLHB  SCEC  SADC"]
     for r in rows:
         out.append(f"{r['SLB']:6d}   -99{r['SLLL']:6.3f}{r['SDUL']:6.3f}{r['SSAT']:6.3f}{r['SRGF']:6.3f}{r['SSKS']:6.2f}"
                    f"{r['SBDM']:6.2f}{r['SLOC']:6.2f}{r['SLCL']:6.1f}{r['SLSI']:6.1f}{r['SLCF']:6.1f}"
                    + (_slni_field(_slni(r['SLOC'], organic_n_factor)) if nitrogen else "   -99")
                    + f"{SOIL_PH:6.1f}   -99   -99   -99")
+    if soil_p_mg_kg is not None or soil_k_cmol_kg is not None:      # the second tier (module doc: phosphorus, potassium)
+        out.append("@  SLB  SLPX  SLKE")
+        for r in rows:
+            f = 1.0 if r["SLB"] <= 30 else 0.5                          # the topsoil's value, half below 30 cm
+            px = f"{float(soil_p_mg_kg) * f:6.1f}" if soil_p_mg_kg is not None else "   -99"
+            ke = f"{float(soil_k_cmol_kg) * f:6.2f}" if soil_k_cmol_kg is not None else "   -99"
+            out.append(f"{r['SLB']:6d}{px}{ke}")
     return "\n".join(out) + "\n"
 
 
@@ -332,22 +360,41 @@ def _fit6(x):
 
 
 def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations, init_sh2o, ppop_m2, last_day,
-                    water=True, nitrogen=None, irrigation=None, mulch_kg_ha=0):
+                    water=True, nitrogen=None, irrigation=None, mulch_kg_ha=0, bund_mm=0, water_table=None):
     """The FileX: one treatment per planting (member), each with its own field (weather station) and planting date;
     initial water at `start`; harvest at maturity, or on `last_day` when not mature by then. water False: no water
     balance (no water stress: the yield without water limitation, for the calibration). nitrogen: the nitrogen
     balance on, with urea applications {"rate_kg_ha", "split": [(days after sowing, share), ...]} (module doc)."""
     n = len(plantings)
-    auto_irr = bool(irrigation) and water
-    ithrl = int(round(float((irrigation or {}).get("SMT", [70])[0]))) if auto_irr else 50
-    rate = float((nitrogen or {}).get("rate_kg_ha") or 0.0)
+    nit = nitrogen or {}
+    irr = dict(irrigation or {}) if water else {}
+    method = int(irr.get("irrigation_method", 3 if "schedule_das" in irr else 1)) if irr else 0
+    sched = schedule_das(irr) if method in (3, 5) else []
+    auto_irr = method in (1, 2, 4)
+    ithrl = (int(round(float(irr.get("NetIrrSMT", 60)))) if method == 4 else 100 if method == 2
+             else int(round(float(irr.get("SMT", [70])[int(irr.get("start_stage", 1)) - 1])))) if auto_irr else 50
+    avwat = int(round(float(irr["MaxIrrSeason"]))) if auto_irr and irr.get("MaxIrrSeason") else None
+    ifreq = int(irr.get("IrrInterval", 0)) if method == 2 else 0
+    ops = []                                                          # (calendar date, code, value): R-mode operations
+    if bund_mm:
+        ops.append((start, "IR009", float(bund_mm)))
+    for d, depth_cm in (water_table or {}).get("ops", []):
+        ops.append((d, "IR007", float(depth_cm)))
+    # a schedule is given in calendar dates, one irrigation level per member from its own sowing: this build's
+    # IRRIG D (days after planting) irrigated almost daily (84 events for a schedule of 4)
+    irrig = "A" if auto_irr else "R" if (sched or ops) else "N"
+    mi = 1 if (sched or ops) else 0
+    rate = float(nit.get("rate_kg_ha") or 0.0)
     mf = 1 if nitrogen and rate > 0 else 0
+    manure = float(nit.get("manure_t_ha") or 0.0)
+    till = bool(nit.get("tillage"))
+    pest = nit.get("pest")
     out = [f"*EXP.DETAILS: {name}{crop} CROP ENGINE MEMBERS", "",
            "*TREATMENTS                        -------------FACTOR LEVELS------------",
            "@N R O C TNAME.................... CU FL SA IC MP MI MF MR MC MT ME MH SM"]
     for k in range(n):
-        out.append(f"{k + 1:2d} 1 0 0 {'M' + str(k + 1):25s}{1:3d}{k + 1:3d}{0:3d}{1:3d}{k + 1:3d}{0:3d}{mf:3d}"
-                   + f"{0:3d}" * 5 + f"{1:3d}")
+        out.append(f"{k + 1:2d} 1 0 0 {'M' + str(k + 1):25s}{1:3d}{k + 1:3d}{0:3d}{1:3d}{k + 1:3d}{(k + 1) if sched else mi:3d}{mf:3d}"
+                   + f"{(k + 1) if manure else 0:3d}{0:3d}{(k + 1) if till else 0:3d}" + f"{0:3d}" * 2 + f"{1:3d}")
     out += ["", "*CULTIVARS", "@C CR INGENO CNAME", f" 1 {crop} {cultivar_id:6s} {CUSTOM_NAME if cultivar_id == CUSTOM_ID else cultivar_id}",
             "", "*FIELDS",
             "@L ID_FIELD WSTA....  FLSA  FLOB  FLDT  FLDD  FLDS  FLST SLTX  SLDP  ID_SOIL    FLNAME"]
@@ -355,7 +402,8 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
         out.append(f"{k + 1:2d} CEFL{k + 1:04d} {st:8s}   -99     0 DR000     0     0 00000 -99    -99  {soil_id:10s} -99")
     out += ["", "*INITIAL CONDITIONS",
             "@C   PCR ICDAT  ICRT  ICND  ICRN  ICRE  ICWD ICRES ICREN ICREP ICRIP ICRID ICNAME",
-            f" 1    {crop} {yyddd(start)}   -99   -99     1     1   -99"
+            f" 1    {crop} {yyddd(start)}   -99   -99     1     1"
+            + (f"{int(round((water_table or {}).get('initial_cm', 0))):6d}" if water_table else "   -99")
             + (f"{int(mulch_kg_ha):6d}   0.8     0     0     0 -99" if mulch_kg_ha else "   -99   -99   -99   -99   -99 -99"),
             "@C  ICBL  SH2O  SNH4  SNO3"]
     nh4 = float((nitrogen or {}).get("initial_nh4_ppm", INIT_NH4))
@@ -367,6 +415,24 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
     for k, p in enumerate(plantings):
         out.append(f"{k + 1:2d} {yyddd(p)}   -99{ppop_m2:6.1f}{ppop_m2:6.1f}     S     R{ROWS_CM.get(crop, ROW_CM):6d}     0{DEPTH_CM:6d}"
                    "   -99   -99   -99   -99     0                        -99")
+    if mi:
+        out += ["", "*IRRIGATION AND WATER MANAGEMENT"]
+        for k, p in enumerate(plantings if sched else plantings[:1]):
+            ev = [(p + dt.timedelta(days=int(d)), "IR001", float(mm)) for d, mm in sched
+                  if p + dt.timedelta(days=int(d)) <= last_day] + list(ops)
+            out += ["@I  EFIR  IDEP  ITHR  IEPT  IOFF  IAME  IAMT IRNAME",
+                    f"{k + 1:2d}     1   -99   -99   -99   -99   -99   -99 -99", "@I IDATE  IROP IRVAL"]
+            out += [f"{k + 1:2d} {yyddd(d)} {code}{v:6.0f}" for d, code, v in sorted(ev)]
+    if manure:                                                        # farmyard manure at each member's sowing
+        out += ["", "*RESIDUES AND ORGANIC FERTILIZER",
+                "@R RDATE  RCOD  RAMT  RESN  RESP  RESK  RINP  RDEP  RMET RENAME"]
+        for k, p in enumerate(plantings):
+            out.append(f"{k + 1:2d} {yyddd(p)} RE003{manure * 1000:6.0f}{float(nit.get('manure_n_pct', 2.0)):6.2f}"
+                       f"{float(nit.get('manure_p_pct', 0.36)):6.2f}{float(nit.get('manure_k_pct', 1.5)):6.2f}"
+                       f"   100    15 AP002 FYM")
+    if till:                                                          # an ox plough at each member's sowing
+        out += ["", "*TILLAGE AND ROTATIONS", "@T TDATE TIMPL  TDEP TNAME"]
+        out += [f"{k + 1:2d} {yyddd(p)} TI003    15 Ox plough" for k, p in enumerate(plantings)]
     if mf:
         out += ["", "*FERTILIZERS (INORGANIC)",
                 "@F FDATE  FMCD  FACD  FDEP  FAMN  FAMP  FAMK  FAMC  FAMO  FOCD FERNAME"]
@@ -378,25 +444,80 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
             f" 1 GE              1     1     S {s}  2150 CROP ENGINE",
             "@N OPTIONS     WATER NITRO SYMBI PHOSP POTAS DISES  CHEM  TILL   CO2",
             f" 1 OP              {'Y' if water else 'N'}     {'Y' if nitrogen else 'N'}     {'Y' if nitrogen and crop == 'BN' else 'N'}"
-            "     N     N     N     N     N     M",
+            f"     {'Y' if nit.get('soil_p_mg_kg') is not None else 'N'}     {'Y' if nit.get('soil_k_cmol_kg') is not None else 'N'}"
+            f"     {'Y' if pest else 'N'}     N     {'Y' if till else 'N'}     M",
             "@N METHODS     WTHER INCON LIGHT EVAPO INFIL PHOTO HYDRO NSWIT MESOM MESEV MESOL",
             f" 1 ME              M     M     E     F     S     {PHOTO.get(crop, 'R')}     R     1     G     S     2",
             "@N MANAGEMENT  PLANT IRRIG FERTI RESID HARVS",
-            f" 1 MA              R     {'A' if auto_irr else 'N'}     {'D' if mf else 'N'}     N     A",
+            f" 1 MA              R     {irrig}     {'D' if mf else 'N'}     {'R' if manure else 'N'}     A",
             "@N OUTPUTS     FNAME OVVEW SUMRY FROPT GROUT CAOUT WAOUT NIOUT MIOUT DIOUT VBOSE CHOUT OPOUT FMOPT",
             " 1 OU              N     N     Y     1     Y     N     N     N     N     N     Y     N     N     A",
             "",
             "@  AUTOMATIC MANAGEMENT",
             "@N PLANTING    PFRST PLAST PH2OL PH2OU PH2OD PSTMX PSTMN",
             f" 1 PL          {s} {yyddd(last_day)}    40   100    30    40    10",
-            "@N IRRIGATION  IMDEP ITHRL ITHRU IROFF IMETH IRAMT IREFF",
-            f" 1 IR          {IRR_DEPTH_CM:5d}{ithrl:6d}   100 GS000 IR001    10     1",
+            "@N IRRIGATION  IMDEP ITHRL ITHRU IROFF IMETH IRAMT IREFF" + (" AVWAT IFREQ" if avwat or ifreq else ""),
+            f" 1 IR          {IRR_DEPTH_CM:5d}{ithrl:6d}   100 GS000 IR001    10     1"
+            + (f"{avwat if avwat else -99:6d}{ifreq:6d}" if avwat or ifreq else ""),
             "@N NITROGEN    NMDEP NMTHR NAMNT NCODE NAOFF",
             " 1 NI             30    50    25 FE001 GS000",
             "@N RESIDUES    RIPCN RTIME RIDEP",
             " 1 RE            100     1    20",
             "@N HARVEST     HFRST HLAST HPCNP HPCNR",
             f" 1 HA              0 {yyddd(last_day)}   100     0", ""]
+    return "\n".join(out) + "\n"
+
+
+def schedule_das(irr):
+    """[(days after sowing, mm)] of a scheduled irrigation (IRRIG D): AquaCrop's method 3 (schedule_das) or 5 (a
+    constant depth every day for SCHEDULE_DAYS days, the crop's season)."""
+    if "schedule_das" in irr:
+        return [(int(d), float(mm)) for d, mm in irr["schedule_das"]]
+    if int(irr.get("irrigation_method", 0)) == 5:
+        return [(d, float(irr.get("depth", 0.0))) for d in range(SCHEDULE_DAYS)]
+    return []
+
+
+def water_table_spec(spec, start, last_day):
+    """A task's groundwater spec (aquacrop_adapter's: depth_m, or monthly_m) as DSSAT's initial depth (ICWD, cm) and
+    dated depth operations (IR007, cm, IRRIG R): the 15th of each month of the season."""
+    if not spec:
+        return None
+    if "monthly_m" not in spec:
+        d = float(spec["depth_m"]) * 100.0
+        return {"initial_cm": d, "ops": [(start, d)]}
+    table = {int(k): float(v) * 100.0 for k, v in spec["monthly_m"].items()}
+    near = lambda m: table.get(m, table[min(table, key=lambda k: min(abs(k - m), 12 - abs(k - m)))])  # noqa: E731
+    days = [dt.date(y, m, 15) for y, m in sorted({(d.year, d.month) for d in pd.date_range(start, last_day)})]
+    days = [d for d in days if start <= d <= last_day]
+    return {"initial_cm": near(start.month), "ops": [(start, near(start.month))] + [(d, near(d.month)) for d in days]}
+
+
+_WATER_TABLE = []
+
+
+def supports_water_table():
+    """True when the installed DSSAT build has the water-table module (DSSAT CSM after April 2023: WaterTable.f90,
+    ADJWTD); the 4.8.0.28 build of the DSSATTools 3.0.2 wheel stores IR007 depths but never uses them."""
+    if not _WATER_TABLE:
+        try:
+            _WATER_TABLE.append(b"ADJWTD" in EXE.read_bytes().upper())
+        except OSError:
+            _WATER_TABLE.append(False)
+    return _WATER_TABLE[0]
+
+
+def pest_file(name, crop, plantings, pest):
+    """The T-file of observed pest damage (DISES Y): leaf area destroyed (PLAD, % a day) at the rate that removes
+    pest["total_pct"] % of the leaves over pest["days"] days from pest["from_das"] days after each member's sowing."""
+    days, total = int(pest.get("days", 21)), float(pest.get("total_pct", 20.0))
+    rate = 100.0 * (1.0 - (1.0 - total / 100.0) ** (1.0 / days))
+    out = [f"*EXP. DATA (T): {name}{crop}", "", "@TRNO  DATE  PLAD"]
+    for k, p in enumerate(plantings):
+        a = p + dt.timedelta(days=int(pest.get("from_das", 21)))
+        b = a + dt.timedelta(days=days - 1)
+        for d, v in ((a - dt.timedelta(days=1), 0.0), (a, rate), (b, rate), (b + dt.timedelta(days=1), 0.0)):
+            out.append(f"{k + 1:5d} {yyddd(d)}{v:6.2f}")
     return "\n".join(out) + "\n"
 
 
@@ -561,7 +682,9 @@ def run_members(task, members, plantings, water=None):
         (folder / "SOIL.SOL").write_text(soil_file(soil_id, task["lat"], task.get("lon", 0.0), task["layers"], root,
                                                    nitrogen=bool(nit), organic_n_factor=float((nit or {}).get("organic_n_factor", 1.0)),
                                                    curve_number=RIDGES_CN if (task.get("field") or {}).get("sr_inhb") else None,
-                                                   cn_adj_pct=(task.get("field") or {}).get("curve_number_adj_pct", 0.0)),
+                                                   cn_adj_pct=(task.get("field") or {}).get("curve_number_adj_pct", 0.0),
+                                                   soil_p_mg_kg=(nit or {}).get("soil_p_mg_kg"),
+                                                   soil_k_cmol_kg=(nit or {}).get("soil_k_cmol_kg")),
                                          encoding="ascii")
         stations = []
         for m in members:
@@ -577,12 +700,19 @@ def run_members(task, members, plantings, water=None):
                      or _default_pop(v["aquacrop_crop"])) / 10000.0
         last = dates[-2].date()
         fx = f"CE{dates[0].year % 100:02d}0001.{ext}"
+        field = task.get("field") or {}
+        wt = (water_table_spec(task.get("groundwater"), dates[0].date(), last)
+              if task.get("groundwater") and supports_water_table() else None)
         (folder / fx).write_text(experiment_file("CE000001", crop, cul_id, soil_id, dates[0].date(), plantings,
                                                  stations, init, ppop, last,
                                                  water=task.get("water", True) if water is None else water,
                                                  nitrogen=task.get("nitrogen"), irrigation=task.get("irrigation"),
-                                                 mulch_kg_ha=MULCH_KG_HA if (task.get("field") or {}).get("mulches") else 0),
+                                                 mulch_kg_ha=MULCH_KG_HA if field.get("mulches") else 0,
+                                                 bund_mm=1000.0 * float(field.get("z_bund", 0.1)) if field.get("bunds") else 0,
+                                                 water_table=wt),
                                  encoding="ascii")
+        if (nit or {}).get("pest"):
+            (folder / (fx[:-1] + "T")).write_text(pest_file("CE000001", crop, plantings, nit["pest"]), encoding="ascii")
         (folder / "DSSATPRO.V48").write_text(run_profile(folder, crop, model), encoding="ascii")
         env = dict(os.environ, DSSAT_HOME=short_path(DATA) + os.sep)
         run = subprocess.run([str(EXE), "A", fx], cwd=short_path(folder), env=env, capture_output=True, text=True,

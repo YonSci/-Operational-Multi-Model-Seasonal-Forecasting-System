@@ -122,7 +122,11 @@ def test_dssat_grows_the_scenarios_it_can(monkeypatch):
     res = {"sites": {"kiboko": {"results": {"maize_early": {"rule1": {"summary": {}, "dssat": {}}}}}}}
     vks, keys = rs.dssat_plan(res, vs, list(mg.SCENARIOS))
     assert vks == {"maize_early", "maize_medium", "sorghum", "bean"}
-    assert "irr_full" in keys and "irr_supplementary" not in keys          # no seasonal cap in DSSAT's irrigation
+    # DSSAT part 2: the seasonal cap (AVWAT), every irrigation method and bunds; not AquaCrop 7's fertility, weeds,
+    # salinity, nor a water table on the installed build
+    assert {"irr_full", "irr_supplementary", "irr_interval", "irr_schedule", "irr_net", "irr_constant", "bunds"} <= set(keys)
+    assert not {"fert_25", "weeds_50", "saline_soil", "parameters", "heat_literature", "transplanted"} & set(keys)
+    assert ("gw_1_5m" in keys) == ds.supports_water_table()
     assert rs.dssat_plan({"sites": {"kiboko": {"results": {"maize_early": {"rule1": {"summary": {}}}}}}}, vs,
                          list(mg.SCENARIOS)) == (set(), [])                 # a run without DSSAT
 

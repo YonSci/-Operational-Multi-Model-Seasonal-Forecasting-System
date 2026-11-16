@@ -1807,6 +1807,47 @@ Lowlands, Coastal Lowlands, Marginal Rain Shadow; Sheahan, Black & Jayne 2013, *
 here (the publishers' pages refuse automated access), so no zone's rate is taken from them yet. The levels stay
 0, 25 and 50 kg N/ha until the sites' managers answer or a zone's surveyed rate is added by hand.
 
+### DSSAT, part 2 (November 2026)
+
+What DSSAT CSM itself can do, checked against the installed build (DSSAT 4.8.0.28, from the DSSATTools 3.0.2 wheel)
+by running each input on a synthetic season (`tests/test_dssat_part2.py` for the files written):
+
+- **Irrigation: every AquaCrop method, and the seasonal cap.** DSSAT's automatic irrigation has a seasonal cap after
+  all (AVWAT, mm; the adapter's earlier note was wrong), so the supplementary irrigation scenario now runs in DSSAT,
+  from the threshold of the stage it starts at: 100 mm applied, early maize 5.10 t/ha against 2.03 rain-fed and 5.14
+  fully irrigated. Methods 2 (to field capacity at most every 7 days, IFREQ) and 4 (the root zone kept above 60 %) are
+  automatic; 3 (a fixed schedule) and 5 (3 mm a day) are written as calendar dates, one irrigation level per member
+  from its own sowing: this build's IRRIG D (days after planting) irrigated almost every day (84 events, 2,115 mm for
+  a schedule of four, 115 mm).
+- **Bunds** (IR009, bund height): runoff held on the field and ponded, whatever the crop.
+- **Farmyard manure** (RE003 at sowing, the nitrogen levels): 2.5 t/ha of dry matter (the Machakos farm average, ACIAR
+  1992: about 50 kg N and 9 kg P a year), 2 % N, 0.36 % P. Synthetic season: 1.97 t/ha against 1.20 without
+  fertiliser and 1.91 with 25 kg N/ha.
+- **Ox-plough tillage** (TI003, 15 cm, at sowing, TILL Y): 2.07 against 1.91 t/ha with 25 kg N/ha.
+- **Phosphorus** (PHOSP Y; CERES-Maize, CERES-Sorghum and CROPGRO-Dry bean): Olsen P in the soil file's second tier
+  (topsoil to 30 cm, half below). With Bray-1 (SA002) the yield did not move between 30 and 3 mg/kg; with Olsen it
+  does, below about 5 mg/kg: 60 kg N/ha, 4.66 t/ha at Olsen 6–20, 4.32 at 4, 4.21 at 2. That matches the eastern
+  trials' small response to phosphorus (0.97, *Phosphorus and potassium* above). Two levels: Olsen 4 mg/kg (low: 41 %
+  of Machakos and Makueni plots are below 10 mg/kg Bray, Okalebo et al. 1992) and 12 mg/kg (about their mean, Bray 25).
+- **Fertiliser rates per site** (`dssat_cultivars.yaml` nitrogen sites, each site's "reported" level): the surveys'
+  field-average practice on maize, until the sites' managers report theirs. Kiboko and Kapiti 13 kg N/ha (the Eastern
+  Lowlands' maize villages, Tegemeo panel 2010: 51 % of fields at 25.5 kg N/ha; an upper bound, since these sites are
+  drier, where under 6 % of households use fertiliser: CCAFS baseline, Wote 2012), El Karama 3 (Laikipia: 6–16 % of
+  fields at 22 kg N/ha), Livemo, Genco Maralal and Genco Tana River none (Kajiado under 2 %, Samburu 1 % of households;
+  Tana River uses manure: the county climate risk profiles). The assumed 0, 25 and 50 kg N/ha stay beside them.
+- **Not in this build, written for a newer one.** A water table (ICWD and dated IR007 depths: DSSAT's water-table
+  module came in 2023; this build stores the depths and never uses them; `supports_water_table()` keeps the scenarios
+  AquaCrop's until a newer DSSAT is installed); potassium ("Potassium model not enabled for this crop", maize
+  included); observed pest damage (PLAD in the T-file, DISES Y: the file is never read, the yield unchanged). The
+  files are written, so a newer DSSAT build (from source or a newer wheel) would run them.
+- **Not in DSSAT CSM at all:** salinity and weed competition, for these crops.
+- **Sequence mode (multi-season), not done.** DSSAT's sequence runs (mode Q) carry soil water, nitrogen and residue
+  from crop to crop, but the release notes of DSSAT 4.8.6 (July 2026) correct "an initialization issue affecting
+  Sequence simulations", which the installed build predates. The way to do it on this build is the carry-over's
+  (`carryover.py`): run the Long Rains, read the soil water and mineral nitrogen on 31 Jul (SoilWat.OUT, SoilNi.OUT)
+  and start the Short Rains from them, with the stover as surface residue. AquaCrop's carry-over (above) did not
+  agree with SMAP better than ERA5-Land, so this waits for that question to be settled.
+
 ### DSSAT in the rest of the engine (November 2026)
 
 - **Management scenarios** (`run_scenarios`): DSSAT grows every scenario except the ones capped by a seasonal

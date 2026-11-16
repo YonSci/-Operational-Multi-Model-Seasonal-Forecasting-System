@@ -56,9 +56,18 @@ def site_levels(sid, levels, reported):
     return out
 
 
+EXTRAS = ("manure_t_ha", "manure_n_pct", "manure_p_pct", "manure_k_pct", "soil_p_mg_kg", "soil_k_cmol_kg", "tillage",
+          "pest")                                               # a level's other inputs (dssat_adapter module doc)
+
+
 def with_nitrogen(t, sid, lv, split):
     return dict(t, nitrogen={"rate_kg_ha": lv["rate_kg_ha"], "split": split.get(t["variety"]["aquacrop_crop"], [(0, 1.0)]),
-                             **dsa.soil_nitrogen(sid)})
+                             **dsa.soil_nitrogen(sid), **{k: lv[k] for k in EXTRAS if k in lv}})
+
+
+def grows(lv, variety):
+    """A level limited to some crops (crops: [AquaCrop crop keys], e.g. potassium: CERES-Maize only)."""
+    return not lv.get("crops") or variety["aquacrop_crop"] in lv["crops"]
 
 
 def normal_hash(dhash):
@@ -87,6 +96,8 @@ def nitrogen_normal(varieties, rules, workers, dhash, force=False):
     nt, nk = [], []
     for t, (sid, vk, rk, y) in zip(tasks, keys):
         for lk, lv in site_levels(sid, levels, reported).items():
+            if not grows(lv, varieties[vk]):
+                continue
             nt.append(dict(with_nitrogen(t, sid, lv, split), potential=False))
             nk.append((lk, sid, vk, rk, y))
     log(f"nitrogen normal: {len(nt)} observed seasons ({len(years)} years, {len(levels)} levels)")
@@ -150,6 +161,8 @@ def run(rid, workers=2, force=False, max_age_days=None):
         if "rad" not in t:
             continue
         for lk, lv in site_levels(key3[0], levels, reported).items():
+            if not grows(lv, varieties[key3[1]]):
+                continue
             tasks.append(dict(with_nitrogen(t, key3[0], lv, split), potential=False))
             keys.append((*key3, lk))
     log(f"{rid}: {len(tasks)} runs ({len(base)} site, crop and rule cells × {len(levels)} nitrogen levels)")

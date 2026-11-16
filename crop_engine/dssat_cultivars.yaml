@@ -52,8 +52,22 @@ nitrogen:
     n0:  {label: "No fertiliser", rate_kg_ha: 0}
     n25: {label: "25 kg N/ha (low)", rate_kg_ha: 25}
     n50: {label: "50 kg N/ha (moderate)", rate_kg_ha: 50}
+    # DSSAT's other inputs (dssat_adapter module doc), each at the low rate unless stated; assumed levels from the
+    # literature (CROP_ENGINE.md "DSSAT, part 2")
+    fym: {label: "Farmyard manure 2.5 t/ha, no urea", rate_kg_ha: 0, manure_t_ha: 2.5, manure_n_pct: 2.0, manure_p_pct: 0.36, manure_k_pct: 1.5}
+    n25_low_p: {label: "25 kg N/ha on a low-phosphorus soil (Olsen P 4 mg/kg)", rate_kg_ha: 25, soil_p_mg_kg: 4}
+    n25_p_mean: {label: "25 kg N/ha, soil phosphorus at the Machakos mean (Olsen P about 12 mg/kg)", rate_kg_ha: 25, soil_p_mg_kg: 12}
+    n25_plough: {label: "25 kg N/ha, ox plough at sowing (15 cm)", rate_kg_ha: 25, tillage: true}
+    # not used: low potassium and fall armyworm damage (soil_k_cmol_kg, pest) do not work in the installed DSSAT build
   split:
     MaizeGDD:   [[0, 0.4], [30, 0.6]]
     SorghumGDD: [[0, 0.4], [30, 0.6]]
     DryBeanGDD: [[0, 1.0]]
-  sites: {}
+  # a site's farmers' practice, from surveys (until its managers report): field-average kg N/ha on maize
+  sites:
+    kalro_kiboko_makueni_farm: {rate_kg_ha: 13, label: "Farmers' practice: 13 kg N/ha (Eastern Lowlands field average)", source: "Sheahan, Black & Jayne 2012 (MSU IDWP 125), Tegemeo panel 2010: 51 % of maize fields fertilised at 25.5 kg N/ha; an upper bound for Kiboko, drier than the sampled villages (Wote, Makueni: under 6 % of households use fertiliser, CCAFS baseline 2012)"}
+    kapiti_research_station_farm: {rate_kg_ha: 13, label: "Farmers' practice: 13 kg N/ha (Eastern Lowlands field average)", source: "Sheahan, Black & Jayne 2012 (MSU IDWP 125), Tegemeo panel 2010, Machakos and Makueni; an upper bound for the drier Kapiti plains"}
+    el_karama_sahiwals_farm: {rate_kg_ha: 3, label: "Farmers' practice: about 3 kg N/ha (Laikipia field average)", source: "Tegemeo panel 2010, Marginal Rain Shadow: 6 % of maize fields at 22.2 kg N/ha; ASDSP 2014 (Laikipia climate risk profile 2018): 16 % use basal fertiliser"}
+    livemo_ltd_memerush_kajiado: {rate_kg_ha: 0, label: "Farmers' practice: no fertiliser (Kajiado)", source: "Kajiado county climate risk profile 2018 (ASDSP 2014): under 2 % of households use fertiliser"}
+    genco_ltd_maralal_samburu_farm: {rate_kg_ha: 0, label: "Farmers' practice: no fertiliser (Samburu)", source: "Samburu county climate risk profile 2021: 1 % use planting fertiliser, 5.7 % top-dress"}
+    genco_ltd_tana_river_farm: {rate_kg_ha: 0, label: "Farmers' practice: no fertiliser, manure instead (Tana River)", source: "Tana River county climate risk profile 2016: farmers use manure rather than fertiliser (no rate given)"}

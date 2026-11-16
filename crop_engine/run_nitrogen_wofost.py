@@ -58,8 +58,10 @@ def maize(varieties):
 
 
 def levels_all():
+    """The levels WOFOST can grow: urea rates only (manure, P, K, tillage and pests are DSSAT's, run_nitrogen.EXTRAS)."""
     levels, split, reported, assumed = rn.settings()
-    return {"unlimited": UNLIMITED, **levels}, split, reported, assumed
+    plain = {k: v for k, v in levels.items() if not any(x in v for x in rn.EXTRAS)}
+    return {"unlimited": UNLIMITED, **plain}, split, reported, assumed
 
 
 def config(rules, sites):
