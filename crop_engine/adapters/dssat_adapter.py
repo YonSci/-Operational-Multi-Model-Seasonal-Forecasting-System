@@ -41,6 +41,12 @@ PlantPop (plants / ha, AquaCrop's parameter, or AquaCrop's default for the crop)
 sorghum) or 50 cm (bean); sown 5 cm deep. Photosynthesis: radiation use efficiency (CERES), the canopy curve
 (CROPGRO, which has no RUE option).
 
+The WOFOST-only crops (crop_engine/wofost_crops.yaml, run_other_crops): a crop with no AquaCrop crop names its DSSAT
+model in `dssat: {crop: cowpea | peanut | pigeonpea | millet, cultivar: ..., <coefficient>: ...}` (OTHER_CROPS:
+CROPGRO-Cowpea, -Peanut, -Pigeonpea, CERES-Millet; DSSAT 4.8 has no mung bean), with its own `root_depth_cm` (the
+WOFOST crop's maximum rooting depth, so both engines root alike) and optionally `PlantPop` (plants / ha; default
+OTHER_POP_M2). Their yield is HWAM, the harvested product (the legumes' seed, as DSSAT reports it; WOFOST's is pods).
+
 Outcome of a member (as aquacrop_adapter: ok, died, failed_establishment, too_late, not_sown, error):
   failed_establishment  no germination within 15 days of sowing (DSSAT's own test; this build then stops with a
                         floating-point exception before its summary, so the member is run alone and its message
@@ -116,9 +122,21 @@ RUNS = Path(os.environ.get("CROP_ENGINE_DSSAT_RUNS") or HOME / "run")   # each t
 CROPS = {"MaizeGDD": ("MZ", "MZCER048", "MZCER048.CUL", "MZX"),
          "SorghumGDD": ("SG", "SGCER048", "SGCER048.CUL", "SGX"),
          "DryBeanGDD": ("BN", "CRGRO048", "BNGRO048.CUL", "BNX")}
+# the WOFOST-only crops' DSSAT models (crop_engine/wofost_crops.yaml `dssat: {crop: <name>, cultivar: ...}`, grown by
+# run_other_crops): DSSAT 4.8 has CROPGRO-Cowpea, -Peanut and -Pigeonpea and CERES-Millet (pearl millet), no mung bean
+OTHER_CROPS = {"cowpea": ("CP", "CRGRO048", "CPGRO048.CUL", "CPX"),
+               "peanut": ("PN", "CRGRO048", "PNGRO048.CUL", "PNX"),
+               "pigeonpea": ("PP", "CRGRO048", "PPGRO048.CUL", "PPX"),
+               "millet": ("ML", "MLCER048", "MLCER048.CUL", "MLX")}
 # photosynthesis: radiation use efficiency for CERES, the canopy curve for CROPGRO (it has no RUE option); rows, cm
-PHOTO = {"MZ": "R", "SG": "R", "BN": "C"}
-ROWS_CM = {"MZ": 75, "SG": 75, "BN": 50}
+PHOTO = {"MZ": "R", "SG": "R", "BN": "C", "CP": "C", "PN": "C", "PP": "C", "ML": "R"}
+ROWS_CM = {"MZ": 75, "SG": 75, "BN": 50, "CP": 60, "PN": 45, "PP": 60, "ML": 75}
+LEGUMES = {"BN", "CP", "PN", "PP"}   # nitrogen fixation (SYMBI) with the nitrogen balance on
+# plants / m2 of the WOFOST-only crops (AquaCrop has no crop file to take PlantPop from): KALRO / Infonet spacings,
+# assumed until the sites report theirs: cowpea 60 x 20 cm, groundnut 45 x 15 cm, short-duration pigeonpea 60 x 20 cm,
+# pearl millet 75 x 20 cm; a variety's dssat PlantPop (plants / ha) replaces them
+OTHER_POP_M2 = {"CP": 8.3, "PN": 14.8, "PP": 8.3, "ML": 6.7}
+NOT_COEFFICIENTS = ("crop", "PlantPop", "root_depth_cm")   # a variety's dssat keys that are not cultivar coefficients
 CUSTOM_ID, CUSTOM_NAME = "CE0001", "crop engine"
 K_EXT = 0.6
 ESTABLISHED_LAI = -np.log(1 - 0.05) / K_EXT
@@ -189,8 +207,22 @@ def installed():
     return EXE.exists() and (DATA / "Genotype").is_dir()
 
 
+def crop_key(variety):
+    """The variety's DSSAT crop key: its AquaCrop crop (CROPS), or a WOFOST-only crop's `dssat: {crop}` (OTHER_CROPS),
+    or None."""
+    if variety.get("aquacrop_crop") in CROPS:
+        return variety["aquacrop_crop"]
+    c = (variety.get("dssat") or {}).get("crop")
+    return c if c in OTHER_CROPS else None
+
+
+def crop_spec(key):
+    """(DSSAT crop code, model, cultivar file, FileX extension) of a crop key (crop_key)."""
+    return CROPS[key] if key in CROPS else OTHER_CROPS[key]
+
+
 def available(variety):
-    return variety.get("aquacrop_crop") in CROPS and bool((variety.get("dssat") or {}).get("cultivar")) and installed()
+    return crop_key(variety) is not None and bool((variety.get("dssat") or {}).get("cultivar")) and installed()
 
 
 # ── installation ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -443,7 +475,7 @@ def experiment_file(name, crop, cultivar_id, soil_id, start, plantings, stations
             "@N GENERAL     NYERS NREPS START SDATE RSEED SNAME.................... SMODEL",
             f" 1 GE              1     1     S {s}  2150 CROP ENGINE",
             "@N OPTIONS     WATER NITRO SYMBI PHOSP POTAS DISES  CHEM  TILL   CO2",
-            f" 1 OP              {'Y' if water else 'N'}     {'Y' if nitrogen else 'N'}     {'Y' if nitrogen and crop == 'BN' else 'N'}"
+            f" 1 OP              {'Y' if water else 'N'}     {'Y' if nitrogen else 'N'}     {'Y' if nitrogen and crop in LEGUMES else 'N'}"
             f"     {'Y' if nit.get('soil_p_mg_kg') is not None else 'N'}     {'Y' if nit.get('soil_k_cmol_kg') is not None else 'N'}"
             f"     {'Y' if pest else 'N'}     N     {'Y' if till else 'N'}     M",
             "@N METHODS     WTHER INCON LIGHT EVAPO INFIL PHOTO HYDRO NSWIT MESOM MESEV MESOL",
@@ -610,7 +642,7 @@ def read_plantgro(text):
 
 def cultivar_coefficients(crop_key, cultivar):
     """{coefficient: value} of a cultivar in DSSAT's own file for the AquaCrop crop key (e.g. MaizeGDD)."""
-    cul = DATA / "Genotype" / CROPS[crop_key][2]
+    cul = DATA / "Genotype" / crop_spec(crop_key)[2]
     lines = cul.read_text(encoding="latin-1").splitlines()
     head = next(i for i, ln in enumerate(lines) if ln.startswith("@VAR"))
     names = lines[head][1:].split()
@@ -663,11 +695,13 @@ def _run_folder():
 def run_members(task, members, plantings, water=None):
     """DSSAT for the given members (indices) sown on `plantings` → {member: (Summary row or None, LAI frame or None)}."""
     v = task["variety"]
-    crop, model, cul_file, ext = CROPS[v["aquacrop_crop"]]
+    key = crop_key(v)
+    crop, model, cul_file, ext = crop_spec(key)
     cfg = dict(v.get("dssat") or {})
     cultivar = cfg.pop("cultivar")
+    own = {k: cfg.pop(k) for k in NOT_COEFFICIENTS if k in cfg}            # not coefficients (OTHER_CROPS' keys)
     dates = pd.DatetimeIndex(task["dates"])
-    root = float((v.get("parameters") or {}).get("Zmax", 2.0)) * 100
+    root = float(own.get("root_depth_cm") or float((v.get("parameters") or {}).get("Zmax", 2.0)) * 100)
     from crop_engine.data.soil import restrictive_cm
     if restrictive_cm(task["layers"]) is not None:                   # a restrictive layer stops the roots (soil_depth)
         root = min(root, restrictive_cm(task["layers"]))
@@ -697,7 +731,7 @@ def run_members(task, members, plantings, water=None):
         frac = float(np.clip(task["initial_frac"], 0, 1))
         init = [(r["SLB"], r["SLLL"] + frac * (r["SDUL"] - r["SLLL"])) for r in rows]
         ppop = float((task.get("kw") or {}).get("PlantPop") or (v.get("parameters") or {}).get("PlantPop")
-                     or _default_pop(v["aquacrop_crop"])) / 10000.0
+                     or own.get("PlantPop") or _default_pop(key)) / 10000.0
         last = dates[-2].date()
         fx = f"CE{dates[0].year % 100:02d}0001.{ext}"
         field = task.get("field") or {}
@@ -745,6 +779,9 @@ def _failed(row):
 
 
 def _default_pop(crop_key):
+    """Plants / ha: AquaCrop's PlantPop for its crops, OTHER_POP_M2 for the WOFOST-only crops."""
+    if crop_key in OTHER_CROPS:
+        return OTHER_POP_M2[OTHER_CROPS[crop_key][0]] * 10000.0
     from aquacrop.entities.crop import crop_params
     return float(crop_params[crop_key]["PlantPop"])
 

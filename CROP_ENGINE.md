@@ -508,8 +508,13 @@ Eight additions made with code and public data only. None changes the outlook's 
   above. FAO AquaCrop 7 lowers pollination from 40 °C to none at 45 °C; the patch applies that order in every run (an
   outlook day above 40 °C at flowering is rare at these sites). The crops' published thresholds (maize 35, sorghum
   36, bean 32 °C, complete failure 5 °C above) are a scenario (`heat_literature`) and, for every run,
-  `CROP_HEAT_THRESHOLDS=literature`, off until the hindcast shows it helps. Irrigated maize with 38 °C every day:
-  6.43 t/ha with the crop file's thresholds, 1.92 with the published ones (6.87 at 28 °C).
+  `CROP_HEAT_THRESHOLDS=literature`. Irrigated maize with 38 °C every day: 6.43 t/ha with the crop file's
+  thresholds, 1.92 with the published ones (6.87 at 28 °C). The hindcast (1993–2016, SEAS5 temperature, 17 Nov 2026,
+  tags `_heatbase` and `_heatlit`) does not tell them apart: of 28,800 member-seasons 6 change (bean at Genco Tana
+  River, 0.208 → 0.200 t/ha), no member's outcome changes, and every score (Spearman, RPSS, failure Brier skill and
+  ROC area, all 48 cells) is the same to three decimals. Even the published thresholds are seldom reached at flowering in
+  these seasons. Kept off: the crop files' thresholds stay the
+  default, the published ones a scenario.
 - **Transplanting** (`aquacrop_adapter.transplant_kw`, scenario `transplanted`): seedlings raised 3 weeks in a nursery
   and set out on the sowing date, about 50 cm2 each (FAO AquaCrop's transplanted crops; AquaCrop-OSPy reads the
   planting method but never uses it): no germination to wait for (a patch germinates them at once), the canopy starts
@@ -1522,7 +1527,7 @@ WOFOST 7.2's one-zone balance, which agrees better with AquaCrop on maize; the o
   Brier skill 0.301 / 0.301, failure ROC area 0.808 / 0.812 (48 cells; 18 better and 9 worse on rank correlation): no
   difference beyond noise, so it stays off.
 
-### Other crops: WOFOST only (November 2026, `run_other_crops.py`, `wofost_crops.yaml`)
+### Other crops: WOFOST, and DSSAT beside it (November 2026, `run_other_crops.py`, `wofost_crops.yaml`)
 
 Cowpea (M66), green gram (N26), short-duration pigeonpea (ICPL 87091), pearl millet (KAT/PM-1) and groundnut (Red
 Valencia): the dryland crops AquaCrop-OSPy has no crop file for, grown by WOFOST from PCSE's Van Heemst 1988 sets with
@@ -1536,10 +1541,76 @@ First run (1 Oct 2026, FAO onset, yield if sown, median t/ha, chance of failure)
 1.0 (24 %), pigeonpea 1.3 (8 %), groundnut 1.1 (24 %); Kapiti 1.9–3.3 for all five (4–8 %); Genco Tana River green
 gram and groundnut fail in 68–72 % of members.
 
-**Open issue (millet).** In this forecast WOFOST's pearl millet hardly grows at El Karama (23 of 25 members fail to
-establish: leaf area never above 0.01) and at Genco Tana River (leaf area 0.09), where cowpea sown on the same dates
-grows; in the observed seasons the same crop at the same sites grows well (El Karama median 3.3 t/ha, 6 % failures).
-Something in the forecast weather or tasks holds millet back; its figures should not be read until this is resolved.
+**The pearl millet of the 1 Oct 2026 run (resolved).** WOFOST's millet hardly grew at El Karama (23 of 25 members
+failed to establish, leaf area 0.01) where cowpea sown on the same day grew, and grew well there in the observed
+seasons (median 3.3 t/ha). Not the forecast's weather: the forecast and observed tasks have the same soil and weather
+variables in the same units (Oct-Jan means 25.6 / 15.2 °C, 21.6 MJ/m2, 15.0 hPa, 1.2 m/s against 23.6-24.2 / 13-14 °C,
+20-22 MJ/m2, 13-15 hPa, 1.1-1.3 m/s observed), and neither the temperature tables (TMNFTB is 1 above 12 °C, TMPFTB 0.6-0.7)
+nor the phenology (maturity in about 98 days at the forecast's 20 °C) hold millet back. Three things together did:
+1. **The season.** The run's start is a dry year (1 Aug soil water 10 % of the available water; 1993-2025 median 0.34)
+   and the sowing (5-6 Oct, after 32 mm) was followed by six nearly dry weeks of observed rain. With the same members
+   and 40 % starting water millet grows (0.6-1.9 t/ha in the four members tried); the observed seasons' sowings were mostly in August, after rain.
+2. **The crop file.** WOFOST's development runs on temperature alone, so the stalled seedling passes its leafy phase
+   while dry: Millet_VanHeemst_1988 gives the leaves 0.8 of its growth only to DVS 0.2, then 0.12 by DVS 1.13 (cowpea 1.0
+   to DVS 0.6) with a smaller specific leaf area, and roots at 4 cm/day to 2 m (cowpea 1.2 to 1.2 m), so the one-zone
+   water balance spreads the first rains over a dry 2 m root zone. With cowpea's root growth (RRI 1.2) 8 of 25 members
+   grow, against 1. Real behaviour of the crop file, not a data error.
+3. **A bug in our adapter (fixed).** A WOFOST crop that never reached 5 % cover was dated at the maturity its stalled
+   crop still reaches, so it was never re-sown (AquaCrop's seedlings die and DSSAT's failure is dated when the leaves
+   are gone, and both re-sow). It is now dated on the first day its leaf area is below 0.01 from 10 days after
+   emergence, as DSSAT's (`wofost_adapter._sow`). On the same El Karama task: 1 member grows before, 13 after (12 re-sown
+   at the next sowing opportunity, median 0.03 -> 0.14 t/ha). Over the observed seasons it changes 77 of 1,980 crop
+   seasons (3.9 %, mostly Genco Tana River, whose normals rise: cowpea 0.09 -> 0.32 t/ha, failure 55 -> 48 %); WOFOST's
+   maize and sorghum normals and runs are rebuilt with it (the adapter is in their configuration hash).
+
+At Genco Tana River the forecast's millet is sown on 6 Sep and grows wholly in observed weather (every member 0.11 t/ha):
+the observed seasons there are poor for this millet too (median 0.35 t/ha; sown in September in 2014 and 2020, it
+failed), so it is the site, not the forecast. **Millet is shown**, with DSSAT's CERES-Millet beside it: in this run
+WOFOST's millet is the crop most hurt by a dry spell after sowing, which the panel's text says.
+
+**Nitrogen for the legumes (WOFOST 8.1).** Cowpea, green gram, pigeonpea and groundnut (WOFOST 8.1's sets with nitrogen
+parameters; pearl millet has none) are grown again by WOFOST 8.1 with the soil nitrogen of `wofost_nitrogen.yaml`
+(NSOILBASE 6.1 kg N/ha, fitted to maize), at no fertiliser, 25 and 50 kg N/ha of urea at sowing (the plain levels of
+`run_nitrogen.settings`, not a site's reported maize practice), beside WOFOST 8.1 with no nitrogen limit, each level
+against its own normal (`benchmark_nitrogen.json`, 1,584 observed seasons x 4 levels, 45 min with 2 workers). Part of
+`run_other_crops` (one product; `--no-nitrogen` leaves it out). **Result: the legumes hardly respond.** The 8.1 sets fix
+80 % of their nitrogen demand (NFIX_FR 0.8), so the soil's supply covers the rest: in the normals no fertiliser yields
+95-100 % of no limit at every site (Kiboko cowpea 0.52 / 0.52 / 0.52 / 0.52 t/ha at no limit, 0, 25, 50 kg N/ha;
+Kapiti pigeonpea 0.45 / 0.43 / 0.45 / 0.45). In the 1 Oct run (FAO onset, yield if sown, median): Kiboko cowpea 2.20 /
+2.18 / 2.18 / 2.19 t/ha, green gram 1.83 / 1.83 / 1.83 / 1.83, groundnut 1.41 at every level; Kapiti cowpea 3.23 / 3.22 /
+3.22 / 3.22, pigeonpea 2.95 / 2.85 / 2.87 / 2.89, green gram 4.43 / 4.40 / 4.40 / 4.40; the chance of failure within one
+member across the levels. Consistent with legumes' small response to nitrogen in the field, but not tested against Kenyan legume
+trials. WOFOST 8.1's water-limited yields are not WOFOST 7.2's (8.1 has CO2 at 425 ppm and its own crop sets: Kiboko
+cowpea 2.20 against 1.93; at Maralal cowpea 1.46 against 0.18), so the levels are read against the 8.1 no-limit row.
+
+**DSSAT as a second model.** DSSAT 4.8 has CROPGRO-Cowpea (CPGRO048), CROPGRO-Peanut (PNGRO048), CROPGRO-Pigeonpea
+(PPGRO048; PRGRO048 is bell pepper) and CERES-Millet (MLCER048), and no mung bean, so green gram stays WOFOST's alone.
+A crop names its DSSAT model in `wofost_crops.yaml` (`dssat: {crop, cultivar, root_depth_cm, coefficients}`;
+`dssat_adapter.OTHER_CROPS`, `crop_key`; plant populations from KALRO / Infonet spacings, assumed; the roots to the WOFOST
+crop's depth). The cultivar is the file's nearest to the variety's maturity at the variety's reference temperature, its
+phases scaled by one factor as `calibration/dssat.py` does (`--other-crops`, `outputs/crop_engine/calibration/dssat/
+other_crops.json`), within the file's MINIMA / MAXIMA:
+
+| Crop | DSSAT cultivar | Before -> after (target), days | Anthesis (variety's) |
+|---|---|---|---|
+| Cowpea | TVU3644 (CP0005; UCR 368 - Kenya matures in 103) | 87 -> 87 (87), x 1.007 | 51 (57) |
+| Pigeonpea | 76W (PP0001; ICPL 88039 155) | 104 -> 100 (100), x 0.962 | 40 (64) |
+| Pearl millet | BK 560 (IB0070; ICTP 8203 96) | 89 -> 80 (80), P1 at its minimum, P5 109 | 55 (-) |
+| Groundnut | Chico (IB0008; Valencia 123) | 114 -> 101 (95): every phase at its minimum, not reached | 28 (42) |
+
+Uncalibrated yield level (DSSAT's own; the legumes' yield is DSSAT's seed, WOFOST's their pods), read against its own
+normal (`benchmark_dssat.json`, 1,584 seasons in 5 min); no yield without water stress is run. DSSAT's normals are lower
+than WOFOST's for cowpea (El Karama 0.33 against 2.25 t/ha, Kapiti 0.14 against 1.14) and millet, higher for pigeonpea
+at most sites. First results (1 Oct 2026, FAO onset, yield if sown, WOFOST / DSSAT): Kiboko cowpea 1.93 / 0.90,
+pigeonpea 1.27 / 1.57, millet 0.40 / 1.07, groundnut 1.11 / 0.97; Kapiti cowpea 2.65 / 1.16, pigeonpea 2.55 / 2.55,
+millet 2.36 / 1.37, groundnut 1.91 / 0.75; El Karama millet 0.14 (64 % failure) / 0.44 (44 %): DSSAT's millet
+establishes in 21 of 25 members where WOFOST's does in 13. No DSSAT member failed to run.
+
+The run: 7,500 member seasons in 76 min with 2 workers (WOFOST 7.2, WOFOST 8.1 at 4 levels, DSSAT), after the three
+normals (about 55 min, rebuilt only when their configuration changes). The panel shows each crop's WOFOST and DSSAT rows
+and a nitrogen table (yield if sown and the chance of a below-normal yield at each level). Tests:
+`crop_engine/tests/test_other_crops2.py`. Between the earlier and this run the outlook's own sowing dates were remade
+(results of 16 Nov, 20:47), so the sites other than the re-sown ones changed with their inputs.
 
 ## Third engine: DSSAT (`crop_engine/adapters/dssat_adapter.py`)
 

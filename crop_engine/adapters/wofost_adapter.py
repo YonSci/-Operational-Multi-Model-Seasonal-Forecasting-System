@@ -29,7 +29,9 @@ the task's initial_frac of the available water over the profile (WAV), from 1 Au
 Outcome of a member: as aquacrop_adapter (ok, died, failed_establishment, too_late, not_sown, error), with
   died                  all leaves dead (LAI < 0.01) after emergence and before development stage 1.9, or matured
                         with no grain (below NO_GRAIN_T_HA): WOFOST's crop otherwise survives drought
-  failed_establishment  died before the canopy reached 5 % cover (LAI 0.085 with extinction 0.6)
+  failed_establishment  died before the canopy reached 5 % cover (LAI 0.085 with extinction 0.6), dated on the first
+                        day its leaf area was below 0.01 from 10 days after emergence (as DSSAT's; WOFOST's stalled
+                        seedling otherwise lives on to a maturity with no canopy, and was dated there: never re-sown)
 and re-sowing after a failed establishment as AquaCrop. Yield: storage organ dry weight (TWSO) in t/ha.
 
 Management (the scenarios, crop_engine.scenarios.management), with the classic water balance, as AquaCrop's where
@@ -409,6 +411,12 @@ def _sow(task, m, plant, dates, dev):
     # maturity with no grain counts as died, as AquaCrop's would
     status = ("failed_establishment" if lai[lai.index <= harvest].max() < ESTABLISHED_LAI
               else "ok" if len(matured) and yld >= NO_GRAIN_T_HA else "died")
+    if status == "failed_establishment" and len(dead) and dead.index[0] < harvest:
+        # a seedling that never established is dated when its leaves were gone (as DSSAT's, and as AquaCrop's
+        # seedlings die), not at the maturity WOFOST's stalled crop still reaches: so it can be re-sown (module doc)
+        harvest = dead.index[0]
+        upto = grow[grow.index <= harvest]
+        yld = float(np.nan_to_num(upto.TWSO.max())) / 1000.0
     if task.get("seedling_death", SEEDLING_DEATH) and status != "failed_establishment":
         died = seedling_died(grow, task["soil"])
         if died is not None and died <= harvest:

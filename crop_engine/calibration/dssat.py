@@ -31,6 +31,11 @@ outlook's urea split): the ratio Kenyan maize nitrogen trials give (crop_engine/
 24 trial-seasons 0.63, 8 in the east 0.64, the dryland Short Rains seasons of Machang'a 2005 and 2006 and Machakos
 2015 0.57–0.59). A first, regional calibration: the sites' own fields are not measured.
 
+The WOFOST-only crops (--other-crops, run_other_crops, wofost_crops.yaml `dssat`): CROPGRO-Cowpea, -Peanut and
+-Pigeonpea's five phases and CERES-Millet's P1 and P5 scaled the same way, to the crop's maturity_days at the
+temperature its days were measured at (its reference_tmean_c, as WOFOST's phenology of these crops); their yield level
+stays DSSAT's (no trial: uncalibrated).
+
 Writes outputs/crop_engine/calibration/dssat/result.json (nitrogen: nitrogen.json) and prints the coefficients for crop_engine/dssat_cultivars.yaml
 (edited by hand, citing it). Usage: python -m crop_engine.calibration.dssat [--varieties ...]
 """
@@ -51,7 +56,11 @@ from crop_engine.data.sites import registered_sites
 from crop_engine.data.soil import Layer
 
 SITE = "kalro_kiboko_makueni_farm"
-PHASES = {"MaizeGDD": ("P1",), "SorghumGDD": ("P1", "P5"), "DryBeanGDD": ("EM-FL", "FL-SH", "FL-SD", "SD-PM", "FL-LF")}
+CROPGRO_PHASES = ("EM-FL", "FL-SH", "FL-SD", "SD-PM", "FL-LF")
+PHASES = {"MaizeGDD": ("P1",), "SorghumGDD": ("P1", "P5"), "DryBeanGDD": CROPGRO_PHASES,
+          # the WOFOST-only crops (dssat_adapter.OTHER_CROPS, --other-crops): CROPGRO's five phases, CERES-Millet's
+          # juvenile phase and grain filling (P1, P5)
+          "cowpea": CROPGRO_PHASES, "peanut": CROPGRO_PHASES, "pigeonpea": CROPGRO_PHASES, "millet": ("P1", "P5")}
 YIELD_COEF = {"MaizeGDD": ("G2", "G3"), "SorghumGDD": ("G2",)}
 LIMITS = ("999991", "999992")     # DSSAT's MINIMA and MAXIMA lines of each cultivar file
 MAIZE_TRAIN = {"variety": "maize_medium", "observed_t_ha": 7.76, "year": 2012,
@@ -78,7 +87,8 @@ def log(m):
 
 def _with(variety, coef):
     """The variety on its DSSAT cultivar with only `coef` overridden (not the calibrated values on file)."""
-    return dict(variety, dssat=dict(cultivar=variety["dssat"]["cultivar"], **coef))
+    keep = {k: variety["dssat"][k] for k in ds.NOT_COEFFICIENTS + ("cultivar",) if k in variety["dssat"]}
+    return dict(variety, dssat=dict(keep, **coef))
 
 
 def limits(key):
@@ -89,7 +99,7 @@ def limits(key):
 def scaled(variety, phen=1.0, yld=1.0):
     """The variety's DSSAT coefficients with its phases × phen and its yield coefficients × yld (module doc), each
     within DSSAT's minimum and maximum."""
-    key = variety["aquacrop_crop"]
+    key = ds.crop_key(variety)
     base = ds.cultivar_coefficients(key, variety["dssat"]["cultivar"])
     lo, hi = limits(key)
     over = {k: base[k] * phen for k in PHASES[key]}
@@ -98,7 +108,7 @@ def scaled(variety, phen=1.0, yld=1.0):
 
 
 def at_limits(variety, over):
-    lo, hi = limits(variety["aquacrop_crop"])
+    lo, hi = limits(ds.crop_key(variety))
     return sorted(k for k, v in over.items() if np.isclose(v, lo.get(k, np.nan)) or np.isclose(v, hi.get(k, np.nan)))
 
 
@@ -395,8 +405,60 @@ def calibrate_site_nitrogen(workers, only=None):
     return 0
 
 
+def kiboko():
+    """(the calibration site, its elevation from ERA5-Land's surface pressure)."""
+    import fao_water_balance as fw  # noqa: E402
+    site = next(s for s in registered_sites() if s.id == SITE)
+    met = era5land.site_met([site], refresh=False)[site.id]
+    cal = met[(met.index.year >= C.CAL_YEARS[0]) & (met.index.year <= C.CAL_YEARS[1])]
+    return site, float(fw.elevation_from_pressure(float(cal.sp_kpa.mean())))
+
+
+def phenology_days(variety, phen, site, elev, tmean):
+    """(days to anthesis, days to maturity) of the variety with its phases × phen at a constant tmean, no water stress."""
+    plant = dt.date(2012, 3, 1)
+    r = run(_with(variety, scaled(variety, phen)), [plant], constant_weather(dt.date(2012, 2, 25), tmean), site, elev)[0]
+    days = lambda d: (dt.date.fromisoformat(d) - plant).days if d else None          # noqa: E731
+    return days(r.get("anthesis")), days(r["harvest"]) if r["status"] == "ok" else None
+
+
+def other_crops(only=None):
+    """--other-crops: the WOFOST-only crops' DSSAT cultivars (wofost_crops.yaml `dssat`, run_other_crops) fitted as the
+    varieties above: one factor on the phases so the crop matures in its maturity_days at the temperature where those
+    days were measured (the crop's reference_tmean_c, as WOFOST's phenology of these crops), within the file's limits.
+    Writes outputs/crop_engine/calibration/dssat/other_crops.json; the coefficients go into wofost_crops.yaml by hand."""
+    from crop_engine import run_other_crops as oc
+    site, elev = kiboko()
+    res = {"created": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "site": SITE, "crops": {}}
+    for ck, c in oc.load_crops(only).items():
+        if not ds.available(c):
+            log(f"{ck}: no DSSAT model or cultivar, left out")
+            continue
+        tref = float(c.get("reference_tmean_c") or 21.0)
+        base = dict(c, dssat={k: v for k, v in c["dssat"].items() if k in ds.NOT_COEFFICIENTS + ("cultivar",)})
+        fl0, before = phenology_days(base, 1.0, site, elev, tref)
+        phen, d, reached = fit_phenology(base, site, elev, tref)
+        fl, _ = phenology_days(base, phen, site, elev, tref)
+        coef = {k: round(x, 3) for k, x in scaled(base, phen).items()}
+        lim = at_limits(base, coef)
+        log(f"{ck} ({c['dssat']['crop']} {c['dssat']['cultivar']}): at {tref} °C anthesis {fl0} → {fl} days "
+            f"(the variety's {c.get('flowering_days')}), maturity {before} → {d} (target {c['maturity_days']}), "
+            f"phase factor {phen}{'' if reached else ', not reached'}{'; at limits: ' + ', '.join(lim) if lim else ''}")
+        log(f"wofost_crops.yaml {ck} dssat: {{" + ", ".join(f"{k}: {x}" for k, x in coef.items()) + "}")
+        res["crops"][ck] = {"crop": c["dssat"]["crop"], "cultivar": c["dssat"]["cultivar"], "reference_tmean_c": tref,
+                            "phase_factor": phen, "coefficients": coef, "at_limits": lim,
+                            "days_to_anthesis": {"before": fl0, "after": fl, "variety": c.get("flowering_days")},
+                            "days_to_maturity": {"before": before, "after": d, "target": c["maturity_days"],
+                                                 "reached": reached}}
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "other_crops.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+    return res
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--other-crops", nargs="*", metavar="CROP",
+                    help="fit the WOFOST-only crops' DSSAT phenology (wofost_crops.yaml dssat; all if none named)")
     ap.add_argument("--varieties", nargs="+", default=["maize_early", "maize_medium", "sorghum", "bean"])
     ap.add_argument("--nitrogen", action="store_true", help="fit the soil's organic nitrogen factor instead")
     ap.add_argument("--nitrogen-sites", nargs="*", metavar="SITE",
@@ -412,6 +474,9 @@ def main():
     if not ds.installed():
         log(f"DSSAT is not installed ({ds.EXE}): python -m crop_engine.adapters.dssat_adapter --install")
         return 1
+    if a.other_crops is not None:
+        other_crops(a.other_crops or None)
+        return 0
     if a.nitrogen_sites is not None:
         return calibrate_site_nitrogen(a.workers, only=a.nitrogen_sites or None)
     if a.nitrogen:
