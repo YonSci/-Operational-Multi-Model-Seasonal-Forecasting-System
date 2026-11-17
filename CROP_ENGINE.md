@@ -512,8 +512,8 @@ Eight additions made with code and public data only. None changes the outlook's 
   thresholds, 1.92 with the published ones (6.87 at 28 °C). The hindcast (1993–2016, SEAS5 temperature, 17 Nov 2026,
   tags `_heatbase` and `_heatlit`) does not tell them apart: of 28,800 member-seasons 6 change (bean at Genco Tana
   River, 0.208 → 0.200 t/ha), no member's outcome changes, and every score (Spearman, RPSS, failure Brier skill and
-  ROC area, all 48 cells) is the same to three decimals. The forecast's daily maximum at flowering seldom passes 32–36 °C
-  at these sites in the Short Rains, so the threshold rarely acts. Kept off: the crop files' thresholds stay the
+  ROC area, all 48 cells) is the same to three decimals. Even the published thresholds are seldom reached at flowering in
+  these seasons. Kept off: the crop files' thresholds stay the
   default, the published ones a scenario.
 - **Transplanting** (`aquacrop_adapter.transplant_kw`, scenario `transplanted`): seedlings raised 3 weeks in a nursery
   and set out on the sowing date, about 50 cm2 each (FAO AquaCrop's transplanted crops; AquaCrop-OSPy reads the
