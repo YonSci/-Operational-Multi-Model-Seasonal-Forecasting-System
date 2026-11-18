@@ -541,8 +541,9 @@ The same AquaCrop crop on every 0.25° cell of the analysis grid that grows rain
 Rains counties (Machakos, Makueni, Kitui, Kajiado, Embu, Tharaka Nithi, Meru, Taita Taveta): the season that
 matters there, and the counties with the longest HarvestStat Short Rains maize records (14–19 seasons since 1990).
 Early-maturing maize, sown at the FAO agricultural onset of each cell's forecast, in the members of the seasonal
-forecast (SEAS5 1 Oct + the latest observations). Run by the daily update after the site outlook and the
-scenarios (`crop_engine.run_all`), within the crop outlook's time limit; published as
+forecast (SEAS5 1 Oct + the latest observations). Run by the daily update right after the site outlook's
+seasonal run, before the weather-model runs (`crop_engine.run_all`; run last, it was crowded out by them, 13–18 Nov
+2026), within the crop outlook's time limit; published as
 `tracker/data/crop/grid.json` and shown in the Crop outlook tab (*Maize across the eastern Kenya counties*).
 
 - **Cells**: MapSPAM 2020 rainfed maize harvested area (5 arc-min pixels) summed to the 0.25° cells, each pixel
