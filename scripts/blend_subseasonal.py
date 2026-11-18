@@ -316,6 +316,11 @@ class Blender:
                 "bias_correction": "provisional (SEAS5 October-start quantile mapping for the same valid day)"}
         return blend, info, self.segments([("gap", gap), ("fc", seg)], {"fc": f"ECMWF ENS (25 members), run {days[0]}"})
 
+    def ens_days_left(self, ens_path):
+        """The ENS run's days that join the season (season_days): none once the observations reach its last day."""
+        with xr.open_dataset(ens_path) as ds:
+            return self.season_days([d.date() for d in ds.time.to_index()])
+
     def segments(self, parts, labels):
         """Where each day's rain comes from, for the dashboard: [{kind, label, start, end}] from 1 Sep to 31 Dec."""
         out = [{"kind": "obs", "label": "Observed rainfall (CHIRPS)", "start": str(self.win0), "end": str(self.obs_end)}]
