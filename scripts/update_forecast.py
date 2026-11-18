@@ -60,6 +60,24 @@ def log(msg):
     print(f"[{dt.datetime.now():%H:%M:%S}] {msg}", flush=True)
 
 
+def run_limited(cmd, minutes, env, **kw):
+    """Run a step for at most `minutes`; on time out stop it with every process it started (the venv's python.exe on
+    Windows is a launcher that starts a second python, which subprocess.run(timeout=...) would leave running).
+    Returns the exit code, or None when stopped."""
+    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+    p = subprocess.Popen(cmd, env=env, **flags, **kw)
+    try:
+        return p.wait(timeout=minutes * 60)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+        else:
+            import signal
+            os.killpg(p.pid, signal.SIGKILL)
+        p.wait()
+        return None
+
+
 def download(url, dest, tries=6):
     tmp = dest.with_suffix(dest.suffix + ".part")
     for i in range(tries):
@@ -208,19 +226,22 @@ def update_crop_outlook(env):
 
 
 def update_fao(env):
-    """FAO water balance (fao_water_balance.py): fetch new CHIRPS v3 days (Earth Engine, then CHC preliminary) and
-    the latest ERA5-Land ET0 (Earth Engine; at most 45 min — days ERA5-Land does not have yet use the ET0
-    climatology), then re-run this season's observed water balance and the "+ latest obs" forecast when CHIRPS v3
+    """FAO water balance (fao_water_balance.py): fetch new CHIRPS v3 days (Earth Engine, then CHC preliminary; the CHC
+    server alone when Earth Engine takes over 30 min) and the latest ERA5-Land ET0 (Earth Engine; at most 45 min —
+    days ERA5-Land does not have yet use the ET0 climatology), then re-run this season's observed water balance and the "+ latest obs" forecast when CHIRPS v3
     has advanced. Returns True when re-run."""
     hist = BASE_DIR / "outputs" / "fao_wb" / "historical" / "fao_wb_seasons.nc"
     if not hist.exists():
         log("FAO water balance: no historical run yet (python scripts/fao_water_balance.py historical); skipped")
         return False
-    subprocess.run([PY, str(BASE_DIR / "scripts" / "fao_download_chirps_v3.py"), "--years", str(YEAR)], check=False, env=env)
-    try:
-        subprocess.run([PY, str(BASE_DIR / "scripts" / "fao_era5land_gee.py"), "--years", str(YEAR)],
-                       check=False, env=env, timeout=45 * 60)
-    except subprocess.TimeoutExpired:
+    # CHIRPS v3: Earth Engine first, at most 30 min (16 Nov 2026: a request to Earth Engine, in restricted mode after
+    # its quota, never returned and held the update for 4 h), then the CHC server directly, at most 30 min more
+    chirps = [PY, str(BASE_DIR / "scripts" / "fao_download_chirps_v3.py"), "--years", str(YEAR)]
+    if run_limited(chirps, 30, env) is None:
+        log("FAO water balance: CHIRPS v3 from Earth Engine took over 30 min; trying the CHC server")
+        if run_limited(chirps + ["--source", "chc"], 30, env) is None:
+            log("FAO water balance: CHIRPS v3 from the CHC server took over 30 min; previous days kept")
+    if run_limited([PY, str(BASE_DIR / "scripts" / "fao_era5land_gee.py"), "--years", str(YEAR)], 45, env) is None:
         log("FAO water balance: ERA5-Land (Earth Engine) took over 45 min; ET0 climatology fills the latest days")
     v3 = BASE_DIR / "data" / "chirps_v3" / f"chirps_v3_p25_kenya_{YEAR}.nc"
     with xr.open_dataset(v3) as ds:
