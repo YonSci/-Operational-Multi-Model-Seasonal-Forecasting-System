@@ -1004,6 +1004,23 @@ function applyBoundaryLayers(map, boundaryData, showAdmin0, showAdmin1, darkMode
 }
 
 // -- Main: gridData arrives as prop from App.jsx ---------------------------
+// Forecast assistant: the drawn area as a rectangle on the map ([[x1, y1], [x2, y2]]), or none
+function showAssistantArea(map, corners) {
+  const data = { type: 'FeatureCollection', features: corners ? [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon',
+    coordinates: [[[corners[0][0], corners[0][1]], [corners[1][0], corners[0][1]], [corners[1][0], corners[1][1]],
+                   [corners[0][0], corners[1][1]], [corners[0][0], corners[0][1]]]] } }] : [] }
+  try {
+    if (!map.getSource('assistant-area')) {
+      if (!corners) return
+      map.addSource('assistant-area', { type: 'geojson', data })
+      map.addLayer({ id: 'assistant-area-fill', type: 'fill', source: 'assistant-area', paint: { 'fill-color': '#1f6fa8', 'fill-opacity': 0.15 } })
+      map.addLayer({ id: 'assistant-area-line', type: 'line', source: 'assistant-area', paint: { 'line-color': '#1f6fa8', 'line-width': 2.5 } })
+    } else {
+      map.getSource('assistant-area').setData(data)
+    }
+  } catch (_) { /* the style is reloading: the next change redraws it */ }
+}
+
 export default function MapPanel({
   darkMode=false,
   selectedModel='',
@@ -1014,7 +1031,11 @@ export default function MapPanel({
   country='kenya',
   selectedSeason='short_rains',
   selectedYear=2026,
-  onOpenBulletin
+  onOpenBulletin,
+  drawArea=false,           // forecast assistant: next two clicks draw a rectangle, reported by onAreaDrawn
+  onAreaDrawn,
+  drawnArea=null,           // forecast assistant: [west, south, east, north] of the area being explained, or null
+  requestedLayer=null,      // forecast assistant: {variable, layer, nonce} to show on the map
 }) {
   const activeSeason = detectSeason(selectedSeason, country, gridData)
   const isShort = activeSeason === 'short_rains'
@@ -1029,6 +1050,16 @@ export default function MapPanel({
   const rasterRef    = useRef(null)
   const currentStyleRef = useRef(null)  // tracks what style is loaded: prevents spurious setStyle
   const [mapReady,   setMapReady]    = useState(false)
+  const drawRef = useRef({ on: false, first: null, cb: null })
+  useEffect(() => { drawRef.current = { on: drawArea, first: null, cb: onAreaDrawn } }, [drawArea, onAreaDrawn])
+  // the rectangle shown follows the area being explained (none when the panel shows something else)
+  const drawnKey = drawnArea ? drawnArea.join(',') : ''
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady) return
+    const b = drawnKey ? drawnKey.split(',').map(Number) : null
+    showAssistantArea(m, b ? [[b[0], b[1]], [b[2], b[3]]] : null)
+  }, [drawnKey, mapReady])
   const [basemapId,  setBasemapId]   = useState(darkMode?'dark':'light')
   const [showBasemaps, setShowBasemaps] = useState(false)
   const basemapRef   = useRef(basemapId)
@@ -1076,6 +1107,15 @@ export default function MapPanel({
       if (onLayerChange) onLayerChange({variable: cfg.variable, layer: cfg.layer})
     }
   }, [activeTab])
+  useEffect(() => {
+    if (!requestedLayer) return
+    const lists = activeTab === 'validation' ? VAL_LAYERS : activeTab === 'historical' ? HIST_LAYERS : activeTab === 'probabilistic' ? PROB_LAYERS
+      : activeTab === 'multimodel' ? MULTI_LAYERS : activeTab === 'medium' ? MRF_LAYERS : joinedRun ? JOINED_LAYERS : LAYERS
+    const cfg = lists.find(l => l.variable === requestedLayer.variable && l.layer === requestedLayer.layer)
+    if (cfg) { setActiveLayer(cfg.id); if (onLayerChange) onLayerChange({ variable: cfg.variable, layer: cfg.layer }) }
+  // runs per request (nonce) and after a tab switch, not when the callbacks' identity changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedLayer?.nonce, activeTab])
   const [tooltip,    setTooltip]     = useState(null)
 
   const setSelectedSite = useDashboardStore(s=>s.setSelectedSite)
@@ -1241,6 +1281,21 @@ export default function MapPanel({
 
     const handleMapClick = (e) => {
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
+      // forecast assistant: drawing an area takes the clicks (first corner, then the opposite corner)
+      if (drawRef.current.on) {
+        const p = [e.lngLat.lng, e.lngLat.lat]
+        const d = drawRef.current
+        if (!d.first) {
+          d.first = p
+          showAssistantArea(map, [p, p])
+        } else {
+          const a = d.first
+          d.first = null
+          showAssistantArea(map, [a, p])
+          if (d.cb) d.cb([Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.max(a[0], p[0]), Math.max(a[1], p[1])])
+        }
+        return
+      }
 
       // 1. Monitored farm site clicked (only when stations overlay is ON)
       if (showStationsRef.current) {
@@ -1549,6 +1604,12 @@ export default function MapPanel({
 
       {/* Layer switcher */}
       <div style={{position:'absolute',inset:0,zIndex:20,pointerEvents:'none',borderRadius:12,overflow:'hidden'}}>
+        {drawArea && (
+          <div role="status" style={{position:'absolute',top:56,left:'50%',transform:'translateX(-50%)',pointerEvents:'none',background:'var(--bg-elevated)',
+                       border:'1px solid var(--info-border)',borderRadius:8,padding:'6px 12px',fontSize:12.5,color:'var(--accent-text)',fontWeight:600}}>
+            Click two opposite corners of the area
+          </div>
+        )}
 
         {!countryView.available && (
           <div style={{position:'absolute',top:14,left:'50%',transform:'translateX(-50%)',pointerEvents:'none',

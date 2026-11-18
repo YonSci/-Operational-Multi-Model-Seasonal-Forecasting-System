@@ -1,0 +1,64 @@
+# Terms for the assistant's Kiswahili and Amharic text: MACHINE-ASSISTED DRAFT, NOT YET REVIEWED.
+#
+# The translator (assistant/translate.py) must use these terms. A native-speaking reviewer (ideally an
+# agrometeorologist or extension officer) should correct them, set `status: reviewed` and fill `reviewed_by`;
+# until every term of a language is reviewed, all text in that language carries "Machine translation, not yet
+# reviewed". Keep acronyms (RPSS, CHIRPS, ECMWF) and numbers unchanged in every language.
+
+languages:
+  sw: {name: Kiswahili, native: Kiswahili, speech: sw-KE, status: draft, reviewed_by: null}
+  am: {name: Amharic, native: አማርኛ, speech: am-ET, status: draft, reviewed_by: null}
+
+terms:
+  onset of the rains:        {sw: kuanza kwa mvua, am: የዝናብ መጀመሪያ}
+  end of the rains:          {sw: kwisha kwa mvua, am: የዝናብ ማብቂያ}
+  cessation:                 {sw: kwisha kwa mvua, am: የዝናብ ማብቂያ}
+  season length:             {sw: urefu wa msimu wa mvua, am: የዝናብ ወቅት ርዝመት}
+  length of growing period:  {sw: urefu wa kipindi cha ukuaji wa mazao, am: የሰብል ዕድገት ወቅት ርዝመት}
+  rainy season:              {sw: msimu wa mvua, am: የዝናብ ወቅት}
+  Short Rains:               {sw: mvua za vuli, am: አጭር ዝናብ (Short Rains)}
+  Long Rains:                {sw: mvua za masika, am: ረጅም ዝናብ (Long Rains)}
+  Kiremt:                    {sw: Kiremt (msimu mkuu wa mvua Ethiopia), am: ክረምት}
+  Belg:                      {sw: Belg (mvua za mwanzo Ethiopia), am: በልግ}
+  Bega:                      {sw: Bega, am: በጋ}
+  early:                     {sw: mapema, am: ቀደም ብሎ}
+  normal:                    {sw: kawaida, am: መደበኛ}
+  late:                      {sw: kuchelewa, am: ዘግይቶ}
+  short (season):            {sw: fupi, am: አጭር}
+  long (season):             {sw: ndefu, am: ረጅም}
+  third (tercile):           {sw: theluthi, am: ሲሶ}
+  chance:                    {sw: uwezekano, am: ዕድል}
+  skill-weighted chance:     {sw: uwezekano uliorekebishwa kwa usahihi wa utabiri, am: በትንበያ ትክክለኛነት የተስተካከለ ዕድል}
+  forecast:                  {sw: utabiri, am: ትንበያ}
+  observed rain:             {sw: mvua iliyopimwa, am: የተለካ ዝናብ}
+  estimated from observed rain so far: {sw: imekadiriwa kutoka mvua iliyopimwa hadi sasa, am: እስካሁን ከተለካው ዝናብ የተገመተ}
+  median:                    {sw: thamani ya kati, am: መካከለኛ እሴት}
+  forecast members:          {sw: matokeo ya utabiri, am: የትንበያ አባላት}
+  8 in 10 members:           {sw: matokeo 8 kati ya 10, am: ከ10 አባላት 8ቱ}
+  skill:                     {sw: usahihi wa utabiri, am: የትንበያ ትክክለኛነት}
+  hit rate:                  {sw: kiwango cha kupatia, am: የትክክለኛ ግምት መጠን}
+  climatology:               {sw: hali ya kawaida ya miaka iliyopita, am: የረጅም ጊዜ አማካይ}
+  dry spell:                 {sw: kipindi cha ukame, am: የደረቅ ጊዜ}
+  sowing:                    {sw: kupanda, am: መዝራት}
+  planting rains:            {sw: mvua za kupandia, am: የመዝሪያ ዝናብ}
+  maize:                     {sw: mahindi, am: በቆሎ}
+  early-maturing maize:      {sw: mahindi yanayokomaa mapema, am: ቶሎ የሚደርስ በቆሎ}
+  medium-maturing maize:     {sw: mahindi yanayokomaa kwa muda wa kati, am: መካከለኛ ጊዜ የሚደርስ በቆሎ}
+  sorghum:                   {sw: mtama, am: ማሽላ}
+  dry bean:                  {sw: maharagwe, am: ቦሎቄ}
+  reach maturity:            {sw: kukomaa, am: ለምርት መድረስ}
+  crop failure:              {sw: kushindwa kwa mazao, am: የሰብል ውድቀት}
+  failed establishment:      {sw: mimea kushindwa kuota na kusimama, am: ችግኝ አለመቋቋም}
+  yield:                     {sw: mavuno, am: ምርት}
+  harvest:                   {sw: kuvuna, am: ምርት መሰብሰብ}
+  irrigation:                {sw: umwagiliaji, am: መስኖ}
+  supplementary irrigation:  {sw: umwagiliaji wa ziada, am: ተጨማሪ መስኖ}
+  mulch:                     {sw: matandazo, am: የአፈር ሽፋን (ማልች)}
+  tied ridges:               {sw: matuta yaliyofungwa, am: የታሰሩ ሸንተረሮች}
+  draft guidance:            {sw: ushauri wa awali (rasimu), am: ረቂቅ ምክር}
+  not yet reviewed:          {sw: bado haujakaguliwa, am: ገና ያልተገመገመ}
+  experimental:              {sw: ya majaribio, am: የሙከራ}
+  unverified:                {sw: haijathibitishwa, am: ያልተረጋገጠ}
+  grid cell:                 {sw: kisanduku cha gridi (takriban km 28), am: የፍርግርግ ሕዋስ (28 ኪ.ሜ ገደማ)}
+  county:                    {sw: kaunti, am: ካውንቲ}
+  region:                    {sw: mkoa, am: ክልል}

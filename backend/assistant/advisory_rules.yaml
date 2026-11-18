@@ -1,0 +1,252 @@
+# Advisory rule library: DRAFT, NOT REVIEWED.
+#
+# Every rule here is a first draft written from the platform's own definitions and model outputs. None has been
+# reviewed by an agronomist or an extension service, and none may be presented as established advice until it is.
+# A reviewer sets `status: reviewed`, fills `reviewed_by` and `sources`, and edits the wording; the dashboard shows
+# "Draft guidance: not yet reviewed" on every card built from a draft rule.
+#
+# How a card is built (assistant/advisory.py):
+#   1. the user picks a decision; the profile (crop, planted or not, sowing date, water) and the evidence (onset,
+#      cessation and season-length forecast; the crop outlook and its scenarios at the nearest crop site) form a
+#      flat context;
+#   2. every rule of that decision whose `when` conditions all hold adds its text (placeholders like {onset_median}
+#      are filled from the context);
+#   3. the decision's `scenario_options` are evaluated from the crop scenarios under the same forecast, ranked by
+#      the user's objective; the baseline (the outlook as sown by the sowing rule) is always shown for reference.
+#
+# Condition operators: in, not_in, eq, ne, lt, le, gt, ge, present, absent. Context keys are listed in
+# advisory.py (context()). Percent values are 0-100.
+
+version: 0.1-draft
+scope: Kenya Short Rains (OND), the six monitored crop sites for crop scenario options
+
+decisions:
+  sowing:
+    label: When to sow
+    question: When should I sow, given the onset outlook?
+    for_planted: [no, unknown]
+    scenario_options: [baseline, sow_minus14, sow_plus14, sow_plus28, sow_oct15, sow_nov01, sow_nov15]
+  crop_choice:
+    label: Which crop or maturity class
+    question: Which crop or variety duration fits this season?
+    for_planted: [no, unknown]
+    variety_options: [maize_early, maize_medium, sorghum, bean]
+  establishment:
+    label: Establishment after sowing
+    question: My crop is sown; what should I watch?
+    for_planted: [yes]
+    scenario_options: [baseline, mulch, ridges, irr_supplementary]
+  replanting:
+    label: Replanting after poor establishment
+    question: Emergence was poor; is replanting still worth it, and with what?
+    for_planted: [yes]
+    # every variety below, sown 14 and 28 days after the rule's onset (late sowings)
+    scenario_options: [sow_plus14, sow_plus28]
+    variety_options: [maize_early, sorghum, bean]
+  water:
+    label: Water management
+    question: Which water option makes the most difference this season?
+    for_planted: [no, unknown, yes]
+    scenario_options: [baseline, mulch, ridges, irr_supplementary, irr_full]
+
+objectives:
+  maturity: {label: Reach maturity, key: p_mature_pct, better: higher}
+  establishment: {label: Reduce establishment failure, key: p_establishment_failure_pct, better: lower}
+  downside: {label: Protect the poor years (lower end of yield), key: yield_p10, better: higher}
+  yield: {label: Higher typical yield, key: yield_median, better: higher}
+  water: {label: Use less irrigation water, key: irrigation_mm, better: lower}
+
+scenarios:
+  baseline: Sow by the sowing rule (the outlook as published)
+  sow_minus14: Sow 14 days before the rule's onset
+  sow_plus14: Sow 14 days after the rule's onset
+  sow_plus28: Sow 28 days after the rule's onset
+  sow_oct15: Sow on 15 Oct (fixed date)
+  sow_nov01: Sow on 1 Nov (fixed date)
+  sow_nov15: Sow on 15 Nov (fixed date)
+  mulch: Mulch, 50% residue cover
+  ridges: Tied ridges or pits (no surface runoff)
+  irr_supplementary: Supplementary irrigation, up to 100 mm a season
+  irr_full: Full irrigation (no water stress)
+  density_low: Plant density x 0.67
+  density_high: Plant density x 1.2
+
+rules:
+  # ---------------------------------------------------------------- sowing
+  - id: sow-onset-observed
+    decision: sowing
+    status: draft
+    when:
+      - {key: onset_status, op: in, value: [estimated_from_observations]}
+    assessment: >-
+      Under the {method} definition the rains here have already started ({onset_median}), judged from observed rain.
+    why: >-
+      A qualifying onset means the planting-rain test of this method has been met on observed rain.
+    could_change: >-
+      A long dry spell after the onset (the method's false-start check) or a revision of the observed rainfall.
+    review: Check the rainfall tracker after the next 7 to 10 days of rain data.
+
+  - id: sow-onset-uncertain
+    decision: sowing
+    status: draft
+    when:
+      - {key: onset_status, op: in, value: [forecast, partly_observed]}
+      - {key: onset_range_days, op: ge, value: 21}
+    assessment: >-
+      The onset is still uncertain: 8 in 10 forecast members put it between {onset_p10} and {onset_p90}.
+    why: >-
+      With a wide onset range, a fixed sowing date risks sowing before the rains establish; preparing land and seed
+      lets sowing follow the first qualifying rains.
+    could_change: Observed rain meeting the method's onset test, which the tracker shows within days.
+    review: Check the tracker every few days until a planting onset is reported.
+
+  - id: sow-late-onset-likely
+    decision: sowing
+    status: draft
+    when:
+      - {key: p_onset_late_pct, op: ge, value: 50}
+    assessment: >-
+      A late onset is more likely than usual ({p_onset_late_pct}% chance of the late third).
+    why: >-
+      A late start shortens the time left before the rains end, which matters most for long-duration varieties.
+    could_change: New observations or the next forecast run.
+    review: Re-check after the next forecast update.
+
+  - id: sow-false-start-risk
+    decision: sowing
+    status: draft
+    when:
+      - {key: crop_p_establishment_failure_pct, op: ge, value: 15}
+    assessment: >-
+      The crop outlook gives a {crop_p_establishment_failure_pct}% chance that a crop sown by the rule fails to
+      establish ({crop_label} at {crop_site}).
+    why: >-
+      Establishment failure follows dry spells soon after sowing; the sowing-date scenarios show whether waiting
+      lowers that chance here.
+    could_change: Rain in the weeks after the onset.
+    review: Compare the sowing-date options below; re-check after the next update.
+
+  - id: sow-low-skill
+    decision: sowing
+    status: draft
+    when:
+      - {key: onset_rpss, op: le, value: 0}
+    assessment: >-
+      The onset forecast has had no skill over climatology here on past seasons (RPSS {onset_rpss}).
+    why: Where skill is low, observed onset (the tracker) is a firmer basis for timing than the outlook.
+    could_change: Nothing in the forecast; rely on observations.
+    review: Follow the tracker.
+
+  # ---------------------------------------------------------------- crop choice
+  - id: choice-short-season-likely
+    decision: crop_choice
+    status: draft
+    when:
+      - {key: p_lgp_short_pct, op: ge, value: 40}
+    assessment: >-
+      A short season is likely ({p_lgp_short_pct}% chance of the short third; median {lgp_median} days).
+    why: >-
+      Crops that need fewer days to mature are less exposed when the rains end early; compare their chance of
+      reaching maturity below.
+    could_change: The cessation forecast as the season advances.
+    review: Re-check after the next forecast update.
+
+  - id: choice-long-season-likely
+    decision: crop_choice
+    status: draft
+    when:
+      - {key: p_lgp_long_pct, op: ge, value: 50}
+    assessment: >-
+      A long season is likely ({p_lgp_long_pct}% chance of the long third; median {lgp_median} days).
+    why: >-
+      A longer season gives longer-duration varieties time to mature; the options below compare them under this
+      forecast.
+    could_change: An early end of the rains, which the cessation forecast is less able to predict.
+    review: Re-check after the next forecast update.
+
+  - id: choice-compare
+    decision: crop_choice
+    status: draft
+    when: []
+    assessment: >-
+      The options compare the crops and maturity classes modelled at {crop_site}, each sown by the {sowing_rule}.
+    why: The same forecast members drive every option, so the differences come from the crops, not the weather.
+    could_change: The next crop outlook update (weekly).
+    review: Re-check when the crop outlook is next updated.
+
+  # ---------------------------------------------------------------- establishment
+  - id: est-watch
+    decision: establishment
+    status: draft
+    when:
+      - {key: planted, op: eq, value: "yes"}
+    assessment: >-
+      Crop sown{sown_on}. For crops sown by the rule at {crop_site}, the outlook gives a
+      {crop_p_establishment_failure_pct}% chance of failed establishment and {crop_p_failure_if_sown_pct}% of crop
+      failure.
+    why: The weeks after sowing are when a dry spell does most harm to establishment.
+    could_change: Rain in the coming days (tracker) and the medium-range outlook.
+    review: Check the tracker and medium-range forecast every few days for the first month.
+
+  - id: est-early-end-risk
+    decision: establishment
+    status: draft
+    when:
+      - {key: cessation_most_likely, op: eq, value: early}
+    assessment: >-
+      An early end of the rains is the most likely outcome ({p_cessation_early_pct}% chance of the early third).
+    why: >-
+      If the rains end early the crop can run short of water at flowering and grain filling; water-saving options
+      are compared below.
+    could_change: The cessation forecast, which has less skill than the onset forecast.
+    review: Re-check after the next forecast update.
+
+  # ---------------------------------------------------------------- replanting
+  - id: replant-window
+    decision: replanting
+    status: draft
+    when:
+      - {key: planted, op: eq, value: "yes"}
+    assessment: >-
+      The options show how late sowings and shorter crops fare under the current forecast at {crop_site}, including
+      the chance of being too late to mature.
+    why: >-
+      Replanting late shortens the season left; a shorter crop or a different crop may still mature where the
+      original variety would not.
+    could_change: Rain in the coming weeks and the cessation forecast.
+    review: Decide within days; each week of delay shortens the season left.
+
+  - id: replant-short-season
+    decision: replanting
+    status: draft
+    when:
+      - {key: p_lgp_short_pct, op: ge, value: 40}
+    assessment: A short season is likely ({p_lgp_short_pct}% chance), which narrows the options for a late crop.
+    why: Late sowings need the rains to last; a likely short season favours the shortest options.
+    could_change: The cessation forecast.
+    review: Re-check after the next forecast update.
+
+  # ---------------------------------------------------------------- water
+  - id: water-compare
+    decision: water
+    status: draft
+    when: []
+    assessment: >-
+      The options compare water management for {crop_label} at {crop_site} under the same forecast.
+    why: >-
+      Water options change how much rain the crop can use (mulch, tied ridges) or add water (irrigation); their
+      modelled effect depends on this season's rain.
+    could_change: The next crop outlook update (weekly).
+    review: Re-check when the crop outlook is next updated.
+
+  - id: water-dry-season
+    decision: water
+    status: draft
+    when:
+      - {key: crop_p_failure_if_sown_pct, op: ge, value: 25}
+    assessment: >-
+      The crop outlook gives a {crop_p_failure_if_sown_pct}% chance of crop failure if sown, so water is the main
+      limit this season.
+    why: Where failure is mostly due to water stress, water-saving and irrigation options make the largest difference.
+    could_change: Rain in the coming weeks.
+    review: Re-check after the next update.

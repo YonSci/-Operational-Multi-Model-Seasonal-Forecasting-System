@@ -1421,6 +1421,15 @@ def _pct(arr, q): return float(np.percentile(arr,q)) if len(arr)>0 else float("n
 
 _NONE = 1.0e6          # "none by the search end" in _late_members (finite: percentiles interpolate cleanly)
 
+def _finite_or_none(a, pi, pj):
+    """a[pi, pj] of a 2-D map as a float, or None where it is missing (not NaN: the response is JSON)."""
+    try:
+        v = float(np.asarray(a)[pi, pj])
+    except (IndexError, TypeError, ValueError):
+        return None
+    return v if np.isfinite(v) else None
+
+
 def _dom(p):
     return int(np.nanargmax(p)) if np.isfinite(p).any() else None
 
@@ -1551,6 +1560,9 @@ def _model_pixel_stats(mkey, pi, pj, year=None):
         hr_on=hr_on, hr_cs=hr_cs, hr_lgp=hr_lgp,
         rpss_on=rpss_on, rpss_cs=rpss_cs, rpss_lgp=rpss_lgp,
         alpha_on=float(np.nanmean(md["alpha"]["onset"][lm])),
+        # this pixel's weight of the members against climatology in the chances (p = alpha x members + (1 - alpha)/3),
+        # so a page can say which part of a chance is the members' and which the long-term average's
+        alpha_on_px=_finite_or_none(md["alpha"]["onset"], pi, pj),
         on_v=on_v.tolist(), cs_v=cs_v.tolist(), lg_v=lg_v.tolist(),
         bc_pixel=_build_bc_pixel(s, md, mkey, oi, nm, pi, pj, on_m, cs_m, on_med, cs_med),
         nm=nm, color=md["color"], _pi=pi, _pj=pj,

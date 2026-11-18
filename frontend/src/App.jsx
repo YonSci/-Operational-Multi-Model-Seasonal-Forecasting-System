@@ -8,12 +8,20 @@ import { useHealth, useModels, usePixelStats, useChirpsHistorical, useValidation
 import useDashboardStore from './store/useDashboardStore'
 import MapPanel from './components/MapPanel'
 import LandingPage from './components/LandingPage'
+import { SHORT_RAINS_INITS, hasModel, latestShortRainsInit } from './shortRainsRuns'
+import { BRAND } from './brand'
 import { version } from '../package.json'
 import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
 import CropOutlookTab, { CropSiteLink, CropSkillPanel } from './components/CropOutlookTab'
+import ExplainPanel, { useTrackerSites } from './components/ExplainPanel'
+import AssistantChat from './components/AssistantChat'
+import FieldReportPanel from './components/FieldReportPanel'
+import BulletinStudio from './components/BulletinStudio'
+import WatchPanel, { loadWatches, useWatchStatuses, ALERT_STATUSES } from './components/WatchPanel'
+import ToolsPanel from './components/ToolsPanel'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -56,15 +64,6 @@ const SEASONS = {
     { id:'deyr',   label:'Autumn rains — Deyr/Hagaya (SON–OND)',        init:'0901', initLabel:'Sep 01' },
   ],
 }
-// Short Rains initializations -> backend model name (Oct runs appear only when the backend has them)
-const SHORT_RAINS_INITS = [
-  { init:'0901',  initLabel:'Sep 01',           model:'ECMWF SEAS5 (Sep)' },
-  { init:'1001',  initLabel:'Oct 01',           model:'ECMWF SEAS5 (Oct)' },
-  { init:'1001o', initLabel:'Oct 01 + Sep obs', model:'ECMWF SEAS5 (Oct+Obs)' },
-  { init:'1001ol', initLabel:'Oct 01 + latest obs', model:'ECMWF SEAS5 (Oct+Obs latest)' },
-  // latest obs, then ECMWF ENS (days 1-15) and extended range (to day 46), then SEAS5 (blend_subseasonal.py)
-  { init:'1001w',  initLabel:'Oct 01 + obs + weather forecasts (experimental)', model:'ECMWF SEAS5 (Oct+Obs+S2S)', experimental:true },
-]
 // Onset / cessation method (Short Rains): Dunning cumulative anomaly, or the agricultural rules adapted from ICPAC's operational definitions
 // (scripts/onset_rules.py) served as "<init> - Agri rule <k>" models; each rule sets onset, cessation and season length
 const ONSET_DEFS = [
@@ -81,7 +80,6 @@ const ONSET_DEFS = [
   { id:'fao-cropwater', group:'fao', label:'FAO water balance', defLabel:'Crop-water', suffix:' - FAO water balance (cropwater)',
     title:'Agricultural onset (as Agricultural); crop-water-requirement cessation: after the climatological rainfall peak, 21-day rain < 0.5 x crop water need (ETc = Kc x ET0) with PAW/TAW falling below 20%. Crop-water LGP between them.' },
 ]
-const hasModel = (modelsData, name) => Object.entries(modelsData?.models ?? {}).some(([k,m]) => k === name || m?.raw_name === name)
 const shortRainsModel = (init, onsetDef='dunning') =>
   (SHORT_RAINS_INITS.find(i=>i.init===init) ?? SHORT_RAINS_INITS[0]).model + ((ONSET_DEFS.find(d=>d.id===onsetDef) ?? ONSET_DEFS[0]).suffix)
 const INIT_LABELS = Object.fromEntries(
@@ -1977,6 +1975,84 @@ const fmtStamp = iso => {
   return `${fmtDate(m[1])}, ${m[2]} ${zone}`.trim()
 }
 
+// Areas needing attention: the map layer of each criterion, and the tab whose layer list holds it
+const ATTENTION_LAYERS = {
+  late_onset: { variable: 'onset', layer: 'prob_an', tab: 'probabilistic' },
+  early_cessation: { variable: 'cessation', layer: 'prob_bn', tab: 'probabilistic' },
+  short_season: { variable: 'lgp', layer: 'prob_bn', tab: 'probabilistic' },
+  onset_delay: { variable: 'onset', layer: 'anomaly', tab: 'forecast' },
+  season_shorter: { variable: 'lgp', layer: 'anomaly', tab: 'forecast' },
+  no_onset: { variable: 'onset', layer: 'failure', tab: 'probabilistic' },
+}
+// Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
+// an earlier run, and the map layer on screen
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts, onTools }) {
+  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
+              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+  return (
+    <div role="group" aria-label="Forecast assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant:</span>
+      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
+              title="Ask a question about the forecast on screen">Ask the assistant</button>
+      <button type="button" style={b} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this location</button>
+      {canCompare && <button type="button" style={b} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
+      {canMap && <button type="button" style={b} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
+      {canAdvise && <button type="button" style={b} onClick={() => onOpen('advisory')} title="Draft guidance and crop options for one decision at the selected place">Advisory (draft)</button>}
+      <button type="button" style={b} onClick={() => onOpen('chart')} title="What a chart at the selected place shows">Explain a chart</button>
+      {canAreas && <button type="button" style={b} onClick={() => onOpen('area')} title="The outlook over a county, region or drawn area">Explain an area</button>}
+      {canAreas && <button type="button" style={b} onClick={() => onOpen('attention')} title="Counties or regions ranked on one criterion">Areas needing attention</button>}
+      <button type="button" style={b} onClick={onReport} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</button>
+      <button type="button" style={b} onClick={onStudio} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</button>
+      <button type="button" style={b} onClick={onWatches} title="Saved places: did the forecast or the advice change? And the decision calendar">
+        My watches{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
+      <button type="button" style={b} onClick={onTools} title="Past seasons like this one, season review, learning, scenario planning, official outlooks">More tools</button>
+    </div>
+  )
+}
+
+// The assistant on the crop outlook page: it explains the site, crop, sowing rule and run selected on the page
+function CropAssistantBar({ site, crop, canAdvise, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts }) {
+  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
+              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+  return (
+    <div role="group" aria-label="Crop outlook assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant ({site}):</span>
+      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
+              title="Ask about the crop outlook on screen">Ask the assistant</button>
+      <button type="button" style={b} onClick={() => onOpen('crop')}
+              title="Outcomes, sowing, yields, failure, past seasons and the crop models, explained">Explain this crop outlook</button>
+      <button type="button" style={b} onClick={() => onOpen('crop_compare')}
+              title="Every crop and sowing rule at this site side by side">Compare crops and sowing rules</button>
+      {canAdvise && <button type="button" style={b} onClick={() => onOpen('advisory')}
+                            title={'Draft guidance and options for one decision, for ' + crop}>Advisory (draft)</button>}
+      <button type="button" style={b} onClick={onReport} title="Send what you observe in the field at this site">Report from the field</button>
+      <button type="button" style={b} onClick={onStudio} title="Compose a crop advisory bulletin for this site">Bulletin Studio</button>
+      <button type="button" style={b} onClick={onWatches} title="Did the forecast or the advice change for this crop and site?">
+        Watch this crop{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
+    </div>
+  )
+}
+
+// The assistant on the near real-time rainfall tracking page: it explains the monitoring site the page shows
+function TrackerAssistantBar({ site, onOpen, onAsk, onReport, onWatches, watchAlerts }) {
+  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
+              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+  return (
+    <div role="group" aria-label="Rainfall tracking assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant{site ? ` (${site})` : ''}:</span>
+      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
+              title="Ask about the rain at this monitoring site">Ask the assistant</button>
+      <button type="button" style={b} onClick={() => onOpen('tracker')}
+              title="Rain so far, the planting onset, dry days and the next days, explained">How is the season going here?</button>
+      <button type="button" style={b} onClick={() => onOpen('tracker_changes')}
+              title="How the weather models' rain changed between the two latest runs">What changed since the last run?</button>
+      <button type="button" style={b} onClick={onReport} title="Send the rain or crop stage you observe at this site">Report from the field</button>
+      <button type="button" style={b} onClick={onWatches} title="Alerts for this site: planting onset, dry spells and changes in the next days">
+        Watch this site{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
+    </div>
+  )
+}
+
 function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit }) {
   const models = Object.entries(modelsData?.models ?? {})
   const base = (model || '').split(' - ')[0]
@@ -1989,8 +2065,7 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
   const hoursSince = ds?.last_update ? (Date.now() - Date.parse(ds.last_update)) / 3.6e6 : null
   // newest Short Rains run on offer (the selector lists the same ones); the experimental run is an alternative to
   // the latest-obs run, not its replacement
-  const latestInit = selectedSeason === 'short_rains'
-    ? SHORT_RAINS_INITS.filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model))).at(-1) : null
+  const latestInit = selectedSeason === 'short_rains' ? latestShortRainsInit(modelsData) : null
   const runInfo = SHORT_RAINS_INITS.find(i => i.init === selectedInit)
   let status, tone
   if (daily && hoursSince != null && hoursSince > 36) {
@@ -2474,8 +2549,8 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <button type="button" onClick={onLogoClick} className="flex flex-col text-left" title="Back to the start page"
                 style={{background:'transparent',border:'none',cursor:'pointer',padding:0,gap:2}}>
-          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>Onset–Cessation–SL Forecast System (OCL-FS)</span>
-          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>Onset, cessation, LGP and crop forecasts for Kenya and Ethiopia: ILRI &amp; ICPAC</span>
+          <span style={{fontSize:18,fontWeight:600,lineHeight:1.3,color:'var(--heading)'}}>{BRAND.short}</span>
+          <span style={{fontSize:13.5,lineHeight:1.4,color:'var(--text-meta)'}}>{BRAND.tagline}: ILRI &amp; ICPAC</span>
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
           <span className="hidden md:inline-flex items-center gap-2" style={{fontSize:13.5,color:'var(--text-meta)'}}
@@ -2663,6 +2738,10 @@ export default function App() {
   const [mapGridData,   setMapGridData]   = useState(null)
   const [selectedYear,  setSelectedYear]  = useState(2026)
   const [selectedInit,  setSelectedInit]  = useState('0901')
+  // A run named by the opened or shared address, or picked in the selector, is kept; otherwise the dashboard
+  // follows the newest published Short Rains run (latestShortRainsInit) as soon as the run list arrives
+  const runPinned = useRef(!!opened?.run)
+  const pickInit = init => { runPinned.current = true; setSelectedInit(init) }
   const [onsetDef,      setOnsetDef]      = useState('dunning')
   const [forecastType,  setForecastType]  = useState(typeFromUrl(opened) ?? 'seasonal')   // Forecast tab: seasonal | subseasonal | medium
   const [mrfModel,      setMrfModel]      = useState(opened?.type === 'medium' && opened.model ? opened.model : 'ecmwf_ens_median')
@@ -2692,6 +2771,7 @@ export default function App() {
       return
     }
     urlRef.current = null
+    runPinned.current = false                          // a new country: its newest run again
     setSelectedSeason(first.id)
     setSelectedInit(first.init)
     if (country === 'ethiopia') {
@@ -2716,6 +2796,7 @@ export default function App() {
   const changeSeason = (seasonId) => {
     const seasons = SEASONS[country]??SEASONS.kenya
     const s = seasons.find(x=>x.id===seasonId) ?? seasons[0]
+    runPinned.current = false                          // a new season: its newest run again
     setSelectedSeason(s.id)
     setSelectedInit(s.init)
     if (s.id === 'kiremt' || s.id === 'short_rains' || s.id === 'fmam' || s.id === 'belg' || s.id === 'bega' || s.id === 'ondj') {
@@ -2764,6 +2845,7 @@ export default function App() {
         urlRef.current = null
         const s = (SEASONS[country] ?? SEASONS.kenya).find(x => x.id === u.season)
         if (s) { setSelectedSeason(s.id); setSelectedInit(s.id === 'short_rains' && SHORT_RAINS_INITS.some(i => i.init === u.run) ? runFromUrl(u.run) : s.init) }
+        runPinned.current = !!u.run
         if (ONSET_DEFS.some(d => d.id === u.method)) setOnsetDef(u.method)
         if (u.site) useDashboardStore.getState().setSelectedSite({ ...u.site, country })
       }
@@ -2775,10 +2857,13 @@ export default function App() {
   // The tracker page reports its content height, so it shows at full length inside the app's single scroll area
   const trackerRef = useRef(null)
   const [trackerHeight, setTrackerHeight] = useState(null)
+  // ... and the monitoring site it shows, which the assistant explains (tracker/dash-shim.js)
+  const [trackerSite, setTrackerSite] = useState(null)
   useEffect(()=>{
     const onMsg = e => {
-      if (e.data?.type === 'tracker-height' && e.source === trackerRef.current?.contentWindow && e.data.height > 0)
-        setTrackerHeight(Math.ceil(e.data.height))
+      if (e.source !== trackerRef.current?.contentWindow) return
+      if (e.data?.type === 'tracker-height' && e.data.height > 0) setTrackerHeight(Math.ceil(e.data.height))
+      if (e.data?.type === 'tracker-site' && typeof e.data.site === 'string') setTrackerSite(e.data.site)
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
@@ -2786,6 +2871,12 @@ export default function App() {
 
   const { data: health, isLoading: healthLoading, isError: healthError } = useHealth()
   const { data: modelsData, isLoading: modelsLoading } = useModels(selectedSeason)
+  // A visit that names no run opens the newest published Short Rains run, as the landing page's preview does
+  useEffect(()=>{
+    if (runPinned.current || selectedSeason !== 'short_rains' || !modelsData?.models) return
+    const latest = latestShortRainsInit(modelsData)
+    if (latest && latest.init !== selectedInit) setSelectedInit(latest.init)
+  },[modelsData, selectedSeason, selectedInit])
   const selectedSite    = useDashboardStore(s=>s.selectedSite)
   const activeModels    = useDashboardStore(s=>s.activeModels)
   const setActiveModels = useDashboardStore(s=>s.setActiveModels)
@@ -2852,6 +2943,54 @@ export default function App() {
   const { data: mrfModels, isLoading: mrfLoading, isError: mrfError } = useMediumRange(isMedium, frSel?.run ?? fcRun)
   const mrfSel = mrfModels?.find(m => m.id === mrfModel) ?? mrfModels?.[0]
   const mrfGridData = useMemo(() => isMedium && mapLayer.variable === 'mrf' ? mrfGrid(mrfSel, mapLayer.layer === 'all' ? 'all' : 'd7') : null, [isMedium, mrfSel, mapLayer.variable, mapLayer.layer])
+  // Forecast assistant: the open explanation ({kind, audience, compare_to}); its parameters follow the current
+  // place, run, method and map layer, so the panel updates when they change
+  const [explain, setExplain] = useState(null)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [studioOpen, setStudioOpen] = useState(false)
+  const [watchOpen, setWatchOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [watchList, setWatchList] = useState(loadWatches)
+  const watchStatuses = useWatchStatuses(watchList)
+  const watchAlerts = watchStatuses.filter(q => q.data && ALERT_STATUSES.includes(q.data.status)).length
+  const onTracker = activeTab === 'tracker'
+  const { data: trackerSites } = useTrackerSites(onTracker)
+  const trackerPlace = (s => s ? { lat: s.lat, lon: s.lon, name: s.name } : null)((trackerSites ?? []).find(x => x.name === trackerSite))
+  // the crop outlook page's selection (CropOutlookTab onSelection): site, crop, sowing rule and run
+  const [cropSel, setCropSel] = useState(null)
+  const onCrop = activeTab === 'crop'
+  const cropPlace = cropSel ? { lat: cropSel.lat, lon: cropSel.lon, name: cropSel.site_name } : null
+  const pagePlace = (onTracker && trackerPlace) || (onCrop && cropPlace) || null
+  const setTrackerPageSite = site => { try { trackerRef.current?.contentWindow?.postMessage({ type: 'tracker-set-site', site }, '*') } catch { /* page not loaded */ } }
+  const [drawArea, setDrawArea] = useState(false)
+  const [requestedLayer, setRequestedLayer] = useState(null)
+  const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
+  const [chatMessages, setChatMessages] = useState([])
+  const compareOptions = selectedSeason === 'short_rains' && !isJoined
+    ? SHORT_RAINS_INITS.filter(i => !i.experimental && shortRainsModel(i.init, srDef) !== srModel && hasModel(modelsData, shortRainsModel(i.init, srDef)))
+        .map(i => ({ model: shortRainsModel(i.init, srDef), label: i.initLabel }))
+    : []
+  const curIdx = SHORT_RAINS_INITS.findIndex(i => i.init === selectedInit)
+  const defaultCompare = (compareOptions.filter(o => SHORT_RAINS_INITS.findIndex(i => shortRainsModel(i.init, srDef) === o.model) < curIdx).at(-1) ?? compareOptions[0])?.model
+  const mapModel = isJoined ? frModel : (selectedModel === 'multimodel' && selectedSeason === 'long_rains' ? '' : effectiveModel)
+  const explainRequest = !explain ? null
+    : explain.kind === 'map' ? { kind: 'map', variable: mapLayer.variable, layer: mapLayer.layer, model: mapModel, season: selectedSeason, audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'changes' ? (compareOptions.length ? { kind: 'changes', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                                                             compare_to: compareOptions.some(o => o.model === explain.compare_to) ? explain.compare_to : defaultCompare, audience: explain.audience, language: explain.language ?? 'en' } : null)
+    : explain.kind === 'area' ? { kind: 'area', season: selectedSeason, model: effectiveModel, name: explain.name ?? '', bbox: explain.bbox ?? '', audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'attention' ? { kind: 'attention', season: selectedSeason, model: effectiveModel, criterion: explain.criterion ?? 'late_onset', audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'chart' ? { kind: 'chart', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                                   chart: explain.chart ?? 'member_dates', quantity: explain.quantity ?? 'onset', crop: explain.crop ?? 'maize_early', audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'advisory' ? { kind: 'advisory', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience, language: explain.language ?? 'en',
+                                      decision: explain.decision ?? 'sowing', crop: explain.crop ?? 'maize_early', planted: explain.planted ?? 'unknown',
+                                      sowing_date: explain.planted === 'yes' ? (explain.sowing_date ?? '') : '', water: explain.water ?? 'rainfed',
+                                      objective: explain.objective ?? 'maturity' }
+    : explain.kind === 'crop' ? { kind: 'crop', site: cropSel?.site_id ?? '', crop: cropSel?.variety ?? 'maize_early', rule: cropSel?.rule ?? '',
+                                  run: cropSel?.run_id ?? '', audience: explain.audience, language: explain.language ?? 'en' }
+    : explain.kind === 'crop_compare' ? { kind: 'crop_compare', site: cropSel?.site_id ?? '', run: cropSel?.run_id ?? '', audience: explain.audience, language: explain.language ?? 'en' }
+    : (explain.kind === 'tracker' || explain.kind === 'tracker_changes') ? { kind: explain.kind, site: trackerSite ?? explain.site ?? '', audience: explain.audience, language: explain.language ?? 'en' }
+    : { kind: 'location', lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel, audience: explain.audience, language: explain.language ?? 'en' }
   const mrfChoices = MRF_ORDER.filter(id => frRuns?.some(r => r.source === 'mr-' + id) || mrfModels?.some(m => m.id === id))
     .map(id => ({ id, label: frRuns?.find(r => r.source === 'mr-' + id)?.model_label ?? MRF_LABELS[id] }))
 
@@ -2897,7 +3036,7 @@ export default function App() {
               selectedSeason={selectedSeason} onSeasonChange={changeSeason}
               selectedModel={selectedModel} setSelectedModel={setSelectedModel}
               selectedYear={selectedYear} setSelectedYear={setSelectedYear}
-              selectedInit={selectedInit} setSelectedInit={setSelectedInit}
+              selectedInit={selectedInit} setSelectedInit={pickInit}
               onsetDef={onsetDef} setOnsetDef={setOnsetDef}
               forecastType={forecastType} setForecastType={setForecastType}
               frRuns={frRuns} frList={frList} frSel={frSel} setFcRun={setFcRun}
@@ -2961,6 +3100,10 @@ export default function App() {
                 selectedSeason={selectedSeason}
                 selectedYear={selectedYear}
                 onOpenBulletin={()=>setBulletinModalOpen(true)}
+                drawArea={drawArea}
+                onAreaDrawn={onAreaDrawn}
+                drawnArea={explain?.kind === 'area' && explain?.bbox ? explain.bbox.split(',').map(Number) : null}
+                requestedLayer={requestedLayer}
               />
               </ErrorBoundary>
             </div>
@@ -2971,6 +3114,18 @@ export default function App() {
           } flex-col ${FULL_PAGE_TABS.includes(activeTab) ? 'h-full overflow-y-auto' : 'h-full overflow-y-auto touch-scroll'}`}>
            {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
              <div className="shrink-0"><RunStatusBar modelsData={modelsData} model={effectiveModel} health={health} selectedSeason={selectedSeason} selectedInit={selectedInit}/></div>
+           )}
+           {!FULL_PAGE_TABS.includes(activeTab) && !isJoined && (
+             <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
+                                                    canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
+                                                    canAreas={!!effectiveModel}
+                                                    onOpen={kind => { setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                                    onAsk={() => { setExplain(null); setReportOpen(false); setChatOpen(true) }}
+                                                    onReport={() => { setExplain(null); setChatOpen(false); setStudioOpen(false); setWatchOpen(false); setReportOpen(true) }}
+                                                    onStudio={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(true) }}
+                                                    onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}
+                                                    watchAlerts={watchAlerts}
+                                                    onTools={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -2997,19 +3152,91 @@ export default function App() {
                                               )}/>}
             {activeTab==='historical'    && <HistoricalTab   pixelData={pixelData} chirpsHist={chirpsHist} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='about'         && <AboutTab initial={aboutInitial} section={aboutSection ?? 'overview'} onSectionChange={setAboutSection}/>}
-            {activeTab==='crop'          && <CropOutlookTab country={country} selectedSite={selectedSite} season={selectedSeason}
+            {activeTab==='crop' && country === 'kenya' && cropSel && (
+              <CropAssistantBar site={cropSel.site_name} crop={cropSel.variety} canAdvise={selectedSeason === 'short_rains'} watchAlerts={watchAlerts}
+                                onOpen={kind => { setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(false)
+                                                  if (kind === 'advisory') {
+                                                    useDashboardStore.getState().setSelectedSite({ lat: cropSel.lat, lon: cropSel.lon, site_name: cropSel.site_name, country })
+                                                    setExplain(e => ({ ...e, kind, crop: cropSel.variety, audience: e?.audience ?? 'general' }))
+                                                  } else setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                onAsk={() => { setExplain(null); setReportOpen(false); setWatchOpen(false); setStudioOpen(false); setChatOpen(true) }}
+                                onReport={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setStudioOpen(false); setReportOpen(true) }}
+                                onStudio={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setReportOpen(false); setStudioOpen(true) }}
+                                onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}/>
+            )}
+            {activeTab==='crop'          && <CropOutlookTab onSelection={setCropSel} country={country} selectedSite={selectedSite} season={selectedSeason}
                                               initId={selectedInit} initLabel={SHORT_RAINS_INITS.find(i => i.init === selectedInit)?.initLabel}
                                               onsetDef={onsetDef} onsetLabel={(d => d && (d.group ? `${d.label} (${d.defLabel})` : d.label))(ONSET_DEFS.find(d => d.id === onsetDef))}
                                               forecastType={forecastType} mrfModel={mrfModel} s2sModel={s2sModel}
                                               onOpenTab={(tab, s) => { if (s) useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab(tab) }}/>}
             {activeTab==='tracker'       && (
-              <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
-                      style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
+              <>
+                <TrackerAssistantBar site={trackerSite} watchAlerts={watchAlerts}
+                                     onOpen={kind => { setChatOpen(false); setReportOpen(false); setWatchOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                     onAsk={() => { setExplain(null); setReportOpen(false); setWatchOpen(false); setChatOpen(true) }}
+                                     onReport={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setReportOpen(true) }}
+                                     onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(true) }}/>
+                <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
+                        style={{width:'100%', height: trackerHeight ? trackerHeight + 'px' : '100%', minHeight: trackerHeight ? undefined : 'calc(100vh - 140px)', border:0, borderRadius:8, background:'var(--bg-surface)', display:'block'}}/>
+              </>
             )}
            </ErrorBoundary>
            </div>
           </div>
         </div>
+      )}
+      {toolsOpen && (
+        <ToolsPanel place={{ lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                    season={selectedSeason} model={effectiveModel} onClose={() => setToolsOpen(false)}/>
+      )}
+      {watchOpen && (
+        <WatchPanel place={(onCrop && cropPlace) || { lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                    initialCrop={onCrop ? cropSel?.variety : undefined}
+                    season={selectedSeason} model={effectiveModel} list={watchList} setList={setWatchList} onClose={() => setWatchOpen(false)}
+                    tracking={onTracker ? trackerPlace : null}
+                    onOpenAdvisory={w => { setWatchOpen(false); useDashboardStore.getState().setSelectedSite({ lat: w.lat, lon: w.lon, site_name: w.place_name, country })
+                                           setExplain(e => ({ ...e, kind: 'advisory', audience: e?.audience ?? 'general', decision: w.decision, crop: w.crop,
+                                                              planted: w.planted, sowing_date: w.sowing_date ?? '' })) }}/>
+      )}
+      {studioOpen && (
+        <BulletinStudio place={(onCrop && cropPlace) || { lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                        season={selectedSeason} model={effectiveModel} onClose={() => setStudioOpen(false)}/>
+      )}
+      {reportOpen && (
+        <FieldReportPanel place={pagePlace ?? { lat: querySite.lat, lon: querySite.lon, name: selectedSite?.site_name ?? `${querySite.lat.toFixed(3)}, ${querySite.lon.toFixed(3)}` }}
+                          context={{ country, season: selectedSeason }} onClose={() => setReportOpen(false)}
+                          onUseSowing={({ crop, sowing_date }) => { setReportOpen(false); setExplain(e => ({ ...e, kind: 'advisory', audience: e?.audience ?? 'general',
+                                                                                                          decision: 'establishment', planted: 'yes', crop, sowing_date })) }}/>
+      )}
+      {chatOpen && (
+        <AssistantChat messages={chatMessages} setMessages={setChatMessages} onClose={() => setChatOpen(false)}
+                       context={onCrop && cropSel
+                         ? { page: 'crop', crop_site: cropSel.site_id, crop_variety: cropSel.variety, crop_rule: cropSel.rule, crop_run: cropSel.run_id,
+                             lat: cropSel.lat, lon: cropSel.lon, season: 'short_rains', model: effectiveModel, site_name: cropSel.site_name }
+                         : onTracker
+                         ? { page: 'tracker', tracker_site: trackerSite, lat: trackerPlace?.lat ?? null, lon: trackerPlace?.lon ?? null,
+                             season: 'short_rains', model: effectiveModel, site_name: trackerSite }
+                         : { lat: querySite.lat, lon: querySite.lon, season: selectedSeason, model: effectiveModel,
+                             variable: mapLayer.variable, layer: mapLayer.layer, site_name: selectedSite?.site_name ?? null }}
+                       onAction={a => {
+                         if (a.action === 'open_tab' && a.tab) { setChatOpen(false); setActiveTab(a.tab) }
+                         else if (a.action === 'open_panel' && a.kind) { setChatOpen(false); setExplain(e => ({ ...e, kind: a.kind, audience: e?.audience ?? 'general' })) }
+                         else if (a.action === 'show_place' && Number.isFinite(a.lat) && Number.isFinite(a.lon)) {
+                           useDashboardStore.getState().setSelectedSite({ lat: a.lat, lon: a.lon, site_name: a.label, country })
+                         }
+                       }}/>
+      )}
+      {explainRequest && (
+        <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
+                      onAudience={audience => setExplain(e => ({ ...e, audience }))}
+                      compareOptions={compareOptions} onCompare={compare_to => setExplain(e => ({ ...e, compare_to }))}
+                      onProfile={patch => { if (patch.site) setTrackerPageSite(patch.site); setExplain(e => ({ ...e, ...patch })) }}
+                      drawing={drawArea} onDraw={() => setDrawArea(d => !d)}
+                      onShowLayer={() => {
+                        const c = ATTENTION_LAYERS[explain?.criterion ?? 'late_onset']
+                        if (c.tab !== activeTab) setActiveTab(c.tab)
+                        setRequestedLayer({ ...c, nonce: Date.now() })
+                      }}/>
       )}
       <BulletinModal
         isOpen={bulletinModalOpen}

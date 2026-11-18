@@ -34,10 +34,31 @@ WT = BASE / "outputs" / "publish_worktree"
 DATA_PATHS = ["frontend/public/tracker/data", "backend/demo_short_rains_extra.npz", "backend/demo_short_rains_rules.npz",
               "backend/rain_stats.npz", "backend/data_status.json", "backend/forecast_runs"]
 CODE_PATHS = ["scripts", "backend/*.py", "frontend/src", "frontend/tracker"]     # code that writes or reads the data
+# Folders whose files the pipeline removes on purpose: the Crop outlook tab's data (crop_engine/dashboard.py) keeps
+# only its current files and deletes the rest (scenarios.json and nitrogen.json when they were made with another
+# configuration, older runs' files). Copying alone would leave the deleted files live, so a file of these folders
+# that is gone here is removed from the published copy too. (folder, pattern, a file that must be here for that)
+MIRRORED = [("frontend/public/tracker/data/crop", "*.json", "index.json")]
 
 
 def log(msg):
     print(f"[{dt.datetime.now():%H:%M:%S}] publish: {msg}", flush=True)
+
+
+def mirror_removals(base=BASE, wt=None):
+    """Remove from the publish worktree the files of MIRRORED folders that the pipeline has deleted here. Skipped for
+    a folder whose required file is missing here (the crop step did not run), so nothing is removed by accident."""
+    wt = wt or WT
+    removed = []
+    for folder, pattern, required in MIRRORED:
+        src, dst = Path(base) / folder, Path(wt) / folder
+        if not (src / required).exists() or not dst.is_dir():
+            continue
+        for f in sorted(dst.glob(pattern)):
+            if f.is_file() and not (src / f.name).exists():
+                f.unlink()
+                removed.append(f"{folder}/{f.name}")
+    return removed
 
 
 def git(*args, cwd=BASE, check=True):
@@ -93,7 +114,9 @@ def main():
             shutil.copytree(src, dst, dirs_exist_ok=True)
         elif src.exists():
             shutil.copy2(src, dst)
-    git("add", "--", *DATA_PATHS, cwd=WT)
+    for f in mirror_removals():
+        log(f"removed {f} (no longer produced)")
+    git("add", "--all", "--", *DATA_PATHS, cwd=WT)
     stat = git("diff", "--cached", "--stat", cwd=WT).stdout.strip()
     if not stat:
         log("live data already current")

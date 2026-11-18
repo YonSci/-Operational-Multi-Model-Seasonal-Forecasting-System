@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import mam_loader as dl
 
-from kenya_api import models, pixel, grid, sites, bulletin, rain_stats
+from kenya_api import models, pixel, grid, sites, bulletin, rain_stats, explain, feedback, studio, watches, extras
 
 # written by scripts/update_forecast.py when the daily update completes; published with the data
 DATA_STATUS = Path(__file__).resolve().parent / "data_status.json"
@@ -66,6 +66,11 @@ app.include_router(grid.router,     prefix="/grid",    tags=["Grid"])
 app.include_router(sites.router,    prefix="/sites",   tags=["Sites"])
 app.include_router(bulletin.router, prefix="",         tags=["Bulletin"])
 app.include_router(rain_stats.router, prefix="",       tags=["Rainfall statistics"])
+app.include_router(explain.router,  prefix="/explain", tags=["Forecast assistant"])
+app.include_router(feedback.router, prefix="/feedback", tags=["Field reports"])
+app.include_router(studio.router, prefix="/studio", tags=["Bulletin Studio"])
+app.include_router(watches.router, prefix="/watches", tags=["Watches and calendar"])
+app.include_router(extras.router, prefix="/extras", tags=["Assistant extras"])
 
 
 @app.get("/", tags=["Health"])
