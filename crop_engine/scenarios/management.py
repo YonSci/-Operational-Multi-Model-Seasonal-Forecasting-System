@@ -20,9 +20,19 @@ A scenario changes one thing of a member's AquaCrop task (adapters.aquacrop_adap
                 season of every Genco Tana River member early (all died in October), which no farmer's irrigation does
   field         AquaCrop-OSPy FieldMngt: mulches (mulch_pct % of the surface covered, soil evaporation there cut by
                 f_mulch: crop residues, 50 % cover); water harvesting as sr_inhb (surface runoff fully inhibited: the
-                rain infiltrates where it falls, as tied ridges or zai pits make it). Not AquaCrop's bunds: they pond
-                the rain on the whole field like a rice paddy, and the waterlogged topsoil stopped the crop in most
-                members at Kapiti, Kiboko and Livemo (canopy under 8 %), which is not what ridges do
+                rain infiltrates where it falls, as tied ridges or zai pits make it). Ridges are not AquaCrop's bunds:
+                bunds pond the rain on the whole field like a rice paddy (at 20 cm the waterlogged topsoil stopped the
+                crop in most members at Kapiti, Kiboko and Livemo, canopy under 8 %). Bunds are their own scenario,
+                10 cm high (AquaCrop only)
+Scenarios only AquaCrop can grow (aquacrop_only; WOFOST and DSSAT leave them out):
+  irrigation    methods 2-5: every 7 days to field capacity; a fixed schedule from each member's sowing; the net
+                irrigation requirement (the water counted, not applied); drip at a constant 3 mm a day
+  groundwater   a water table at a constant depth (1.5 or 2.5 m): capillary rise into the root zone
+  fertility     AquaCrop 7's soil fertility stress (%), its generic crop response (adapters/aquacrop_stress.py)
+  weeds         AquaCrop 7's weeds, their relative cover of the canopy (%)
+  salinity      AquaCrop 7's salinity: a saline soil (initial ECe), saline irrigation water (ECw) or a saline water
+                table (ECgw), dS/m; one season from the stated start (salt builds up over years: ECe ≈ 1.5 ECw)
+These are assumed levels, to show what the practice or condition would change, not measured at any site.
 Re-sowing after a failed establishment works as in the outlook.
 """
 import datetime as dt
@@ -49,8 +59,47 @@ SCENARIOS = {
                   field=dict(mulches=True, mulch_pct=50, f_mulch=0.5)),
     "ridges": dict(label="Tied ridges or pits (no surface runoff)", group="Water management",
                    field=dict(sr_inhb=True)),
+    "bunds": dict(label="Bunds 10 cm high (rain held on the field)", group="Water management",
+                  field=dict(bunds=True, z_bund=0.10)),
+    # irrigation methods other than soil-moisture targets (AquaCrop only)
+    "irr_interval": dict(label="Irrigation every 7 days, to field capacity (up to 30 mm)", group="Irrigation method",
+                         irrigation=dict(irrigation_method=2, IrrInterval=7, MaxIrr=30)),
+    "irr_schedule": dict(label="Fixed schedule: 25 mm at sowing, 30 mm at 20, 40 and 60 days", group="Irrigation method",
+                         irrigation=dict(schedule_das=[[0, 25], [20, 30], [40, 30], [60, 30]], MaxIrr=50)),
+    "irr_net": dict(label="Net irrigation requirement (root zone kept at 60 %)", group="Irrigation method",
+                    irrigation=dict(irrigation_method=4, NetIrrSMT=60)),
+    "irr_constant": dict(label="Drip, 3 mm every day", group="Irrigation method",
+                         irrigation=dict(irrigation_method=5, depth=3, MaxIrr=10)),
+    # a water table (AquaCrop only)
+    "gw_1_5m": dict(label="Water table at 1.5 m", group="Groundwater", groundwater=dict(depth_m=1.5)),
+    "gw_2_5m": dict(label="Water table at 2.5 m", group="Groundwater", groundwater=dict(depth_m=2.5)),
+    # AquaCrop 7's soil fertility stress, weeds and salinity (adapters/aquacrop_stress.py; AquaCrop only)
+    "fert_25": dict(label="Soil fertility stress 25 % (about 80 % of the unstressed biomass)", group="Soil fertility",
+                    fertility=dict(stress_pct=25)),
+    "fert_50": dict(label="Soil fertility stress 50 % (about half the unstressed biomass)", group="Soil fertility",
+                    fertility=dict(stress_pct=50)),
+    "weeds_20": dict(label="Weeds: 20 % of the canopy", group="Weeds", weeds=dict(rc_pct=20)),
+    "weeds_50": dict(label="Weeds: 50 % of the canopy", group="Weeds", weeds=dict(rc_pct=50)),
+    "saline_soil": dict(label="Saline soil (ECe 4 dS/m at the start)", group="Salinity",
+                        salinity=dict(ece_initial=4.0)),
+    "saline_irrigation": dict(label="Full irrigation with saline water (ECw 2 dS/m)", group="Salinity",
+                              irrigation=dict(irrigation_method=1, SMT=[70, 70, 70, 70], MaxIrr=50),
+                              salinity=dict(ecw=2.0)),
+    "saline_water_table": dict(label="Saline water table at 1.5 m (ECgw 4 dS/m)", group="Salinity",
+                               groundwater=dict(depth_m=1.5), salinity=dict(ecgw=4.0)),
 }
-KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "irrigation", "field")
+KEYS = ("sow_shift", "sow_fixed", "density", "initial_frac", "irrigation", "field", "groundwater", "fertility", "weeds",
+        "salinity")
+AQUACROP_KEYS = ("groundwater", "fertility", "weeds", "salinity")     # processes only AquaCrop has
+
+
+def aquacrop_only(key):
+    """True when only AquaCrop can grow the scenario: a water table, soil fertility, weeds or salinity, bunds, or an
+    irrigation method other than soil-moisture targets (WOFOST's and DSSAT's irrigation is method 1's)."""
+    s = SCENARIOS[key]
+    irr = s.get("irrigation") or {}
+    return (any(k in s for k in AQUACROP_KEYS) or bool((s.get("field") or {}).get("bunds"))
+            or (bool(irr) and (irr.get("irrigation_method", 3 if "schedule_das" in irr else 1) != 1)))
 
 
 def describe(key):
@@ -81,7 +130,7 @@ def apply(task, key):
         out["kw"] = dict(task["kw"], PlantPop=float(np.round(pop * scen["density"])))
     if "initial_frac" in scen:
         out["initial_frac"] = float(scen["initial_frac"])
-    for k in ("irrigation", "field"):
+    for k in ("irrigation", "field") + AQUACROP_KEYS:
         if k in scen:
             out[k] = dict(scen[k])
     return out

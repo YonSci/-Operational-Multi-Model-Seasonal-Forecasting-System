@@ -858,6 +858,13 @@ function ScenarioPanel({ data, loading, seasonal, sid, vk, rk, ruleLabel, msg })
         falls below 30 % of its available water from sowing to flowering, at most 100 mm a season reaching the soil (about 130 mm
         drawn at 75 % efficiency); full irrigation keeps it above 70 % throughout, the yield with water no longer limiting. Mulch
         covers half the soil with residues, halving evaporation there; tied ridges or pits let no rain run off the field.
+        Bunds hold up to 10 cm of rain on the field (which can waterlog a crop). The other irrigation methods water every 7 days
+        to field capacity, on a fixed schedule from sowing, at a constant 3 mm a day (drip), or count the net water a crop needs
+        to keep its root zone above 60 % (the requirement, not a practice). A water table feeds the root zone by capillary rise.
+        Soil fertility, weeds and salinity are FAO AquaCrop 7&apos;s methods, added to AquaCrop-OSPy: a fertility stress level
+        (its generic crop response), the weeds&apos; share of the canopy, and salt from the soil, the irrigation water or the
+        water table (one season from that start: salt builds up over years). These levels are assumed, not measured at the site;
+        they are grown by AquaCrop only.
         {extra.length > 0 && <> The last {extra.length > 1 ? 'columns are' : 'column is'} {extra.map(([, , l]) => l).join(' and ')}, grown with
         the same choice where the model has it: WOFOST has no plant population; DSSAT’s automatic irrigation has no seasonal cap (no
         supplementary irrigation), its mulch is crop residue left on the soil and its ridges a low runoff curve number. Where the

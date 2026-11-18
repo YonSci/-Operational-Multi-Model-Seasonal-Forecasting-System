@@ -110,17 +110,21 @@ def base_tasks(res, ds, varieties, rules, site_ids):
 
 
 def dssat_plan(res, varieties, keys):
-    """The DSSAT varieties of a run with DSSAT results, and the scenarios DSSAT can grow (no seasonal irrigation cap)."""
+    """The DSSAT varieties of a run with DSSAT results, and the scenarios DSSAT can grow (no seasonal irrigation cap, nothing
+    only AquaCrop has: management.aquacrop_only)."""
     if not any("dssat" in x for s in res["sites"].values() for rs in s["results"].values() for x in rs.values()):
         return set(), []
-    return set(ro.dssat_varieties(varieties)), [k for k in keys if "MaxIrrSeason" not in (mg.SCENARIOS[k].get("irrigation") or {})]
+    return set(ro.dssat_varieties(varieties)), [k for k in keys if not mg.aquacrop_only(k)
+                                                and "MaxIrrSeason" not in (mg.SCENARIOS[k].get("irrigation") or {})]
 
 
 def wofost_plan(res, varieties, keys):
-    """The WOFOST varieties of a run with WOFOST results, and the scenarios WOFOST can grow."""
+    """The WOFOST varieties of a run with WOFOST results, and the scenarios WOFOST can grow (management.aquacrop_only:
+    left out)."""
     if not any("wofost" in x for s in res["sites"].values() for rs in s["results"].values() for x in rs.values()):
         return set(), []
-    return set(ro.wofost_varieties(varieties)), [k for k in keys if not WOFOST_SKIP & set(mg.SCENARIOS[k])]
+    return set(ro.wofost_varieties(varieties)), [k for k in keys if not WOFOST_SKIP & set(mg.SCENARIOS[k])
+                                                 and not mg.aquacrop_only(k)]
 
 
 def run(rid, site_ids=None, variety_keys=None, rules=None, keys=None, workers=2, force=False, max_age_days=None,
