@@ -200,12 +200,17 @@ def joined_rain(b, source, run, path, nwp_cache):
     if source == "s2s-ecmwf":
         if not [p for i, p in b.ext_by_init.items() if i < run]:
             return "no extended-range run before it on disk"
+        if not b.ens_days_left(path):                                  # ENS's 15 days all observed: a later run has it
+            return "no forecast day after the observations"
         P, info, weather, segs = b.ecmwf(path)
         extra["weather"] = weather
     elif source == "s2s-gefs":
         P, info, segs = b.gefs(path)
     elif source == "mr-ecmwf_ens_median" and (BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc").exists():
-        P, info, segs = b.ens_only(BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc")
+        ens_path = BASE / "data" / "ecmwf_ens" / f"ens_tp_{run:%Y%m%d}00_kenya.nc"
+        if not b.ens_days_left(ens_path):
+            return "no forecast day after the observations"
+        P, info, segs = b.ens_only(ens_path)
     else:
         if path not in nwp_cache:
             nwp_cache.clear()
