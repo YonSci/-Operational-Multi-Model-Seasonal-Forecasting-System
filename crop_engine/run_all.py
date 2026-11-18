@@ -2,9 +2,10 @@
 """
 Crop outlook for every source, each in its own process (crop_engine.run_outlook --sources <one>): the memory of a run
 is released before the next, and this parent imports nothing heavy. The first child also builds the benchmark and
-tops up the ERA5-Land temperatures. Then, in the time left, the management scenarios (weekly), DSSAT's nitrogen levels
-(weekly, crop_engine/run_nitrogen.py) and the gridded regional outlook of the seasonal run (crop_engine/grid.py), and
-the results index and the Crop outlook tab's data are rewritten.
+tops up the ERA5-Land temperatures. The gridded regional outlook of the seasonal run (crop_engine/grid.py) runs right
+after the seasonal source, before the weather-model runs: they can take the whole time limit, and with the grid last
+it was not run at all (13-18 Nov 2026). Then, in the time left, the management scenarios (weekly) and DSSAT's nitrogen
+levels (weekly, crop_engine/run_nitrogen.py), and the results index and the Crop outlook tab's data are rewritten.
 
 Used by the daily update (scripts/update_forecast.py):
   python -m crop_engine.run_all --workers 1 --minutes 240
@@ -19,6 +20,21 @@ import time
 
 from crop_engine import config as C
 from crop_engine import dashboard
+
+
+def regional_outlook(a, env, end):
+    """The gridded regional outlook of the seasonal run (crop_engine/grid.py: it writes its own tab data, grid.json;
+    its benchmark is rebuilt only when its configuration changes), within the time left."""
+    left = end - time.monotonic() if end else None
+    if left is not None and left <= 0:
+        print("crop: time limit reached; regional outlook not run, the previous one kept", flush=True)
+        return
+    cmd = [sys.executable, "-m", "crop_engine.grid", "--workers", str(max(a.workers, 2))]
+    try:
+        if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
+            print("crop: regional outlook failed; the previous one kept", flush=True)
+    except subprocess.TimeoutExpired:
+        print("crop: regional outlook stopped at the time limit; the previous one kept", flush=True)
 
 
 def main():
@@ -58,6 +74,8 @@ def main():
         except subprocess.TimeoutExpired:                                # the child is killed; its previous results stay
             failed.append(s)
             print(f"crop: {s} stopped at the time limit", flush=True)
+        if s == "seasonal" and "seasonal" not in failed:
+            regional_outlook(a, env, end)
     # management scenarios of the seasonal run in the time left (weekly; crop_engine.run_scenarios)
     left = end - time.monotonic() if end else None
     if "seasonal" in sources and "seasonal" not in failed and (left is None or left > 0):
@@ -78,16 +96,6 @@ def main():
                 print("crop: nitrogen levels failed; the previous ones kept", flush=True)
         except subprocess.TimeoutExpired:
             print("crop: nitrogen levels stopped at the time limit; the previous ones kept", flush=True)
-    # the gridded regional outlook of the seasonal run in the time left (crop_engine/grid.py: it writes its own
-    # tab data, grid.json; its benchmark is rebuilt only when its configuration changes)
-    left = end - time.monotonic() if end else None
-    if "seasonal" in sources and "seasonal" not in failed and (left is None or left > 0):
-        cmd = [sys.executable, "-m", "crop_engine.grid", "--workers", str(max(a.workers, 2))]
-        try:
-            if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
-                print("crop: regional outlook failed; the previous one kept", flush=True)
-        except subprocess.TimeoutExpired:
-            print("crop: regional outlook stopped at the time limit; the previous one kept", flush=True)
     dashboard.write_index()
     dashboard.write()
     if failed:
