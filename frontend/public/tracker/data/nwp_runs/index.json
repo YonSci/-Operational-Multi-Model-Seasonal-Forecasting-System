@@ -655,6 +655,28 @@
      "days": 7
     }
    }
+  },
+  {
+   "run": "2026-11-19",
+   "file": "nwp_20261119.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-19",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-19",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-19",
+     "days": 2
+    },
+    "gfs_global": {
+     "start": "2026-11-19",
+     "days": 16
+    }
+   }
   }
  ]
 }
