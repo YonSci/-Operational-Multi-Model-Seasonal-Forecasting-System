@@ -18,6 +18,11 @@ origin/main), so the branch checked out here is never touched. Nothing is publis
 differs from origin/main (a feature branch with unmerged changes), so data never goes live ahead of its code.
 After publishing, a checkout on main is fast-forwarded to the new commit (its data files already match it).
 
+Network steps have a time limit (FETCH_TIMEOUT, PUSH_TIMEOUT): on 19 Nov 2026 a push stayed open for six hours after
+GitHub had taken the commit ("unable to rewind rpc post data"), and the update waited on it. A push that times out
+or fails is checked against origin/main, so one the server took counts as published. The push runs with a larger
+http.postBuffer, so a day's data (tens of thousands of changed lines) is sent in one request.
+
 Usage:
   python scripts/publish_daily.py              # commit and push when the data changed
   python scripts/publish_daily.py --dry-run    # show what would be published
@@ -39,6 +44,9 @@ CODE_PATHS = ["scripts", "backend/*.py", "frontend/src", "frontend/tracker"]    
 # configuration, older runs' files). Copying alone would leave the deleted files live, so a file of these folders
 # that is gone here is removed from the published copy too. (folder, pattern, a file that must be here for that)
 MIRRORED = [("frontend/public/tracker/data/crop", "*.json", "index.json")]
+FETCH_TIMEOUT = 120                     # s
+PUSH_TIMEOUT = 600                      # s
+POST_BUFFER = 512 * 1024 * 1024         # bytes: http.postBuffer for the push
 
 
 def log(msg):
@@ -61,11 +69,50 @@ def mirror_removals(base=BASE, wt=None):
     return removed
 
 
-def git(*args, cwd=BASE, check=True):
-    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+def kill_tree(proc):
+    """Stop a process and its children: git push runs git-remote-https and send-pack under it, and killing git alone
+    would leave them holding the connection."""
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+    else:
+        proc.kill()
+
+
+def git(*args, cwd=BASE, check=True, timeout=None):
+    cmd = ["git", *args]
+    proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                            errors="replace")
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_tree(proc)
+        try:
+            out, _ = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:       # a grandchild outside the tree (a hook's shell) still holds the pipes
+            out = ""
+        r = subprocess.CompletedProcess(cmd, 124, out, f"timed out after {timeout} s")
+    else:
+        r = subprocess.CompletedProcess(cmd, proc.returncode, out, err)
     if check and r.returncode:
         raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()}")
     return r
+
+
+def fetch(cwd=BASE, check=True):
+    return git("fetch", "--quiet", "origin", "main", cwd=cwd, check=check, timeout=FETCH_TIMEOUT)
+
+
+def push(cwd=None):
+    return git("-c", f"http.postBuffer={POST_BUFFER}", "push", "--quiet", "origin", "HEAD:main", cwd=cwd or WT,
+               check=False, timeout=PUSH_TIMEOUT)
+
+
+def on_origin(cwd=None):
+    """Whether origin/main already holds this commit (a push the server took though the client did not hear back)."""
+    cwd = cwd or WT
+    if fetch(cwd=cwd, check=False).returncode:
+        return False
+    return not git("merge-base", "--is-ancestor", "HEAD", "origin/main", cwd=cwd, check=False).returncode
 
 
 def sync_checkout():
@@ -73,7 +120,9 @@ def sync_checkout():
     but would block the next morning's `git pull`, leaving the checkout behind and later publishes skipped."""
     if git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "main":
         return
-    git("fetch", "--quiet", "origin", "main")
+    if fetch(check=False).returncode:
+        log("checkout left as is: origin/main could not be fetched")
+        return
     if git("diff", "--quiet", "origin/main", "--", *DATA_PATHS, check=False).returncode:
         log("checkout left as is: its data differ from origin/main")
         return
@@ -95,7 +144,7 @@ def main():
     ap.add_argument("--note", default="", help="added to the commit message (e.g. the observation date)")
     a = ap.parse_args()
 
-    git("fetch", "--quiet", "origin", "main")
+    fetch()
     if git("diff", "--quiet", "origin/main", "--", *CODE_PATHS, check=False).returncode:
         changed = git("diff", "--name-only", "origin/main", "--", *CODE_PATHS).stdout.split()
         log(f"not published: this checkout's code differs from origin/main ({len(changed)} file(s), e.g. "
@@ -130,13 +179,16 @@ def main():
     msg = f"Daily data update {dt.date.today():%Y-%m-%d}" + (f" ({a.note})" if a.note else "")
     git("commit", "--quiet", "-m", msg, cwd=WT)
     for attempt in range(2):
-        r = git("push", "--quiet", "origin", "HEAD:main", cwd=WT, check=False)
+        r = push()
         if not r.returncode:
             log(f"pushed to origin/main: {msg}")
             sync_checkout()
             return 0
+        if on_origin():
+            log(f"pushed to origin/main: {msg} (the push ended with: {r.stderr.strip()[:200]})")
+            sync_checkout()
+            return 0
         log(f"push rejected ({r.stderr.strip()[:200]}); rebasing on the new origin/main")
-        git("fetch", "--quiet", "origin", "main")
         if git("rebase", "--quiet", "origin/main", cwd=WT, check=False).returncode:
             git("rebase", "--abort", cwd=WT, check=False)
             break
