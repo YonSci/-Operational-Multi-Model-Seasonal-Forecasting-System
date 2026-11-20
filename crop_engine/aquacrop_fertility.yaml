@@ -1,0 +1,23 @@
+# AquaCrop's soil fertility stress (FAO AquaCrop 7's semi-quantitative method, adapters/aquacrop_stress.py), its level
+# fitted to the Kenyan maize nitrogen trials of the yields database by `python -m crop_engine.calibration.aquacrop_fertility`
+# (outputs/crop_engine/calibration/aquacrop/fertility.json, 13 Nov 2026). The response shapes stay AquaCrop's generic
+# crop's: the trials report yields, not the canopy under stress the shapes need.
+#
+# no_fertiliser   the level at which early maize, over the observed Short Rains 1993-2016 at Kiboko and Kapiti (FAO
+#                 onset), yields the trials' 0.62 of its unstressed yield (the median of 27 seasons whose unstressed
+#                 crop yields 0.5 t/ha or more; the target of DSSAT's soil nitrogen, calibration/dssat.py N_TARGET):
+#                 74 %. Below about 60 % the level hardly lowers these rain-fed yields: AquaCrop readjusts the stress
+#                 each day from the biomass so far, so a season already short of water is not penalised twice.
+#                 Sorghum takes maize's level (no sorghum nitrogen trial); the bean fixes its nitrogen (none).
+# sites           a site's own field: KALRO Kiboko 2013, irrigated, 0/40/80/160 kg N/ha (water not limiting):
+#                 medium maize yields the trial's 0.22, 0.51, 0.80 of its 160 kg N/ha yield at 71, 51 and 24 %.
+no_fertiliser:
+  MaizeGDD: 74
+  SorghumGDD: 74
+  DryBeanGDD: 0
+sites:
+  kalro_kiboko_makueni_farm:
+    n0: 71
+    n40: 51
+    n80: 24
+    source: "KALRO Kiboko 2013, irrigated, 0/40/80/160 kg N/ha with 20 kg P/ha (Kenya soil health compilation: doi 10.7910/DVN/SOAWL6 and its Dryad copy 10.5061/dryad.j3tx95xhc)"

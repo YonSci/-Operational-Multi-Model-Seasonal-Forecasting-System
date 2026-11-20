@@ -77,5 +77,8 @@ def test_seasons_under_the_three_stresses():
     for ece, fao in ((4.0, 0.72), (6.0, 0.48)):
         s = _task(salinity={"ece_initial": ece})
         assert s["yield_t_ha"] / base["yield_t_ha"] == pytest.approx(fao, abs=0.06)
+    # near the limit (8 dS/m; FAO 29: 0.24) the crop draws on its less saline compartments instead of collapsing
+    # (root-zone rule alone: 0.01)
+    assert _task(salinity={"ece_initial": 8.0})["yield_t_ha"] / base["yield_t_ha"] > 0.05
     # the wrappers are idle again afterwards: the same unstressed season
     assert _task()["yield_t_ha"] == base["yield_t_ha"] and st.current() is None

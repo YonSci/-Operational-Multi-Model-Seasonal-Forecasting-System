@@ -4,7 +4,8 @@ six layers to 200 cm, sand, clay, organic matter, coarse fragments, and field ca
 Saxton & Rawls (2006) pedotransfer functions, as used by the FAO water balance).
 
 These are 0.25° (≈ 28 km) averages of 250 m SoilGrids estimates, not field measurements: the crop results carry
-that uncertainty. Coarse fragments are reported but not yet used to reduce water-holding capacity.
+that uncertainty. Coarse fragments take water out of AquaCrop's layers (aquacrop_adapter.make_soil); DSSAT receives them
+(SLCF); WOFOST does not use them.
 """
 from dataclasses import dataclass
 
