@@ -854,7 +854,8 @@ and the benchmark seasons; model errors are in none of them and are counted apar
 | `p_failure`, `yield_t_ha` | valid members | no crop (no sowing opportunity, too late) or a failed one: the overall figures, no crop counted as no yield |
 
 **Re-sowing.** After a failed establishment the member is sown again at the next day that meets Agri rule 1's onset
-criteria after the seedlings died (`config.RESOW_RULE`, at most `RESOW_MAX` = 1 more sowing, by 15 Jan), as a farmer
+criteria after the seedlings died (`config.RESOW_RULE`, at most `RESOW_MAX` = 2 more sowings, by 15 Jan; 1 before
+November 2026), as a farmer
 re-sows after the next good rain, provided the variety can still mature by 31 Mar. The outcome is then the re-sown
 crop's; `sowings` and `first_planting` record it, and the summary's `resown` gives the share of members re-sown.
 A `died` crop can still yield: AquaCrop ends the season when the canopy collapses, often late in grain filling. A crop failure is a yield below the variety's threshold (0.5 t/ha
@@ -891,7 +892,7 @@ crop failure is compared with the benchmark's instead (`benchmark_p_failure`).
   the next year is a leap year). March rain is SEAS5 at five to six months' lead, where its skill is small: treat
   the March spread as near-climatological. The onset and cessation forecasts keep their 28 Feb end.
 - Establishment is very sensitive to the soil water on 1 Aug. ERA5-Land puts it at 4–20 % of the available water at
-  most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings (re-sown once).
+  most sites (the dry season), so a sowing rain followed by a dry spell often kills the seedlings (re-sown up to twice).
   At Kiboko a fixed 50 % would roughly halve the failures; without soil moisture measurements it is left as is.
 - Agri rule 1 finds no onset by 15 Jan in many seasons at the drier sites (Kiboko 15 of 33, Kapiti and El Karama
   12): its "no 7-day dry spell in 21 days" criterion is rarely met there. Farmers sow anyway, so the rule-1 figures

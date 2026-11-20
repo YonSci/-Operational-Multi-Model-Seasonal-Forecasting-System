@@ -167,6 +167,28 @@ def test_resowing_after_a_false_start():
     assert again["planting"] >= "2026-11-15" and again["status"] in ("ok", "died") and again["yield_t_ha"] > 0
 
 
+def test_resown_at_most_resow_max_times(monkeypatch):
+    # two false starts and a crop that grows: with RESOW_MAX = 2 the third sowing is the outcome, with 1 the second
+    # sowing's failure stands
+    calls = []
+
+    def sow(task, m, plant, dates, g):
+        calls.append(plant)
+        status = "failed_establishment" if len(calls) < 3 else "ok"
+        return dict(member=m + 1, planting=plant.isoformat(), status=status, harvest=(plant + dt.timedelta(days=20)).isoformat(),
+                    yield_t_ha=0.0 if status != "ok" else 3.0)
+    monkeypatch.setattr(aq, "_sow", sow)
+    ds = _false_start()
+    t = dict(_task(ds, [dt.date(2026, 9, 1)]), resow=[[dt.date(2026, 9, 25), dt.date(2026, 10, 20), dt.date(2026, 11, 15)]])
+    monkeypatch.setattr(aq, "RESOW_MAX", 2)
+    r = aq.simulate(t)[0]
+    assert r["status"] == "ok" and r["sowings"] == 3 and r["planting"] == "2026-10-20" and r["first_planting"] == "2026-09-01"
+    calls.clear()
+    monkeypatch.setattr(aq, "RESOW_MAX", 1)
+    r = aq.simulate(t)[0]
+    assert r["status"] == "failed_establishment" and r["sowings"] == 2 and len(calls) == 2
+
+
 def test_a_late_germination_still_gets_its_full_season():
     # sown on 20 Sep into dry soil, the seed waiting for the rains from 15 Nov: AquaCrop-OSPy's end of season counted
     # maturity from sowing, so the crop that germinated in November was "mature" in December with no grain (0 t/ha,
