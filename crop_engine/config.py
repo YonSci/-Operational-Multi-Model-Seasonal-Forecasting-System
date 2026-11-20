@@ -34,8 +34,11 @@ PLANTING_RULES = {
 # Re-sowing after a failed establishment (the seedlings dried out after a false start): at the next day that meets
 # Agri rule 1's onset criteria after the crop died (by the rules' search end, 15 Jan), as a farmer re-sows after the
 # next good rain; at most RESOW_MAX times, and only while the variety can still mature by the season's end (SEASON_END).
+# Twice since November 2026 (once before): in Kisii the 2026 crop sown on 15 Aug and re-sown on 13 Sep both died
+# in a dry spell, the outcome was a failure in every member, and a third sowing (22 Sep, 6 Oct) grew 4.6-6.4 t/ha:
+# after two false starts a farmer sows again while the season allows.
 RESOW_RULE = 1
-RESOW_MAX = 1
+RESOW_MAX = 2
 
 # Per-day source of the rainfall (precip_source) and of temperature / ET0 (met_source)
 PRECIP_SOURCES = ["obs_final", "obs_prelim", "gap", "forecast", "seasonal", "climatology"]
