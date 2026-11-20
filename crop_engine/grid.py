@@ -170,8 +170,9 @@ def as_sites(cells):
 def inputs(cells, refresh=True, with_met=False):
     """weather.Inputs at the cells: their gridded ERA5-Land temperature, and with_met (DSSAT) their ERA5-Land solar
     radiation, humidity and wind (era5land.site_met at the cells, fetched once from Earth Engine and cached per cell).
-    Cells off the forecast's land mask or without soil data are dropped (logged): returns (inputs, soils, the cells
-    kept)."""
+    Cells off the forecast's land mask or without soil data are dropped (logged), and with_met those without ERA5-Land
+    radiation, humidity and wind (a coastal cell whose centre is off ERA5-Land's land mask): DSSAT and AquaCrop keep
+    the same cells. Returns (inputs, soils, the cells kept)."""
     from crop_engine.data import weather as W
     if refresh:
         failed = gt.update()
@@ -196,6 +197,13 @@ def inputs(cells, refresh=True, with_met=False):
         except ValueError as exc:
             log(f"{s.id}: {exc}; left out")
     cells = cells.loc[ok].reset_index(drop=True)
+    if with_met:
+        from crop_engine.data import era5land
+        met = era5land.site_met(as_sites(cells), refresh=False, skip_empty=True)
+        for r in cells.itertuples():
+            if r.id not in met:
+                log(f"{r.id}: no ERA5-Land radiation, humidity and wind (off its land mask); left out")
+        cells = cells[cells.id.isin(list(met))].reset_index(drop=True)
     inp = W.Inputs(sites=as_sites(cells), refresh=False, blender=b, temps=gt.cell_series, with_met=with_met)
     moved = [s.id for s in inp.sites if cell_id(s.cell_lat, s.cell_lon) != s.id]
     if moved:

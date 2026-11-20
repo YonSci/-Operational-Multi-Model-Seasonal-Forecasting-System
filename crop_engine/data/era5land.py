@@ -114,6 +114,11 @@ def met_path(site):
     return CACHE / f"era5land_met_{site.id}_{site.lat:.4f}_{site.lon:.4f}.csv"   # a moved site is fetched again
 
 
+def nodata_path(site):
+    """Marks a site whose ERA5-Land cell has no values (off ERA5-Land's land mask, e.g. a coastal point)."""
+    return met_path(site).with_suffix(".nodata")
+
+
 def rows_to_frames(daily, wind, sites):
     """Earth Engine getRegion rows (header first) of the daily fields and of the 6-hourly wind speed → {site id:
     DataFrame of RAW by date}. Rows are matched to sites by their 0.1° cell (sites in one cell share it)."""
@@ -167,13 +172,20 @@ def derive(raw):
                          "wind2_ms": fw.u2_from_u10(raw.wind10_ms), "sp_kpa": raw.sp_kpa}, index=raw.index)
 
 
-def site_met(sites, today=None, refresh=True, fetch=None):
+def site_met(sites, today=None, refresh=True, fetch=None, skip_empty=False):
     """{site id: DataFrame indexed by date of rad_mj_m2 (MJ m-2 day-1), vap_hpa, wind2_ms, sp_kpa}: ERA5-Land from
     1 Jan 1993 to its last day. A site without a cache is fetched whole (an error if that fails); stale caches are
-    topped up when refresh, and used as they are (with a warning) when Earth Engine cannot be reached."""
+    topped up when refresh, and used as they are (with a warning) when Earth Engine cannot be reached.
+
+    A site whose fetch comes back without a single value (its ERA5-Land cell is off the land mask) is an error, after
+    the other sites' caches are written; with skip_empty it is left out of the result instead, and marked
+    (nodata_path) so that it is not fetched again."""
     fetch = fetch or _ee_fetch
     today = today or dt.datetime.now(dt.timezone.utc).date()
-    have, new = {}, {}
+    have, new, empty = {}, {}, []
+    if skip_empty:
+        empty = [s.id for s in sites if nodata_path(s).exists()]
+        sites = [s for s in sites if s.id not in empty]
     for s in sites:
         p = met_path(s)
         if p.exists() and p.stat().st_size:
@@ -203,9 +215,17 @@ def site_met(sites, today=None, refresh=True, fetch=None):
         df = new[s.id].astype(float)
         df = df[~df.index.duplicated(keep="last")].sort_index().dropna()
         if df.empty:
-            raise RuntimeError(f"ERA5-Land radiation, humidity and wind: no days for {s.id}")
+            empty.append(s.id)
+            if skip_empty:
+                nodata_path(s).write_text(f"no ERA5-Land values at {cell_of(s.lat, s.lon)} ({today})\n")
+            continue
         have[s.id] = df
         tmp = met_path(s).with_name(f"{met_path(s).stem}.{os.getpid()}.tmp")      # whole, as the temperature cache
         df.rename_axis("date").to_csv(tmp, float_format="%.4f")
         os.replace(tmp, met_path(s))
-    return {s.id: derive(have[s.id]) for s in sites}
+    if empty and not skip_empty:
+        raise RuntimeError(f"ERA5-Land radiation, humidity and wind: no days for {', '.join(empty[:5])}")
+    if empty:
+        _log(f"radiation, humidity and wind: no ERA5-Land values for {len(empty)} site(s) ({', '.join(empty[:5])}); "
+             f"left out")
+    return {s.id: derive(have[s.id]) for s in sites if s.id in have}

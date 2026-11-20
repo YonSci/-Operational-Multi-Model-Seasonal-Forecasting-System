@@ -70,6 +70,26 @@ def test_cache_is_fetched_once_topped_up_and_kept_when_earth_engine_fails(tmp_pa
         E.site_met([B], today=dt.date(2026, 3, 20), fetch=_fake(calls, fail=True))    # nothing to fall back on
 
 
+def test_a_site_without_values_is_left_out_marked_and_not_fetched_again(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "CACHE", tmp_path)
+    monkeypatch.setattr(E, "FIRST", dt.date(2026, 1, 1))
+    calls = []
+
+    def fetch(sites, start, end):                                       # B's cell is off the land mask: all NaN
+        calls.append(tuple(s.id for s in sites))
+        out = _fake([])(sites, start, end)
+        out["b"] = out["b"] * np.nan
+        return out
+    with pytest.raises(RuntimeError, match="no days for b"):
+        E.site_met([A, B], today=dt.date(2026, 3, 1), fetch=fetch)
+    assert E.met_path(A).exists() and not E.nodata_path(B).exists()     # A's fetch is not lost
+    m = E.site_met([A, B], today=dt.date(2026, 3, 1), fetch=fetch, skip_empty=True)
+    assert list(m) == ["a"] and E.nodata_path(B).exists()
+    calls.clear()
+    m = E.site_met([A, B], today=dt.date(2026, 3, 1), fetch=fetch, skip_empty=True)
+    assert list(m) == ["a"] and calls == []                             # B is not asked for again
+
+
 DATES = pd.date_range("2026-08-01", "2027-03-31")
 SITE = Site("test_site", "Test site", -2.21, 37.72, "kenya", 0, 0, -2.125, 37.625)
 
