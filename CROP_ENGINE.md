@@ -652,7 +652,10 @@ seasonal run, before the weather-model runs (`crop_engine.run_all`; run last, it
 - **Cells**: MapSPAM 2020 rainfed maize harvested area (5 arc-min pixels) summed to the 0.25° cells, each pixel
   given to its HarvestStat county by point in polygon; a cell is kept with at least 300 ha in the counties (276
   cells, 2.17 million ha, every one on the forecast's land grid with SoilGrids soil and ERA5-Land temperature; the
-  eight eastern counties alone: 97 cells, 99 % of their rainfed maize area). A cell on a county border carries a weight for each county.
+  eight eastern counties alone: 97 cells, 99 % of their rainfed maize area). Four coastal cells (Kwale, Kilifi,
+  Lamu; 8,200 ha) are left out: the ERA5-Land 0.1° cell at their centre is off its land mask, without radiation,
+  humidity or wind for DSSAT, and both models keep the same 272 cells (marked `.nodata` in the cache, not fetched
+  again). A cell on a county border carries a weight for each county.
 - **Weather, soil, sowing**: as at a site (*Inputs*), at the cell: CHIRPS and the forecast's rain members, the
   platform's ERA5-Land ET0 grid, the SoilGrids profile and the 1 Aug ERA5-Land root-zone water of the cell, the
   cell's own FAO onset (forecast members; the FAO water balance's historical onset in past seasons). Temperature:

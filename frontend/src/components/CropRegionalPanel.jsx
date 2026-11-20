@@ -61,19 +61,27 @@ function GridMap({ data, layer, site, onHover, hover }) {
     const X = lon => (lon - x0) * k, Y = lat => (y1 - lat) * k
     const path = g => ringsOf(g).map(r => 'M' + r.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('L') + 'Z').join('')
     const many = Object.keys(data.outlines).length > 12               // the whole country: label the larger counties only
+    const font = Math.max(11, (x1 - x0) * k / 55)
+    const cand = Object.entries(data.outlines).map(([n, g]) => {
+      const all = ringsOf(g).flat()
+      const w = Math.max(...all.map(p => p[0])) - Math.min(...all.map(p => p[0]))
+      const h = Math.max(...all.map(p => p[1])) - Math.min(...all.map(p => p[1]))
+      const r = [...ringsOf(g)].sort((a, b) => b.length - a.length)[0] ?? []
+      return { n, w, h, x: X(r.reduce((s, p) => s + p[0], 0) / r.length), y: Y(r.reduce((s, p) => s + p[1], 0) / r.length) }
+    })
+    // the whole country: the larger counties with cells first, and a label that would overlap one already placed is
+    // left out (the county still shows its name on hover)
+    const placed = []
+    const labels = many ? cand.filter(c => withCells.has(c.n) && c.w >= 0.6 && c.h >= 0.4)
+      .sort((a, b) => b.w * b.h - a.w * a.h)
+      .filter(c => {
+        const tw = c.n.length * font * 0.6, box = [c.x - tw / 2 - 2, c.x + tw / 2 + 2, c.y - font - 1, c.y + font * 0.35 + 1]
+        if (placed.some(b => box[0] < b[1] && b[0] < box[1] && box[2] < b[3] && b[2] < box[3])) return false
+        placed.push(box)
+        return true
+      }) : cand
     return { W: (x1 - x0) * k, H: (y1 - y0) * k, X, Y, k, paths: Object.entries(data.outlines).map(([n, g]) => [n, path(g)]),
-             font: Math.max(11, (x1 - x0) * k / 55),
-             labels: Object.entries(data.outlines).filter(([n, g]) => {
-               if (!many) return true
-               if (!withCells.has(n)) return false
-               const r = ringsOf(g).flat()
-               const w = Math.max(...r.map(p => p[0])) - Math.min(...r.map(p => p[0]))
-               const h = Math.max(...r.map(p => p[1])) - Math.min(...r.map(p => p[1]))
-               return w >= 0.6 && h >= 0.4
-             }).map(([n, g]) => {
-               const r = [...ringsOf(g)].sort((a, b) => b.length - a.length)[0] ?? []
-               return [n, X(r.reduce((s, p) => s + p[0], 0) / r.length), Y(r.reduce((s, p) => s + p[1], 0) / r.length)]
-             }) }
+             font, labels: labels.map(c => [c.n, c.x, c.y]) }
   }, [data.outlines, data.cells, data.counties])
   const half = data.meta.cell_deg / 2
   return (
