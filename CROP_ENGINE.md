@@ -631,18 +631,28 @@ warm season), not for skill it has shown here.
 
 ## Gridded regional outlook (`crop_engine/grid.py`, pilot)
 
-The same AquaCrop crop on every 0.25° cell of the analysis grid that grows rainfed maize in the eastern Kenya Short
-Rains counties (Machakos, Makueni, Kitui, Kajiado, Embu, Tharaka Nithi, Meru, Taita Taveta): the season that
-matters there, and the counties with the longest HarvestStat Short Rains maize records (14–19 seasons since 1990).
+The same AquaCrop crop on every 0.25° cell of the analysis grid that grows rainfed maize in Kenya (all 47
+counties, since November 2026; the first pilot took the eight eastern Short Rains maize counties, Machakos, Makueni,
+Kitui, Kajiado, Embu, Tharaka Nithi, Meru and Taita Taveta, still available as `--counties eastern`).
 Early-maturing maize, sown at the FAO agricultural onset of each cell's forecast, in the members of the seasonal
 forecast (SEAS5 1 Oct + the latest observations). Run by the daily update right after the site outlook's
 seasonal run, before the weather-model runs (`crop_engine.run_all`; run last, it was crowded out by them, 13–18 Nov
 2026), within the crop outlook's time limit; published as
-`tracker/data/crop/grid.json` and shown in the Crop outlook tab (*Maize across the eastern Kenya counties*).
+`tracker/data/crop/grid.json` and shown in the Crop outlook tab (*Maize across Kenya's counties*).
+
+- **Which season the map is.** The Short Rains is the main maize season of the eastern counties only. HarvestStat's
+  Long and Short Rains maize production, over the years with both reported, gives the Short Rains share: 70–83 % in
+  Machakos, Makueni and Kitui, about half in Meru, Tharaka Nithi and Taita Taveta, 16–25 % on the coast and around
+  the lake (Kilifi, Kwale, Siaya, Homa Bay), under 10 % in the western and Rift Valley maize counties (Trans Nzoia 0,
+  Bungoma 4, Kakamega 6, Nakuru 6, Nandi 3 %), where late-maturing maize is sown in March–April. Each county row
+  carries its share (`season.sr_share`; missing where HarvestStat reports annual totals only, as for Uasin Gishu), and
+  a county below 25 % is marked a Long Rains county (`season.long_rains_county`): there the map is the smaller Short
+  Rains crop of early maize, not the county's main harvest, which belongs to a Long Rains outlook.
 
 - **Cells**: MapSPAM 2020 rainfed maize harvested area (5 arc-min pixels) summed to the 0.25° cells, each pixel
-  given to its HarvestStat county by point in polygon; a cell is kept with at least 300 ha in the counties (97
-  cells, 99 % of the counties' rainfed maize area). A cell on a county border carries a weight for each county.
+  given to its HarvestStat county by point in polygon; a cell is kept with at least 300 ha in the counties (276
+  cells, 2.17 million ha, every one on the forecast's land grid with SoilGrids soil and ERA5-Land temperature; the
+  eight eastern counties alone: 97 cells, 99 % of their rainfed maize area). A cell on a county border carries a weight for each county.
 - **Weather, soil, sowing**: as at a site (*Inputs*), at the cell: CHIRPS and the forecast's rain members, the
   platform's ERA5-Land ET0 grid, the SoilGrids profile and the 1 Aug ERA5-Land root-zone water of the cell, the
   cell's own FAO onset (forecast members; the FAO water balance's historical onset in past seasons). Temperature:
@@ -1673,6 +1683,6 @@ Priorities after the November 2026 review (software MVP in place; the next miles
   hindcast and the regional map (*Third engine: DSSAT*); next, the partners' fertiliser rates and the sites' soil
   tests in `dssat_cultivars.yaml` (the questionnaire asks for them), then phosphorus where soil data allow. SARRA-Py where partner data support
   it; the Long Rains (MAM) and Ethiopia; crop
-  bulletins. Gridded regional yield forecasts: a pilot for the eastern Kenya Short Rains maize counties is in place
-  (*Gridded regional outlook*); next, a hindcast of the grid against HarvestStat, the AquaCrop dry-sowing fix, then
-  sorghum and the other Short Rains counties.
+  bulletins. Gridded regional yield forecasts: a pilot on every Kenyan county's rainfed maize is in place
+  (*Gridded regional outlook*; the eastern Short Rains counties first, all 47 since November 2026, the Long Rains
+  counties marked); next, a hindcast of the grid against HarvestStat, then sorghum, and a Long Rains map.

@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
-// Gridded regional crop outlook (crop_engine/grid.py): AquaCrop on every 0.25° maize cell of the eastern Kenya Short
-// Rains counties, and the counties as the maize-area-weighted mean of their cells.
+// Gridded regional crop outlook (crop_engine/grid.py): AquaCrop and DSSAT on every 0.25 deg rainfed maize cell of
+// Kenya, and the counties as the maize-area-weighted mean of their cells. Each county carries the Short Rains share of
+// its maize (HarvestStat): in a Long Rains county the map is the smaller Short Rains crop.
 const DATA = 'tracker/data/crop/grid.json'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDate = iso => { if (!iso) return '—'; const [, m, d] = iso.split('-').map(Number); return `${d} ${MONTHS[m - 1]}` }
@@ -51,6 +52,7 @@ function Legend({ bins, none }) {
 function GridMap({ data, layer, site, onHover, hover }) {
   const L = LAYERS[layer]
   const geo = useMemo(() => {
+    const withCells = new Set(data.counties.map(c => c.name))
     const pts = Object.values(data.outlines).flatMap(g => ringsOf(g).flat())
     const lons = pts.map(p => p[0]).concat(data.cells.map(c => c.lon))
     const lats = pts.map(p => p[1]).concat(data.cells.map(c => c.lat))
@@ -58,15 +60,24 @@ function GridMap({ data, layer, site, onHover, hover }) {
     const k = 100                                                       // px per degree (near the equator: no correction)
     const X = lon => (lon - x0) * k, Y = lat => (y1 - lat) * k
     const path = g => ringsOf(g).map(r => 'M' + r.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('L') + 'Z').join('')
+    const many = Object.keys(data.outlines).length > 12               // the whole country: label the larger counties only
     return { W: (x1 - x0) * k, H: (y1 - y0) * k, X, Y, k, paths: Object.entries(data.outlines).map(([n, g]) => [n, path(g)]),
-             labels: Object.entries(data.outlines).map(([n, g]) => {
+             font: Math.max(11, (x1 - x0) * k / 55),
+             labels: Object.entries(data.outlines).filter(([n, g]) => {
+               if (!many) return true
+               if (!withCells.has(n)) return false
+               const r = ringsOf(g).flat()
+               const w = Math.max(...r.map(p => p[0])) - Math.min(...r.map(p => p[0]))
+               const h = Math.max(...r.map(p => p[1])) - Math.min(...r.map(p => p[1]))
+               return w >= 0.6 && h >= 0.4
+             }).map(([n, g]) => {
                const r = [...ringsOf(g)].sort((a, b) => b.length - a.length)[0] ?? []
                return [n, X(r.reduce((s, p) => s + p[0], 0) / r.length), Y(r.reduce((s, p) => s + p[1], 0) / r.length)]
              }) }
-  }, [data.outlines, data.cells])
+  }, [data.outlines, data.cells, data.counties])
   const half = data.meta.cell_deg / 2
   return (
-    <svg viewBox={`0 0 ${geo.W} ${geo.H}`} role="img" style={{ width: '100%', maxWidth: 460, height: 'auto', display: 'block' }}
+    <svg viewBox={`0 0 ${geo.W} ${geo.H}`} role="img" style={{ width: '100%', maxWidth: 560, height: 'auto', display: 'block' }}
          aria-label={`Map of ${L.label.toLowerCase()} for each 0.25° cell; the table below has the county values`}
          onMouseLeave={() => onHover(null)}>
       {data.cells.map(c => {
@@ -82,7 +93,7 @@ function GridMap({ data, layer, site, onHover, hover }) {
       })}
       {geo.paths.map(([n, d]) => <path key={n} d={d} fill="none" stroke="var(--heading)" strokeOpacity={0.75} strokeWidth={1.2} pointerEvents="none"/>)}
       {geo.labels.map(([n, x, y]) => (
-        <text key={n} x={x} y={y} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--heading)" pointerEvents="none"
+        <text key={n} x={x} y={y} textAnchor="middle" fontSize={geo.font} fontWeight={600} fill="var(--heading)" pointerEvents="none"
               style={{ paintOrder: 'stroke', stroke: 'var(--bg-surface)', strokeWidth: 3 }}>{n}</text>
       ))}
       {site && Number.isFinite(+site.lat) && (
@@ -146,13 +157,17 @@ export default function CropRegionalPanel({ site }) {
     <section aria-label="Regional maize outlook" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 12,
                                                           padding: '16px 18px', minWidth: 0 }}>
       <div className="flex flex-wrap items-center gap-2">
-        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--heading)', margin: 0 }}>Maize across the eastern Kenya counties</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--heading)', margin: 0 }}>Maize across Kenya's counties</h3>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--caution-text)', background: 'var(--caution-bg)', borderRadius: 999, padding: '2px 9px' }}>Pilot</span>
       </div>
       <p style={{ fontSize: 13.5, color: 'var(--text-meta)', margin: '4px 0 0', lineHeight: 1.5, maxWidth: 860 }}>
         {useD ? 'DSSAT (CERES-Maize)' : 'AquaCrop'} on every 0.25° cell (about 28 km) that grows rainfed maize: {m.variety_label.toLowerCase()} sown at the {m.rule_label} of
         each cell, in the {m.members} members of {m.model_label}, observations to {fmtDate(m.obs_end)}. Each is compared with the same crop in the
         observed weather of {m.years[0]}–{m.years[1]}{hasD ? ', grown by the same model' : ''}. A county is the mean of its cells, weighted by their maize area.
+      </p>
+      <p style={{ fontSize: 13.5, color: 'var(--text-body)', margin: '6px 0 0', lineHeight: 1.5, maxWidth: 860 }}>
+        The Short Rains is the main maize season of the eastern counties only. In the western, Rift Valley, central and coastal counties most maize
+        is grown in the Long Rains: there the map shows the smaller Short Rains crop, not the main harvest (the table marks these counties).
       </p>
       {hasD && (
         <div role="radiogroup" aria-label="Crop model" className="flex flex-wrap items-center gap-2" style={{ margin: '12px 0 0' }}>
@@ -178,7 +193,7 @@ export default function CropRegionalPanel({ site }) {
         ))}
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '0 0 8px' }}>{LAYERS[layer].sub}</p>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]" style={{ alignItems: 'start' }}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]" style={{ alignItems: 'start' }}>
         <div style={{ minWidth: 0 }}>
           <GridMap data={d} layer={layer} site={site} onHover={setHover} hover={hover}/>
           <Legend bins={LAYERS[layer].bins} none={layer === 'below' ? 'no normal range (a third or more of past seasons failed)' : 'no value'}/>
@@ -188,10 +203,10 @@ export default function CropRegionalPanel({ site }) {
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto', marginTop: 14 }}>
+      <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: counties.length > 12 ? 520 : undefined, marginTop: 14 }}>
         <table className="crop-table wrap" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr><th>County</th><th>Maize area</th><th>Yield vs normal</th><th>8 in 10 members</th><th>Below normal</th><th>Above normal</th>
+            <tr><th>County</th><th>Short Rains share</th><th>Maize area</th><th>Yield vs normal</th><th>8 in 10 members</th><th>Below normal</th><th>Above normal</th>
                 <th>Maize area failing</th><th>Past seasons vs reported yields</th></tr>
           </thead>
           <tbody>
@@ -200,6 +215,8 @@ export default function CropRegionalPanel({ site }) {
               return (
                 <tr key={c.name}>
                   <td style={{ fontWeight: 600, color: 'var(--heading)' }}>{c.name}</td>
+                  <td>{c.season?.sr_share == null ? '--' : pct(c.season.sr_share)}{c.season?.long_rains_county
+                       ? <><br/><span style={{ fontSize: 12, fontWeight: 600, color: 'var(--caution-text)' }}>Long Rains county</span></> : null}</td>
                   <td>{ha(c.area_ha)} ha, {c.n_cells} cell{c.n_cells > 1 ? 's' : ''}</td>
                   <td>{c.pct_normal == null ? '—' : `${c.pct_normal}%`} <span style={{ color: 'var(--text-meta)' }}>({fmtT(c.mean_t_ha)} vs {fmtT(c.normal_mean_t_ha)} t/ha)</span></td>
                   <td>{fmtT(c.p10_t_ha)}–{fmtT(c.p90_t_ha)} t/ha</td>
@@ -215,6 +232,8 @@ export default function CropRegionalPanel({ site }) {
         </table>
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-meta)', margin: '8px 0 0', lineHeight: 1.5, maxWidth: 860 }}>
+        Short Rains share: the Short Rains part of the county's Long + Short Rains maize production in the years HarvestStat Africa reports both
+        (-- where it reports annual totals only); below {pct(m.long_rains_share ?? 0.25)} the county is marked as a Long Rains county.
         Maize area failing: the median, over the members, of the share of the county’s maize area with a failed crop. Past seasons vs reported
         yields: rank correlation of the county’s simulated past seasons with its Short Rains maize yields reported by HarvestStat Africa
         (1 is a perfect ranking, 0 none): how well the model ranks good and bad seasons, not a check of this forecast.

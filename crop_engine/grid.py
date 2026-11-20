@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 Gridded regional crop outlook (pilot): AquaCrop on every 0.25° cell of the analysis grid that grows rainfed maize in
-the eastern Kenya Short Rains counties, driven by the seasonal forecast's members, and summed to counties.
+Kenya, driven by the seasonal forecast's members, and summed to counties. The Short Rains is the main maize season
+of the eastern counties only: each county carries the Short Rains share of its maize production (HarvestStat), so a
+Long Rains county reads as one.
 
 Each cell is grown as the monitored sites are (run_outlook.py): the cell's forecast rain members and its own forecast
 onset as the sowing date, the SoilGrids profile of the cell, the ERA5-Land root-zone water on 1 Aug, and ERA5-Land
@@ -21,7 +23,8 @@ Published per cell and county: the expected (mean) yield as a percent of its 199
 below / above normal yield (the benchmark's terciles of 1993–2016) and the chance of crop failure; per county also
 the share of its maize area that fails. Yields are water-limited (no nutrients, pests or losses): the anomalies are
 what is meant, not the levels. The county normal series is checked against HarvestStat's Short Rains maize yields of
-the county (verify()).
+the county (verify()), and each county's Short Rains share of its Long + Short Rains maize production is
+published beside it (sr_shares()).
 
 Outputs:
   outputs/crop_engine/grid/benchmark.json        the cells' observed-weather seasons (rebuilt when the
@@ -34,6 +37,7 @@ Usage:
   python -m crop_engine.grid                           # temperature top-up, benchmark if needed, the seasonal run
   python -m crop_engine.grid --verify                  # also print the county check
   python -m crop_engine.grid --counties Machakos Makueni --workers 4 --force
+  python -m crop_engine.grid --counties eastern       # the eight eastern counties of the first pilot
 """
 import argparse
 import datetime as dt
@@ -58,16 +62,22 @@ from crop_engine.yields import statistics as ys
 
 GRID_OUT = C.OUT / "grid"
 PUBLISHED = C.DASHBOARD_OUT / "grid.json"
-# The Short Rains maize counties of eastern Kenya: the season that matters there, with the longest HarvestStat
-# Short Rains records (14–19 seasons since 1990)
-COUNTIES = ["Machakos", "Makueni", "Kitui", "Kajiado", "Embu", "Tharaka Nithi", "Meru", "Taita Taveta"]
+# Every county of Kenya (HarvestStat's boundaries; None). The first pilot (to 20 Nov 2026) took the eastern Short
+# Rains maize counties only: the season that matters there, with the longest HarvestStat Short Rains records.
+EASTERN = ["Machakos", "Makueni", "Kitui", "Kajiado", "Embu", "Tharaka Nithi", "Meru", "Taita Taveta"]
+COUNTIES = None
+LONG_RAINS_SHARE = 0.25            # below this Short Rains share of a county's maize, its main season is the Long Rains
 MIN_HA = 300.0                       # rainfed maize harvested area of a cell in the counties (MapSPAM 2020)
 VARIETIES = ["maize_early"]
 RULES = ["fao-agricultural"]
 MIN_COUNTY_YEARS = 8
 CAVEATS = [
-    "Pilot: the eastern Kenya Short Rains maize counties, early-maturing maize sown at the FAO agricultural onset "
-    "of each cell's forecast.",
+    "Pilot: every Kenyan county with rainfed maize, early-maturing maize sown at the FAO agricultural onset of each "
+    "cell's forecast.",
+    "The Short Rains is the main maize season of the eastern counties only. In the western, Rift Valley, central "
+    "and coastal counties most maize is grown in the Long Rains, often late-maturing varieties sown in March or "
+    "April: there this map is the smaller Short Rains crop, not the county's main harvest (the county table gives "
+    "each county's Short Rains share of its maize, HarvestStat).",
     "Each 0.25° cell (about 28 km) is one field, grown by AquaCrop and by DSSAT, with the cell's average soil "
     "(SoilGrids), rain (CHIRPS and the bias-corrected forecast) and temperature (ERA5-Land; DSSAT also its radiation, "
     "humidity and wind): not any farmer's field.",
@@ -91,13 +101,34 @@ def cell_id(lat, lon):
 
 
 # ── the cells ───────────────────────────────────────────────────────────────
-def crop_cells(counties=COUNTIES, min_ha=MIN_HA, crop="maiz", root=YIELD_DATA):
-    """DataFrame of the 0.25° cells with at least min_ha of the crop's rainfed harvested area in the counties:
-    id, cell_lat, cell_lon, area_ha (in the counties) and weights {county: ha}."""
-    import geopandas as gpd                                       # here: only the cell selection needs it
-    k = ys.mapspam_kenya(root, log)
+def _boundaries(root=YIELD_DATA):
+    import geopandas as gpd                                       # here: only the cells and outlines need it
     b = gpd.read_file(root / "HarvestStat_Africa" / "hvstat_africa_boundary_v1.2.gpkg")
-    b = b[(b.country_code == "KE") & b.admin_1.isin(counties)]
+    return b[b.country_code == "KE"]
+
+
+def kenya_counties(root=YIELD_DATA):
+    """The 47 counties of Kenya, as HarvestStat names them."""
+    return sorted(_boundaries(root).admin_1.dropna().unique())
+
+
+def resolve_counties(counties, root=YIELD_DATA):
+    """None (or "all"): every county; "eastern": the first pilot's eight; otherwise the names given."""
+    if counties is None or list(counties) == ["all"]:
+        return kenya_counties(root)
+    if list(counties) == ["eastern"]:
+        return list(EASTERN)
+    return list(counties)
+
+
+def crop_cells(counties=COUNTIES, min_ha=MIN_HA, crop="maiz", root=YIELD_DATA):
+    """DataFrame of the 0.25° cells with at least min_ha of the crop's rainfed harvested area in the counties (None:
+    every county of Kenya): id, cell_lat, cell_lon, area_ha (in the counties) and weights {county: ha}."""
+    import geopandas as gpd
+    counties = resolve_counties(counties, root)
+    k = ys.mapspam_kenya(root, log)
+    b = _boundaries(root)
+    b = b[b.admin_1.isin(counties)]
     missing = sorted(set(counties) - set(b.admin_1))
     if missing:
         raise ValueError(f"not HarvestStat counties of Kenya: {', '.join(missing)}")
@@ -116,11 +147,10 @@ def crop_cells(counties=COUNTIES, min_ha=MIN_HA, crop="maiz", root=YIELD_DATA):
 
 
 def county_outlines(counties=COUNTIES, root=YIELD_DATA, tolerance=0.01):
-    """{county: GeoJSON geometry} simplified for the tab's map (coordinates to 3 decimals)."""
-    import geopandas as gpd
+    """{county: GeoJSON geometry} simplified for the tab's map (coordinates to 3 decimals); None: every county."""
     from shapely.geometry import mapping
-    b = gpd.read_file(root / "HarvestStat_Africa" / "hvstat_africa_boundary_v1.2.gpkg")
-    b = b[(b.country_code == "KE") & b.admin_1.isin(counties)].dissolve("admin_1")
+    b = _boundaries(root)
+    b = b[b.admin_1.isin(resolve_counties(counties, root))].dissolve("admin_1")
 
     def rnd(x):
         return [rnd(v) for v in x] if isinstance(x, (list, tuple)) and not isinstance(x[0], float) else \
@@ -264,6 +294,23 @@ def harveststat_sr(crop="maize"):
     h = ys.harveststat()
     h = h[(h.season == "SR") & (h.crop == crop) & h.qc_flag.isna() & np.isfinite(h.yield_dry_kg_ha)]
     return {c: {int(y): float(v) / 1000 for y, v in zip(g.year, g.yield_dry_kg_ha)} for c, g in h.groupby("admin_1")}
+
+
+def sr_shares(crop="maize"):
+    """{county: {"sr_share": the Short Rains share of its Long + Short Rains production, "n_years": years summed}},
+    over the years with both seasons reported (HarvestStat Africa, QC-flagged seasons left out). A county reported
+    only as annual totals is missing."""
+    h = ys.harveststat()
+    h = h[(h.crop == crop) & h.season.isin(["LR", "SR"]) & h.qc_flag.isna() & np.isfinite(h.production_t)]
+    if h.empty:
+        return {}
+    p = h.pivot_table(index=["admin_1", "year"], columns="season", values="production_t", aggfunc="sum").dropna()
+    out = {}
+    for county, g in p.groupby(level=0):
+        tot = float(g.LR.sum() + g.SR.sum())
+        if tot > 0:
+            out[county] = {"sr_share": round(float(g.SR.sum()) / tot, 2), "n_years": int(len(g))}
+    return out
 
 
 def _detrend(x, t):
@@ -472,13 +519,16 @@ def publish(cells, summ, members, bench, meta, varieties, rules, counties, verif
     member_map = {cid: {vk: {rk: members[cid][vk][rk]}} for cid in members}
     dss = meta.get("dssat")
     meta = {k: v for k, v in meta.items() if k != "dssat"}
+    shares = sr_shares()
+    season = {c: {**shares[c], "long_rains_county": shares[c]["sr_share"] < LONG_RAINS_SHARE} for c in shares}
     out = {"meta": {**meta, "variety": vk, "models": ["aquacrop"] + (["dssat"] if dss and dbench else []), "variety_label": varieties[vk]["label"], "rule": rk,
                     "rule_label": C.PLANTING_RULES[rk]["label"], "failure_t_ha": varieties[vk]["failure_t_ha"],
-                    "cell_deg": 0.25, "counties": counties, "min_ha": MIN_HA,
+                    "cell_deg": 0.25, "counties": resolve_counties(counties), "min_ha": MIN_HA,
+                    "long_rains_share": LONG_RAINS_SHARE,
                     "area_source": "MapSPAM 2020 V2r2 rainfed maize harvested area", "years": [years[0], years[-1]],
                     "cal_years": bench["cal_years"], "caveats": CAVEATS},
            "cells": cell_rows(cells, summ, bench, vk, rk),
-           "counties": [{"name": c, **v, "verification": verification.get(c, {})}
+           "counties": [{"name": c, **v, "verification": verification.get(c, {}), "season": season.get(c)}
                         for c, v in summarize_counties(member_map, bench["cells"], cells, varieties, vk, rk,
                                                        years).items()],
            "outlines": outlines}
@@ -486,7 +536,7 @@ def publish(cells, summ, members, bench, meta, varieties, rules, counties, verif
         dmap = {cid: {vk: {rk: dss["members"][cid][vk][rk]}} for cid in dss["members"]}
         out["cells_dssat"] = cell_rows(cells, dss["summaries"], dbench, vk, rk)
         dv = verify(dbench["cells"], cells, vk, rk, dbench["years"])
-        out["counties_dssat"] = [{"name": c, **v, "verification": dv.get(c, {})}
+        out["counties_dssat"] = [{"name": c, **v, "verification": dv.get(c, {}), "season": season.get(c)}
                                  for c, v in summarize_counties(dmap, dbench["cells"], cells, varieties, vk, rk,
                                                                 years).items()]
     dest = Path(dest)
@@ -500,7 +550,8 @@ def publish(cells, summ, members, bench, meta, varieties, rules, counties, verif
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--counties", nargs="+", default=COUNTIES)
+    ap.add_argument("--counties", nargs="+", default=COUNTIES,
+                    help="county names, 'eastern' (the first pilot's eight) or 'all' (the default: every county)")
     ap.add_argument("--min-ha", type=float, default=MIN_HA)
     ap.add_argument("--varieties", nargs="+", default=VARIETIES)
     ap.add_argument("--rules", nargs="+", choices=list(C.PLANTING_RULES), default=RULES)
@@ -518,9 +569,11 @@ def main():
     for k in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):        # the worker processes
         os.environ.setdefault(k, "1")
     _, varieties = ro.load_varieties(a.varieties)
+    a.counties = resolve_counties(a.counties)
     cells = crop_cells(a.counties, a.min_ha)
-    log(f"{len(cells)} cells with at least {a.min_ha:.0f} ha of rainfed maize in {', '.join(a.counties)} "
-        f"({cells.area_ha.sum():.0f} ha)")
+    where = f"all {len(a.counties)} counties" if len(a.counties) >= 47 else ", ".join(a.counties)
+    log(f"{len(cells)} cells with at least {a.min_ha:.0f} ha of rainfed maize in {where} "
+        f"({len({c for w in cells.weights for c in w})} with cells; {cells.area_ha.sum():.0f} ha)")
     use_dssat = not a.no_dssat and bool(ro.dssat_varieties(dict(varieties)))
     inp, soils, cells = inputs(cells, refresh=not a.no_refresh, with_met=use_dssat)
     log(f"{len(inp.sites)} cells with weather and soil; observations to {inp.b.obs_end}")
