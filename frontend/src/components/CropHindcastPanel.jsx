@@ -351,7 +351,7 @@ export default function CropHindcastPanel({ ix, sid, vk, rk, skill, onSite }) {
           <Note>
             With so few years a value is uncertain by about ±0.4, and a county’s yield mixes every farm, variety and management in it, while the
             model grows one crop at one site: where even the observed-weather crop does not follow the county yields, the forecast cannot either.
-            The regional outlook above checks every maize cell of the eastern counties against the same yields.
+            The regional outlook above checks every maize cell of Kenya's counties against the same yields.
           </Note>
         </>
       )}

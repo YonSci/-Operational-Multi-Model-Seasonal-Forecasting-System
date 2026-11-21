@@ -102,3 +102,28 @@ def test_only_a_growing_year_is_rebuilt(tmp_path, monkeypatch):
     monkeypatch.setattr(gt.time, "time", lambda: gt.path(2026).stat().st_mtime + 25 * 3600)
     assert gt.stale(2026, today) and not gt.stale(2010, today) and not gt.stale(2025, today)
     assert gt.stale(2025, dt.date(2026, 2, 1)) and not gt.stale(2024, dt.date(2026, 2, 1))   # Dec still growing in Feb
+
+
+# ── which counties, and which season ─────────────────────────────────────────
+def test_counties_default_to_all_of_kenya(monkeypatch):
+    monkeypatch.setattr(G, "kenya_counties", lambda root=None: ["Bungoma", "Kitui", "Machakos"])
+    assert G.COUNTIES is None
+    assert G.resolve_counties(None) == ["Bungoma", "Kitui", "Machakos"]
+    assert G.resolve_counties(["all"]) == ["Bungoma", "Kitui", "Machakos"]
+    assert G.resolve_counties(["eastern"]) == G.EASTERN and len(G.EASTERN) == 8
+    assert G.resolve_counties(["Kitui"]) == ["Kitui"]
+
+
+def test_short_rains_share_from_both_seasons_reported(monkeypatch):
+    rows = []
+    for y, lr, sr in ((2010, 900.0, 100.0), (2011, 800.0, 200.0), (2012, 500.0, np.nan)):   # 2012: SR not reported
+        rows += [dict(admin_1="Bungoma", crop="maize", season="LR", year=y, production_t=lr, qc_flag=np.nan),
+                 dict(admin_1="Bungoma", crop="maize", season="SR", year=y, production_t=sr, qc_flag=np.nan)]
+    rows += [dict(admin_1="Kitui", crop="maize", season=s, year=2010, production_t=v, qc_flag=np.nan)
+             for s, v in (("LR", 20.0), ("SR", 80.0))]
+    rows += [dict(admin_1="Uasin Gishu", crop="maize", season="annual", year=2010, production_t=5000.0, qc_flag=np.nan)]
+    monkeypatch.setattr(G.ys, "harveststat", lambda: pd.DataFrame(rows))
+    s = G.sr_shares()
+    assert s["Bungoma"] == {"sr_share": 0.15, "n_years": 2}            # (100 + 200) / 2000; 2012 left out
+    assert s["Kitui"]["sr_share"] == 0.8
+    assert "Uasin Gishu" not in s                                        # annual totals only

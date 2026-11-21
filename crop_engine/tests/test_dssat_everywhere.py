@@ -132,6 +132,7 @@ def test_the_regional_map_publishes_dssat_beside_aquacrop(tmp_path, monkeypatch)
     monkeypatch.setattr(G, "cell_rows", lambda cells, summ, bench, vk, rk: [{"id": "a", "from": bench["cells"]["name"]}])
     monkeypatch.setattr(G, "summarize_counties", lambda fc, bench, *a: {"X": {"from": bench["name"]}})
     monkeypatch.setattr(G, "verify", lambda bench, *a, **k: {"X": {"n_years": len(bench)}})
+    monkeypatch.setattr(G, "sr_shares", lambda crop="maize": {"X": {"sr_share": 0.6, "n_years": 10}})
     var = {"maize_early": {"label": "Early maize", "failure_t_ha": 0.5}}
     bench = {"years": [1993, 2025], "cal_years": [1993, 2016], "cells": {"name": "aquacrop"}}
     dbench = {"years": [1993, 2025], "config_hash": "d1", "cells": {"name": "dssat"}}
