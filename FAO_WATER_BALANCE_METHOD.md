@@ -73,6 +73,19 @@ looks back over the days that caused the stress.
 
 All inputs are on the platform's 0.25° Kenya grid (42 × 34 cells; land cells only).
 
+**Other regions.** The input scripts take `--region` (or the `FORECAST_REGION` environment variable; default
+`kenya`), defined in `scripts/regions.py`. `ethiopia_deyr` is southern Ethiopia's Deyr/Hagaya regime: 22 × 50 cells
+(3.5–9.0° N, 35.25–47.75° E), of which the 713 that overlap `mask_deyr_autumn_rains.geojson` are in the forecast.
+Its files carry the tag `ethiopia_deyr` (`data/chirps_v3/chirps_v3_p25_ethiopia_deyr_<year>.nc`,
+`data/soilgrids/soil_hydraulics_ethiopia_deyr_p25.nc`, …) and its outputs go under `outputs/ethiopia_deyr/`,
+so Kenya's files are never touched:
+
+```powershell
+python scripts\fao_download_chirps_v3.py --region ethiopia_deyr
+python scripts\fao_era5land_gee.py --region ethiopia_deyr
+python scripts\fao_soilgrids.py --region ethiopia_deyr
+```
+
 The other four methods use CHIRPS v2, and the SEAS5 members they use are calibrated to v2. This method uses
 CHIRPS v3 throughout: its observations, its terciles and its own bias-corrected members.
 

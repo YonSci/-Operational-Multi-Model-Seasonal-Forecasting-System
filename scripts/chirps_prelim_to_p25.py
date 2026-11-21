@@ -2,13 +2,15 @@
 """
 chirps_prelim_to_p25.py
 ───────────────────────
-Convert CHIRPS-2.0 preliminary daily GeoTIFFs (0.05°) into a 0.25° NetCDF on the Kenya
-target grid (lat -4.875..5.375, lon 33.625..41.875), by 5x5 block means — the same
+Convert CHIRPS-2.0 preliminary daily GeoTIFFs (0.05°) into a 0.25° NetCDF on a region's
+target grid (regions.py; default Kenya: lat -4.875..5.375, lon 33.625..41.875), by 5x5 block means — the same
 aggregation CHIRPS uses for its p25 product. Output variable: precip (mm/day), dims time/lat/lon.
 
 Usage:
   python scripts/chirps_prelim_to_p25.py data/chirps_prelim_2026 data/chirps_prelim_2026/chirps_prelim_2026_p25_kenya.nc
+  python scripts/chirps_prelim_to_p25.py data/chirps_prelim_2026 <out.nc> --region ethiopia_deyr
 """
+import argparse
 import glob
 import os
 import re
@@ -20,12 +22,14 @@ import rasterio
 from rasterio.windows import from_bounds
 import xarray as xr
 
-# Cell edges of the 0.25° target grid
-S, N, W, E = -5.0, 5.5, 33.5, 42.0
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import regions  # noqa: E402
+
 FACTOR = 5
 
 
-def main(tif_dir, out_path):
+def main(tif_dir, out_path, region=None):
+    W, S, E, N = regions.get(region).bounds          # cell edges of the 0.25° target grid
     # Files are kept gzipped (~2.4 MB vs ~69 MB unpacked) and read in place through GDAL's /vsigzip/
     files = sorted(glob.glob(os.path.join(tif_dir, "chirps-v2.0.*.tif.gz")))
     if not files:
@@ -56,4 +60,9 @@ def main(tif_dir, out_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("tif_dir")
+    ap.add_argument("out_path")
+    regions.add_argument(ap)
+    a = ap.parse_args()
+    main(a.tif_dir, a.out_path, regions.activate(a.region).key)

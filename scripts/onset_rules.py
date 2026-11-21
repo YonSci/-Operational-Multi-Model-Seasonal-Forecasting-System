@@ -46,6 +46,7 @@ import xarray as xr
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "scripts"))
 import agro_onset as ao  # noqa: E402
+import regions  # noqa: E402
 
 RULES = {
     1: dict(label="Agri rule 1: >20 mm in 3 days (first day wet), no 7-day dry spell in 21 days; water-balance cessation",
@@ -67,11 +68,19 @@ EXT_QM_WINDOW = 7               # EQM CHIRPS pool ±days for 1 Jan – 28 Feb (�
 DRY_DAY_MM = 1.0
 CESS = dict(window=10, ratio=0.5, swhc=100.0)
 LATE = 500.0                    # sentinel DOY for "none by the search end" (late) in terciles
-RAW_OCT = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / "ecmwf_oct"
-EXT_CACHE = BASE_DIR / "outputs" / "ecmwf_oct" / "ECMWF_bc_daily_janfeb.nc"
-PET_PATH = BASE_DIR / "data" / "worldclim" / "pet_mhargreaves_clim_kenya.nc"
-FINAL_2026 = BASE_DIR / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc"
-PRELIM_2026 = BASE_DIR / "data" / "chirps_prelim_2026" / "chirps_prelim_2026_p25_kenya.nc"
+REGION = RAW_OCT = EXT_CACHE = PET_PATH = FINAL_2026 = PRELIM_2026 = None     # set by use_region
+
+
+def use_region(key=None):
+    """Point the module's paths at a forecast region (regions.py; default: FORECAST_REGION, else kenya)."""
+    global REGION, RAW_OCT, EXT_CACHE, PET_PATH, FINAL_2026, PRELIM_2026
+    REGION = regions.get(key)
+    RAW_OCT, EXT_CACHE, PET_PATH = REGION.seas5_rain, REGION.janfeb_cache, REGION.pet_clim
+    FINAL_2026, PRELIM_2026 = REGION.chirps_final(2026), REGION.chirps_prelim(2026)
+    return REGION
+
+
+use_region()
 
 
 # ── Cessation ───────────────────────────────────────────────────────────────
@@ -242,7 +251,7 @@ def _save(vals, dims, coords, path):
 def run(seasonal_dir, rules=(1, 2, 3)):
     out_root = BASE_DIR / "outputs" / "ecmwf_sep_demo" if seasonal_dir == "sep-demo" else Path(seasonal_dir)
     mem, win0, m_years, lat, lon = member_daily(seasonal_dir)
-    grid = xr.open_dataarray(BASE_DIR / "outputs" / "ecmwf_oct_obs_latest" / "chirps_Q_bar.nc")
+    grid = xr.open_dataarray(REGION.obs_run / "chirps_Q_bar.nc")
     assert np.allclose(grid.lat.values, lat) and np.allclose(grid.lon.values, lon), "grid differs from the Oct runs"
     lm = np.isfinite(grid.values)
     c_years, c_daily = ao._chirps_daily(lat, lon)
@@ -321,7 +330,9 @@ if __name__ == "__main__":
     ap.add_argument("seasonal_dir", nargs="?")
     ap.add_argument("--sep-demo", action="store_true", help="the Sep 01 run from backend/demo_data.npz")
     ap.add_argument("--rules", type=int, nargs="+", default=[1, 2, 3])
+    regions.add_argument(ap)
     a = ap.parse_args()
+    use_region(regions.activate(a.region).key)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     run("sep-demo" if a.sep_demo else a.seasonal_dir, tuple(a.rules))

@@ -2,7 +2,8 @@
 """
 fao_download_chirps_v3.py
 ─────────────────────────
-CHIRPS v3 daily rainfall over Kenya on the platform's 0.25° grid, for the FAO water-balance module.
+CHIRPS v3 daily rainfall on a region's 0.25° grid (regions.py; --region, default Kenya), for the FAO water-balance
+module.
 
   final   CHIRPS v3 "rnl" (ERA5 used to split each CHIRPS3 pentad into days), 1981 – about a month ago; Jan–Mar and
           Aug–Dec of every year are kept (OND season searched from 15 Aug, cessation to 28 Feb). Default source:
@@ -14,12 +15,13 @@ CHIRPS v3 daily rainfall over Kenya on the platform's 0.25° grid, for the FAO w
 CHIRPS v3 daily is the pentadal CHIRPS3 total split into days with ERA5 (final) or IMERG (prelim) timing; it is not
 an independent daily product, which suits the module's 5–10 day windows.
 
-Output: data/chirps_v3/chirps_v3_p25_kenya_<year>.nc   (variable "precip", mm/day; attribute "source" per day)
+Output: data/chirps_v3/chirps_v3_p25_<region>_<year>.nc   (variable "precip", mm/day; attribute "source" per day)
 Existing complete years are skipped; the current year is rebuilt on every run.
 
 Usage:
   python scripts/fao_download_chirps_v3.py                # 1993 – this year
   python scripts/fao_download_chirps_v3.py --years 2026
+  python scripts/fao_download_chirps_v3.py --region ethiopia_deyr
 """
 import argparse
 import datetime as dt
@@ -41,11 +43,21 @@ from rasterio.windows import from_bounds
 
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "scripts"))
+import regions  # noqa: E402
+
 OUT = BASE / "data" / "chirps_v3"
 CHC = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily"
-LAT = np.arange(-4.875, 5.4, 0.25)                   # platform grid (cell centres), 42 × 34
-LON = np.arange(33.625, 41.9, 0.25)
-BOUNDS = (33.5, -5.0, 42.0, 5.5)                     # W, S, E, N edges
+REGION = LAT = LON = BOUNDS = None                   # set by use_region: cell centres and W, S, E, N edges
+
+
+def use_region(key=None):
+    global REGION, LAT, LON, BOUNDS
+    REGION = regions.get(key)
+    LAT, LON, BOUNDS = REGION.lat, REGION.lon, REGION.bounds
+    return REGION
+
+
+use_region()
 MONTHS = (1, 2, 3, 8, 9, 10, 11, 12)
 SOURCE = "gee"
 os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
@@ -80,7 +92,7 @@ def listing(url):
 
 
 def read_final(day):
-    """Kenya window of one final 0.25° file → (42, 34) mm/day. Only the 42 Kenya rows are read over HTTP (the CHC
+    """The region's window of one final 0.25° file → (lat, lon) mm/day. Only the region's rows are read over HTTP (the CHC
     server is slow, ~0.2 MB/s, but answers many small range requests in parallel); whole-file download as fallback."""
     url = f"{CHC}/final/rnl/p25/{day.year}/chirps-v3.0.rnl.{day:%Y.%m.%d}.tif"
     a = None
@@ -107,7 +119,7 @@ PRELIM_WORKERS = 2                                   # the CHC server answers bu
 
 
 def read_prelim(day, tries=5):
-    """Kenya window of one preliminary 0.05° file over HTTP, averaged 5 × 5 → (42, 34) mm/day, or None when the
+    """The region's window of one preliminary 0.05° file over HTTP, averaged 5 × 5 → (lat, lon) mm/day, or None when the
     server still refuses it after the retries. A rate-limited request (HTTP 429) comes back as an HTML page that GDAL
     cannot open, so GDAL retries it itself (GDAL_HTTP_MAX_RETRY) and the whole read is retried after a pause."""
     url = f"/vsicurl/{CHC}/prelim/sat/{day.year}/chirps-v3.0.prelim.{day:%Y.%m.%d}.tif"
@@ -129,15 +141,16 @@ def read_prelim(day, tries=5):
 
 
 def gee_final(year, want):
-    """{day: (42, 34) mm/day} for the wanted days of year from Earth Engine (CHIRPS v3 rnl, 0.05° → 0.25° mean)."""
+    """{day: (lat, lon) mm/day} for the wanted days of year from Earth Engine (CHIRPS v3 rnl, 0.05° → 0.25° mean)."""
     import fao_era5land_gee as g
     ee = g._retry(lambda _: g.init_ee(), None)          # sign-in can hit a dropped connection too
+    g.set_grid(REGION.key)
     def one(_, m):                                   # (_ = placeholder: _retry logs args[1:])
         ic = ee.ImageCollection("UCSB-CHC/CHIRPS/V3/DAILY_RNL").filterDate(f"{year}-{m:02d}-01", ee.Date.fromYMD(year, m, 1).advance(1, "month"))
         dates = [pd.Timestamp(t, unit="ms").date() for t in ic.aggregate_array("system:time_start").getInfo()]
         if not dates:
             return {}
-        a = g.pixels(ee, ic.select("precipitation").toBands())[:, ::-1]           # (days, 210, 170) ascending lat
+        a = g.pixels(ee, ic.select("precipitation").toBands())[:, ::-1]           # (days, rows, columns) ascending lat
         with np.errstate(invalid="ignore"), __import__("warnings").catch_warnings():
             __import__("warnings").simplefilter("ignore", RuntimeWarning)       # all-sea cells
             a = np.nanmean(a.reshape(len(dates), len(LAT), 5, len(LON), 5), axis=(2, 4)).astype(np.float32)
@@ -156,7 +169,7 @@ def days_of(year, last):
 
 
 def build_year(year, workers):
-    dest = OUT / f"chirps_v3_p25_kenya_{year}.nc"
+    dest = REGION.chirps_v3(year)
     today = dt.date.today()
     current = year >= today.year - (1 if today.month <= 3 else 0)
     if dest.exists() and not current:
@@ -206,13 +219,15 @@ def main():
     ap.add_argument("--years", type=int, nargs="*", default=list(range(1993, dt.date.today().year + 1)))
     ap.add_argument("--workers", type=int, default=4, help="parallel requests (keep low: the CHC server blocks bursts)")
     ap.add_argument("--source", choices=("gee", "chc"), default="gee", help="final record from Earth Engine or the CHC server")
+    regions.add_argument(ap)
     a = ap.parse_args()
+    use_region(regions.activate(a.region).key)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     OUT.mkdir(parents=True, exist_ok=True)
     global SOURCE
     SOURCE = a.source
-    log(f"CHIRPS v3 ({a.source}) → {OUT}")
+    log(f"CHIRPS v3 ({a.source}, {REGION.key}) → {OUT}")
     for y in a.years:
         try:
             build_year(y, a.workers)
