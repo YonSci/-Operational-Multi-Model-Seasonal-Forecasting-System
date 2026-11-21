@@ -62,12 +62,28 @@ import xarray as xr
 import yaml
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR / "scripts"))
+import regions  # noqa: E402
+
 CFG_PATH = BASE_DIR / "config" / "fao_water_balance.yaml"
-OUT_HIST = BASE_DIR / "outputs" / "fao_wb" / "historical"
 CHIRPS3 = BASE_DIR / "data" / "chirps_v3"
-ERA5 = BASE_DIR / "data" / "era5land"
-SOIL = BASE_DIR / "data" / "soilgrids" / "soil_hydraulics_kenya_p25.nc"
-ET0_DIR = BASE_DIR / "outputs" / "fao_wb" / "et0"
+REGION = OUT_HIST = ERA5 = SOIL = ET0_DIR = SEAS5_OCT = BC_CACHE = None      # set by use_region
+
+
+def use_region(key=None):
+    """Point the module's paths at a forecast region (regions.py; default: FORECAST_REGION, else kenya)."""
+    global REGION, OUT_HIST, ERA5, SOIL, ET0_DIR, SEAS5_OCT, BC_CACHE
+    REGION = regions.get(key)
+    OUT_HIST = REGION.fao_wb / "historical"
+    ERA5 = REGION.era5land
+    SOIL = REGION.soil
+    ET0_DIR = REGION.fao_wb / "et0"
+    SEAS5_OCT = REGION.seas5_rain
+    BC_CACHE = REGION.fao_wb / "seas5_oct_bc_chirps3.nc"
+    return REGION
+
+
+use_region()
 LATE = 500.0                        # sentinel DOY for "none by the search end" in terciles (as onset_rules.py)
 
 FLAGS = {"no_rainfall_onset": 1, "no_agricultural_onset": 2, "false_onset_rejected": 4, "no_rainfall_cessation": 8,
@@ -141,9 +157,9 @@ def elevation_from_pressure(p_kpa):
 
 
 # ── Soil ────────────────────────────────────────────────────────────────────
-def taw_mm(zr, soil_path=SOIL):
+def taw_mm(zr, soil_path=None):
     """TAW (lat, lon) = 1000 × depth-weighted mean (θFC − θWP) over 0..Zr × Zr, and the θ means; NaN = no soil data."""
-    with xr.open_dataset(soil_path) as ds:
+    with xr.open_dataset(soil_path or SOIL) as ds:
         top, bot = ds["depth_top"].values, ds["depth_bottom"].values
         w = np.clip(np.minimum(bot, zr) - top, 0, None)                  # metres of each layer inside the root zone
         w = w / w.sum()
@@ -339,8 +355,12 @@ def season(P, ET0, taw, sw0, cfg, peak_idx=None, keep_daily=False):
 
 # ── Grid and inputs ─────────────────────────────────────────────────────────
 def grid():
-    """Platform 0.25° Kenya grid and land mask (cells with CHIRPS data in the seasonal outputs)."""
-    g = xr.open_dataarray(BASE_DIR / "outputs" / "ecmwf_oct_obs_latest" / "chirps_Q_bar.nc")
+    """The region's 0.25° grid and land mask (cells with CHIRPS data in its seasonal outputs). Before the region's
+    first seasonal run (no chirps_Q_bar.nc yet): its grid with every cell in."""
+    q = REGION.obs_run / "chirps_Q_bar.nc"
+    if not q.exists() and REGION.key != regions.DEFAULT:
+        return REGION.lat, REGION.lon, np.ones((len(REGION.lat), len(REGION.lon)), bool)
+    g = xr.open_dataarray(q)
     return g.lat.values, g.lon.values, np.isfinite(g.values)
 
 
@@ -356,7 +376,7 @@ def chirps3_season(y, t0, T, lat, lon):
     dates = season_dates(y, t0, T)
     out = np.full((T, len(lat), len(lon)), np.nan, np.float32)
     for yy in (y, y + 1):
-        f = CHIRPS3 / f"chirps_v3_p25_kenya_{yy}.nc"
+        f = REGION.chirps_v3(yy)
         if not f.exists():
             continue
         with xr.open_dataset(f) as ds:
@@ -527,7 +547,7 @@ def run_historical(cfg, years=None, keep_daily=True):
     taw = np.where(lm, taw, np.nan).astype(np.float32)
     clim = et0_climatology(cfg, lat, lon)
     peak = climatological_peak(cfg, lat, lon)
-    years = years or [y for y in range(1993, 2100) if (CHIRPS3 / f"chirps_v3_p25_kenya_{y}.nc").exists()]
+    years = years or [y for y in range(1993, 2100) if REGION.chirps_v3(y).exists()]
     S = int(lm.sum())
     res = {k: np.full((len(years), *lm.shape), np.nan, np.float32) for k in (*DATE_VARS, *LGP_VARS, "false_onsets_rejected")}
     flags = np.zeros((len(years), *lm.shape), np.int32)
@@ -587,8 +607,7 @@ def _unflat(a, lm):
 
 
 # ── Forecast mode ───────────────────────────────────────────────────────────
-SEAS5_OCT = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / "ecmwf_oct"
-BC_CACHE = BASE_DIR / "outputs" / "fao_wb" / "seas5_oct_bc_chirps3.nc"
+# SEAS5_OCT, BC_CACHE: set by use_region
 
 
 def seas5_oct_bc(cfg, m_years, lat, lon, lm):
@@ -639,7 +658,7 @@ def obs_end_doy(run_dir):
     """Last observed day used by a run: 30 Sep for the 1 Oct runs; the latest CHIRPS v3 day for "+ latest obs"."""
     if not Path(run_dir).name.endswith("obs_latest"):
         return 273
-    with xr.open_dataset(CHIRPS3 / f"chirps_v3_p25_kenya_{pd.Timestamp.today().year}.nc") as ds:
+    with xr.open_dataset(REGION.chirps_v3(pd.Timestamp.today().year)) as ds:
         last = pd.Timestamp(ds.time.values[-1])
     return md_doy(f"{last:%m-%d}")
 
@@ -764,7 +783,9 @@ if __name__ == "__main__":
     h = sub.add_parser("historical"); h.add_argument("--years", type=int, nargs="*"); h.add_argument("--no-daily", action="store_true")
     f = sub.add_parser("forecast"); f.add_argument("run_dir")
     ap.add_argument("--config", default=str(CFG_PATH))
+    regions.add_argument(ap)
     a = ap.parse_args()
+    use_region(regions.activate(a.region).key)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     cfg = load_config(a.config)

@@ -2,7 +2,7 @@
 """
 pet_hargreaves.py
 ─────────────────
-Daily potential evapotranspiration climatology on the Kenya 0.25° forecast grid with the modified Hargreaves
+Daily potential evapotranspiration climatology on a region's 0.25° forecast grid with the modified Hargreaves
 method (Droogers & Allen 2002), for the ICPAC cessation rule (10-day rain < 0.5 × PET; onset_rules.py):
 
   PET = 0.0013 × 0.408 Ra × (Tmean + 17.0) × (Tmax − Tmin − 0.0123 P)^0.76      [mm/day]
@@ -18,7 +18,10 @@ from year to year than rainfall, and SEAS5 temperature is not downloaded).
 which halves PET.)
 
 Usage: python scripts/pet_hargreaves.py → data/worldclim/pet_mhargreaves_clim_kenya.nc (pet, tmax, tmin by doy)
+       python scripts/pet_hargreaves.py --region ethiopia_deyr → ..._ethiopia_deyr.nc
 """
+import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -29,11 +32,22 @@ import xarray as xr
 from rasterio.windows import from_bounds
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR / "scripts"))
+import regions  # noqa: E402
+
 WC_DIR = BASE_DIR / "data" / "worldclim"
 WC_URL = "https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_10m_{v}.zip"
-GRID = BASE_DIR / "outputs" / "ecmwf_oct_obs_latest" / "chirps_Q_bar.nc"
-CHIRPS = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
-OUT = WC_DIR / "pet_mhargreaves_clim_kenya.nc"
+GRID = CHIRPS = OUT = None                         # set by use_region: the region's grid, CHIRPS history, output
+
+
+def use_region(key=None):
+    global GRID, CHIRPS, OUT
+    r = regions.get(key)
+    GRID, CHIRPS, OUT = r.obs_run / "chirps_Q_bar.nc", r.chirps_hist, r.pet_clim
+    return r
+
+
+use_region()
 YEARS = (1993, 2022)
 
 
@@ -82,6 +96,9 @@ def worldclim(var, lat, lon):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    regions.add_argument(ap)
+    use_region(regions.activate(ap.parse_args().region).key)
     grid = xr.open_dataarray(GRID)
     lat, lon = grid.lat.values, grid.lon.values
 

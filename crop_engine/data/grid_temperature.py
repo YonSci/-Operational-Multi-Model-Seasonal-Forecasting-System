@@ -1,12 +1,13 @@
 """
-Daily ERA5-Land 2 m maximum and minimum temperature on the platform's 0.25° Kenya grid, for the gridded crop outlook
+Daily ERA5-Land 2 m maximum and minimum temperature on a region's 0.25° grid (scripts/regions.py; --region, default
+Kenya), for the gridded crop outlook
 (crop_engine/grid.py): ECMWF/ERA5_LAND/DAILY_AGGR from Google Earth Engine, sampled on the 0.05° grid nested in the
 0.25° cells and averaged 5 × 5 over land, as scripts/fao_era5land_gee.py builds the platform's ET0. The sites take
 the same temperature from Open-Meteo at their point (data/era5land.py); a cell takes its area average.
 
 Months of the crop season and of the SEAS5 corrections (Jan–Mar, Aug–Dec), UTC days:
 
-  data/crop_engine/grid/era5land_t2m_<year>.nc   tmax, tmin (°C; time, lat, lon)
+  data/crop_engine/grid/era5land_t2m_<year>.nc   tmax, tmin (°C; time, lat, lon)   (other regions: grid_<region>/)
 
 Past years are fetched once. The current year, and the previous one until April, are rebuilt when their file is more
 than REFRESH_HOURS old (ERA5-Land runs about 5 days behind real time).
@@ -14,6 +15,7 @@ than REFRESH_HOURS old (ERA5-Land runs about 5 days behind real time).
 Usage:
   python -m crop_engine.data.grid_temperature                  # 1993 – this year
   python -m crop_engine.data.grid_temperature --years 2026
+  python -m crop_engine.data.grid_temperature --region ethiopia_deyr
 """
 import argparse
 import datetime as dt
@@ -28,8 +30,8 @@ import xarray as xr
 from crop_engine import config as C
 
 import fao_water_balance as fw  # noqa: E402  (scripts/, on sys.path via config)
+import regions  # noqa: E402
 
-DIR = C.CACHE / "grid"
 MONTHS = (1, 2, 3, 8, 9, 10, 11, 12)
 BANDS = ["temperature_2m_max", "temperature_2m_min"]
 FIRST_YEAR = 1993
@@ -38,6 +40,21 @@ REFRESH_HOURS = 20
 
 def log(m):
     print(f"[{dt.datetime.now():%H:%M:%S}] grid temperature: {m}", flush=True)
+
+
+def use_region(key=None):
+    """This module's files and fao_water_balance's grid for a forecast region (default: FORECAST_REGION, else Kenya)."""
+    global DIR
+    r = fw.use_region(key)
+    DIR = _dir(r)
+    return r
+
+
+def _dir(r):
+    return C.CACHE / ("grid" if r.key == regions.DEFAULT else f"grid_{r.tag}")
+
+
+DIR = _dir(regions.get())
 
 
 def path(year):
@@ -55,14 +72,14 @@ def stale(year, today=None):
 
 
 def _month(ee, gee, y, m):
-    """(days, 2, 210, 170) tmax, tmin (K) of one month on the 0.05° grid, north-up, and the dates; None if no days."""
+    """(days, 2, rows, columns) tmax, tmin (K) of one month on the 0.05° grid, north-up, and the dates; None if no days."""
     start = ee.Date.fromYMD(y, m, 1)
     daily = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR").filterDate(start, start.advance(1, "month")).select(BANDS)
     n = daily.size().getInfo()
     if n == 0:
         return None
     dates = pd.to_datetime(daily.aggregate_array("system:time_start").getInfo(), unit="ms")
-    return gee.pixels(ee, daily.toBands()).reshape(n, len(BANDS), 210, 170), dates
+    return gee.pixels(ee, daily.toBands()).reshape(n, len(BANDS), *gee.shape()), dates
 
 
 def _retry(fn, *args, tries=5):
@@ -110,6 +127,7 @@ def update(years=None, workers=4, year_workers=2):
     if not years:
         return []
     ee = gee.init_ee()
+    gee.set_grid(fw.REGION.key)
     lat, lon, _ = fw.grid()
     failed = []
 
@@ -149,9 +167,11 @@ def main():
     ap.add_argument("--years", type=int, nargs="*")
     ap.add_argument("--workers", type=int, default=4, help="months fetched in parallel")
     ap.add_argument("--year-workers", type=int, default=2)
+    regions.add_argument(ap)
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    use_region(regions.activate(a.region).key)
     failed = update(a.years, a.workers, a.year_workers)
     log("done" + (f"; failed: {failed}" if failed else ""))
     return 1 if failed else 0
