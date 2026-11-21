@@ -657,6 +657,36 @@
    }
   },
   {
+   "run": "2026-11-18",
+   "file": "nwp_20261118.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-18",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-18",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-18",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-11-18",
+     "days": 15
+    },
+    "icon_global": {
+     "start": "2026-11-18",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-11-18",
+     "days": 7
+    }
+   }
+  },
+  {
    "run": "2026-11-19",
    "file": "nwp_20261119.csv",
    "models": {
@@ -675,6 +705,66 @@
     "gfs_global": {
      "start": "2026-11-19",
      "days": 16
+    }
+   }
+  },
+  {
+   "run": "2026-11-20",
+   "file": "nwp_20261120.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-20",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-20",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-20",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-11-20",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-11-20",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-11-20",
+     "days": 7
+    }
+   }
+  },
+  {
+   "run": "2026-11-21",
+   "file": "nwp_20261121.csv",
+   "models": {
+    "ecmwf_ens_median": {
+     "start": "2026-11-21",
+     "days": 15
+    },
+    "ecmwf_ifs025": {
+     "start": "2026-11-21",
+     "days": 15
+    },
+    "gem_global": {
+     "start": "2026-11-21",
+     "days": 10
+    },
+    "gfs_global": {
+     "start": "2026-11-21",
+     "days": 16
+    },
+    "icon_global": {
+     "start": "2026-11-21",
+     "days": 7
+    },
+    "ukmo_global_deterministic_10km": {
+     "start": "2026-11-21",
+     "days": 7
     }
    }
   }
