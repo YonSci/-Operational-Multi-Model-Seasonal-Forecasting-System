@@ -38,7 +38,6 @@ NO_ONSET = 400.0          # sentinel DOY for "no onset by 31 Dec" when forming t
 CAL_YEARS = np.arange(1993, 2017)
 VAL_YEARS = np.arange(2017, 2025)
 ALPHA_GRID = np.round(np.arange(0.0, 1.01, 0.02), 2)
-CHIRPS_PATH = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
 
 
 # ── Core rule ───────────────────────────────────────────────────────────────
@@ -139,7 +138,7 @@ def _target_grid(seasonal_dir):
 def _chirps_daily(lat, lon):
     import regions
     r = regions.get()
-    path = CHIRPS_PATH if r.key == regions.DEFAULT else BASE_DIR / r.chirps_hist.relative_to(regions.BASE_DIR)
+    path = BASE_DIR / r.chirps_hist.relative_to(regions.BASE_DIR)          # regions.py: CHIRPS_VERSION's history
     with xr.open_dataset(path) as ds:
         ds = ds.reindex(lat=lat, lon=lon, method="nearest")
         t = pd.DatetimeIndex(ds.time.values)

@@ -118,10 +118,11 @@ class Blender:
         self.lm = ~np.isnan(self.seas[0, 0])
         self.ext_paths = sorted(glob.glob(str(self.base / "data" / "ecmwf_ext" / "ext_tp_*_kenya.nc")))
         self.ext_by_init = {self.init_of(p): p for p in self.ext_paths}
-        self.chirps = chirps_daily(self.base / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc", self.lat, self.lon)
+        import regions                                                           # CHIRPS_VERSION's 1993–2025 record
+        hist = self.base / regions.get("kenya").chirps_hist.relative_to(regions.BASE_DIR)
+        self.chirps = chirps_daily(hist, self.lat, self.lon)
         self.refc = load_reforecasts(self.base / refc_dir, self.lat, self.lon)
-        self.c_idx, self.c_val = (chirps_all(self.base / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc",
-                                             self.lat, self.lon) if self.refc else ({}, None))
+        self.c_idx, self.c_val = chirps_all(hist, self.lat, self.lon) if self.refc else ({}, None)
         self.raw, self.qm = None, {}
         self.bc_used = {"reforecast": 0, "provisional": 0}
 

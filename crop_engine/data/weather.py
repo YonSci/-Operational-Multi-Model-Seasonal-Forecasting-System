@@ -17,7 +17,7 @@ and, when the ERA5-Land site series are available (crop_engine.data.era5land.sit
 
 Rain of a forecast run, member k (the members of forecast_runs.py, so the onset dates the dashboard shows belong to
 exactly this rain):
-  1–31 Aug        observed CHIRPS v2 (final, then preliminary)
+  1–31 Aug        observed CHIRPS (CHIRPS_VERSION: v3, or v2; final, then preliminary)
   1 Sep – 31 Dec  the run's joined rain: observed to the last observed day, gap days, the weather forecast, SEAS5
   1 Jan – 28 Feb  SEAS5 member k, bias-corrected as the Agri rules' January–February (onset_rules.EXT_CACHE);
                   a 29 Feb repeats 28 Feb
@@ -58,7 +58,8 @@ import fao_water_balance as fw  # noqa: E402
 import onset_rules as orl  # noqa: E402
 
 KIND_TO_SOURCE = {"obs": "obs_final", "gap": "gap", "ens": "forecast", "ext": "forecast", "fc": "forecast", "seas": "seasonal"}
-CHIRPS_HIST = C.BASE / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
+CHIRPS_HIST = orl.REGION.chirps_hist              # 1993–2025 (scripts/regions.py, CHIRPS_VERSION)
+CHIRPS_LABEL = orl.REGION.chirps_label
 
 
 def season_length(t0, end=C.SEASON_END):
@@ -121,10 +122,10 @@ class Inputs:
             print(f"[{dt.datetime.now():%H:%M:%S}] crop weather: radiation, humidity and wind {self.met2_note}", flush=True)
         self.et0_clim = fw.et0_climatology(self.cfg, self.lat, self.lon, self.T)[:, self.ii, self.jj]  # (T, site)
         self.o26 = orl.obs_2026(self.lat, self.lon)[:, self.ii, self.jj]                           # (366, site)
-        self.final_end = _last_time(orl.FINAL_2026) if orl.FINAL_2026.exists() else dt.date(self.year, 1, 1)
+        self.final_end = orl.final_end_2026() or dt.date(self.year, 1, 1)
         with xr.open_dataarray(orl.EXT_CACHE) as da:                      # (member, 59, site)
             self.janfeb = da.sel(year=self.year).values[:, :, self.ii, self.jj].astype(np.float32)
-        with xr.open_dataset(CHIRPS_HIST) as ds:                          # (day, site) observed CHIRPS v2, 1993–2025
+        with xr.open_dataset(CHIRPS_HIST) as ds:                          # (day, site) observed CHIRPS, 1993–2025
             p = ds["precip"].sel(lat=xr.DataArray(self.lat[self.ii], dims="site"),
                                  lon=xr.DataArray(self.lon[self.jj], dims="site"), method="nearest")
             self.hist = pd.DataFrame(p.values.astype(np.float32), index=pd.DatetimeIndex(ds.time.values),
@@ -150,7 +151,7 @@ class Inputs:
         return fw.season_dates(year, self.t0, self.T)
 
     def observed_rain(self, dates):
-        """(site, len(dates)) observed CHIRPS v2: the 1993–2025 file, then 2026 final / preliminary; NaN if missing."""
+        """(site, len(dates)) observed CHIRPS: the 1993–2025 file, then 2026 final / preliminary; NaN if missing."""
         out = self.hist.reindex(dates).values.T.copy()
         in26 = dates.year == 2026
         if in26.any():
@@ -388,7 +389,7 @@ class Inputs:
         rain = self.observed_rain(dates)[None]
         src = np.full(len(dates), C.PRECIP_SOURCES.index("obs_final"), np.int8)
         tmax, tmin, et0, tsrc, esrc = self.met(year, dates)
-        attrs = {"forecast_source": "observed", "model_label": "Observed weather (CHIRPS v2, ERA5-Land)", "season_year": year,
+        attrs = {"forecast_source": "observed", "model_label": f"Observed weather ({CHIRPS_LABEL}, ERA5-Land)", "season_year": year,
                  "run_date": "", "obs_end": "", "members_kind": "one observed season"}
         return to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, self.sites, attrs, self._extra(dates))
 
@@ -430,7 +431,7 @@ def to_dataset(rain, tmax, tmin, et0, src, tsrc, esrc, dates, sites, attrs, extr
         attrs = {**attrs, "radiation": extra or "not available"}
     ds.attrs.update({
         "precip_sources": json.dumps(C.PRECIP_SOURCES), "met_sources": json.dumps(C.MET_SOURCES),
-        "calibration": "CHIRPS v2 quantile mapping of SEAS5 (1993–2016); weather forecasts as in forecast_runs.py",
+        "calibration": f"{CHIRPS_LABEL} quantile mapping of SEAS5 (1993–2016); weather forecasts as in forecast_runs.py",
         "spatial_resolution": "0.25° analysis-grid cell nearest each site; weather forecasts from their native grids "
                               "(0.25–1.5°) mapped to it; temperature at the site (ERA5-Land 0.1°)",
         "created": dt.datetime.now().astimezone().isoformat(timespec="minutes"),

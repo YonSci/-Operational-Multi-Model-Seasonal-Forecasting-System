@@ -103,8 +103,9 @@ def product_status(today):
             with xr.open_dataset(f) as ds:
                 last_obs[p] = pd.Timestamp(ds.time.values.max()).date()
     ends = []
-    for f in (BASE / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc",
-              BASE / "data" / "chirps_prelim_2026" / "chirps_prelim_2026_p25_kenya.nc"):
+    sys.path.insert(0, str(BASE / "scripts"))
+    import regions
+    for f in regions.get("kenya").chirps_obs(2026):      # CHIRPS_VERSION: v3 the year file; v2 final + preliminary
         if f.exists():
             with xr.open_dataset(f) as ds:
                 ends.append(pd.Timestamp(ds.time.values.max()).date())

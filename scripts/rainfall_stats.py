@@ -34,6 +34,7 @@ Output: backend/rain_stats.npz   keys "<model>|lat", "<model>|lon", "<model>|met
 Usage:  python scripts/rainfall_stats.py [--base <repo holding data/ and outputs/>] [--out backend/rain_stats.npz]
 """
 import argparse
+import sys
 import datetime as dt
 import json
 from pathlib import Path
@@ -107,7 +108,13 @@ def season_stats(rain):
 
 
 def chirps_kenya(base, lat, lon, start, end):
-    out = []
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import regions
+    if regions.chirps_version() != "v2":              # the record's 1993–2025 file (scripts/regions.py)
+        pr = xr.open_dataset(base / regions.get("kenya").chirps_hist.relative_to(regions.BASE_DIR))["precip"]
+        pr = pr.reindex(lat=lat, lon=lon, method="nearest", tolerance=0.01)
+        return [pr.sel(time=slice(*window_dates(y, start, end))).values for y in CAL_YEARS]
+    out = []                                          # CHIRPS v2: the yearly clips, as before
     for y in CAL_YEARS:
         d0, d1 = window_dates(y, start, end)
         parts = [xr.open_dataset(base / "data" / "chirps_pr_ke" / f"chirps-v2.0.{yy}.days_p25_clip.nc")["precip"]

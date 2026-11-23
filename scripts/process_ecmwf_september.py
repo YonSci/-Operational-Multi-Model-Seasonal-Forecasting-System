@@ -54,7 +54,7 @@ MIN_TERCILE_YEARS   = 12
 ALPHA_GRID          = np.round(np.arange(0.0, 1.01, 0.02), 2)
 
 ECMWF_DIR           = BASE_DIR / "data" / "seasonal_pr_downloads_ke" / "ecmwf_sep"
-CHIRPS_PATH         = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
+CHIRPS_PATH         = regions.get("kenya").chirps_hist   # the CHIRPS history (regions.py, CHIRPS_VERSION); --region sets it
 OUT_DIR             = BASE_DIR / "outputs" / "ecmwf_sep"
 
 # Observed-prefix mode: when the forecast's lead day 0 (OBS_LEAD_DOY) falls after WIN_DOY_START, days
@@ -442,14 +442,13 @@ if __name__ == "__main__":
     ap.add_argument("--obs-end-doy", type=int, default=None,
                     help="Last observed DOY (default: --obs-lead-doy - 1); later days come from the forecast")
     ap.add_argument("--chirps-extra", type=Path, nargs="+", default=None,
-                    help="Extra CHIRPS daily NetCDF(s) for years beyond CHIRPS_PATH (e.g. 2026 final + prelim)")
+                    help="Extra CHIRPS daily NetCDF(s) for years beyond CHIRPS_PATH (regions.Region.chirps_obs: v3, the year's file; v2, final + prelim)")
     ap.add_argument("--bc-op-override", type=Path, default=None,
                     help="Daily traces (member, day, lat, lon) that replace the operational year after bias correction")
     regions.add_argument(ap)
     a = ap.parse_args()
     REGION = regions.activate(a.region).key
-    if REGION != regions.DEFAULT:                      # the region's CHIRPS history (under this script's BASE_DIR)
-        CHIRPS_PATH = BASE_DIR / regions.get(REGION).chirps_hist.relative_to(regions.BASE_DIR)
+    CHIRPS_PATH = BASE_DIR / regions.get(REGION).chirps_hist.relative_to(regions.BASE_DIR)   # (under this script's BASE_DIR)
     OBS_LEAD_DOY, OBS_END_DOY, CHIRPS_EXTRA = a.obs_lead_doy, a.obs_end_doy, a.chirps_extra
     BC_OP_OVERRIDE = a.bc_op_override
     INIT_MONTH, WIN_DOY_START, WIN_DOY_END = a.init_month, a.win_doy_start, a.win_doy_end
