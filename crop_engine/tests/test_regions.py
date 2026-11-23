@@ -107,6 +107,7 @@ def test_chirps_v2_keeps_final_and_preliminary_and_bad_values_are_refused(monkey
 
 
 def test_the_v3_downloader_takes_sat_from_1998_and_every_month(monkeypatch):
+    pytest.importorskip("rasterio")                                # (not installed on CI)
     import fao_download_chirps_v3 as dl
     monkeypatch.delenv(regions.CHIRPS_ENV, raising=False)
     assert (dl.product(1997), dl.product(1998), dl.product(2026)) == ("rnl", "sat", "sat")
@@ -118,6 +119,7 @@ def test_the_v3_downloader_takes_sat_from_1998_and_every_month(monkeypatch):
 
 
 def test_a_coastal_cell_keeps_its_land_pixels():
+    pytest.importorskip("rasterio")                                # (not installed on CI)
     import fao_download_chirps_v3 as dl
     a = np.full((len(dl.LAT) * 5, len(dl.LON) * 5), 2.0, np.float32)
     a[0, 0] = np.nan                                                # one sea pixel in the north-west cell
