@@ -3,7 +3,8 @@
 fao_era5land_gee.py
 ───────────────────
 ERA5-Land forcing for the FAO water-balance module from Google Earth Engine (faster than the Copernicus CDS queue):
-daily FAO-56 Penman-Monteith ET0 and root-zone soil moisture on the platform's 0.25° Kenya grid.
+daily FAO-56 Penman-Monteith ET0 and root-zone soil moisture on a region's 0.25° grid (regions.py; --region,
+default Kenya).
 
   ECMWF/ERA5_LAND/DAILY_AGGR (UTC days):
     temperature_2m_max / _min            → Tmax, Tmin  (FAO-56: T = (Tmax + Tmin) / 2)
@@ -19,7 +20,7 @@ Months Jan–Mar and Aug–Dec of each year (OND season from 15 Aug, cessation t
 0.05° grid nested in the 0.25° cells (nearest ERA5-Land 0.1° value), ET0 is computed there and averaged 5 × 5 over
 land pixels. Same output as fao_water_balance.build_et0 (the CDS route):
 
-  outputs/fao_wb/et0/et0_<year>.nc   ET0 (mm/day), theta_rootzone (m3 m-3)
+  outputs/fao_wb/et0/et0_<year>.nc   ET0 (mm/day), theta_rootzone (m3 m-3)   (other regions: <region outputs>/fao_wb/et0)
 
 Existing years are skipped; the current year is rebuilt (ERA5-Land runs about 5 days behind real time).
 Earth Engine project: EE_PROJECT, else ~/.config/earthengine/project.txt.
@@ -27,6 +28,7 @@ Earth Engine project: EE_PROJECT, else ~/.config/earthengine/project.txt.
 Usage:
   python scripts/fao_era5land_gee.py                 # 1993 – this year
   python scripts/fao_era5land_gee.py --years 2026
+  python scripts/fao_era5land_gee.py --region ethiopia_deyr
 """
 import argparse
 import datetime as dt
@@ -42,10 +44,10 @@ import xarray as xr
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "scripts"))
 import fao_water_balance as fw  # noqa: E402
+import regions  # noqa: E402
 
 MONTHS = (1, 2, 3, 8, 9, 10, 11, 12)
-GRID = {"dimensions": {"width": 170, "height": 210}, "crsCode": "EPSG:4326",
-        "affineTransform": {"scaleX": 0.05, "shearX": 0, "translateX": 33.5, "shearY": 0, "scaleY": -0.05, "translateY": 5.5}}
+GRID = None            # set by set_grid: the region's 0.05° pixel grid (5 × 5 pixels per 0.25° cell), north-up
 DAILY = ["temperature_2m_max", "temperature_2m_min", "dewpoint_temperature_2m", "surface_solar_radiation_downwards_sum",
          "surface_pressure", "volumetric_soil_water_layer_1", "volumetric_soil_water_layer_2", "volumetric_soil_water_layer_3"]
 NODATA = -9999.0
@@ -54,6 +56,24 @@ SYNOPTIC = None        # set in init_ee: hours 00, 06, 12, 18 UTC (as the CDS ro
 
 def log(msg):
     print(f"[{dt.datetime.now():%H:%M:%S}] {msg}", flush=True)
+
+
+def set_grid(region=None):
+    """The 0.05° pixel grid over a region's cells (Kenya: 170 × 210 pixels from 33.5 E, 5.5 N)."""
+    global GRID
+    r = regions.get(region)
+    w, s, e, n = r.bounds
+    GRID = {"dimensions": {"width": len(r.lon) * 5, "height": len(r.lat) * 5}, "crsCode": "EPSG:4326",
+            "affineTransform": {"scaleX": 0.05, "shearX": 0, "translateX": w, "shearY": 0, "scaleY": -0.05, "translateY": n}}
+    return GRID
+
+
+def shape():
+    """(rows, columns) of GRID."""
+    return GRID["dimensions"]["height"], GRID["dimensions"]["width"]
+
+
+set_grid()             # the default region's grid (FORECAST_REGION, else Kenya) for callers that do not set one
 
 
 def init_ee():
@@ -66,7 +86,7 @@ def init_ee():
 
 
 def pixels(ee, img, tries=8):
-    """(bands, 210, 170) float32 on the 0.05° grid, north-up; NaN where masked (sea, lakes). Fetched as a GeoTIFF
+    """(bands, rows, columns) float32 on the 0.05° GRID, north-up; NaN where masked (sea, lakes). Fetched as a GeoTIFF
     (a NUMPY_NDARRAY reply lists every band in its header, which NumPy refuses beyond ~10 kB). Network drops and
     Earth Engine rate limits are retried with growing pauses."""
     from rasterio.io import MemoryFile
@@ -86,7 +106,7 @@ def pixels(ee, img, tries=8):
 
 
 def month(ee, y, m):
-    """One month: (days, 8 daily variables + wind, 210, 170) and the dates; None when ERA5-Land has no days yet."""
+    """One month: (days, 8 daily variables + wind, rows, columns) and the dates; None when ERA5-Land has no days yet."""
     start = ee.Date.fromYMD(y, m, 1)
     end = start.advance(1, "month")
     daily = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR").filterDate(start, end).select(DAILY)
@@ -94,7 +114,7 @@ def month(ee, y, m):
     if n == 0:
         return None
     dates = pd.to_datetime(daily.aggregate_array("system:time_start").getInfo(), unit="ms")
-    d = pixels(ee, daily.toBands()).reshape(n, len(DAILY), 210, 170)
+    d = pixels(ee, daily.toBands()).reshape(n, len(DAILY), *shape())
     hourly = ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY").select(["u_component_of_wind_10m", "v_component_of_wind_10m"])
 
     def speed(t):
@@ -128,7 +148,7 @@ def build_year(ee, y, lat, lon, workers):
     if not parts:
         log(f"  {y}: no ERA5-Land days")
         return
-    v = np.concatenate([p[0] for p in parts])                           # (days, 9, 210, 170)
+    v = np.concatenate([p[0] for p in parts])                           # (days, 9, rows, columns)
     dates = pd.DatetimeIndex(np.concatenate([p[1] for p in parts]))
     v = v[:, :, ::-1]                                                    # north-up → ascending latitude
     tmax, tmin, tdew = v[:, 0] - 273.15, v[:, 1] - 273.15, v[:, 2] - 273.15
@@ -159,11 +179,15 @@ def main():
     ap.add_argument("--years", type=int, nargs="*", default=list(range(1993, dt.date.today().year + 1)))
     ap.add_argument("--workers", type=int, default=8, help="months fetched in parallel (high-volume endpoint)")
     ap.add_argument("--year-workers", type=int, default=2)
+    regions.add_argument(ap)
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    fw.use_region(regions.activate(a.region).key)
+    set_grid()
     ee = init_ee()
     lat, lon, _ = fw.grid()
+    assert shape() == (len(lat) * 5, len(lon) * 5), (shape(), len(lat), len(lon))
     log(f"ERA5-Land via Earth Engine → {fw.ET0_DIR}")
     with ThreadPoolExecutor(a.year_workers) as ex:
         list(ex.map(lambda y: build_year(ee, y, lat, lon, a.workers), a.years))

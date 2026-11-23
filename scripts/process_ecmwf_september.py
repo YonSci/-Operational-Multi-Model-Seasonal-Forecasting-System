@@ -26,6 +26,8 @@ warnings.filterwarnings("ignore")
 # Add notebook/ to sys.path
 BASE_DIR = Path(os.environ.get("PIPELINE_BASE") or Path(__file__).resolve().parent.parent)   # data/ and outputs/ live here
 sys.path.insert(0, str(BASE_DIR / "notebook"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import regions  # noqa: E402
 try:
     import dunning_lib as dl
 except ImportError:
@@ -60,6 +62,7 @@ OUT_DIR             = BASE_DIR / "outputs" / "ecmwf_sep"
 # days are bias-corrected. OBS_END_DOY defaults to OBS_LEAD_DOY-1; a later value replaces the first
 # forecast days with observations too (applied to every year so calibration stays consistent).
 # CHIRPS_EXTRA files supply years beyond CHIRPS_PATH (later files fill gaps left by earlier ones).
+REGION              = "kenya"  # forecast region (regions.py; --region)
 OBS_LEAD_DOY        = None
 OBS_END_DOY         = None
 CHIRPS_EXTRA        = None
@@ -125,20 +128,23 @@ def run_pipeline():
     print(f"  Output folder   : {OUT_DIR}")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Target Grid & Land Mask Definition (exact 42 × 34 layout)
-    target_lat = np.round(np.arange(-4.875, 5.375 + 0.001, 0.25), 3).astype(np.float32)
-    target_lon = np.round(np.arange(33.625, 41.875 + 0.001, 0.25), 3).astype(np.float32)
+    # 1. Target Grid & Land Mask Definition (the region's grid; Kenya: exact 42 × 34 layout)
+    region = regions.get(REGION)
+    target_lat = np.round(region.lat, 3).astype(np.float32)
+    target_lon = np.round(region.lon, 3).astype(np.float32)
     n_lat, n_lon = len(target_lat), len(target_lon)
 
     ref_qbar = BASE_DIR / "outputs" / "ecmwf_v3" / "chirps_Q_bar.nc"
-    if ref_qbar.exists():
+    if region.mask is not None:
+        lm = regions.cell_mask(region)                 # cells overlapping the region's polygon(s)
+    elif ref_qbar.exists():
         with xr.open_dataset(ref_qbar) as ds_qb:
             q_arr = list(ds_qb.data_vars.values())[0].values
             lm = ~np.isnan(q_arr)
     else:
         lm = np.ones((n_lat, n_lon), dtype=bool)
 
-    print(f"\n[Step 1/5] Target grid established: {n_lat} lat × {n_lon} lon ({int(lm.sum())} land pixels)")
+    print(f"\n[Step 1/5] Target grid established ({region.key}): {n_lat} lat × {n_lon} lon ({int(lm.sum())} land pixels)")
 
     # 2. Ingest CHIRPS Observations (1993–2025)
     print("\n[Step 2/5] Ingesting and aligning CHIRPS daily observations ...")
@@ -439,7 +445,11 @@ if __name__ == "__main__":
                     help="Extra CHIRPS daily NetCDF(s) for years beyond CHIRPS_PATH (e.g. 2026 final + prelim)")
     ap.add_argument("--bc-op-override", type=Path, default=None,
                     help="Daily traces (member, day, lat, lon) that replace the operational year after bias correction")
+    regions.add_argument(ap)
     a = ap.parse_args()
+    REGION = regions.activate(a.region).key
+    if REGION != regions.DEFAULT:                      # the region's CHIRPS history (under this script's BASE_DIR)
+        CHIRPS_PATH = BASE_DIR / regions.get(REGION).chirps_hist.relative_to(regions.BASE_DIR)
     OBS_LEAD_DOY, OBS_END_DOY, CHIRPS_EXTRA = a.obs_lead_doy, a.obs_end_doy, a.chirps_extra
     BC_OP_OVERRIDE = a.bc_op_override
     INIT_MONTH, WIN_DOY_START, WIN_DOY_END = a.init_month, a.win_doy_start, a.win_doy_end

@@ -2,7 +2,8 @@
 """
 fao_soilgrids.py
 ────────────────
-Soil water-retention parameters for the FAO water-balance module on the platform's 0.25° Kenya grid.
+Soil water-retention parameters for the FAO water-balance module on a region's 0.25° grid (regions.py; --region,
+default Kenya).
 
 SoilGrids 2.0 (ISRIC) publishes texture, organic carbon and coarse fragments but not water retention, so field
 capacity (−33 kPa) and permanent wilting point (−1500 kPa) are estimated with the Saxton & Rawls (2006) pedotransfer
@@ -19,13 +20,14 @@ Layers 0–5, 5–15, 15–30, 30–60, 60–100 and 100–200 cm are read from 
 (mean prediction), converted, and averaged onto each 0.25° cell (land pixels only). The module averages θFC and θWP
 over the crop's rooting depth Zr (depth-weighted) to get TAW = 1000 (θFC − θWP) Zr.
 
-Output: data/soilgrids/soil_hydraulics_kenya_p25.nc
+Output: data/soilgrids/soil_hydraulics_<region>_p25.nc
   theta_fc, theta_wp (depth, lat, lon) volumetric fractions; sand, clay, om_pct, cfvo; depth_top / depth_bottom (m)
-Raw layers are cached in data/soilgrids/raw/ (re-runs skip them).
+Raw layers are cached in data/soilgrids/raw/ (other regions: raw_<region>/; re-runs skip them).
 
 Usage:
   python scripts/fao_soilgrids.py
 """
+import argparse
 import datetime as dt
 import os
 import sys
@@ -38,12 +40,23 @@ import rasterio
 import xarray as xr
 
 BASE = Path(__file__).resolve().parent.parent
-OUT = BASE / "data" / "soilgrids"
-RAW = OUT / "raw"
-LAT = np.arange(-4.875, 5.4, 0.25)
-LON = np.arange(33.625, 41.9, 0.25)
-W, S, E, N = 33.5, -5.0, 42.0, 5.5
-NX, NY = 850, 1050                                  # 0.01° (about 1 km); 25 × 25 pixels per 0.25° cell
+sys.path.insert(0, str(BASE / "scripts"))
+import regions  # noqa: E402
+
+REGION = RAW = LAT = LON = W = S = E = N = NX = NY = None     # set by use_region
+
+
+def use_region(key=None):
+    """The region's cells, edges and 0.01° (about 1 km) raster size: 25 × 25 pixels per 0.25° cell."""
+    global REGION, RAW, LAT, LON, W, S, E, N, NX, NY
+    REGION = regions.get(key)
+    RAW, LAT, LON = REGION.soil_raw, REGION.lat, REGION.lon
+    W, S, E, N = REGION.bounds
+    NX, NY = len(LON) * 25, len(LAT) * 25
+    return REGION
+
+
+use_region()
 DEPTHS = ["0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm", "100-200cm"]
 TOPS = np.array([0, 5, 15, 30, 60, 100]) / 100.0
 BOTS = np.array([5, 15, 30, 60, 100, 200]) / 100.0
@@ -98,14 +111,18 @@ def to_cells(a):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    regions.add_argument(ap)
+    a = ap.parse_args()
+    use_region(regions.activate(a.region).key)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     RAW.mkdir(parents=True, exist_ok=True)
     pairs = [(v, d) for v in VARS for d in DEPTHS]
-    log(f"SoilGrids WCS: {len(pairs)} layers (≈1 km, Kenya)")
+    log(f"SoilGrids WCS: {len(pairs)} layers (≈1 km, {REGION.name})")
     with ThreadPoolExecutor(4) as ex:
         list(ex.map(lambda p: fetch(*p), pairs))
-    # 1050 × 850 does not split into 42 × 34 blocks of 25: crop to 1050 × 850 = 42·25 × 34·25 ✓
+    # Kenya: 1050 × 850 = 42·25 × 34·25
     assert NY == len(LAT) * 25 and NX == len(LON) * 25
     out = {k: [] for k in ("theta_fc", "theta_wp", "sand", "clay", "om_pct", "cfvo")}
     for d in DEPTHS:
@@ -125,7 +142,7 @@ def main():
     ds["theta_wp"].attrs.update(units="m3 m-3", long_name="permanent wilting point (-1500 kPa), Saxton & Rawls 2006, coarse-fragment corrected")
     ds.attrs.update(source="SoilGrids 2.0 (ISRIC) sand, clay, soc, cfvo mean; WCS at 0.01°, averaged to 0.25°",
                     pedotransfer="Saxton & Rawls (2006) Soil Sci. Soc. Am. J. 70:1569-1578; OM = 1.724 SOC (≤ 8 %)")
-    dest = OUT / "soil_hydraulics_kenya_p25.nc"
+    dest = REGION.soil
     ds.to_netcdf(dest)
     log(f"wrote {dest}")
 

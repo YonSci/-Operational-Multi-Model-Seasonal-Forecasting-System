@@ -180,6 +180,11 @@ schtasks /Create /TN "OND Forecast Update" /TR "D:\Operational-Multi-Model-Seaso
     --obs-lead-doy 274 --chirps-extra data\chirps_2026\chirps-v2.0.2026.days_p25.nc `
     --ecmwf-dir data\seasonal_pr_downloads_ke\ecmwf_oct --out-dir outputs\ecmwf_oct_obs
 
+# (c) another region (scripts/regions.py): its grid, mask, CHIRPS history and output paths; e.g. southern Ethiopia's
+#     Deyr/Hagaya regime from the SEAS5 1 Oct runs over Ethiopia
+.\.venv\Scripts\python.exe scripts\process_ecmwf_september.py --region ethiopia_deyr --init-month 10 --win-doy-start 244 `
+    --win-doy-end 365 --ecmwf-dir data\seasonal_pr_downloads_et\ecmwf_oct --out-dir outputs\ethiopia_deyr\ecmwf_oct
+
 # Dashboard (local)
 cd backend;  ..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8765
 cd frontend; npm run dev        # http://127.0.0.1:5173 → Kenya → Short Rains → Init

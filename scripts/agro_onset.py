@@ -137,7 +137,10 @@ def _target_grid(seasonal_dir):
 
 
 def _chirps_daily(lat, lon):
-    with xr.open_dataset(CHIRPS_PATH) as ds:
+    import regions
+    r = regions.get()
+    path = CHIRPS_PATH if r.key == regions.DEFAULT else BASE_DIR / r.chirps_hist.relative_to(regions.BASE_DIR)
+    with xr.open_dataset(path) as ds:
         ds = ds.reindex(lat=lat, lon=lon, method="nearest")
         t = pd.DatetimeIndex(ds.time.values)
         years = np.unique(t.year)
