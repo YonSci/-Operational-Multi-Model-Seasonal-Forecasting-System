@@ -122,7 +122,7 @@ Kapiti Research Station reported no rain or cloud by ~24 Oct, against a forecast
 
 | Step | Script | Output |
 |---|---|---|
-| CHIRPS final 2026 (re-download when CHC updates it) + preliminary daily p05 GeoTIFFs after it, kept gzipped and read via `/vsigzip/` | `update_forecast.py`, `chirps_prelim_to_p25.py` | `data/chirps_2026/`, `data/chirps_prelim_2026/` |
+| CHIRPS v3 daily for 2026 (Earth Engine `sat` final, then CHC preliminary days; the CHC server when Earth Engine is slow), the last day = the observation cut-off. With `CHIRPS_VERSION=v2` (before 26 Nov 2026): CHIRPS v2 final 2026 + preliminary daily p05 GeoTIFFs. See [CHIRPS_V3_SWITCH.md](CHIRPS_V3_SWITCH.md) | `update_forecast.py`, `fao_download_chirps_v3.py` (v2: `chirps_prelim_to_p25.py`) | `data/chirps_v3_daily/` (v2: `data/chirps_2026/`, `data/chirps_prelim_2026/`) |
 | SEAS5 01 Oct init re-run with observed CHIRPS spliced to the latest day (all years) | `process_ecmwf_september.py --obs-end-doy` | `outputs/ecmwf_oct_obs_latest/` + `run_meta.json` (dashboard model `ECMWF SEAS5 (Oct+Obs latest)`, Init "Oct 01 + latest obs") |
 | Planting onset rule: ≥20 mm in ≤3 days (first day ≥1 mm), no ≥10-day dry spell (<1 mm/day) in the next 21 days, searched from 01 Oct; CHIRPS + all members, terciles (no onset = late), α*, RPSS, hit rate, median correlation/MAE | `agro_onset.py seasonal` | `<seasonal>/agro_onset/` |
 | PET climatology, modified Hargreaves (Droogers & Allen 2002): WorldClim 2.1 Tmax/Tmin (1970–2000) + CHIRPS monthly rain 1993–2022, FAO-56 Ra; built once | `pet_hargreaves.py` | `data/worldclim/pet_mhargreaves_clim_kenya.nc` |
@@ -175,7 +175,8 @@ schtasks /Create /TN "OND Forecast Update" /TR "D:\Operational-Multi-Model-Seaso
 .\.venv\Scripts\python.exe scripts\process_ecmwf_september.py --init-month 10 --win-doy-start 274 --win-doy-end 365 `
     --ecmwf-dir data\seasonal_pr_downloads_ke\ecmwf_oct --out-dir outputs\ecmwf_oct
 
-# (b) observed September CHIRPS + October-initialized forecast
+# (b) observed September CHIRPS + October-initialized forecast (CHIRPS v3 since 26 Nov 2026: --chirps-extra
+#     data\chirps_v3_daily\chirps_v3_p25_kenya_2026.nc; the daily update rebuilds (a) and (b) when the record changes)
 .\.venv\Scripts\python.exe scripts\process_ecmwf_september.py --init-month 10 --win-doy-start 244 --win-doy-end 365 `
     --obs-lead-doy 274 --chirps-extra data\chirps_2026\chirps-v2.0.2026.days_p25.nc `
     --ecmwf-dir data\seasonal_pr_downloads_ke\ecmwf_oct --out-dir outputs\ecmwf_oct_obs

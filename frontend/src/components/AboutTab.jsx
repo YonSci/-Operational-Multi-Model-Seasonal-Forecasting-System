@@ -44,9 +44,9 @@ const C3S_MODELS = [
 // Near real-time rainfall tracking inputs (see public/tracker/data/products.csv for the live latency of each)
 const TRACKER_ROLE = 'Rainfall since 1 September at monitored sites; compared with CHIRPS for bias, correlation and rain detection'
 const SATELLITE_INFO = [
-  { name: 'CHIRPS 2.0', provider: 'UC Santa Barbara Climate Hazards Center', resolution: '0.05°, used at 0.25°', latency: 'Preliminary ~2–5 days; final ~3 weeks after the month',
-    method: 'Satellite infrared rainfall blended with rain-gauge reports, 1981 to present',
-    use: 'Reference for the whole platform: climatology, bias correction and verification. Preliminary daily files fill the days after the last complete month' },
+  { name: 'CHIRPS v3.0', provider: 'UC Santa Barbara Climate Hazards Center', resolution: '0.05\u00b0, averaged over each 0.25\u00b0 cell\u2019s land', latency: 'Preliminary ~2\u20135 days; final ~1 month after the month',
+    method: 'Satellite infrared rainfall blended with rain-gauge reports (corrected for gauge undercatch), 1981 to present. Daily values are 5-day totals split into days with IMERG satellite timing ("sat", from 1998; ERA5 timing before 1998)',
+    use: 'Reference for the Short Rains products: climatology, bias correction and verification. Preliminary daily files fill the days after the final record. CHIRPS v2.0 until 26 Nov 2026 (CHC ends v2 production after December 2026)' },
   { name: 'ARC2', provider: 'NOAA Climate Prediction Center (FEWS NET)', resolution: '0.1°', latency: '~1–2 days',
     method: 'Africa Rainfall Climatology version 2: Meteosat infrared cloud-top temperatures merged with daily rain-gauge reports', use: TRACKER_ROLE },
   { name: 'TAMSAT v3.1', provider: 'University of Reading', resolution: '0.0375°', latency: '~2–5 days',
@@ -334,8 +334,8 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
           </S>
           <S title="Datasets" scope="Kenya and Ethiopia · all seasons · 0.25° grid">
             <Tbl head={['Dataset','Used for','Resolution','Period']} rows={[
-              ['CHIRPS v2 daily rainfall', 'Observed onset, cessation and season length; terciles; bias correction of the forecasts', '0.25°', '1981 on (Long Rains), 1993 on (other seasons)'],
-              ['CHIRPS v3 daily rainfall', 'FAO water balance: observations, terciles and its own bias correction', '0.05°, averaged to 0.25°', '1993 on'],
+              ['CHIRPS v3 daily rainfall ("sat"; ERA5-timed "rnl" before 1998)', 'Short Rains (from 26 Nov 2026): observed onset, cessation and season length; terciles; bias correction of the forecasts; FAO water balance; observed weather of the crop outlook', '0.05\u00b0, averaged to 0.25\u00b0', '1993 on'],
+              ['CHIRPS v2 daily rainfall', 'Long Rains products, the 1 Sep runs, and the Short Rains products before 26 Nov 2026', '0.25\u00b0', '1981 on (Long Rains), 1993 on (other seasons)'],
               ['ECMWF SEAS5 and C3S seasonal models', 'Seasonal forecasts and hindcasts (25 members for SEAS5); forecast temperature and March rain of the crop outlook (SEAS5 1 Oct runs to 31 Mar, bias-corrected to ERA5-Land and CHIRPS)', 'Regridded to 0.25°', 'SEAS5 hindcasts from 1981 (Long Rains) or 1993; other C3S models from 1993'],
               ['ERA5-Land', 'FAO-56 reference evapotranspiration (ET0) and starting soil moisture; site temperature, solar radiation, humidity and wind of the crop outlook', '0.1°, averaged to 0.25° (crop sites: the 0.1° cell)', '1993 on'],
               ['SoilGrids 2.0', 'Soil water-holding capacity for the FAO water balance', '~1 km, averaged to 0.25°', 'Static'],
@@ -1047,7 +1047,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             </Disclosure>
 
             <Disclosure title="Probabilities, skill and missing dates" scope="Kenya · Short Rains · CAL 1993–2016 · VAL 2017–2024">
-                <KV label="Terciles" value="Early / normal / late (short / normal / long for LGP) from the 33rd and 67th percentiles of the observed record at each cell (CAL 1993–2016): CHIRPS v2 for Dunning and the Agri rules, CHIRPS v3 for FAO."/>
+                <KV label="Terciles" value="Early / normal / late (short / normal / long for LGP) from the 33rd and 67th percentiles of the observed record at each cell (CAL 1993–2016): CHIRPS v3 for every method (from 26 Nov 2026; before it, CHIRPS v2 for Dunning and the Agri rules)."/>
                 <KV label="Probabilities" value="Share of members in each tercile, calibrated with the damping factor α fitted on the hindcasts (CAL 1993–2016)."/>
                 <KV label="Skill" value="RPSS and hit rate on the independent validation years (VAL 2017–2024). RPSS > 0 beats climatology."/>
                 <KV label="No onset / cessation" value="A member with none by the search end counts as later than any date, not as missing, so medians and terciles stay honest in failed seasons. Season length is 0 without onset."/>
@@ -1309,7 +1309,7 @@ export default function AboutTab({ initial, section: sectionProp, onSectionChang
             </p>
             <CropWorkflowDiagram />
             <Tbl head={['Step', 'What happens', 'Code']} rows={[
-              ['1 Inputs', 'Observed CHIRPS v2 rain to the last day and the forecast run’s rain members (SEAS5 bias-corrected to CHIRPS, sub-seasonal and weather models joined in front of it); ERA5-Land temperature at the site (Open-Meteo) and its solar radiation, humidity and wind (Google Earth Engine); the sub-seasonal models’ own temperature (ECMWF extended range, GEFS) at the sites; SoilGrids layers and the ERA5-Land soil water on 1 Aug; the sowing date of each member by Agri rule 1 and by the FAO agricultural onset.', 'crop_engine/data/'],
+              ['1 Inputs', 'Observed CHIRPS v3 rain to the last day and the forecast run’s rain members (SEAS5 bias-corrected to CHIRPS, sub-seasonal and weather models joined in front of it); ERA5-Land temperature at the site (Open-Meteo) and its solar radiation, humidity and wind (Google Earth Engine); the sub-seasonal models’ own temperature (ECMWF extended range, GEFS) at the sites; SoilGrids layers and the ERA5-Land soil water on 1 Aug; the sowing date of each member by Agri rule 1 and by the FAO agricultural onset.', 'crop_engine/data/'],
               ['2 Crop weather', 'One daily file per run: 1 Aug – 31 Mar for every member, with the source of every day (observed, forecast, SEAS5, climatology). The sub-seasonal runs take their own model’s temperature in its range, then SEAS5; SEAS5 temperature, radiation, humidity and wind are corrected to the site’s ERA5-Land record; ET0 is the platform’s FAO-56 ET0, then its climatology scaled by each member’s weather. The file is checked (no gaps, value ranges, Tmin ≤ Tmax, source codes) before any crop runs.', 'data/weather.py, data/seas5.py, data/s2s_temperature.py'],
               ['3 Crop models', 'AquaCrop-OSPy grows the published outlook; WOFOST 7.2 (maize and sorghum) and DSSAT 4.8 (maize, sorghum and the bean) grow the same members as two more models, shown beside it, so the dependence on the model can be seen. A member sown on a false start is re-sown once at its next sowing opportunity.', 'adapters/aquacrop_adapter.py, adapters/wofost_adapter.py, adapters/dssat_adapter.py'],
               ['4 Products', 'The Crop outlook tab: yields, chance of failure and sowing opportunity per site, crop and rule, against the same crop grown in the observed weather of 1993–2025, with WOFOST’s and DSSAT’s results beside AquaCrop’s. The management scenarios: the same members with one choice changed. DSSAT’s nitrogen levels: the same members at three fertiliser rates.', 'run_outlook.py, run_scenarios.py, run_nitrogen.py, dashboard.py'],

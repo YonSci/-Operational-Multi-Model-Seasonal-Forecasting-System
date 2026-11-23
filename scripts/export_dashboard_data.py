@@ -22,6 +22,7 @@ import xarray as xr
 BASE = Path(__file__).resolve().parent.parent
 OUT = BASE / "outputs" / "dashboard"
 sys.path.insert(0, str(BASE / "scripts"))
+import regions  # noqa: E402  (the CHIRPS record: CHIRPS_VERSION)
 
 
 def latest(pattern):
@@ -37,7 +38,16 @@ PRODUCTS = [
          link="https://www.chc.ucsb.edu/data/chirps",
          about="Satellite infrared rainfall blended with rain-gauge reports, 1981 to present. The reference for this "
                "tracker: climatology (1993–2016), bias correction and verification all use CHIRPS. The final record "
-               "ends with the last complete month; preliminary daily files fill the days after it."),
+               "ends with the last complete month; preliminary daily files fill the days after it.")
+    if regions.chirps_version() == "v2" else
+    dict(id="chirps", kind="obs", name="CHIRPS v3.0", provider="UC Santa Barbara Climate Hazards Center",
+         resolution="0.05° (averaged over each 0.25° cell's land)",
+         typical_latency="final ~1 month after the month; preliminary ~2–5 days", link="https://www.chc.ucsb.edu/data/chirps",
+         about="Satellite infrared rainfall blended with rain-gauge reports (corrected for gauge undercatch), 1981 to "
+               "present; daily values are 5-day totals split into days with IMERG timing (\"sat\"). The reference for this "
+               "tracker: climatology (1993–2016), bias correction and verification all use CHIRPS. The final record "
+               "ends about a month back; preliminary daily files fill the days after it. CHIRPS v2.0 until 26 Nov 2026 "
+               "(CHC ends v2 production after December 2026)."),
     dict(id="arc2", kind="obs", name="ARC2", provider="NOAA Climate Prediction Center (FEWS NET)",
          resolution="0.1°", typical_latency="~1–2 days", link="https://www.cpc.ncep.noaa.gov/products/fews/",
          about="Africa Rainfall Climatology v2: Meteosat infrared cloud-top temperatures merged with daily GTS rain-gauge "
@@ -103,8 +113,6 @@ def product_status(today):
             with xr.open_dataset(f) as ds:
                 last_obs[p] = pd.Timestamp(ds.time.values.max()).date()
     ends = []
-    sys.path.insert(0, str(BASE / "scripts"))
-    import regions
     for f in regions.get("kenya").chirps_obs(2026):      # CHIRPS_VERSION: v3 the year file; v2 final + preliminary
         if f.exists():
             with xr.open_dataset(f) as ds:

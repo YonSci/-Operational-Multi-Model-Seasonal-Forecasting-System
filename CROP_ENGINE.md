@@ -725,7 +725,7 @@ the sites' had a harvest index below 0.15.
 
 | Input | Source | Notes |
 | :--- | :--- | :--- |
-| Rain 1–31 Aug | CHIRPS v2 observed (final, then preliminary) | |
+| Rain 1–31 Aug | CHIRPS v3 observed (final, then preliminary; CHIRPS v2 before 26 Nov 2026, [CHIRPS_V3_SWITCH.md](CHIRPS_V3_SWITCH.md)) | |
 | Rain 1 Sep – 31 Dec | the run's joined members (`scripts/forecast_runs.py`) | observed → gap days → weather forecast → SEAS5 |
 | Rain 1 Jan – 28 Feb | SEAS5 member, quantile-mapped to CHIRPS (`onset_rules.EXT_CACHE`) | as the Agri rules |
 | Rain 1–31 Mar | SEAS5 member k (1 Oct run, lead days 152–182), quantile-mapped to CHIRPS per site and day (`data/seas5.py`) | without the 182-day SEAS5 files: a declared climatological ensemble, member k the observed CHIRPS March of 1994 + (k mod 24); observed seasons use their own March |
