@@ -32,6 +32,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -61,14 +62,21 @@ def log(msg):
 
 
 def run_limited(cmd, minutes, env, **kw):
-    """Run a step for at most `minutes`; on time out stop it with every process it started (the venv's python.exe on
-    Windows is a launcher that starts a second python, which subprocess.run(timeout=...) would leave running).
-    Returns the exit code, or None when stopped."""
+    """Run a step for at most `minutes` of wall-clock time; on time out stop it with every process it started (the
+    venv's python.exe on Windows is a launcher that starts a second python, which subprocess.run(timeout=...) would
+    leave running). Returns the exit code, or None when stopped.
+
+    The limit is checked against the clock every 15 s rather than given to p.wait(): Windows wait timers pause while
+    the PC is in sleep or Modern Standby, so a limit could run hours late (24 Nov 2026: standby 17:42-19:57)."""
     flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
     p = subprocess.Popen(cmd, env=env, **flags, **kw)
-    try:
-        return p.wait(timeout=minutes * 60)
-    except subprocess.TimeoutExpired:
+    end = time.time() + minutes * 60
+    while True:
+        try:
+            return p.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            if time.time() < end:
+                continue
         if os.name == "nt":
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
         else:
@@ -217,12 +225,14 @@ def update_crop_outlook(env):
         # run_all keeps CROP_MINUTES itself (it stops its own child); this outer limit is only a safety net.
         # With WOFOST beside AquaCrop each run is ~11 min (AquaCrop ~5, WOFOST ~6), ~100 min for 9 runs; a benchmark
         # rebuild adds ~20 min, and with little free memory a run can take ~26 min (9 Nov 2026: 3 runs left out at 180)
-        r = subprocess.run([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", str(CROP_MINUTES)], cwd=BASE_DIR,
-                           env=env, timeout=(CROP_MINUTES + 10) * 60)
-        if r.returncode:
-            log(f"crop outlook: some runs failed or were stopped (exit {r.returncode}); their previous results kept")
-    except subprocess.TimeoutExpired:
-        log(f"crop outlook: took over {CROP_MINUTES + 10} min; stopped, previous results kept")
+        rc = run_limited([PY, "-m", "crop_engine.run_all", "--workers", "1", "--minutes", str(CROP_MINUTES)], CROP_MINUTES + 10,
+                         env, cwd=BASE_DIR)
+        if rc is None:
+            log(f"crop outlook: took over {CROP_MINUTES + 10} min; stopped, previous results kept")
+        elif rc:
+            log(f"crop outlook: some runs failed or were stopped (exit {rc}); their previous results kept")
+    except OSError as exc:
+        log(f"crop outlook: could not start ({exc}); previous results kept")
 
 
 def update_fao(env):
@@ -259,6 +269,22 @@ def update_fao(env):
     return True
 
 
+def stay_awake():
+    """Ask Windows not to sleep or enter Modern Standby, and to keep the display on, until this process ends (the
+    request is released with it). On a Modern Standby laptop the system goes into standby when the display turns off
+    for being idle: on 24 Nov 2026 that suspended the update for 2 h 15 min mid-crop-outlook. Closing the lid still
+    puts the PC in standby."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x00000001, 0x00000002
+        if not ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED):
+            log("stay awake: the request was refused; the PC may sleep during the update")
+    except Exception as exc:                          # never stop the update for this
+        log(f"stay awake: not available ({exc})")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--force", action="store_true")
@@ -267,6 +293,7 @@ def main():
     a = ap.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    stay_awake()
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 
     obs_end = sync_prelim(sync_final())
