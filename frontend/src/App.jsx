@@ -2975,11 +2975,14 @@ export default function App() {
   const [farmDraw, setFarmDraw] = useState(false)
   const [farmFocus, setFarmFocus] = useState(0)
   const [farmNotice, setFarmNotice] = useState(null)
+  const [farmImage, setFarmImage] = useState(null)      // the selected farm's NDVI image (FarmSatellite), or null
+  const onFarmImage = useMemo(() => img => setFarmImage(img), [])
   const farms = useMemo(() => farmList.map(f => ({ ...f, ha: areaM2(f.geometry) / 1e4, centre: centroid(f.geometry), cells: farmCells(f.geometry),
                                                    bounds: farmBounds(f.geometry) })), [farmList])
   const selectedFarm = farms.find(f => f.id === farmId) ?? null
   const storeFarms = list => { setFarmList(list); saveFarms(list) }
   const showFarm = (f, ctry) => {
+    if (f.id !== farmId) setFarmImage(null)
     setFarmId(f.id); setFarmFocus(Date.now())
     const c = centroid(f.geometry)
     useDashboardStore.getState().setSelectedSite({ lat: +c[1].toFixed(4), lon: +c[0].toFixed(4), site_name: f.name, country: ctry })
@@ -3000,8 +3003,9 @@ export default function App() {
     showFarm(f, country)
   }, [farmList, country])   // eslint-disable-line react-hooks/exhaustive-deps
   const onFarmDrawCancel = useMemo(() => () => setFarmDraw(false), [])
-  const mapFarm = useMemo(() => selectedFarm ? { geometry: selectedFarm.geometry, cells: selectedFarm.cells, bounds: selectedFarm.bounds, focus: farmFocus } : null,
-                          [selectedFarm, farmFocus])
+  const mapFarm = useMemo(() => selectedFarm ? { geometry: selectedFarm.geometry, cells: selectedFarm.cells, bounds: selectedFarm.bounds, focus: farmFocus,
+                                                image: farmImage } : null,
+                          [selectedFarm, farmFocus, farmImage])
   const [requestedLayer, setRequestedLayer] = useState(null)
   const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
   const [chatMessages, setChatMessages] = useState([])
@@ -3270,14 +3274,14 @@ export default function App() {
                        }}/>
       )}
       {farmsOpen && !farmDraw && (
-        <FarmPanel farms={farms} selectedId={farmId} country={country} notice={farmNotice}
+        <FarmPanel farms={farms} selectedId={farmId} country={country} notice={farmNotice} onImage={onFarmImage}
                    onSelect={id => { const f = farms.find(x => x.id === id); if (f) showFarm(f, country) }} onAdd={addFarms}
                    onUpdate={(id, patch) => {
                      storeFarms(farmList.map(f => f.id === id ? { ...f, ...patch } : f))
                      const s = useDashboardStore.getState()
                      if (patch.name && id === farmId && s.selectedSite) s.setSelectedSite({ ...s.selectedSite, site_name: patch.name })
                    }}
-                   onDelete={id => { storeFarms(farmList.filter(f => f.id !== id)); if (id === farmId) setFarmId(null) }}
+                   onDelete={id => { storeFarms(farmList.filter(f => f.id !== id)); if (id === farmId) { setFarmId(null); setFarmImage(null) } }}
                    onDraw={() => { setDrawArea(false); setFarmNotice(null); setMobileViewMode('map'); setFarmDraw(true) }}
                    onZoom={() => setFarmFocus(Date.now())}
                    onClose={() => setFarmsOpen(false)}/>

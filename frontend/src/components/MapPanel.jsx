@@ -1052,6 +1052,25 @@ function showFarm(map, geometry, cells) {
       geometry: { type: 'Polygon', coordinates: [[[c.lon - h, c.lat - h], [c.lon + h, c.lat - h], [c.lon + h, c.lat + h], [c.lon - h, c.lat + h], [c.lon - h, c.lat - h]]] } })) })
   } catch (_) { /* the style is reloading: the effect redraws it */ }
 }
+// the farm's NDVI image (FarmSatellite) between the cell outlines and the farm outline; the farm's tint is off meanwhile
+function showFarmImage(map, image) {
+  try {
+    if (!image) {
+      if (map.getLayer('farm-img')) map.removeLayer('farm-img')
+      if (map.getSource('farm-img')) map.removeSource('farm-img')
+      if (map.getLayer('farm-fill')) map.setPaintProperty('farm-fill', 'fill-opacity', 0.25)
+      return
+    }
+    farmLayers(map)
+    const src = map.getSource('farm-img')
+    if (src) src.updateImage({ url: image.url, coordinates: image.coordinates })
+    else {
+      map.addSource('farm-img', { type: 'image', url: image.url, coordinates: image.coordinates })
+      map.addLayer({ id: 'farm-img', type: 'raster', source: 'farm-img', paint: { 'raster-resampling': 'nearest', 'raster-fade-duration': 0 } }, 'farm-fill')
+    }
+    map.setPaintProperty('farm-fill', 'fill-opacity', 0)
+  } catch (_) { /* the style is reloading: the effect redraws it */ }
+}
 function showFarmDraft(map, pts) {
   try {
     if (!pts.length && !map.getSource('farm-draft')) return
@@ -1080,7 +1099,7 @@ export default function MapPanel({
   farmDraw=false,           // farm boundaries: clicks add corners of a farm outline, reported by onFarmDrawn(ring)
   onFarmDrawn,
   onFarmDrawCancel,
-  farm=null,                // farm boundaries: {geometry, cells: [{lat, lon}], bounds: [w, s, e, n], focus} of the selected farm
+  farm=null,                // farm boundaries: {geometry, cells: [{lat, lon}], bounds: [w, s, e, n], focus, image: {url, coordinates} | null}
 }) {
   const activeSeason = detectSeason(selectedSeason, country, gridData)
   const isShort = activeSeason === 'short_rains'
@@ -1140,6 +1159,12 @@ export default function MapPanel({
     showFarm(m, farm?.geometry ?? null, farm?.cells)
     showFarmDraft(m, farmDrawRef.current.pts)
   }, [farmGeomKey, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
+  const farmImageUrl = farm?.image?.url ?? ''
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady) return
+    showFarmImage(m, farm?.image ?? null)
+  }, [farmImageUrl, farmGeomKey, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
   // zoom to the farm when it is selected (focus changes), not on every redraw
   const farmFocus = farm?.focus ?? null
   useEffect(() => {
