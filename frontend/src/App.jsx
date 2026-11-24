@@ -2988,7 +2988,7 @@ export default function App() {
     useDashboardStore.getState().setSelectedSite({ lat: +c[1].toFixed(4), lon: +c[0].toFixed(4), site_name: f.name, country: ctry })
   }
   const addFarms = got => {
-    const added = got.map(f => ({ id: newFarmId(), name: f.name, geometry: f.geometry, created: new Date().toISOString() }))
+    const added = got.map(f => ({ id: newFarmId(), name: f.name, geometry: f.geometry, created: new Date().toISOString(), ...(f.online ? { online: f.online } : {}) }))
     storeFarms([...farmList, ...added])
     showFarm(added[0], country)
   }

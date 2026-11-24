@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cellKey, downloadFarm, readFarmFile } from '../lib/farmGeo'
 import FarmSatellite from './FarmSatellite'
+import FarmOnline, { restoreBackup } from './FarmOnline'
+import { API_BASE } from '../api/queries'
 import { RULES, STATUS_LABEL, farmStatus } from '../lib/farmStatus'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -213,7 +215,7 @@ function StatusCard({ farm, data, sat }) {
   )
 }
 
-function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelete, onImage }) {
+function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelete, onImage, onLinked }) {
   const [sat, setSat] = useState(null)
   const [name, setName] = useState(farm.name)
   useEffect(() => setName(farm.name), [farm.id, farm.name])
@@ -243,6 +245,7 @@ function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelet
       </div>
       <StatusCard farm={farm} data={data} sat={sat}/>
       <FarmSatellite key={farm.id} farm={farm} onImage={onImage} onResult={setSat}/>
+      <FarmOnline key={`online-${farm.id}`} farm={farm} country={country} onLinked={onLinked}/>
       {outside && <p style={{ margin: 0, fontSize: 13, color: 'var(--caution-text)' }}>Forecast products for farms are published for Kenya&apos;s Short Rains so far.</p>}
       {data.loading && <p style={lbl}>Loading the published products...</p>}
       {!data.loading && cells.map((c, i) => <CellCard key={c.id} c={c} i={i} n={cells.length} data={data}/>)}
@@ -271,6 +274,16 @@ export default function FarmPanel({ farms, selectedId, onSelect, onAdd, onUpdate
     if (!file) return
     setMsg(null)
     try {
+      if (/\.json$/i.test(file.name)) {                 // a farm's key file (Download the farm's key): open it from the server
+        let j = null
+        try { j = JSON.parse(await file.text()) } catch { /* not JSON: read it as GeoJSON below */ }
+        if (j?.cai_farm_backup) {
+          const f = await restoreBackup(j)
+          onAdd([f])
+          setMsg({ text: `Opened ${f.name} from its key file.` })
+          return
+        }
+      }
       const { farms: got, errors } = await readFarmFile(file)
       if (got.length) onAdd(got)
       setMsg(errors.length ? { bad: true, text: errors.join(' ') } : { text: `Added ${got.length} farm${got.length > 1 ? 's' : ''} from ${file.name}.` })
@@ -292,7 +305,7 @@ export default function FarmPanel({ farms, selectedId, onSelect, onAdd, onUpdate
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button type="button" style={btnPrimary} onClick={onDraw}>Draw a farm on the map</button>
-          <button type="button" style={btn} onClick={() => fileRef.current?.click()}>Upload GeoJSON or KML</button>
+          <button type="button" style={btn} onClick={() => fileRef.current?.click()} title="A farm outline (GeoJSON, KML) or a farm's key file">Upload GeoJSON, KML or key file</button>
           <input ref={fileRef} type="file" accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml" onChange={upload} style={{ display: 'none' }}/>
         </div>
         {msg && <p role={msg.bad ? 'alert' : 'status'} style={{ margin: 0, fontSize: 13, color: msg.bad ? 'var(--bad-text)' : 'var(--ok-text)' }}>{msg.text}</p>}
@@ -309,8 +322,15 @@ export default function FarmPanel({ farms, selectedId, onSelect, onAdd, onUpdate
         {!farms.length && <p style={lbl}>No farms yet.</p>}
         {sel && (
           <FarmDetail farm={sel} country={country} data={data} onImage={onImage}
-                      onRename={name => onUpdate(sel.id, { name })} onDownload={() => downloadFarm(sel)} onZoom={() => onZoom(sel.id)}
-                      onDelete={() => { if (window.confirm(`Delete ${sel.name} from this browser?`)) onDelete(sel.id) }}/>
+                      onRename={name => {
+                        onUpdate(sel.id, { name })
+                        if (sel.online) fetch(`${API_BASE}/farms/${sel.online.id}/edit`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Farm-Key': sel.online.key },
+                                                                                      body: JSON.stringify({ patch: { name } }) }).catch(() => {})
+                      }}
+                      onLinked={online => onUpdate(sel.id, { online })}
+                      onDownload={() => downloadFarm(sel)} onZoom={() => onZoom(sel.id)}
+                      onDelete={() => { if (window.confirm(sel.online ? `Remove ${sel.name} from this browser? Its online copy and diary stay on the server; delete them first under "Farm diary" if you want them gone, or download the farm's key to open it again later.`
+                                                                       : `Delete ${sel.name} from this browser?`)) onDelete(sel.id) }}/>
         )}
       </div>
     </aside>
