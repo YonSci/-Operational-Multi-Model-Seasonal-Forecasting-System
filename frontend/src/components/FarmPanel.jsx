@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cellKey, downloadFarm, readFarmFile } from '../lib/farmGeo'
 import FarmSatellite from './FarmSatellite'
+import { RULES, STATUS_LABEL, farmStatus } from '../lib/farmStatus'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fd = iso => { if (!iso) return 'n/a'; const [, m, d] = String(iso).slice(0, 10).split('-').map(Number); return `${d} ${MON[m - 1]}` }
@@ -64,12 +65,18 @@ function useCellData(enabled) {
     const t = await getText('tracker/data/products.csv')
     return t ? Object.fromEntries(parseCSV(t).map(r => [r.id, r])) : null
   } })
+  // cropland greenness per cell (scripts/veg_anomaly.py); the file may not exist yet
+  const veg = useQuery({ ...opts, enabled, queryKey: ['farm-veg-csv'], queryFn: async () => {
+    const t = await getText('tracker/data/veg.csv')
+    return t ? new Map(parseCSV(t).map(r => [cellKey(+r.lat, +r.lon), r])) : null
+  } })
   const cropIdx = useMemo(() => {
     const d = crop.data
     if (!d) return null
     return { meta: d.meta, aq: new Map((d.cells ?? []).map(c => [c.id, c])), ds: new Map((d.cells_dssat ?? []).map(c => [c.id, c])) }
   }, [crop.data])
-  return { grid: grid.data, fc: fc.data, crop: cropIdx, products: products.data, loading: grid.isLoading || fc.isLoading || crop.isLoading }
+  return { grid: grid.data, fc: fc.data, crop: cropIdx, products: products.data, veg: veg.data,
+           loading: grid.isLoading || fc.isLoading || crop.isLoading || veg.isLoading }
 }
 
 const parent05 = v => (Math.floor(v * 2) / 2 + 0.25).toFixed(2)
@@ -108,6 +115,7 @@ function CellCard({ c, i, n, data }) {
   const nOnset = g ? ['chirps', 'arc2', 'tamsat', 'pdirnow', 'imerg', 'imerg_early', 'imerg_gee', 'gsmap_gee'].filter(p => g[`${p}_onset_detected`] !== undefined && g[`${p}_onset_detected`] !== '') : []
   const nDet = nOnset.filter(p => g[`${p}_onset_detected`] === '1').length
   const obsTo = data.products?.chirps?.latest_data
+  const v = data.veg?.get(cellKey(c.lat, c.lon))
   return (
     <section style={card} aria-label={`Forecast cell ${i + 1}`}>
       <div style={{ fontWeight: 700, color: 'var(--heading)', fontSize: 14 }}>
@@ -117,7 +125,7 @@ function CellCard({ c, i, n, data }) {
         {Math.round(c.share * 100)}% of the farm ({ha(c.ha)}); the cell is about {Math.round(c.km2)} km2
         {data.crop?.aq.get(c.id) ? `, ${aq.county} County` : ''}
       </div>
-      {!g && !models && !aq && <p style={{ margin: 0, fontSize: 13 }}>No published products for this cell: it lies outside the Kenya forecast area.</p>}
+      {!g && !models && !aq && !v && <p style={{ margin: 0, fontSize: 13 }}>No published products for this cell: it lies outside the Kenya forecast area.</p>}
       {g && (
         <>
           <H>Rain so far</H>
@@ -134,6 +142,15 @@ function CellCard({ c, i, n, data }) {
       )}
       {dEnd.length > 0 && (
         <Row k={`Rain to ${fd(fcTo)}`} v={`${Math.round(median(dEnd))} mm`} note={`(range ${Math.round(Math.min(...dEnd))}-${Math.round(Math.max(...dEnd))})`}/>
+      )}
+      {v && num(v.ndvi) != null && (
+        <>
+          <H>Cropland greenness (Sentinel-2, {fd(v.window_start)} to {fd(v.window_end)})</H>
+          <Row k="NDVI of the cell's cropland" v={num(v.ndvi).toFixed(2)}
+               note={num(v.base_mean) != null ? `(past years ${num(v.base_mean).toFixed(2)})` : ''}/>
+          {num(v.z) != null && <Row k="Against the same weeks of past years" v={`${num(v.z) > 0 ? '+' : ''}${num(v.z).toFixed(1)} SD`}
+                                    note={`(greener than in ${v.lower_years} of ${v.years})`}/>}
+        </>
       )}
       {g && num(g.season_p_early) != null && (
         <>
@@ -155,7 +172,49 @@ function CellCard({ c, i, n, data }) {
   )
 }
 
+const STATUS_COLOUR = { attention: ['var(--warn-text)', 'var(--caution-bg)'], watch: ['var(--caution-text)', 'var(--caution-bg)'],
+                        normal: ['var(--ok-text)', 'var(--ok-bg)'], insufficient: ['var(--text-meta)', 'var(--bg-elevated)'] }
+const LEVEL_WORD = { attention: 'Attention', watch: 'Watch', normal: 'Normal' }
+
+// The farm's status from its main cell (the largest share of the farm) and its own satellite check
+function StatusCard({ farm, data, sat }) {
+  const c = farm.cells[0]
+  if (!c || data.loading) return null
+  const st = farmStatus({ grid: data.grid?.get(cellKey(c.lat, c.lon)), aq: data.crop?.aq.get(c.id), ds: data.crop?.ds.get(c.id),
+                          veg: data.veg?.get(cellKey(c.lat, c.lon)), sat })
+  const [fg, bg] = STATUS_COLOUR[st.status]
+  return (
+    <section aria-label="Farm status" style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 700, color: 'var(--heading)', fontSize: 14, flex: 1 }}>Farm status</span>
+        <span style={{ background: bg, color: fg, border: `1px solid ${fg}`, borderRadius: 999, padding: '2px 10px', fontWeight: 700, fontSize: 13 }}>
+          {STATUS_LABEL[st.status]}</span>
+      </div>
+      {st.signals.map(x => (
+        <div key={x.name} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.45 }}>
+          <span style={{ minWidth: 74, fontWeight: 700, color: STATUS_COLOUR[x.level][0] }}>{LEVEL_WORD[x.level]}</span>
+          <span><strong style={{ color: 'var(--heading)' }}>{x.name}:</strong> {x.text}</span>
+        </div>
+      ))}
+      <p style={{ margin: 0, ...lbl, lineHeight: 1.5 }}>
+        {st.status === 'insufficient' ? 'Too few signals for this place to set a status. ' : `Based on ${st.used} signal${st.used === 1 ? '' : 's'}. `}
+        {!sat?.latest && "Check the crop health below to add the farm's own satellite view. "}
+        A status points to what to check; it is not a forecast of the harvest.
+      </p>
+      <details style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--accent-text)' }}>How the status is set</summary>
+        <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+          {RULES.map(([k, t]) => <li key={k}><strong>{k}:</strong> {t}</li>)}
+          <li>The status is the most serious signal. With a single signal and nothing flagged, it is Insufficient data.</li>
+          <li>The signals are those of the cell holding most of the farm.</li>
+        </ul>
+      </details>
+    </section>
+  )
+}
+
 function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelete, onImage }) {
+  const [sat, setSat] = useState(null)
   const [name, setName] = useState(farm.name)
   useEffect(() => setName(farm.name), [farm.id, farm.name])
   const cells = farm.cells
@@ -182,7 +241,8 @@ function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelet
           <button type="button" style={{ ...btn, color: 'var(--warn-text)' }} onClick={onDelete}>Delete</button>
         </div>
       </div>
-      <FarmSatellite key={farm.id} farm={farm} onImage={onImage}/>
+      <StatusCard farm={farm} data={data} sat={sat}/>
+      <FarmSatellite key={farm.id} farm={farm} onImage={onImage} onResult={setSat}/>
       {outside && <p style={{ margin: 0, fontSize: 13, color: 'var(--caution-text)' }}>Forecast products for farms are published for Kenya&apos;s Short Rains so far.</p>}
       {data.loading && <p style={lbl}>Loading the published products...</p>}
       {!data.loading && cells.map((c, i) => <CellCard key={c.id} c={c} i={i} n={cells.length} data={data}/>)}
