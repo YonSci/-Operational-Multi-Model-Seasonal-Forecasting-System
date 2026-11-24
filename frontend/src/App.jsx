@@ -22,6 +22,8 @@ import FieldReportPanel from './components/FieldReportPanel'
 import BulletinStudio from './components/BulletinStudio'
 import WatchPanel, { loadWatches, useWatchStatuses, ALERT_STATUSES } from './components/WatchPanel'
 import ToolsPanel from './components/ToolsPanel'
+import FarmPanel from './components/FarmPanel'
+import { areaM2, bounds as farmBounds, centroid, checkGeometry, farmCells, loadFarms, newFarmId, saveFarms } from './lib/farmGeo'
 
 // --- Helpers --------------------------------------------------------------
 function doy(d, year=2026) {
@@ -1986,7 +1988,7 @@ const ATTENTION_LAYERS = {
 }
 // Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
 // an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts, onTools }) {
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts, onTools, onFarms }) {
   const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
               padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
   return (
@@ -2005,6 +2007,7 @@ function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOp
       <button type="button" style={b} onClick={onStudio} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</button>
       <button type="button" style={b} onClick={onWatches} title="Saved places: did the forecast or the advice change? And the decision calendar">
         My watches{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
+      <button type="button" style={b} onClick={onFarms} title="Draw or upload your farm's boundary and see the forecasts for the area it lies in">My farms</button>
       <button type="button" style={b} onClick={onTools} title="Past seasons like this one, season review, learning, scenario planning, official outlooks">More tools</button>
     </div>
   )
@@ -2964,6 +2967,41 @@ export default function App() {
   const pagePlace = (onTracker && trackerPlace) || (onCrop && cropPlace) || null
   const setTrackerPageSite = site => { try { trackerRef.current?.contentWindow?.postMessage({ type: 'tracker-set-site', site }, '*') } catch { /* page not loaded */ } }
   const [drawArea, setDrawArea] = useState(false)
+  // My farms (FarmPanel): farm boundaries kept in this browser; the selected one is drawn on the map and its centre
+  // becomes the selected place
+  const [farmsOpen, setFarmsOpen] = useState(false)
+  const [farmList, setFarmList] = useState(loadFarms)
+  const [farmId, setFarmId] = useState(null)
+  const [farmDraw, setFarmDraw] = useState(false)
+  const [farmFocus, setFarmFocus] = useState(0)
+  const [farmNotice, setFarmNotice] = useState(null)
+  const farms = useMemo(() => farmList.map(f => ({ ...f, ha: areaM2(f.geometry) / 1e4, centre: centroid(f.geometry), cells: farmCells(f.geometry),
+                                                   bounds: farmBounds(f.geometry) })), [farmList])
+  const selectedFarm = farms.find(f => f.id === farmId) ?? null
+  const storeFarms = list => { setFarmList(list); saveFarms(list) }
+  const showFarm = (f, ctry) => {
+    setFarmId(f.id); setFarmFocus(Date.now())
+    const c = centroid(f.geometry)
+    useDashboardStore.getState().setSelectedSite({ lat: +c[1].toFixed(4), lon: +c[0].toFixed(4), site_name: f.name, country: ctry })
+  }
+  const addFarms = got => {
+    const added = got.map(f => ({ id: newFarmId(), name: f.name, geometry: f.geometry, created: new Date().toISOString() }))
+    storeFarms([...farmList, ...added])
+    showFarm(added[0], country)
+  }
+  const onFarmDrawn = useMemo(() => ring => {
+    setFarmDraw(false)
+    const g = checkGeometry({ type: 'Polygon', coordinates: [ring] })
+    if (g instanceof Error) { setFarmNotice({ bad: true, text: g.message }); return }
+    setFarmNotice(null)
+    const f = { id: newFarmId(), name: `Farm ${farmList.length + 1}`, geometry: g, created: new Date().toISOString() }
+    const next = [...farmList, f]
+    setFarmList(next); saveFarms(next)
+    showFarm(f, country)
+  }, [farmList, country])   // eslint-disable-line react-hooks/exhaustive-deps
+  const onFarmDrawCancel = useMemo(() => () => setFarmDraw(false), [])
+  const mapFarm = useMemo(() => selectedFarm ? { geometry: selectedFarm.geometry, cells: selectedFarm.cells, bounds: selectedFarm.bounds, focus: farmFocus } : null,
+                          [selectedFarm, farmFocus])
   const [requestedLayer, setRequestedLayer] = useState(null)
   const onAreaDrawn = useMemo(() => bbox => { setDrawArea(false); setExplain(e => ({ ...e, kind: 'area', name: '', bbox: bbox.map(v => v.toFixed(3)).join(',') })) }, [])
   const [chatMessages, setChatMessages] = useState([])
@@ -3104,6 +3142,10 @@ export default function App() {
                 onAreaDrawn={onAreaDrawn}
                 drawnArea={explain?.kind === 'area' && explain?.bbox ? explain.bbox.split(',').map(Number) : null}
                 requestedLayer={requestedLayer}
+                farmDraw={farmDraw}
+                onFarmDrawn={onFarmDrawn}
+                onFarmDrawCancel={onFarmDrawCancel}
+                farm={mapFarm}
               />
               </ErrorBoundary>
             </div>
@@ -3119,13 +3161,14 @@ export default function App() {
              <div className="shrink-0"><AssistantBar siteLabel={selectedSite?.site_name ?? 'the selected place'} canCompare={compareOptions.length > 0}
                                                     canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
                                                     canAreas={!!effectiveModel}
-                                                    onOpen={kind => { setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
-                                                    onAsk={() => { setExplain(null); setReportOpen(false); setChatOpen(true) }}
-                                                    onReport={() => { setExplain(null); setChatOpen(false); setStudioOpen(false); setWatchOpen(false); setReportOpen(true) }}
-                                                    onStudio={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(true) }}
-                                                    onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}
+                                                    onOpen={kind => { setFarmsOpen(false); setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
+                                                    onAsk={() => { setFarmsOpen(false); setExplain(null); setReportOpen(false); setChatOpen(true) }}
+                                                    onReport={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setStudioOpen(false); setWatchOpen(false); setReportOpen(true) }}
+                                                    onStudio={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(true) }}
+                                                    onWatches={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}
                                                     watchAlerts={watchAlerts}
-                                                    onTools={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(true) }}/></div>
+                                                    onTools={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(true) }}
+                                                    onFarms={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(false); setFarmsOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3225,6 +3268,19 @@ export default function App() {
                            useDashboardStore.getState().setSelectedSite({ lat: a.lat, lon: a.lon, site_name: a.label, country })
                          }
                        }}/>
+      )}
+      {farmsOpen && !farmDraw && (
+        <FarmPanel farms={farms} selectedId={farmId} country={country} notice={farmNotice}
+                   onSelect={id => { const f = farms.find(x => x.id === id); if (f) showFarm(f, country) }} onAdd={addFarms}
+                   onUpdate={(id, patch) => {
+                     storeFarms(farmList.map(f => f.id === id ? { ...f, ...patch } : f))
+                     const s = useDashboardStore.getState()
+                     if (patch.name && id === farmId && s.selectedSite) s.setSelectedSite({ ...s.selectedSite, site_name: patch.name })
+                   }}
+                   onDelete={id => { storeFarms(farmList.filter(f => f.id !== id)); if (id === farmId) setFarmId(null) }}
+                   onDraw={() => { setDrawArea(false); setFarmNotice(null); setMobileViewMode('map'); setFarmDraw(true) }}
+                   onZoom={() => setFarmFocus(Date.now())}
+                   onClose={() => setFarmsOpen(false)}/>
       )}
       {explainRequest && (
         <ExplainPanel request={explainRequest} onClose={() => setExplain(null)}
