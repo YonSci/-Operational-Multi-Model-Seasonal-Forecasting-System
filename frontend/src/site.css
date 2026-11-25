@@ -335,3 +335,6 @@
 /* Items in a PopMenu (App.jsx): the assistant row's More tools and the header's My places */
 .menu-item { background: transparent; }
 .menu-item:hover, .menu-item:focus-visible { background: var(--bg-elevated); color: var(--accent-text); }
+
+/* MapPanel's top row of controls spans the map's width: only the controls take clicks, the gaps go to the map */
+.map-ctl-row > * { pointer-events: auto; }

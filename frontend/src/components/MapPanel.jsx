@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import * as mapboxgl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
-import { CloudRain, MapPin, FileDown } from 'lucide-react'
+import { CloudRain, MapPin, Layers, ChevronDown, Map as MapIcon } from 'lucide-react'
 import useDashboardStore from '../store/useDashboardStore'
 import DiagnosticAgreementModal, { AUDITED_20_SITES_ETHIOPIA } from './DiagnosticAgreementModal'
 
@@ -1034,6 +1034,7 @@ function farmLayers(map) {
   map.addSource('farm-cells', { type: 'geojson', data: FARM_EMPTY })
   map.addSource('farm', { type: 'geojson', data: FARM_EMPTY })
   map.addSource('farm-draft', { type: 'geojson', data: FARM_EMPTY })
+  map.addSource('farm-pt', { type: 'geojson', data: FARM_EMPTY })
   map.addLayer({ id: 'farm-cells-line', type: 'line', source: 'farm-cells', paint: { 'line-color': '#7c3aed', 'line-width': 1.5, 'line-dasharray': [3, 2] } })
   map.addLayer({ id: 'farm-fill', type: 'fill', source: 'farm', paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.25 } })
   map.addLayer({ id: 'farm-line', type: 'line', source: 'farm', paint: { 'line-color': '#b45309', 'line-width': 2.5 } })
@@ -1041,12 +1042,23 @@ function farmLayers(map) {
                  paint: { 'line-color': '#b45309', 'line-width': 2, 'line-dasharray': [2, 1] } })
   map.addLayer({ id: 'farm-draft-pts', type: 'circle', source: 'farm-draft', filter: ['==', ['geometry-type'], 'Point'],
                  paint: { 'circle-radius': 4, 'circle-color': '#ffffff', 'circle-stroke-color': '#b45309', 'circle-stroke-width': 2 } })
+  // zoomed out, a small farm is a pixel or less: a dot marks where it is
+  map.addLayer({ id: 'farm-dot', type: 'circle', source: 'farm-pt', maxzoom: 12.5,
+                 paint: { 'circle-radius': 6, 'circle-color': '#b45309', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } })
+}
+// the middle of a geometry's bounding box: where the farm dot goes
+function geomCentre(geometry) {
+  const xs = [], ys = []
+  const walk = c => { if (typeof c[0] === 'number') { xs.push(c[0]); ys.push(c[1]) } else c.forEach(walk) }
+  walk(geometry.coordinates)
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]
 }
 function showFarm(map, geometry, cells) {
   try {
     if (!geometry && !map.getSource('farm')) return
     farmLayers(map)
     map.getSource('farm').setData(geometry ? { type: 'Feature', properties: {}, geometry } : FARM_EMPTY)
+    map.getSource('farm-pt')?.setData(geometry ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: geomCentre(geometry) } } : FARM_EMPTY)
     const h = 0.125
     map.getSource('farm-cells').setData({ type: 'FeatureCollection', features: (geometry ? cells ?? [] : []).map(c => ({ type: 'Feature', properties: {},
       geometry: { type: 'Polygon', coordinates: [[[c.lon - h, c.lat - h], [c.lon + h, c.lat - h], [c.lon + h, c.lat + h], [c.lon - h, c.lat + h], [c.lon - h, c.lat - h]]] } })) })
@@ -1165,16 +1177,38 @@ export default function MapPanel({
     if (!m || !mapReady) return
     showFarmImage(m, farm?.image ?? null)
   }, [farmImageUrl, farmGeomKey, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
-  // zoom to the farm when it is selected (focus changes), not on every redraw
+  // When a farm is selected (focus changes, not on every redraw), show its forecast cell(s) and some of the cells
+  // around them: the forecast the farm gets, in context. Zoomed in on the field the map would be one cell.
   const farmFocus = farm?.focus ?? null
   useEffect(() => {
     const m = mapRef.current
     if (!m || !mapReady || !farmFocus || !farm?.bounds) return
+    const cells = farm.cells ?? []
+    const pad = 0.125 + 0.1   // half a 0.25 deg cell, plus a strip of the neighbours
+    const box = cells.length
+      ? [Math.min(...cells.map(c => c.lon)) - pad, Math.min(...cells.map(c => c.lat)) - pad, Math.max(...cells.map(c => c.lon)) + pad, Math.max(...cells.map(c => c.lat)) + pad]
+      : farm.bounds
+    const [w, s, e, n] = box
+    try { m.fitBounds([[w, s], [e, n]], { padding: 40, maxZoom: cells.length ? 11 : 13, duration: 600 }) } catch (_) { /* map rebuilding */ }
+  }, [farmFocus, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
+  // the Sentinel-2 view is about the field itself: zoom to the field when its image arrives
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady || !farm?.image?.url || !farm?.bounds) return
     const [w, s, e, n] = farm.bounds
     try { m.fitBounds([[w, s], [e, n]], { padding: 60, maxZoom: 16, duration: 600 }) } catch (_) { /* map rebuilding */ }
-  }, [farmFocus, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [farm?.image?.url, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
   const [basemapId,  setBasemapId]   = useState(darkMode?'dark':'light')
-  const [showBasemaps, setShowBasemaps] = useState(false)
+  const [showBasemaps, setShowBasemaps] = useState(false)   // the Map menu: basemap, borders, counties, stations
+  const mapMenuRef = useRef(null)
+  useEffect(() => {
+    if (!showBasemaps) return undefined
+    const away = e => { if (mapMenuRef.current && !mapMenuRef.current.contains(e.target)) setShowBasemaps(false) }
+    const esc = e => { if (e.key === 'Escape') setShowBasemaps(false) }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [showBasemaps])
   const basemapRef   = useRef(basemapId)
   const [showAdmin0, setShowAdmin0]  = useState(true)
   const [showAdmin1, setShowAdmin1]  = useState(false)
@@ -1356,7 +1390,8 @@ export default function MapPanel({
       map=new mapboxgl.Map({
         container:mapContainer.current,
         style:initialStyle,
-        center:[37.9,0.0],zoom:5.4,minZoom:3,maxZoom:17   // 17: close enough to draw a farm
+        center:[37.9,0.0],zoom:5.4,minZoom:3,maxZoom:17,   // 17: close enough to draw a farm
+        attributionControl:false                           // added bottom-left below: the legend covers bottom-right
       })
       map.on('error', e => {
         if (e?.error instanceof mapboxgl.GPUInitializationError) { console.error('[Map] graphics error:', e.error); setMapFailure('unsupported') }
@@ -1365,7 +1400,8 @@ export default function MapPanel({
       map.on('webglcontextrestored', () => setMapFailure(null))
       map.fitBounds(countryView.bounds,{padding:30,duration:0})
       map.addControl(new mapboxgl.NavigationControl({showCompass:false}),'top-right')
-      map.addControl(new mapboxgl.ScaleControl({unit:'metric'}),'bottom-right')
+      map.addControl(new mapboxgl.ScaleControl({unit:'metric'}),'bottom-left')
+      map.addControl(new mapboxgl.AttributionControl({compact:true}),'bottom-left')
     } catch (err) {
       console.error('[Map init] interactive map unavailable:', err)
       try { map?.remove() } catch { /* half-built map */ }
@@ -1373,6 +1409,9 @@ export default function MapPanel({
       return
     }
     map.on('load',()=>{
+      // the credits start folded to their (i) button, as they do after the first pan, so they don't cover the map
+      const attrib = mapContainer.current?.querySelector('.maplibregl-ctrl-attrib')
+      attrib?.classList.remove('maplibregl-compact-show'); attrib?.removeAttribute('open')
       if(mapReadyRef.current) return   // guard double-fire
       setupLayers(map, darkRef.current, countryRef.current, ()=>{
         console.log('[Map init] setupLayers complete')
@@ -1692,7 +1731,19 @@ export default function MapPanel({
   }, [])
 
   const tipLines=tooltip?fmtTip(tooltip.props,activeLayer,opYear,activeSeason):null
+  // the hover box goes right of and below the cursor, or left of / above it near the map's right and bottom edges
+  const tipPlace=(t, el)=>{
+    const w=el?.clientWidth ?? 0, h=el?.clientHeight ?? 0
+    const x = t.x + 14 + 270 > w && t.x > w / 2 ? { right: Math.max(4, w - t.x + 14) } : { left: t.x + 14 }
+    const y = t.y + 14 + 130 > h && t.y > h / 2 ? { bottom: Math.max(4, h - t.y + 14) } : { top: t.y + 14 }
+    return { ...x, ...y }
+  }
   const brd='1px solid var(--border-primary)'
+  // one look for the map's controls: readable text and at least 34 px tall
+  const CTL={display:'flex',alignItems:'center',gap:6,minHeight:34,padding:'0 10px',borderRadius:8,fontSize:12.5,fontWeight:600,cursor:'pointer',
+             background:'var(--bg-surface)',border:brd,color:'var(--heading)',boxShadow:'0 1px 4px rgba(0,0,0,0.18)'}
+  const menuHead={fontSize:11,fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase',color:'var(--text-meta)',padding:'4px 2px 2px'}
+  const activeSites = country === 'ethiopia' ? MONITORED_SITES_ETHIOPIA : MONITORED_SITES_KENYA
 
   return (
     <div style={{position:'relative',display:'flex',flexDirection:'column',height:'100%',overflow:'visible',borderRadius:12,background:'var(--bg-surface)',border:brd}}>
@@ -1772,14 +1823,14 @@ export default function MapPanel({
 
         {/* Layer picker & Seasonal Area toggle -- top-left */}
         {countryView.available && (
-        <div style={{position:'absolute',top:8,left:8,pointerEvents:'auto',display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',zIndex:30}}>
+        <div className="map-ctl-row" style={{position:'absolute',top:8,left:8,right:44,pointerEvents:'none',display:'flex',alignItems:'flex-start',gap:6,flexWrap:'wrap',zIndex:30}}>
 
         <div style={{position:'relative'}}>
-          <button onClick={()=>setShowLayers(v=>!v)}
-            style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,fontSize:10,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
-            <span style={{fontSize:9,fontWeight:700,color:'var(--text-muted)'}}>LAYERS</span>
-            <span style={{fontSize:9,maxWidth:110,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--accent-blue)'}}>{layerCfg.label}</span>
-            <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
+          <button type="button" onClick={()=>setShowLayers(v=>!v)} aria-expanded={showLayers} title="Choose the map layer"
+            style={{...CTL,maxWidth:'min(240px, 55vw)'}}>
+            <Layers size={14} aria-hidden="true" style={{flexShrink:0,color:'var(--accent-text)'}}/>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{layerCfg.label}</span>
+            <ChevronDown size={13} aria-hidden="true" style={{flexShrink:0}}/>
           </button>
         {showLayers && (
           activeTab === 'medium' ? (
@@ -2051,94 +2102,79 @@ export default function MapPanel({
             </button>
           )
         )}
-        </div>
-        )}
-
-        {/* Farm Quick Selector & Station Map Toggle -- top-right (next to MapLibre nav controls) */}
-        {countryView.available && (() => {
-          const activeSites = country === 'ethiopia' ? MONITORED_SITES_ETHIOPIA : MONITORED_SITES_KENYA
-          return (
-            <div style={{position:'absolute',top:8,right:44,pointerEvents:'auto',display:'flex',alignItems:'center',gap:4,maxWidth:'min(250px, 60vw)'}}>
-              <button
-                type="button"
-                onClick={() => setShowStations(v => !v)}
-                title={showStations ? "Turn OFF station markers on map" : "Turn ON station markers on map"}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 3, padding: '5px 7px', borderRadius: 8, fontSize: 9, cursor: 'pointer',
-                  backdropFilter: 'blur(4px)',
-                  background: showStations ? (darkMode ? 'rgba(16,185,129,0.25)' : '#d1fae5') : 'var(--bg-elevated)',
-                  border: '1px solid ' + (showStations ? '#10b981' : 'var(--border-primary)'),
-                  color: showStations ? (darkMode ? '#34d399' : '#047857') : 'var(--text-muted)',
-                  fontWeight: 700, flexShrink: 0
-                }}
-              >
-                <MapPin size={11} aria-hidden="true"/>
-                <span>{showStations ? 'ON' : 'OFF'}</span>
+          {/* top-right: go to a station, and the Map menu */}
+          <div style={{marginLeft:'auto',display:'flex',alignItems:'flex-start',gap:6,minWidth:0}}>
+            <label htmlFor="map-station" className="sr-only">Go to a station</label>
+            <select id="map-station"
+              value={activeSites.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
+              onChange={(e) => {
+                const site = activeSites.find(s => s.site_name === e.target.value)
+                if (site) {
+                  setShowStations(true)
+                  setSelectedSite({ site_name: site.site_name, lat: site.lat, lon: site.lon })
+                  mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
+                }
+              }}
+              style={{...CTL,padding:'0 8px',maxWidth:'min(190px, 40vw)',fontWeight:500,textOverflow:'ellipsis'}}>
+              <option value="">Go to a station ({activeSites.length})</option>
+              {activeSites.map(s => (
+                <option key={s.site_name} value={s.site_name}>
+                  {s.site_name.replace(' Farm', '').replace(' Station', '').replace(' Agricultural Research Center', ' ARC')} ({s.county})
+                </option>
+              ))}
+            </select>
+            <div ref={mapMenuRef} style={{position:'relative'}}>
+              <button type="button" onClick={()=>setShowBasemaps(v=>!v)} aria-expanded={showBasemaps} style={CTL}
+                      title="Basemap, country border, counties and stations">
+                <MapIcon size={14} aria-hidden="true" style={{color:'var(--accent-text)'}}/> Map <ChevronDown size={13} aria-hidden="true"/>
               </button>
-              <select
-                value={activeSites.some(s=>s.site_name===selectedSite?.site_name) ? selectedSite.site_name : ''}
-                onChange={(e) => {
-                  const site = activeSites.find(s => s.site_name === e.target.value)
-                  if (site) {
-                    setShowStations(true)
-                    setSelectedSite({ site_name: site.site_name, lat: site.lat, lon: site.lon })
-                    mapRef.current?.flyTo({ center: [site.lon, site.lat], zoom: 7.5, duration: 800 })
-                  }
-                }}
-                style={{padding:'5px 8px',borderRadius:8,fontSize:9,cursor:'pointer',
-                        backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,
-                        color:'var(--text-secondary)',fontWeight:600,outline:'none',width:'100%',textOverflow:'ellipsis'}}>
-                <option value="">🎯 Stations ({activeSites.length})...</option>
-                {activeSites.map(s => (
-                  <option key={s.site_name} value={s.site_name}>
-                    {s.site_name.replace(' Farm', '').replace(' Station', '').replace(' Agricultural Research Center', ' ARC')} ({s.county})
-                  </option>
-                ))}
-              </select>
+              {showBasemaps && (
+                <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,width:230,maxWidth:'calc(100vw - 24px)',zIndex:40,
+                             background:'var(--bg-surface)',border:brd,borderRadius:10,boxShadow:'0 12px 32px rgba(0,0,0,0.3)',
+                             padding:10,display:'flex',flexDirection:'column',gap:6}}>
+                  <div style={menuHead}>Basemap</div>
+                  <div role="radiogroup" aria-label="Basemap" style={{display:'grid',gridTemplateColumns:'repeat(2, minmax(0, 1fr))',gap:4}}>
+                    {Object.entries(BASEMAPS).map(([id,{label}])=>{
+                      const active=id===basemapId
+                      return (
+                        <button key={id} type="button" role="radio" aria-checked={active} onClick={()=>setBasemapId(id)}
+                          style={{minHeight:32,padding:'0 8px',borderRadius:6,fontSize:12.5,cursor:'pointer',textAlign:'left',
+                                  border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
+                                  background:active?'var(--accent-blue)':'var(--bg-surface)',color:active?'#fff':'var(--text-primary)',fontWeight:active?700:500}}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={menuHead}>Show on the map</div>
+                  {[[country === 'ethiopia' ? 'Country border' : 'Kenya border', showAdmin0, setShowAdmin0],
+                    [country === 'ethiopia' ? 'Regions' : 'Counties', showAdmin1, setShowAdmin1],
+                    ['Stations and farms', showStations, setShowStations],
+                    ...(country === 'ethiopia' ? [['Site audit button', showAuditAgreement, setShowAuditAgreement]] : [])].map(([label, on, set]) => (
+                    <label key={label} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,minHeight:30,cursor:'pointer',color:'var(--text-primary)'}}>
+                      <input type="checkbox" checked={on} onChange={()=>set(v=>!v)} style={{width:16,height:16,accentColor:'var(--accent-blue)'}}/>
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
-          )
-        })()}
-
-        {/* Selected Site Indicator Badge -- top-left underneath layer dropdown */}
-        {selectedSite && countryView.available && (
-          <div style={{position:'absolute',top:38,left:8,pointerEvents:'auto',
-                       display:'flex',alignItems:'center',gap:4,padding:'3px 7px',
-                       borderRadius:6,fontSize:8,background:'var(--bg-elevated)',
-                       border:brd,backdropFilter:'blur(4px)',boxShadow:'0 2px 8px rgba(0,0,0,0.2)',
-                       maxWidth:'calc(100% - 16px)',flexWrap:'wrap'}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444',flexShrink:0}}/>
-            <span style={{color:'var(--text-muted)',fontWeight:700}}>ACTIVE:</span>
-            <span style={{color:'var(--text-primary)',fontWeight:600,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-              {selectedSite.site_name}
-            </span>
-            <span style={{color:'var(--text-faint)',fontSize:8}}>
-              ({Number(selectedSite.lat).toFixed(2)}°, {Number(selectedSite.lon).toFixed(2)}°)
-            </span>
-            {onOpenBulletin && (
-              <button
-                type="button"
-                onClick={onOpenBulletin}
-                title="Generate PDF/PNG Bulletin for this point"
-                style={{
-                  marginLeft: 2,
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-primary)',
-                  color: 'var(--heading)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <FileDown size={12} aria-hidden="true"/>
-                <span>Download bulletin</span>
-              </button>
-            )}
           </div>
+
+          {/* the selected place, on its own line under the controls */}
+          {selectedSite && (
+            <div style={{flexBasis:'100%',pointerEvents:'none',display:'flex'}}>
+              <div style={{pointerEvents:'auto',display:'flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:8,fontSize:12,
+                           background:'var(--bg-surface)',border:brd,boxShadow:'0 1px 4px rgba(0,0,0,0.18)',maxWidth:'100%',minWidth:0}}>
+                <span aria-hidden="true" style={{width:8,height:8,borderRadius:'50%',background:'#ef4444',flexShrink:0}}/>
+                <span style={{color:'var(--heading)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedSite.site_name}</span>
+                <span style={{color:'var(--text-meta)',whiteSpace:'nowrap'}}>
+                  {Number(selectedSite.lat).toFixed(2)}&deg;, {Number(selectedSite.lon).toFixed(2)}&deg;
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
         )}
 
         {/* Colour legend -- bottom-right */}
@@ -2148,93 +2184,9 @@ export default function MapPanel({
         </div>
         )}
 
-        {/* Bottom controls: Basemap & Boundary toggles */}
-        <div style={{position:'absolute',bottom:8,left:8,pointerEvents:'auto',display:'flex',alignItems:'center',flexWrap:'wrap',gap:4,maxWidth:'calc(100% - 145px)',zIndex:10}}>
-          {/* Basemap picker */}
-          <div style={{position:'relative'}}>
-            <button onClick={()=>setShowBasemaps(v=>!v)}
-              style={{display:'flex',alignItems:'center',gap:4,padding:'4px 8px',borderRadius:8,fontSize:9,cursor:'pointer',backdropFilter:'blur(4px)',background:'var(--bg-elevated)',border:brd,color:'var(--text-secondary)'}}>
-              <span style={{fontSize:8,fontWeight:700,color:'var(--text-muted)'}}>MAP</span>
-              <span style={{fontSize:8,color:'var(--accent-blue)'}}>{BASEMAPS[basemapId].label}</span>
-              <span style={{fontSize:8,color:'var(--text-faint)'}}>v</span>
-            </button>
-            {showBasemaps && (
-              <div style={{position:'absolute',bottom:'100%',left:0,marginBottom:4,borderRadius:8,
-                           boxShadow:'0 8px 24px rgba(0,0,0,0.35)',background:'var(--bg-elevated)',
-                           border:brd,padding:6,minWidth:130,zIndex:30}}>
-                {Object.entries(BASEMAPS).map(([id,{label}])=>{
-                  const active=id===basemapId
-                  return (
-                    <button key={id} onClick={()=>{setBasemapId(id);setShowBasemaps(false)}}
-                      style={{display:'block',width:'100%',padding:'5px 7px',borderRadius:5,fontSize:9,
-                              cursor:'pointer',textAlign:'left',marginBottom:2,
-                              border:'1px solid '+(active?'var(--accent-blue)':'transparent'),
-                              background:active?'var(--accent-blue)':'transparent',
-                              color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Boundary toggles */}
-          <button onClick={()=>setShowAdmin0(v=>!v)}
-            title="Toggle Kenya National Border"
-            style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
-                    backdropFilter:'blur(4px)',
-                    background: showAdmin0 ? (darkMode ? 'rgba(56,189,248,0.2)' : '#e0f2fe') : 'var(--bg-elevated)',
-                    border: '1px solid ' + (showAdmin0 ? 'var(--accent-blue)' : 'var(--border-primary)'),
-                    color: showAdmin0 ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                    fontWeight: showAdmin0 ? 700 : 500}}>
-            <span style={{width:5,height:5,borderRadius:'50%',background:showAdmin0?'var(--accent-blue)':'var(--text-faint)'}}/>
-            BORDER: {showAdmin0 ? 'ON' : 'OFF'}
-          </button>
-          <button onClick={()=>setShowAdmin1(v=>!v)}
-            title="Toggle County / District Boundaries"
-            style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
-                    backdropFilter:'blur(4px)',
-                    background: showAdmin1 ? (darkMode ? 'rgba(16,185,129,0.2)' : '#d1fae5') : 'var(--bg-elevated)',
-                    border: '1px solid ' + (showAdmin1 ? '#10b981' : 'var(--border-primary)'),
-                    color: showAdmin1 ? (darkMode ? '#34d399' : '#059669') : 'var(--text-secondary)',
-                    fontWeight: showAdmin1 ? 700 : 500}}>
-            <span style={{width:5,height:5,borderRadius:'50%',background:showAdmin1?'#10b981':'var(--text-faint)'}}/>
-            COUNTIES: {showAdmin1 ? 'ON' : 'OFF'}
-          </button>
-
-          {/* Station markers toggle */}
-          <button onClick={()=>setShowStations(v=>!v)}
-            title="Toggle Monitored Farm & Climatological Stations on Map"
-            style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
-                    backdropFilter:'blur(4px)',
-                    background: showStations ? (darkMode ? 'rgba(16,185,129,0.2)' : '#d1fae5') : 'var(--bg-elevated)',
-                    border: '1px solid ' + (showStations ? '#10b981' : 'var(--border-primary)'),
-                    color: showStations ? (darkMode ? '#34d399' : '#059669') : 'var(--text-secondary)',
-                    fontWeight: showStations ? 700 : 500}}>
-            <span style={{width:5,height:5,borderRadius:'50%',background:showStations?'#10b981':'var(--text-faint)'}}/>
-            STATIONS: {showStations ? 'ON' : 'OFF'}
-          </button>
-
-          {/* Site Audit Agreement toggle (Ethiopia) */}
-          {country === 'ethiopia' && (
-            <button onClick={()=>setShowAuditAgreement(v=>!v)}
-              title="Toggle 20-Site Audited Agreement option in toolbar"
-              style={{display:'flex',alignItems:'center',gap:4,padding:'4px 7px',borderRadius:8,fontSize:8,cursor:'pointer',
-                      backdropFilter:'blur(4px)',
-                      background: showAuditAgreement ? (darkMode ? 'rgba(59,130,246,0.2)' : '#dbeafe') : 'var(--bg-elevated)',
-                      border: '1px solid ' + (showAuditAgreement ? 'var(--accent-blue)' : 'var(--border-primary)'),
-                      color: showAuditAgreement ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                      fontWeight: showAuditAgreement ? 700 : 500}}>
-              <span style={{width:5,height:5,borderRadius:'50%',background:showAuditAgreement?'var(--accent-blue)':'var(--text-faint)'}}/>
-              SITE AUDIT: {showAuditAgreement ? 'ON' : 'OFF'}
-            </button>
-          )}
-        </div>
-
         {/* Hover tooltip -- follows cursor over monitored farm sites and forecast grid */}
         {tooltip && (
-          <div style={{position:'absolute',left:tooltip.x+14,top:tooltip.y+14,
+          <div style={{position:'absolute',...tipPlace(tooltip, mapContainer.current),
                        background:'var(--bg-elevated)',border:brd,borderRadius:8,
                        padding:'8px 12px',maxWidth:260,boxShadow:'0 8px 24px rgba(0,0,0,0.4)',
                        zIndex:30}}>
