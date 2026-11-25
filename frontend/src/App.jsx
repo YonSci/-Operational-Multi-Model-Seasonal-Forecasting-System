@@ -813,7 +813,7 @@ function EnsembleAgreement({ pixelData, activeModels, selectedModel='multimodel'
 }
 
 
-function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeModels,selectedSeason='short_rains',selectedInit='0901'}) {
+function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeModels,selectedSeason='short_rains',selectedInit='0901',cropTile=null}) {
   if (isLoading && !pixelData) return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-3" style={{color:'var(--text-faint)'}}>
       <div className="w-8 h-8 border-2 border-[var(--accent-blue)] border-t-transparent rounded-full animate-spin"/>
@@ -888,30 +888,25 @@ function ForecastingTab({selectedModel,selectedYear,pixelData,isLoading,activeMo
   }
   const opYear = selectedYear ?? 2026
   const displayModel = isSingle ? 'ECMWF SEAS5' : (selectedModel === 'multimodel' ? 'Multi-Model Consensus' : selectedModel)
+  // headline tiles: the same medians, anomalies and ranges as the summary card, and the chances of each tercile
+  // (the models' average when there are several)
+  const tileRows = TIMING_ROWS.map(row => {
+    const sec = row.key === 'on' ? 'ONSET' : row.key === 'cs' ? 'CESSATION' : 'SEASON LENGTH'
+    const [p50, anom, cal, p10s, p90s] = row.key === 'on' ? [mmmOn, mmmAnom, chirpsOn, allOnP10, allOnP90]
+      : row.key === 'cs' ? [mmmCs, mmmCsAnom, chirpsCs, allCsP10, allCsP90] : [mmmLg, mmmLgAnom, chirpsLg, allLgP10, allLgP90]
+    const ps = entries.map(([, m]) => m[row.p]).filter(v => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite))
+    const p = ps.length ? [0, 1, 2].map(i => ps.reduce((a, v) => a + v[i], 0) / ps.length) : null
+    const lo = p10s.length ? Math.min(...p10s) : null, hi = p90s.length ? Math.max(...p90s) : null
+    const after = lateP50Range(sec)
+    return { row, title: (sec === 'SEASON LENGTH' ? one?.var_labels?.lgp : sec === 'ONSET' ? one?.var_labels?.onset : one?.var_labels?.cessation) ?? row.label,
+             p50, anom, cal, p, late: lateP50(sec),
+             range: lo != null && (hi != null || after) ? [lo, hi, after] : null }
+  })
 
   return (
     <div className="flex flex-col h-full gap-2 overflow-y-auto touch-scroll p-0.5">
-      {/* Regime Pill & Seasonal Domain Status */}
-      {pixelData && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6,
-          padding: '4px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: 8
-        }}>
-          <div style={{display: 'flex', alignItems: 'center', gap: 6, fontSize: 10}}>
-            <span style={{color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase'}}>Climate Regime:</span>
-            <span style={{fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 4}}>
-              <span>{pixelData.regime_id === 1 ? '🌾' : (pixelData.regime_id === 2 ? '🏔️' : (pixelData.regime_id === 3 ? '🐪' : '🏜️'))}</span>
-              <span>{pixelData.regime_name || 'Classified Rainfall Regime'}</span>
-            </span>
-          </div>
-          <div style={{fontSize: 9, display: 'flex', alignItems: 'center', gap: 4}}>
-            <span style={{width: 6, height: 6, borderRadius: '50%', background: pixelData.is_in_seasonal_zone !== false ? '#10b981' : '#f59e0b'}}/>
-            <span style={{fontWeight: 600, color: pixelData.is_in_seasonal_zone !== false ? '#10b981' : '#f59e0b'}}>
-              {pixelData.is_in_seasonal_zone !== false ? `Within ${seasonCode} Active Domain` : `Outside ${seasonCode} Domain`}
-            </span>
-          </div>
-        </div>
-      )}
+      <HeadlineTiles rows={tileRows} year={opYear} pixelData={pixelData} seasonCode={seasonCode}
+                     rangeLabel={one ? '8 in 10 members' : "The models' 10-90% range"} cropTile={cropTile}/>
 
       {pixelData?.is_in_seasonal_zone === false && (
         <div style={{
@@ -2133,22 +2128,27 @@ function RunStatusBar({ modelsData, model, health, selectedSeason, selectedInit 
   } else {
     status = daily ? 'Current: updated daily as observations arrive' : 'Current: latest forecast start for this season'; tone = 'ok'
   }
-  const item = (label, value) => value && (
-    <div style={{display:'flex',flexDirection:'column',minWidth:0}}>
-      <span style={{fontSize:12,color:'var(--text-meta)'}}>{label}</span>
-      <span style={{fontSize:13.5,fontWeight:600,color:'var(--heading)',fontVariantNumeric:'tabular-nums'}}>{value}</span>
-    </div>
-  )
+  // one line: "Initialised 1 Oct 2026 (ECMWF SEAS5) . observations through 10 Nov 2026 . ..."
+  const parts = []
+  const item = (label, value) => { if (value) parts.push([label, value]) }
   const toneColor = { ok: 'var(--ok-text)', info: 'var(--accent-text)', warn: 'var(--warn-text)' }[tone]
   return (
     <section aria-label="Forecast run and data status"
-             style={{display:'flex',flexWrap:'wrap',alignItems:'flex-end',gap:'8px 24px',padding:'10px 14px',marginBottom:8,
-                     borderRadius:10,border:'1px solid var(--border-primary)',background:'var(--bg-surface)'}}>
-      {item('Forecast initialised', `${fmtDate(entry.init_date)} · ${models.length > 1 && !base ? models.length + ' models' : 'ECMWF SEAS5'}`)}
-      {item('Observations through', entry.obs_end ? fmtDate(entry.obs_end) : 'None (forecast only)')}
-      {item('Valid period', fmtSpan(entry.valid_start, entry.valid_end))}
-      {weather && item('Weather forecasts', `ECMWF ENS ${fmtDate(weather.ens_run)} (to ${fmtDate(weather.ens_days.split('/')[1])}) · extended range ${fmtDate(weather.ext_run)} (to ${fmtDate(weather.ext_days.split('/')[1])}) · then SEAS5`)}
-      {daily && item('Last successful update', fmtStamp(ds?.last_update) ?? 'Not recorded')}
+             style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'4px 16px',padding:'6px 12px',marginBottom:8,
+                     borderRadius:8,border:'1px solid var(--border-primary)',background:'var(--bg-surface)'}}>
+      {item('Initialised', `${fmtDate(entry.init_date)} (${models.length > 1 && !base ? models.length + ' models' : 'ECMWF SEAS5'})`)}
+      {item('observations through', entry.obs_end ? fmtDate(entry.obs_end) : 'none (forecast only)')}
+      {item('valid', fmtSpan(entry.valid_start, entry.valid_end))}
+      {weather && item('weather forecasts', `ECMWF ENS ${fmtDate(weather.ens_run)} (to ${fmtDate(weather.ens_days.split('/')[1])}) \u00b7 extended range ${fmtDate(weather.ext_run)} (to ${fmtDate(weather.ext_days.split('/')[1])}) \u00b7 then SEAS5`)}
+      {daily && item('last update', fmtStamp(ds?.last_update) ?? 'not recorded')}
+      <p style={{margin:0,flex:'1 1 420px',minWidth:0,fontSize:13,lineHeight:1.5,color:'var(--text-meta)'}}>
+        {parts.map(([label, value], i) => (
+          <Fragment key={label}>
+            {i > 0 && <span aria-hidden="true"> &middot; </span>}
+            {label} <span style={{fontWeight:600,color:'var(--heading)',fontVariantNumeric:'tabular-nums'}}>{value}</span>
+          </Fragment>
+        ))}
+      </p>
       <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,fontWeight:600,color:toneColor,marginLeft:'auto'}}>
         <span aria-hidden="true" style={{width:8,height:8,borderRadius:'50%',background:toneColor}}/>{status}
       </div>
@@ -2224,6 +2224,75 @@ const TIMING_ROWS = [
   { key:'lg', p:'p_lgp', label:'Season length', cats:['Short','Normal','Long'], clim:'lgp',                                               unit:'days' },
 ]
 const timingValue = (row, v, year) => row.unit === 'date' ? doy(v, year) : Math.round(v) + ' days'
+
+// Forecast tab, first thing under the controls: the place, then one tile each for onset, end of rains and season
+// length (median, against the 1993-2016 normal, likely range, chances of each tercile) and the crop outlook tile
+const TERCILE_COLORS = ['#2563eb', '#94a3b8', '#ea580c']
+function HeadlineTiles({ rows, year, pixelData, seasonCode, rangeLabel, cropTile }) {
+  const site = useDashboardStore(s => s.selectedSite)
+  const inZone = pixelData?.is_in_seasonal_zone !== false
+  const tag = { fontSize: 12.5, fontWeight: 600, borderRadius: 999, padding: '3px 10px', border: '1px solid var(--border-primary)',
+                background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }
+  const delta = (row, anom) => {
+    if (anom == null) return null
+    const a = Math.round(anom)
+    if (a === 0) return 'same as normal'
+    const word = row.unit === 'date' ? (a > 0 ? 'later' : 'earlier') : (a > 0 ? 'longer' : 'shorter')
+    return `${Math.abs(a)} day${Math.abs(a) === 1 ? '' : 's'} ${word} than normal`
+  }
+  return (
+    <section aria-label="Outlook at the selected place" style={{display:'flex', flexDirection:'column', gap:8, flexShrink:0}}>
+      <div style={{display:'flex', flexWrap:'wrap', alignItems:'center', gap:'6px 10px'}}>
+        <h2 style={{margin:0, fontSize:17, fontWeight:700, color:'var(--heading)'}}>
+          {site?.site_name ?? `${Number(pixelData.glat).toFixed(2)}, ${Number(pixelData.glon).toFixed(2)}`}
+        </h2>
+        <span style={{fontSize:13, color:'var(--text-meta)'}}>
+          forecast cell {Number(pixelData.glat).toFixed(2)}&deg;, {Number(pixelData.glon).toFixed(2)}&deg;
+        </span>
+        {pixelData.regime_name && <span style={tag}>{pixelData.regime_name}</span>}
+        <span style={{...tag, color: inZone ? 'var(--ok-text)' : 'var(--warn-text)'}}>
+          {inZone ? `In the ${seasonCode} domain` : `Outside the ${seasonCode} domain`}
+        </span>
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(230px, 1fr))', gap:8}}>
+        {rows.map(({ row, title, p50, anom, cal, p, late, range }) => {
+          const top = p ? p.indexOf(Math.max(...p)) : -1
+          return (
+            <article key={row.key} aria-label={title}
+                     style={{background:'var(--bg-surface)', border:'1px solid var(--border-primary)', borderRadius:10, padding:'10px 14px',
+                             display:'flex', flexDirection:'column', gap:4, minWidth:0}}>
+              <div style={{fontSize:12, fontWeight:700, letterSpacing:'0.05em', textTransform:'uppercase', color:'var(--text-meta)'}}>{title}</div>
+              <div style={{display:'flex', alignItems:'baseline', flexWrap:'wrap', gap:'2px 10px'}}>
+                <span style={{fontSize:26, fontWeight:700, lineHeight:1.15, color:'var(--heading)', fontVariantNumeric:'tabular-nums'}}>
+                  {p50 != null ? timingValue(row, p50, year) : late ? late.value : '--'}
+                </span>
+                {delta(row, anom) && <span style={{fontSize:13.5, fontWeight:600, color:'var(--text-secondary)'}}>{delta(row, anom)}</span>}
+              </div>
+              <div style={{fontSize:12.5, color:'var(--text-meta)', lineHeight:1.45}}>
+                {cal != null && <>Normal {timingValue(row, cal, year)}</>}
+                {cal != null && range && ' \u00b7 '}
+                {range && <>{rangeLabel}: {timingValue(row, range[0], year)} to {range[1] != null ? timingValue(row, range[1], year) : 'after ' + range[2]}</>}
+                {p50 == null && late && <> ({late.sub})</>}
+              </div>
+              {p && (
+                <>
+                  <div role="img" aria-label={row.cats.map((c, i) => `${c} ${Math.round(p[i] * 100)}%`).join(', ')}
+                       style={{display:'flex', height:8, borderRadius:4, overflow:'hidden', background:'var(--gauge-track)', marginTop:4}}>
+                    {p.map((v, i) => <div key={i} style={{width:`${v * 100}%`, background:TERCILE_COLORS[i]}}/>)}
+                  </div>
+                  <div aria-hidden="true" style={{display:'flex', justifyContent:'space-between', gap:6, fontSize:12.5, color:'var(--text-secondary)'}}>
+                    {row.cats.map((c, i) => <span key={c} style={{fontWeight: i === top ? 700 : 400}}>{c} {Math.round(p[i] * 100)}%</span>)}
+                  </div>
+                </>
+              )}
+            </article>
+          )
+        })}
+        {cropTile}
+      </div>
+    </section>
+  )
+}
 
 function TimingCell({ m, row, year, base }) {
   if (!m) return <span style={{color:'var(--text-meta)'}}>Loading…</span>
@@ -3285,7 +3354,8 @@ export default function App() {
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
-            {activeTab==='forecast' && country==='kenya' && selectedSeason==='short_rains' && (
+            {activeTab==='forecast' && country==='kenya' && selectedSeason==='short_rains' && forecastType==='seasonal'
+             && mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile' && (
               <CropSiteLink selectedSite={selectedSite} onsetDef={onsetDef}
                             onOpen={s => { useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab('crop') }}/>
             )}
@@ -3298,7 +3368,11 @@ export default function App() {
             )}
             {activeTab==='forecast' && forecastType==='seasonal' && (mapLayer.variable === 'rainfall' && mapLayer.layer === 'tercile'
               ? <RainfallStatsPanel pixelData={pixelData} isLoading={pixelLoading} model={effectiveModel} gridData={mapGridData}/>
-              : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}/>)}
+              : <ForecastingTab  selectedModel={selectedModel} selectedYear={selectedYear} pixelData={pixelData} isLoading={pixelLoading} activeModels={activeModels} selectedSeason={selectedSeason} selectedInit={selectedInit}
+                                 cropTile={country==='kenya' && selectedSeason==='short_rains' && (
+                                   <CropSiteLink variant="tile" selectedSite={selectedSite} onsetDef={onsetDef}
+                                                 onOpen={s => { useDashboardStore.getState().setSelectedSite({ ...s, country }); setActiveTab('crop') }}/>
+                                 )}/>)}
             {activeTab==='probabilistic' && <ProbabilisticTab pixelData={pixelData} activeModels={activeModels} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}/>}
             {activeTab==='multimodel'    && <MultiModelTab   pixelData={pixelData} activeModels={activeModels} modelsData={modelsData} selectedSeason={selectedSeason} selectedYear={selectedYear}/>}
             {activeTab==='validation'    && <ValidationTab   pixelData={pixelData} activeModels={activeModels} validationData={validationData} selectedModel={selectedModel} setSelectedModel={setSelectedModel} modelsData={modelsData} selectedYear={selectedYear} setSelectedYear={setSelectedYear} country={country} selectedSeason={selectedSeason} onSeasonChange={changeSeason} selectedInit={selectedInit}
