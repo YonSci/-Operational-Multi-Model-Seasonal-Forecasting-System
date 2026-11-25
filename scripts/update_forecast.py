@@ -360,6 +360,15 @@ def main():
     # crop outlook last (it can take an hour on a busy PC): the forecasts above are already published; its tab data
     # goes out in a second, crop-only publish
     update_crop_outlook(env)
+    # crop runs for the farms saved online (My farms): the backend's queue, results posted back; skipped without the
+    # batch token (FARM_BATCH_TOKEN or ~/.config/cai/farm_batch_token); at most 30 min, never stops the update
+    import importlib.util as _iu
+    if _iu.find_spec("aquacrop"):
+        rc = run_limited([PY, "-m", "crop_engine.farms"], 30, env, cwd=BASE_DIR)
+        if rc is None:
+            log("farm crop runs: took over 30 min; stopped")
+        elif rc:
+            log(f"farm crop runs: failed (exit {rc})")
     if a.publish:
         subprocess.run([PY, str(BASE_DIR / "scripts" / "publish_daily.py"), "--note", f"crop outlook, observations to {obs_end}"],
                        check=False, env=env)

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { cellKey, downloadFarm, readFarmFile } from '../lib/farmGeo'
 import FarmSatellite from './FarmSatellite'
 import FarmOnline, { restoreBackup } from './FarmOnline'
+import FarmRun from './FarmRun'
 import { API_BASE } from '../api/queries'
 import { RULES, STATUS_LABEL, farmStatus } from '../lib/farmStatus'
 
@@ -245,7 +246,7 @@ function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelet
       </div>
       <StatusCard farm={farm} data={data} sat={sat}/>
       <FarmSatellite key={farm.id} farm={farm} onImage={onImage} onResult={setSat}/>
-      <FarmOnline key={`online-${farm.id}`} farm={farm} country={country} onLinked={onLinked}/>
+      <FarmOnline key={`online-${farm.id}`} farm={farm} country={country} onLinked={onLinked} Simulation={FarmRun}/>
       {outside && <p style={{ margin: 0, fontSize: 13, color: 'var(--caution-text)' }}>Forecast products for farms are published for Kenya&apos;s Short Rains so far.</p>}
       {data.loading && <p style={lbl}>Loading the published products...</p>}
       {!data.loading && cells.map((c, i) => <CellCard key={c.id} c={c} i={i} n={cells.length} data={data}/>)}
