@@ -67,7 +67,7 @@ function Comparison({ now, past }) {
   )
 }
 
-export default function FarmSatellite({ farm, onImage }) {
+export default function FarmSatellite({ farm, onImage, onResult }) {
   const key = keyOf(farm)
   const [st, setSt] = useState(() => cache.get(key) ?? {})
   const [busy, setBusy] = useState(null)       // 'latest' | 'past' | null
@@ -80,7 +80,7 @@ export default function FarmSatellite({ farm, onImage }) {
     return () => abort.current?.abort()
   }, [key])
   useEffect(() => { onImage(showMap && st.latest?.image ? st.latest.image : null) }, [st.latest, showMap, onImage])
-  useEffect(() => () => onImage(null), [onImage])
+  useEffect(() => { onResult?.(st.latest ? st : null) }, [st, onResult])
   const save = patch => setSt(s => { const n = { ...s, ...patch }; cache.set(key, n); return n })
 
   async function check() {

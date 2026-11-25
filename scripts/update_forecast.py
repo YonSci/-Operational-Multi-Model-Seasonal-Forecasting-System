@@ -387,7 +387,9 @@ def main():
     # project in EE_PROJECT or ~/.config/earthengine/project.txt)
     import importlib.util
     ee_cfg = Path.home() / ".config" / "earthengine"
-    if importlib.util.find_spec("ee") and (ee_cfg / "credentials").exists() and (os.environ.get("EE_PROJECT") or (ee_cfg / "project.txt").exists()):
+    has_ee = bool(importlib.util.find_spec("ee") and (ee_cfg / "credentials").exists()
+                  and (os.environ.get("EE_PROJECT") or (ee_cfg / "project.txt").exists()))
+    if has_ee:
         products += ["imerg_gee", "gsmap_gee"]
     # Multi-model 10–16 day forecasts downloaded directly from ECMWF, NOAA, ECCC, DWD and the Met Office
     # (00 UTC run); any model that cannot be reached is filled from Open-Meteo
@@ -402,6 +404,14 @@ def main():
     subprocess.run([PY, rt, "verify", "--ref", "chirps", "--periods", f"{YEAR - 1}-10-01:{YEAR - 1}-12-31",
                     f"{YEAR}-09-01:{obs_end}"], check=False, env=env)
 
+    # cropland greenness per cell, the last 16 days against past years (Sentinel-2, Earth Engine) for My farms; at
+    # most 20 min (a request in restricted mode can hang); the previous veg.csv stays when it fails
+    if has_ee:
+        rc = run_limited([PY, str(BASE_DIR / "scripts" / "veg_anomaly.py")], 20, env)
+        if rc is None:
+            log("vegetation anomaly: Earth Engine took over 20 min; previous veg.csv kept")
+        elif rc:
+            log(f"vegetation anomaly: failed (exit {rc}); previous veg.csv kept")
     subprocess.run([PY, str(BASE_DIR / "scripts" / "site_report.py"), "--seasonal-dir", str(OUT_DIR)], check=True, env=env)
     subprocess.run([PY, str(BASE_DIR / "scripts" / "export_dashboard_data.py")], check=False, env=env)
     subprocess.run([PY, str(BASE_DIR / "scripts" / "build_results_report.py")], check=False, env=env)
