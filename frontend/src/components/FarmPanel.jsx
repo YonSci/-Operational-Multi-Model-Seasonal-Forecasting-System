@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cellKey, downloadFarm, readFarmFile } from '../lib/farmGeo'
+import FarmSatellite from './FarmSatellite'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fd = iso => { if (!iso) return 'n/a'; const [, m, d] = String(iso).slice(0, 10).split('-').map(Number); return `${d} ${MON[m - 1]}` }
@@ -154,7 +155,7 @@ function CellCard({ c, i, n, data }) {
   )
 }
 
-function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelete }) {
+function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelete, onImage }) {
   const [name, setName] = useState(farm.name)
   useEffect(() => setName(farm.name), [farm.id, farm.name])
   const cells = farm.cells
@@ -181,7 +182,8 @@ function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelet
           <button type="button" style={{ ...btn, color: 'var(--warn-text)' }} onClick={onDelete}>Delete</button>
         </div>
       </div>
-      {outside && <p style={{ margin: 0, fontSize: 13, color: 'var(--caution-text)' }}>Farm products are published for Kenya&apos;s Short Rains so far.</p>}
+      <FarmSatellite key={farm.id} farm={farm} onImage={onImage}/>
+      {outside && <p style={{ margin: 0, fontSize: 13, color: 'var(--caution-text)' }}>Forecast products for farms are published for Kenya&apos;s Short Rains so far.</p>}
       {data.loading && <p style={lbl}>Loading the published products...</p>}
       {!data.loading && cells.map((c, i) => <CellCard key={c.id} c={c} i={i} n={cells.length} data={data}/>)}
       <p style={{ margin: 0, ...lbl, lineHeight: 1.5 }}>
@@ -192,7 +194,7 @@ function FarmDetail({ farm, country, data, onRename, onDownload, onZoom, onDelet
   )
 }
 
-export default function FarmPanel({ farms, selectedId, onSelect, onAdd, onUpdate, onDelete, onDraw, onZoom, country, notice, onClose }) {
+export default function FarmPanel({ farms, selectedId, onSelect, onAdd, onUpdate, onDelete, onDraw, onZoom, country, notice, onImage, onClose }) {
   const [msg, setMsg] = useState(notice)
   useEffect(() => { if (notice) setMsg(notice) }, [notice])
   const fileRef = useRef(null)
@@ -246,7 +248,7 @@ export default function FarmPanel({ farms, selectedId, onSelect, onAdd, onUpdate
         )}
         {!farms.length && <p style={lbl}>No farms yet.</p>}
         {sel && (
-          <FarmDetail farm={sel} country={country} data={data}
+          <FarmDetail farm={sel} country={country} data={data} onImage={onImage}
                       onRename={name => onUpdate(sel.id, { name })} onDownload={() => downloadFarm(sel)} onZoom={() => onZoom(sel.id)}
                       onDelete={() => { if (window.confirm(`Delete ${sel.name} from this browser?`)) onDelete(sel.id) }}/>
         )}
