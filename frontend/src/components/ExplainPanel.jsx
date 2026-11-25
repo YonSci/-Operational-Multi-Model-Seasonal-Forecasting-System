@@ -199,7 +199,7 @@ function TrackerEvidence({ ev }) {
   const th = { textAlign: 'left', fontWeight: 600, fontSize: 12, color: 'var(--text-meta)', padding: '4px 6px', borderBottom: '1px solid var(--border-primary)' }
   const td = { padding: '4px 6px', borderBottom: '1px solid var(--border-primary)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }
   const recent = Object.fromEntries((ev.recent_rain?.by_product ?? []).map(x => [x.product, x]))
-  const rows = [{ product: 'CHIRPS 2.0', mm: r.chirps_mm, through: r.through }, ...r.other_products]
+  const rows = [{ product: 'CHIRPS v3', mm: r.chirps_mm, through: r.through }, ...r.other_products]
   return (
     <>
       <div style={box}>

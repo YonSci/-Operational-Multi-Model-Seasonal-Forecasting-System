@@ -8,7 +8,8 @@ outlook, and the seasonal forecast as ranges with tercile probabilities and a lo
 Inputs (defaults pick the latest available):
   --seasonal-dir  seasonal output folder updated with observations (with agro_onset/ inside)
   --ens-outlook   outputs/ecmwf_ens/ens_outlook_<init>.nc
-Observations: CHIRPS final 2026 p25 + preliminary p25 (data/chirps_2026, data/chirps_prelim_2026)
+Observations: CHIRPS 2026, final then preliminary (scripts/regions.py, CHIRPS_VERSION: v3 data/chirps_v3_daily;
+v2 data/chirps_2026 + data/chirps_prelim_2026)
 
 Writes outputs/site_reports/<issue-date>/<site>.{json,md,png} and index.md.
 """
@@ -28,11 +29,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "scripts"))
 sys.path.insert(0, str(BASE_DIR / "backend"))
 import agro_onset as ao  # noqa: E402
+import regions  # noqa: E402
 
 CAL = (1993, 2016)
-CHIRPS_REC = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
-CHIRPS_FINAL = BASE_DIR / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc"
-CHIRPS_PRELIM = BASE_DIR / "data" / "chirps_prelim_2026" / "chirps_prelim_2026_p25_kenya.nc"
+CHIRPS_REC = regions.get("kenya").chirps_hist      # 1993–2025 (CHIRPS_VERSION)
 CATS = ("early", "normal", "late")
 
 
@@ -78,12 +78,12 @@ def corr_mae(ens_med, obs):
 def observed_series(lat, lon, year):
     """Observed daily rain for `year` from final + preliminary CHIRPS at the nearest 0.25° cell."""
     parts = []
-    if CHIRPS_FINAL.exists():
-        f = xr.open_dataset(CHIRPS_FINAL).precip.sel(latitude=lat, longitude=lon, method="nearest").to_series()
-        parts.append(f[f.index.year == year])
-    if CHIRPS_PRELIM.exists():
-        p = xr.open_dataset(CHIRPS_PRELIM).precip.sel(lat=lat, lon=lon, method="nearest").to_series()
-        parts.append(p[p.index.year == year])
+    for path in regions.get("kenya").chirps_obs(year):   # v3: the year file; v2: final p25, then preliminary
+        if path.exists():
+            with xr.open_dataset(path) as ds:
+                pr = ds.precip.rename({k: v for k, v in {"latitude": "lat", "longitude": "lon"}.items() if k in ds.precip.dims})
+                f = pr.sel(lat=lat, lon=lon, method="nearest").to_series()
+            parts.append(f[f.index.year == year])
     s = pd.concat(parts) if parts else pd.Series(dtype=float)
     s = s[~s.index.duplicated(keep="first")].sort_index()
     return s

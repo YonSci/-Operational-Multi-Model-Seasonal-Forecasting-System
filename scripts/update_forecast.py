@@ -4,7 +4,9 @@ update_forecast.py
 ──────────────────
 Refresh the Kenya Short Rains forecast as new observations and medium-range forecasts arrive.
 
-  1. Sync CHIRPS: re-download the final 2026 p25 file if CHC updated it; fetch any new preliminary
+  1. Sync CHIRPS (scripts/regions.py, CHIRPS_VERSION): v3 (default), this year's CHIRPS v3 daily file
+     (fao_download_chirps_v3.py: Earth Engine, then the CHC server); v2, re-download the final 2026 p25 file if CHC
+     updated it and fetch any new preliminary
      daily p05 GeoTIFFs after the final record ends; rebuild the 0.25° preliminary NetCDF
   2. Seasonal (ECMWF SEAS5, latest init) re-run with observed CHIRPS spliced in up to the latest day
      → outputs/ecmwf_<mon>_obs_latest/ (+ run_meta.json); skipped when the observation date is unchanged
@@ -40,6 +42,10 @@ import xarray as xr
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PY = sys.executable
+sys.path.insert(0, str(BASE_DIR / "scripts"))
+import regions  # noqa: E402
+
+REGION = regions.get("kenya")
 CHC = "https://data.chc.ucsb.edu/products/CHIRPS/v2.0"         # moved from products/CHIRPS-2.0 (404 since Oct 2026)
 FINAL = BASE_DIR / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc"
 PRELIM_DIR = BASE_DIR / "data" / "chirps_prelim_2026"
@@ -152,26 +158,89 @@ def sync_prelim(final_end):
     return end
 
 
+def fetch_chirps_v3(env, label):
+    """This year's CHIRPS v3 days: Earth Engine first, at most 30 min (16 Nov 2026: a request to Earth Engine, in
+    restricted mode after its quota, never returned and held the update for 4 h), then the CHC server directly, at
+    most 30 min more; the days on disk are kept when both fail."""
+    chirps = [PY, str(BASE_DIR / "scripts" / "fao_download_chirps_v3.py"), "--years", str(YEAR)]
+    if run_limited(chirps, 30, env) is None:
+        log(f"{label}: CHIRPS v3 from Earth Engine took over 30 min; trying the CHC server")
+        if run_limited(chirps + ["--source", "chc"], 30, env) is None:
+            log(f"{label}: CHIRPS v3 from the CHC server took over 30 min; previous days kept")
+
+
+def last_day(path):
+    with xr.open_dataset(path) as ds:
+        return pd.Timestamp(ds.time.values.max()).date()
+
+
+def sync_observations(env):
+    """The last observed day: CHIRPS v3 (this year's daily file), or v2 (final p25 + preliminary)."""
+    if regions.chirps_version() == "v2":
+        return sync_prelim(sync_final())
+    fetch_chirps_v3(env, "CHIRPS v3")
+    path = REGION.chirps_daily(YEAR)
+    with xr.open_dataset(path) as ds:
+        n_pre = int(ds.source.str.startswith("prelim").sum())
+    end = last_day(path)
+    log(f"CHIRPS v3 {YEAR}: observations to {end} ({n_pre} preliminary day(s))")
+    return end
+
+
 def run_seasonal(obs_end, force):
     meta_p = OUT_DIR / "run_meta.json"
-    if meta_p.exists() and not force and json.loads(meta_p.read_text()).get("obs_end") == str(obs_end):
+    meta = json.loads(meta_p.read_text()) if meta_p.exists() else {}
+    chirps = regions.chirps_version()
+    if meta and not force and meta.get("obs_end") == str(obs_end) and meta.get("chirps", "v2") == chirps:
         log(f"seasonal: already up to date (obs to {obs_end})")
         return False
     obs_end_doy = obs_end.timetuple().tm_yday
     lead0_doy = dt.date(YEAR, INIT_MONTH, 1).timetuple().tm_yday
-    extra = [str(FINAL)] + ([str(PRELIM_NC)] if PRELIM_NC.exists() else [])
+    extra = [str(f) for f in REGION.chirps_obs(YEAR) if f.exists()]
     cmd = [PY, str(BASE_DIR / "scripts" / "process_ecmwf_september.py"), "--init-month", str(INIT_MONTH),
            "--win-doy-start", str(WIN_START), "--win-doy-end", str(WIN_END),
            "--ecmwf-dir", str(ECMWF_DIR), "--out-dir", str(OUT_DIR), "--chirps-extra", *extra]
     if obs_end_doy >= WIN_START:
         cmd += ["--obs-lead-doy", str(lead0_doy), "--obs-end-doy", str(max(obs_end_doy, lead0_doy - 1))]
-    log(f"seasonal: SEAS5 {YEAR}-{INIT_MONTH:02d}-01 init + observations to {obs_end} → {OUT_DIR.name}")
+    log(f"seasonal: SEAS5 {YEAR}-{INIT_MONTH:02d}-01 init + {REGION.chirps_label} observations to {obs_end} → {OUT_DIR.name}")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(OUT_DIR / "process.log", "w", encoding="utf-8") as f:
         subprocess.run(cmd, check=True, stdout=f, stderr=subprocess.STDOUT, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-    meta_p.write_text(json.dumps({"init": f"{YEAR}-{INIT_MONTH:02d}-01", "obs_end": str(obs_end),
-                                  "obs_end_doy": obs_end_doy, "updated": dt.datetime.now().isoformat(timespec="seconds")}, indent=1))
+    meta_p.write_text(json.dumps({"init": f"{YEAR}-{INIT_MONTH:02d}-01", "obs_end": str(obs_end), "obs_end_doy": obs_end_doy,
+                                  "chirps": chirps, "updated": dt.datetime.now().isoformat(timespec="seconds")}, indent=1))
     return True
+
+
+# The fixed 1 Oct runs (ECMWF_SEAS5_OCTOBER_PIPELINE.md): rebuilt with their onset rules when the CHIRPS record
+# changes (their climatology, terciles and bias correction come from it); stamp: <run>/chirps_record.json
+FIXED_RUNS = {
+    "ecmwf_oct": ["--win-doy-start", "274"],                                   # OND window
+    "ecmwf_oct_obs": ["--win-doy-start", "244", "--obs-lead-doy", "274"],      # observed September + forecast
+}
+
+
+def refresh_fixed_runs(env):
+    """Rebuild the fixed 1 Oct runs made from another CHIRPS record; True when any was."""
+    chirps, done = regions.chirps_version(), False
+    for name, args in FIXED_RUNS.items():
+        out = BASE_DIR / "outputs" / name
+        stamp = out / "chirps_record.json"
+        old = json.loads(stamp.read_text()).get("chirps", "v2") if stamp.exists() else "v2"
+        if old == chirps:
+            continue
+        log(f"seasonal: {name} was made from CHIRPS {old}; rebuilding from {REGION.chirps_label}")
+        extra = [str(f) for f in REGION.chirps_obs(YEAR) if f.exists()] if "--obs-lead-doy" in args else []
+        cmd = [PY, str(BASE_DIR / "scripts" / "process_ecmwf_september.py"), "--init-month", "10", *args,
+               "--win-doy-end", "365", "--ecmwf-dir", str(ECMWF_DIR), "--out-dir", str(out)]
+        if extra:
+            cmd += ["--chirps-extra", *extra]
+        out.mkdir(parents=True, exist_ok=True)
+        with open(out / "process.log", "w", encoding="utf-8") as f:
+            subprocess.run(cmd, check=True, stdout=f, stderr=subprocess.STDOUT, env=env)
+        subprocess.run([PY, str(BASE_DIR / "scripts" / "onset_rules.py"), str(out)], check=True, env=env)
+        stamp.write_text(json.dumps({"chirps": chirps, "updated": dt.datetime.now().isoformat(timespec="seconds")}, indent=1))
+        done = True
+    return done
 
 
 def update_forecast_runs(env):
@@ -234,27 +303,28 @@ def update_fao(env):
     if not hist.exists():
         log("FAO water balance: no historical run yet (python scripts/fao_water_balance.py historical); skipped")
         return False
-    # CHIRPS v3: Earth Engine first, at most 30 min (16 Nov 2026: a request to Earth Engine, in restricted mode after
-    # its quota, never returned and held the update for 4 h), then the CHC server directly, at most 30 min more
-    chirps = [PY, str(BASE_DIR / "scripts" / "fao_download_chirps_v3.py"), "--years", str(YEAR)]
-    if run_limited(chirps, 30, env) is None:
-        log("FAO water balance: CHIRPS v3 from Earth Engine took over 30 min; trying the CHC server")
-        if run_limited(chirps + ["--source", "chc"], 30, env) is None:
-            log("FAO water balance: CHIRPS v3 from the CHC server took over 30 min; previous days kept")
+    if regions.chirps_version() == "v2":              # with v3 the platform's record is fetched first (sync_observations)
+        fetch_chirps_v3(env, "FAO water balance")
     if run_limited([PY, str(BASE_DIR / "scripts" / "fao_era5land_gee.py"), "--years", str(YEAR)], 45, env) is None:
         log("FAO water balance: ERA5-Land (Earth Engine) took over 45 min; ET0 climatology fills the latest days")
-    v3 = BASE_DIR / "data" / "chirps_v3" / f"chirps_v3_p25_kenya_{YEAR}.nc"
+    v3 = REGION.chirps_v3(YEAR)
     with xr.open_dataset(v3) as ds:
         last = str(pd.Timestamp(ds.time.values[-1]).date())
     meta_p = BASE_DIR / "outputs" / "fao_wb" / "run_meta.json"
     old = json.loads(meta_p.read_text()) if meta_p.exists() else {}
-    if old.get("chirps_v3_end") == last and (OUT_DIR / "fao_wb_agricultural" / "method.json").exists():
+    chirps = regions.chirps_version()
+    if (old.get("chirps_v3_end") == last and old.get("chirps", "v2") == chirps
+            and (OUT_DIR / "fao_wb_agricultural" / "method.json").exists()):
         log(f"FAO water balance: already up to date (CHIRPS v3 to {last})")
         return False
     fw = str(BASE_DIR / "scripts" / "fao_water_balance.py")
-    subprocess.run([PY, fw, "historical", "--years", str(YEAR)], check=True, env=env)
+    if old.get("chirps", "v2") != chirps:              # another CHIRPS record: every year's water balance again
+        log(f"FAO water balance: CHIRPS record changed ({old.get('chirps', 'v2')} → {chirps}); rebuilding every year")
+        subprocess.run([PY, fw, "historical"], check=True, env=env)
+    else:
+        subprocess.run([PY, fw, "historical", "--years", str(YEAR)], check=True, env=env)
     subprocess.run([PY, fw, "forecast", str(OUT_DIR)], check=True, env=env)
-    meta_p.write_text(json.dumps({"chirps_v3_end": last, "updated": dt.datetime.now().isoformat(timespec="seconds")}, indent=1))
+    meta_p.write_text(json.dumps({"chirps_v3_end": last, "chirps": chirps, "updated": dt.datetime.now().isoformat(timespec="seconds")}, indent=1))
     log(f"FAO water balance: CHIRPS v3 to {last}; season so far and the latest-obs forecast updated")
     return True
 
@@ -269,15 +339,16 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 
-    obs_end = sync_prelim(sync_final())
+    obs_end = sync_observations(env)
     changed = run_seasonal(obs_end, a.force)
+    fixed_changed = refresh_fixed_runs(env)
     if changed or not (OUT_DIR / "agro_onset" / "rule.json").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "agro_onset.py"), "seasonal", str(OUT_DIR)], check=True, env=env)
     # the hosted API reads the October runs (incl. this one) from backend/demo_short_rains_extra.npz
-    if changed or not (BASE_DIR / "backend" / "demo_short_rains_extra.npz").exists():
+    if changed or fixed_changed or not (BASE_DIR / "backend" / "demo_short_rains_extra.npz").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "pack_short_rains_demo.py")], check=True, env=env)
     # seasonal rainfall statistics (Rainfall Terciles view): total, wet / dry days, intensity, spells
-    if changed or not (BASE_DIR / "backend" / "rain_stats.npz").exists():
+    if changed or fixed_changed or not (BASE_DIR / "backend" / "rain_stats.npz").exists():
         subprocess.run([PY, str(BASE_DIR / "scripts" / "rainfall_stats.py")], check=False, env=env)
     # Agri onset / cessation rules 1–3 for the platform's Method selector (PET climatology built once) and the
     # FAO water balance, packed for the backend, then every site's comparison across initializations and methods
@@ -287,7 +358,7 @@ def main():
     except Exception as exc:                            # the FAO module must not stop the daily update
         log(f"FAO water balance: failed ({str(exc)[:160]}); previous FAO outputs kept")
         fao_changed = False
-    if changed or rules_missing or fao_changed:
+    if changed or rules_missing or fao_changed or fixed_changed:
         if changed or rules_missing:
             if not (BASE_DIR / "data" / "worldclim" / "pet_mhargreaves_clim_kenya.nc").exists():
                 subprocess.run([PY, str(BASE_DIR / "scripts" / "pet_hargreaves.py")], check=True, env=env)
@@ -342,7 +413,7 @@ def main():
         log("backend not running (no reload needed)")
     # when this update completed and what it covers: the dashboard shows it next to the results
     status = {"last_update": dt.datetime.now().astimezone().isoformat(timespec="minutes"), "obs_end": str(obs_end),
-              "schedule": "daily"}
+              "observations": REGION.chirps_label, "schedule": "daily"}
     (BASE_DIR / "backend" / "data_status.json").write_text(json.dumps(status, indent=1) + "\n", encoding="utf-8")
     if a.publish:
         subprocess.run([PY, str(BASE_DIR / "scripts" / "publish_daily.py"), "--note", f"observations to {obs_end}"],

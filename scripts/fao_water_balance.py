@@ -620,7 +620,8 @@ def seas5_oct_bc(cfg, m_years, lat, lon, lm):
     n_day, n_mem = 151, pes.N_MEMBERS_COMMON
     if BC_CACHE.exists() and BC_CACHE.stat().st_mtime > max(f.stat().st_mtime for f in files if f.exists()):
         with xr.open_dataarray(BC_CACHE) as da:
-            if np.array_equal(da.year.values, m_years) and da.attrs.get("qm_window") == w:
+            if (np.array_equal(da.year.values, m_years) and da.attrs.get("qm_window") == w
+                    and da.attrs.get("chirps", "v2") == regions.chirps_version()):    # mapped to this CHIRPS record
                 return da.values.astype(np.float32)
     raw = np.full((n_mem, len(m_years), n_day, len(lat), len(lon)), np.nan, np.float32)
     for yi, f in enumerate(files):
@@ -647,7 +648,7 @@ def seas5_oct_bc(cfg, m_years, lat, lon, lm):
     BC_CACHE.parent.mkdir(parents=True, exist_ok=True)
     xr.DataArray(bc, dims=("member", "year", "day", "lat", "lon"), name="pr",
                  coords={"member": np.arange(1, n_mem + 1), "year": m_years, "day": np.arange(n_day), "lat": lat, "lon": lon},
-                 attrs={"units": "mm/day", "first_doy": 274, "qm_window": w,
+                 attrs={"units": "mm/day", "first_doy": 274, "qm_window": w, "chirps": regions.chirps_version(),
                         "long_name": "SEAS5 1 Oct members quantile-mapped to CHIRPS v3 (CAL years)"}
                  ).to_netcdf(BC_CACHE, encoding={"pr": {"zlib": True, "complevel": 4}})
     print(f"[fao] SEAS5 1 Oct members bias-corrected to CHIRPS v3 → {BC_CACHE}")

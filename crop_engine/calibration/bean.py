@@ -47,7 +47,7 @@ from crop_engine.data import soil as soil_mod
 from crop_engine.data.sites import Site
 
 OUT = C.OUT / "calibration" / "dssat"
-CHIRPS_HIST = C.BASE / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
+CHIRPS_HIST = __import__("regions").get("kenya").chirps_hist   # scripts/regions.py (on sys.path via config), CHIRPS_VERSION
 CACHE_DIR = C.CACHE / "bean_trials"           # the trial points' ERA5-Land over the trials' window (point_weather)
 SPINUP_DAYS = 60
 SEASON_DAYS = 200                 # weather after sowing (the bean matures in about 75-95 days)

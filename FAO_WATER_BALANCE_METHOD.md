@@ -64,7 +64,7 @@ looks back over the days that caused the stress.
 
 | Input | Source | Processing |
 |---|---|---|
-| Rainfall | **CHIRPS v3** daily (`scripts/fao_download_chirps_v3.py`) | Final `rnl` record (ERA5 used to split CHIRPS3 pentads into days), 1993 on, from Google Earth Engine (`UCSB-CHC/CHIRPS/V3/DAILY_RNL`, 0.05° averaged 5 × 5 onto the 0.25° cells). This is identical to CHC's own 0.25° files (checked: max difference 0.000), and it avoids the slow CHC server. Days after the final record come from the CHC preliminary `sat` 0.05° files, Kenya window only. |
+| Rainfall | **CHIRPS v3** daily (`scripts/fao_download_chirps_v3.py`), the platform's record since 26 Nov 2026 ([CHIRPS_V3_SWITCH.md](CHIRPS_V3_SWITCH.md)) | Final `sat` record (IMERG used to split CHIRPS3 pentads into days) from 1998 and `rnl` (ERA5 timing) for 1993–1997, from Google Earth Engine (`UCSB-CHC/CHIRPS/V3/DAILY_SAT`, `DAILY_RNL`; 0.05° averaged over each 0.25° cell's land pixels), every day of the year (`data/chirps_v3_daily/`). Days after the final record come from the CHC preliminary `sat` 0.05° files, region window only. Before the switch this module used `rnl` for Jan–Mar and Aug–Dec (`data/chirps_v3/`, still what `CHIRPS_VERSION=v2` reads). |
 | Meteorology | **ERA5-Land** via Google Earth Engine (`scripts/fao_era5land_gee.py`) | `ECMWF/ERA5_LAND/DAILY_AGGR`: Tmax, Tmin, dewpoint, Rs (daily sum), surface pressure, soil water layers 1–3. Wind speed from `ECMWF/ERA5_LAND/HOURLY` (speed each hour, then the daily mean; the daily-mean components underestimate it by ~8% over Kenya). Sampled on a 0.05° grid nested in the 0.25° cells; ET0 computed there, then averaged over land pixels. The same data from the Copernicus CDS: `scripts/fao_download_era5land.py` (slower when the CDS queue is long). |
 | Soil | **SoilGrids 2.0** sand, clay, organic carbon, coarse fragments (`scripts/fao_soilgrids.py`) | SoilGrids has no water-retention layers, so θFC (−33 kPa) and θWP (−1500 kPa) come from the Saxton & Rawls (2006) pedotransfer equations per layer (0–5 … 100–200 cm), reduced for coarse fragments. Read at ~1 km and averaged to 0.25°. Kenya mean available water: ~100–108 mm per metre. |
 | Initial soil water | ERA5-Land 0–100 cm soil moisture | On 1 Aug: relative wetness between the cell's 2nd and 98th percentiles (1993–2016) × TAW. |
@@ -86,8 +86,8 @@ python scripts\fao_era5land_gee.py --region ethiopia_deyr
 python scripts\fao_soilgrids.py --region ethiopia_deyr
 ```
 
-The other four methods use CHIRPS v2, and the SEAS5 members they use are calibrated to v2. This method uses
-CHIRPS v3 throughout: its observations, its terciles and its own bias-corrected members.
+Since 26 Nov 2026 every method uses the same CHIRPS v3 record (before it, the other four methods used CHIRPS v2).
+This method keeps its own bias-corrected SEAS5 members (to 28 Feb), quantile-mapped to that record.
 
 ## Crops
 

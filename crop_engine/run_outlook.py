@@ -59,6 +59,7 @@ from crop_engine.data import weather as W
 from crop_engine.scenarios import planting as pl
 
 import forecast_runs as fr  # noqa: E402
+import regions  # noqa: E402  (scripts/: the CHIRPS record in use)
 import onset_rules as orl  # noqa: E402
 
 ENGINE = f"AquaCrop-OSPy {version('aquacrop')}"
@@ -97,6 +98,13 @@ def load_varieties(only=None):
     return ref, vs
 
 
+def _observed_record(h):
+    """The observed rain record enters the hashes from the CHIRPS v3 switch on (CHIRPS v2: the hashes as before)."""
+    v = regions.chirps_version()
+    if v != "v2":
+        h.update(f"chirps {v}".encode())
+
+
 def config_hash(rules, sites):
     """Changes when the varieties, rules, sites, season end, AquaCrop version, the adapter or its CO2 series change:
     results made before are rebuilt."""
@@ -108,6 +116,7 @@ def config_hash(rules, sites):
     h.update(Path(aq.__file__).read_bytes())
     h.update(aq.CO2_FILE.read_bytes())
     h.update(Path(pl.__file__).read_bytes())
+    _observed_record(h)
     return h.hexdigest()[:12]
 
 
@@ -121,6 +130,7 @@ def wofost_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(wf.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
+    _observed_record(h)
     return h.hexdigest()[:12]
 
 
@@ -135,6 +145,7 @@ def dssat_hash(rules, sites):
     h.update(json.dumps([C.RESOW_RULE, C.RESOW_MAX, list(C.SEASON_END)]).encode())
     h.update(Path(dsa.__file__).read_bytes())
     h.update(Path(pl.__file__).read_bytes())
+    _observed_record(h)
     return h.hexdigest()[:12]
 
 

@@ -11,6 +11,15 @@ centres on the CHIRPS p25 lattice, x.125 / x.375 / ...), its edges, and where it
 
 A script picks its region with --region, else the FORECAST_REGION environment variable, else kenya
 (get(None) reads the variable when called, not when this module is imported).
+
+CHIRPS record: v3 (default) or v2, from the CHIRPS_VERSION environment variable (read when called). CHC ends CHIRPS v2
+production after December 2026.
+  v3  CHIRPS v3.0 daily "sat" (each pentad split into days with IMERG timing; final from 1998, preliminary after it),
+      with "rnl" (ERA5 timing) for 1981-1997, which "sat" does not cover; one full-year file per year on the region's
+      grid (data/chirps_v3_daily, fao_download_chirps_v3.py) and the 1993-2025 history built from them
+  v2  CHIRPS v2.0: the 1993-2025 history (data/chirps_pr_<cc>), the year's final p25 file and its preliminary days;
+      the FAO water balance's own v3 "rnl" files (data/chirps_v3). Every path as before the switch, for comparison
+      and rollback.
 """
 import os
 from dataclasses import dataclass
@@ -21,6 +30,18 @@ import numpy as np
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV = "FORECAST_REGION"
 DEFAULT = "kenya"
+CHIRPS_ENV = "CHIRPS_VERSION"
+CHIRPS_VERSIONS = ("v3", "v2")
+HIST_YEARS = (1993, 2025)                        # the CHIRPS history file's years
+V3_SAT_FROM = 1998                               # first year of CHIRPS v3 daily "sat" (IMERG); "rnl" before it
+
+
+def chirps_version():
+    """The CHIRPS record in use: CHIRPS_VERSION (v3 or v2), else v3."""
+    v = (os.environ.get(CHIRPS_ENV) or CHIRPS_VERSIONS[0]).lower()
+    if v not in CHIRPS_VERSIONS:
+        raise ValueError(f"{CHIRPS_ENV}={v!r}; known: {', '.join(CHIRPS_VERSIONS)}")
+    return v
 
 
 @dataclass(frozen=True)
@@ -62,7 +83,22 @@ class Region:
         return self.outputs / "fao_wb"
 
     def chirps_v3(self, year):
+        """The FAO water balance's CHIRPS v3 days of a year: with v3, the platform's record (chirps_daily); with v2, its
+        own "rnl" files (Jan-Mar, Aug-Dec)."""
+        if chirps_version() == "v3":
+            return self.chirps_daily(year)
         return BASE_DIR / "data" / "chirps_v3" / f"chirps_v3_p25_{self.tag}_{year}.nc"
+
+    def chirps_daily(self, year):
+        """CHIRPS v3 daily, every day of a year on the region's grid (final, then preliminary; variable "source")."""
+        return BASE_DIR / "data" / "chirps_v3_daily" / f"chirps_v3_p25_{self.tag}_{year}.nc"
+
+    def chirps_obs(self, year):
+        """The files holding a year's observed days after the history (later files fill days the earlier lack):
+        v3, the year's file; v2, the final p25 file and the preliminary days."""
+        if chirps_version() == "v3":
+            return [self.chirps_daily(year)]
+        return [self.chirps_final(year), self.chirps_prelim(year)]
 
     @property
     def soil(self):
@@ -75,8 +111,15 @@ class Region:
 
     @property
     def chirps_hist(self):
-        """CHIRPS v2.0 daily on the region's 0.25° grid, 1993-2025."""
-        return BASE_DIR / "data" / f"chirps_pr_{self.cc}" / f"{self.cc}_chirps_pr_r25_1993_2025.nc"
+        """CHIRPS daily on the region's 0.25° grid, 1993-2025 (v3: built from chirps_daily; v2: CHIRPS v2.0)."""
+        y0, y1 = HIST_YEARS
+        if chirps_version() == "v3":
+            return BASE_DIR / "data" / "chirps_v3_daily" / f"chirps_v3_p25_{self.tag}_{y0}_{y1}.nc"
+        return BASE_DIR / "data" / f"chirps_pr_{self.cc}" / f"{self.cc}_chirps_pr_r25_{y0}_{y1}.nc"
+
+    @property
+    def chirps_label(self):
+        return "CHIRPS v3" if chirps_version() == "v3" else "CHIRPS v2"
 
     @staticmethod
     def chirps_final(year):

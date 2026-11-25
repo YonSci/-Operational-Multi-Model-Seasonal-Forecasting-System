@@ -68,16 +68,33 @@ EXT_QM_WINDOW = 7               # EQM CHIRPS pool ±days for 1 Jan – 28 Feb (�
 DRY_DAY_MM = 1.0
 CESS = dict(window=10, ratio=0.5, swhc=100.0)
 LATE = 500.0                    # sentinel DOY for "none by the search end" (late) in terciles
-REGION = RAW_OCT = EXT_CACHE = PET_PATH = FINAL_2026 = PRELIM_2026 = None     # set by use_region
+REGION = RAW_OCT = EXT_CACHE = PET_PATH = FINAL_2026 = PRELIM_2026 = OBS_2026 = None     # set by use_region
 
 
 def use_region(key=None):
     """Point the module's paths at a forecast region (regions.py; default: FORECAST_REGION, else kenya)."""
-    global REGION, RAW_OCT, EXT_CACHE, PET_PATH, FINAL_2026, PRELIM_2026
+    global REGION, RAW_OCT, EXT_CACHE, PET_PATH, FINAL_2026, PRELIM_2026, OBS_2026
     REGION = regions.get(key)
     RAW_OCT, EXT_CACHE, PET_PATH = REGION.seas5_rain, REGION.janfeb_cache, REGION.pet_clim
-    FINAL_2026, PRELIM_2026 = REGION.chirps_final(2026), REGION.chirps_prelim(2026)
+    OBS_2026 = REGION.chirps_obs(2026)              # the files with 2026's observed days (CHIRPS_VERSION)
+    FINAL_2026, PRELIM_2026 = REGION.chirps_final(2026), REGION.chirps_prelim(2026)     # CHIRPS v2
     return REGION
+
+
+def final_end_2026():
+    """The last day of 2026's final (not preliminary) CHIRPS record, or None: v3, the year file's last "final" day; v2,
+    the end of the final p25 file."""
+    if regions.chirps_version() == "v2":
+        if not FINAL_2026.exists():
+            return None
+        with xr.open_dataset(FINAL_2026) as ds:
+            return pd.Timestamp(ds.time.values.max()).date()
+    path = OBS_2026[0]
+    if not path.exists():
+        return None
+    with xr.open_dataset(path) as ds:
+        fin = ds.time.values[ds.source.str.startswith("final").values]
+    return pd.Timestamp(fin.max()).date() if len(fin) else None
 
 
 use_region()
@@ -146,9 +163,10 @@ def by_label(end_doy):
 
 # ── Data ────────────────────────────────────────────────────────────────────
 def obs_2026(lat, lon):
-    """CHIRPS 2026 by DOY (final, then preliminary) on the grid → (366, lat, lon), NaN where not yet observed."""
+    """CHIRPS 2026 by DOY (OBS_2026: v3, the year's file; v2, final then preliminary) on the grid → (366, lat, lon),
+    NaN where not yet observed."""
     arr = np.full((366, len(lat), len(lon)), np.nan, np.float32)
-    for path in (FINAL_2026, PRELIM_2026):
+    for path in OBS_2026:
         if not path.exists():
             continue
         with xr.open_dataset(path) as ds:
@@ -178,7 +196,7 @@ def next_year_obs(c_years, c_daily, o26, y, n):
 def jan_feb(seasonal_dir, m_years, lat, lon, lm, c_years, c_daily, o26):
     """(member, year, EXT_DAYS, lat, lon) bias-corrected 1 Jan – 28 Feb rain for the 1 Oct runs, from SEAS5 lead
     days 93–151 in RAW_OCT; None for other runs or when a year's file has fewer lead days. Cached in EXT_CACHE
-    (shared by the three 1 Oct runs; rebuilt when a raw file is newer)."""
+    (shared by the three 1 Oct runs; rebuilt when a raw file is newer or the CHIRPS record changes)."""
     if seasonal_dir == "sep-demo" or not Path(seasonal_dir).name.startswith("ecmwf_oct"):
         return None
     files = [RAW_OCT / f"ecmwf_{y}10_d01.nc" for y in m_years]
@@ -186,7 +204,8 @@ def jan_feb(seasonal_dir, m_years, lat, lon, lm, c_years, c_daily, o26):
         return None
     if EXT_CACHE.exists() and EXT_CACHE.stat().st_mtime > max(f.stat().st_mtime for f in files):
         with xr.open_dataarray(EXT_CACHE) as da:
-            if np.array_equal(da.year.values, m_years) and da.attrs.get("qm_window") == EXT_QM_WINDOW:
+            if (np.array_equal(da.year.values, m_years) and da.attrs.get("qm_window") == EXT_QM_WINDOW
+                    and da.attrs.get("chirps", "v2") == regions.chirps_version()):       # mapped to this CHIRPS record
                 print(f"[rules] 1 Jan – 28 Feb members from {EXT_CACHE.name}")
                 return da.values.astype(np.float32)
     import process_ecmwf_september as pes
@@ -218,7 +237,7 @@ def jan_feb(seasonal_dir, m_years, lat, lon, lm, c_years, c_daily, o26):
     da = xr.DataArray(bc, dims=["member", "year", "day", "lat", "lon"], name="pr",
                       coords={"member": np.arange(1, n_mem + 1), "year": m_years, "day": np.arange(EXT_DAYS), "lat": lat, "lon": lon},
                       attrs={"units": "mm/day", "long_name": "Bias-corrected daily precipitation 1 Jan – 28 Feb (EQM), 1 Oct init",
-                             "qm_window": EXT_QM_WINDOW})
+                             "qm_window": EXT_QM_WINDOW, "chirps": regions.chirps_version()})
     da.to_netcdf(EXT_CACHE, encoding={"pr": {"zlib": True, "complevel": 4}})
     print(f"[rules] 1 Jan – 28 Feb members bias-corrected → {EXT_CACHE}")
     return bc

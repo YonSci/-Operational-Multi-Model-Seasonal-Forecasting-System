@@ -8,7 +8,8 @@ Products (open access unless noted)            latency   native grid
   arc2     NOAA CPC ARC2 Africa daily          ~2 d      0.1°
   tamsat   TAMSAT v3.1 daily RFE (rfe_filled)  ~4–5 d    0.0375°
   pdirnow  UCI CHRS PDIR-Now daily             ~1 d      0.04°
-  chirps   CHIRPS-2.0 final p25 + preliminary  ~5 d      0.25° / 0.05°   (data/chirps_2026, data/chirps_prelim_2026)
+  chirps   CHIRPS final + preliminary          ~5 d      0.25° / 0.05°   (regions.py, CHIRPS_VERSION: v3 data/chirps_v3_daily,
+                                                                         v2 data/chirps_2026 + data/chirps_prelim_2026)
   imerg    NASA GPM IMERG Late daily V07       ~1–2 d    0.1°   needs a NASA Earthdata login in ~/.netrc (untested here)
 Not included: JAXA GSMaP (needs a JAXA account), MSWEP (needs a GloH2O data request).
 
@@ -49,9 +50,11 @@ OUT = BASE_DIR / "outputs" / "realtime_rain"
 S, N, W, E, RES = -5.0, 5.5, 33.5, 42.0, 0.25
 LAT = np.round(np.arange(S + RES / 2, N, RES), 3)
 LON = np.round(np.arange(W + RES / 2, E, RES), 3)
-CHIRPS_REC = BASE_DIR / "data" / "chirps_pr_ke" / "ke_chirps_pr_r25_1993_2025.nc"
-CHIRPS_FINAL = BASE_DIR / "data" / "chirps_2026" / "chirps-v2.0.2026.days_p25.nc"
-CHIRPS_PRELIM = BASE_DIR / "data" / "chirps_prelim_2026" / "chirps_prelim_2026_p25_kenya.nc"
+import regions  # noqa: E402
+
+_KE = regions.get("kenya")
+CHIRPS_REC = _KE.chirps_hist                       # 1993–2025, then this year's observed days (CHIRPS_VERSION)
+CHIRPS_OBS = _KE.chirps_obs(2026)
 OND_MASK = None
 
 
@@ -250,13 +253,11 @@ def load_chirps():
     parts = []
     with xr.open_dataset(CHIRPS_REC) as ds:
         parts.append(ds["precip"].reindex(lat=LAT, lon=LON, method="nearest", tolerance=0.01).load())
-    if CHIRPS_FINAL.exists():
-        with xr.open_dataset(CHIRPS_FINAL) as ds:
-            f = ds["precip"].rename(latitude="lat", longitude="lon")
-            parts.append(f.reindex(lat=LAT, lon=LON, method="nearest", tolerance=0.01).load())
-    if CHIRPS_PRELIM.exists():
-        with xr.open_dataset(CHIRPS_PRELIM) as ds:
-            parts.append(ds["precip"].reindex(lat=LAT, lon=LON, method="nearest", tolerance=0.01).load())
+    for path in CHIRPS_OBS:                         # v3: the year file; v2: final p25, then preliminary
+        if path.exists():
+            with xr.open_dataset(path) as ds:
+                f = ds["precip"].rename({k: v for k, v in {"latitude": "lat", "longitude": "lon"}.items() if k in ds["precip"].dims})
+                parts.append(f.reindex(lat=LAT, lon=LON, method="nearest", tolerance=0.01).load())
     da = xr.concat(parts, "time")
     return da.isel(time=~da.indexes["time"].duplicated(keep="first")).sortby("time")
 

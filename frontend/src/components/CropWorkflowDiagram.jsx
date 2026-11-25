@@ -41,7 +41,7 @@ export default function CropWorkflowDiagram() {
   const c1 = 20, c2 = 290, c3 = 540, c4 = 800, bw = 232, top = 42, gap = 12
   // 1 inputs, stacked
   const inputs = [
-    { title: 'Rain', lines: ['CHIRPS v2 observed', 'SEAS5, sub-seasonal and', 'weather-model members'] },
+    { title: 'Rain', lines: ['CHIRPS v3 observed', 'SEAS5, sub-seasonal and', 'weather-model members'] },
     { title: 'Temperature, sun, air', lines: ['ERA5-Land at the site, then', 'the sub-seasonal model’s,', 'then SEAS5 (bias-corrected)'] },
     { title: 'Soil', lines: ['SoilGrids layers to 200 cm', 'ERA5-Land water on 1 Aug'] },
     { title: 'Sowing date', lines: ['Agri rule 1 onset', 'FAO agricultural onset', 're-sown after a false start'] },
