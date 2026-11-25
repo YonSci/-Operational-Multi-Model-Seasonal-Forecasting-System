@@ -22,6 +22,7 @@ const STYLE_DARK  = {
         "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
       ],
       "tileSize": 256,
+      "maxzoom": 16,
       "attribution": "(c) Esri, HERE, Garmin, (c) OpenStreetMap contributors"
     }
   },
@@ -36,6 +37,7 @@ const STYLE_LIGHT = {
         "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
       ],
       "tileSize": 256,
+      "maxzoom": 16,
       "attribution": "(c) Esri, HERE, Garmin, (c) OpenStreetMap contributors"
     }
   },
@@ -52,6 +54,7 @@ const STYLE_OSM = {
         "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
       ],
       "tileSize": 256,
+      "maxzoom": 19,
       "attribution": "(c) OpenStreetMap contributors"
     }
   },
@@ -66,6 +69,7 @@ const STYLE_SATELLITE = {
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
       ],
       "tileSize": 256,
+      "maxzoom": 18,
       "attribution": "(c) Esri, Maxar, Earthstar Geographics"
     }
   },
@@ -80,6 +84,7 @@ const STYLE_TOPO = {
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
       ],
       "tileSize": 256,
+      "maxzoom": 16,
       "attribution": "(c) Esri, USGS, NOAA"
     }
   },
@@ -1021,6 +1026,42 @@ function showAssistantArea(map, corners) {
   } catch (_) { /* the style is reloading: the next change redraws it */ }
 }
 
+// Farm boundaries (FarmPanel): the selected farm with the outlines of the 0.25-degree cells it overlaps, and the
+// outline being drawn. Added on first use, and again after a basemap change (the effects re-run on mapReady).
+const FARM_EMPTY = { type: 'FeatureCollection', features: [] }
+function farmLayers(map) {
+  if (map.getSource('farm')) return
+  map.addSource('farm-cells', { type: 'geojson', data: FARM_EMPTY })
+  map.addSource('farm', { type: 'geojson', data: FARM_EMPTY })
+  map.addSource('farm-draft', { type: 'geojson', data: FARM_EMPTY })
+  map.addLayer({ id: 'farm-cells-line', type: 'line', source: 'farm-cells', paint: { 'line-color': '#7c3aed', 'line-width': 1.5, 'line-dasharray': [3, 2] } })
+  map.addLayer({ id: 'farm-fill', type: 'fill', source: 'farm', paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.25 } })
+  map.addLayer({ id: 'farm-line', type: 'line', source: 'farm', paint: { 'line-color': '#b45309', 'line-width': 2.5 } })
+  map.addLayer({ id: 'farm-draft-line', type: 'line', source: 'farm-draft', filter: ['==', ['geometry-type'], 'LineString'],
+                 paint: { 'line-color': '#b45309', 'line-width': 2, 'line-dasharray': [2, 1] } })
+  map.addLayer({ id: 'farm-draft-pts', type: 'circle', source: 'farm-draft', filter: ['==', ['geometry-type'], 'Point'],
+                 paint: { 'circle-radius': 4, 'circle-color': '#ffffff', 'circle-stroke-color': '#b45309', 'circle-stroke-width': 2 } })
+}
+function showFarm(map, geometry, cells) {
+  try {
+    if (!geometry && !map.getSource('farm')) return
+    farmLayers(map)
+    map.getSource('farm').setData(geometry ? { type: 'Feature', properties: {}, geometry } : FARM_EMPTY)
+    const h = 0.125
+    map.getSource('farm-cells').setData({ type: 'FeatureCollection', features: (geometry ? cells ?? [] : []).map(c => ({ type: 'Feature', properties: {},
+      geometry: { type: 'Polygon', coordinates: [[[c.lon - h, c.lat - h], [c.lon + h, c.lat - h], [c.lon + h, c.lat + h], [c.lon - h, c.lat + h], [c.lon - h, c.lat - h]]] } })) })
+  } catch (_) { /* the style is reloading: the effect redraws it */ }
+}
+function showFarmDraft(map, pts) {
+  try {
+    if (!pts.length && !map.getSource('farm-draft')) return
+    farmLayers(map)
+    const feats = pts.map(p => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } }))
+    if (pts.length > 1) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.length > 2 ? [...pts, pts[0]] : pts } })
+    map.getSource('farm-draft').setData({ type: 'FeatureCollection', features: feats })
+  } catch (_) { /* the style is reloading */ }
+}
+
 export default function MapPanel({
   darkMode=false,
   selectedModel='',
@@ -1036,6 +1077,10 @@ export default function MapPanel({
   onAreaDrawn,
   drawnArea=null,           // forecast assistant: [west, south, east, north] of the area being explained, or null
   requestedLayer=null,      // forecast assistant: {variable, layer, nonce} to show on the map
+  farmDraw=false,           // farm boundaries: clicks add corners of a farm outline, reported by onFarmDrawn(ring)
+  onFarmDrawn,
+  onFarmDrawCancel,
+  farm=null,                // farm boundaries: {geometry, cells: [{lat, lon}], bounds: [w, s, e, n], focus} of the selected farm
 }) {
   const activeSeason = detectSeason(selectedSeason, country, gridData)
   const isShort = activeSeason === 'short_rains'
@@ -1060,6 +1105,49 @@ export default function MapPanel({
     const b = drawnKey ? drawnKey.split(',').map(Number) : null
     showAssistantArea(m, b ? [[b[0], b[1]], [b[2], b[3]]] : null)
   }, [drawnKey, mapReady])
+  // farm boundaries: the outline being drawn (corners as [lon, lat])
+  const farmDrawRef = useRef({ on: false, pts: [], done: null })
+  const [farmPts, setFarmPts] = useState(0)
+  const finishFarm = () => {
+    const d = farmDrawRef.current
+    if (d.pts.length < 3) return
+    const ring = [...d.pts, d.pts[0]]
+    d.pts = []; setFarmPts(0)
+    if (mapRef.current) showFarmDraft(mapRef.current, [])
+    if (d.done) d.done(ring)
+  }
+  const undoFarm = () => {
+    const d = farmDrawRef.current
+    d.pts = d.pts.slice(0, -1); setFarmPts(d.pts.length)
+    if (mapRef.current) showFarmDraft(mapRef.current, d.pts)
+  }
+  useEffect(() => {
+    const d = farmDrawRef.current
+    d.on = farmDraw; d.done = onFarmDrawn; d.pts = []; setFarmPts(0)
+    const m = mapRef.current
+    if (!m) return
+    showFarmDraft(m, [])
+    try { if (farmDraw) m.doubleClickZoom.disable(); else m.doubleClickZoom.enable() } catch (_) { /* map rebuilding */ }
+    if (!farmDraw) return
+    const onKey = e => { if (e.key === 'Escape' && onFarmDrawCancel) onFarmDrawCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [farmDraw, onFarmDrawn, onFarmDrawCancel])
+  const farmGeomKey = farm ? JSON.stringify(farm.geometry) : ''
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady) return
+    showFarm(m, farm?.geometry ?? null, farm?.cells)
+    showFarmDraft(m, farmDrawRef.current.pts)
+  }, [farmGeomKey, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
+  // zoom to the farm when it is selected (focus changes), not on every redraw
+  const farmFocus = farm?.focus ?? null
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady || !farmFocus || !farm?.bounds) return
+    const [w, s, e, n] = farm.bounds
+    try { m.fitBounds([[w, s], [e, n]], { padding: 60, maxZoom: 16, duration: 600 }) } catch (_) { /* map rebuilding */ }
+  }, [farmFocus, mapReady])   // eslint-disable-line react-hooks/exhaustive-deps
   const [basemapId,  setBasemapId]   = useState(darkMode?'dark':'light')
   const [showBasemaps, setShowBasemaps] = useState(false)
   const basemapRef   = useRef(basemapId)
@@ -1243,7 +1331,7 @@ export default function MapPanel({
       map=new mapboxgl.Map({
         container:mapContainer.current,
         style:initialStyle,
-        center:[37.9,0.0],zoom:5.4,minZoom:3,maxZoom:12
+        center:[37.9,0.0],zoom:5.4,minZoom:3,maxZoom:17   // 17: close enough to draw a farm
       })
       map.on('error', e => {
         if (e?.error instanceof mapboxgl.GPUInitializationError) { console.error('[Map] graphics error:', e.error); setMapFailure('unsupported') }
@@ -1280,6 +1368,18 @@ export default function MapPanel({
     })
 
     const handleMapClick = (e) => {
+      // farm boundaries: drawing a farm takes the clicks (a click on the first corner closes the outline)
+      if (farmDrawRef.current.on) {
+        const d = farmDrawRef.current
+        const p = [e.lngLat.lng, e.lngLat.lat]
+        const px = q => map.project(q)
+        const near = (q, tol) => { const a = px(q); return Math.hypot(a.x - e.point.x, a.y - e.point.y) <= tol }
+        if (d.pts.length >= 3 && near(d.pts[0], 10)) { finishFarm(); return }
+        if (d.pts.length && near(d.pts[d.pts.length - 1], 4)) return      // the second click of a double-click
+        d.pts = [...d.pts, p]; setFarmPts(d.pts.length)
+        showFarmDraft(map, d.pts)
+        return
+      }
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
       // forecast assistant: drawing an area takes the clicks (first corner, then the opposite corner)
       if (drawRef.current.on) {
@@ -1350,6 +1450,7 @@ export default function MapPanel({
     }
 
     const handleMouseMove = (e) => {
+      if (farmDrawRef.current.on) { map.getCanvas().style.cursor = 'crosshair'; setTooltip(null); return }
       if(!COUNTRY_VIEWS[countryRef.current]?.available) return
 
       // Check farm sites first (only when stations overlay is ON)
@@ -1416,6 +1517,7 @@ export default function MapPanel({
     })
 
     map.on('click', handleMapClick)
+    map.on('dblclick', () => { if (farmDrawRef.current.on) finishFarm() })
     map.on('mousemove', handleMouseMove)
     map.on('mouseleave', handleMouseLeave)
     window.__map = map
@@ -1442,7 +1544,8 @@ export default function MapPanel({
     if(currentStyleRef.current===targetStyle) return   // already correct, don't wipe sources
     currentStyleRef.current=targetStyle
     mapReadyRef.current=false; setMapReady(false); setTooltip(null)
-    map.setStyle(targetStyle)
+    // diff:false: a full reload, which fires style.load (a diffed update does not, and the overlays were lost)
+    map.setStyle(targetStyle,{diff:false})
     map.once('style.load',()=>{
       setupLayers(map,darkRef.current,countryRef.current,()=>{
         mapReadyRef.current=true; setMapReady(true)
@@ -1608,6 +1711,22 @@ export default function MapPanel({
           <div role="status" style={{position:'absolute',top:56,left:'50%',transform:'translateX(-50%)',pointerEvents:'none',background:'var(--bg-elevated)',
                        border:'1px solid var(--info-border)',borderRadius:8,padding:'6px 12px',fontSize:12.5,color:'var(--accent-text)',fontWeight:600}}>
             Click two opposite corners of the area
+          </div>
+        )}
+        {farmDraw && (
+          <div role="status" style={{position:'absolute',top:92,left:'50%',transform:'translateX(-50%)',pointerEvents:'auto',background:'var(--bg-elevated)',
+                       border:'1px solid var(--info-border)',borderRadius:8,padding:'6px 10px',fontSize:12.5,color:'var(--accent-text)',fontWeight:600,
+                       display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:'center',gap:6,maxWidth:'calc(100% - 24px)',boxShadow:'0 4px 14px rgba(0,0,0,0.25)'}}>
+            <span style={{textAlign:'center'}}>
+              {farmPts < 3 ? 'Zoom in and click the corners of your farm' : 'Click the first corner or double-click to finish'}
+              {farmPts > 0 ? ` (${farmPts} corner${farmPts === 1 ? '' : 's'})` : ''}
+            </span>
+            <button type="button" onClick={finishFarm} disabled={farmPts < 3}
+              style={{padding:'3px 10px',borderRadius:6,border:0,background:farmPts < 3 ? 'var(--bg-surface)' : 'var(--btn-primary)',color:farmPts < 3 ? 'var(--text-muted)' : '#fff',fontWeight:600,cursor:farmPts < 3 ? 'default' : 'pointer'}}>Finish</button>
+            <button type="button" onClick={undoFarm} disabled={!farmPts}
+              style={{padding:'3px 10px',borderRadius:6,border:'1px solid var(--border-primary)',background:'var(--bg-surface)',color:'var(--heading)',cursor:farmPts ? 'pointer' : 'default'}}>Undo</button>
+            <button type="button" onClick={() => onFarmDrawCancel && onFarmDrawCancel()}
+              style={{padding:'3px 10px',borderRadius:6,border:'1px solid var(--border-primary)',background:'var(--bg-surface)',color:'var(--heading)',cursor:'pointer'}}>Cancel</button>
           </div>
         )}
 
