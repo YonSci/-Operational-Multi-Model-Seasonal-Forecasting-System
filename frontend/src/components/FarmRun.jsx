@@ -31,7 +31,7 @@ export default function FarmRun({ sim, season }) {
   const box = { border: '1px solid var(--border-primary)', borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4,
                 background: 'var(--bg-elevated)' }
   if (!r) {
-    return <div style={box}><p style={{ margin: 0, fontSize: 13 }}>The first crop run for this sowing arrives after the next daily update (12:30, East Africa Time).</p></div>
+    return <div style={box}><p style={{ margin: 0, fontSize: 13 }}>The first crop run for this sowing arrives after the next daily update (it starts at 19:30, East Africa Time).</p></div>
   }
   if (r.error) {
     return <div style={box}><p style={{ margin: 0, fontSize: 13, color: 'var(--caution-text)' }}>The last crop run could not simulate this farm: {r.error}.</p></div>
