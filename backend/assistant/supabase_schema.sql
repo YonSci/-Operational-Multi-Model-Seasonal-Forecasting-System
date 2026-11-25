@@ -101,3 +101,45 @@ create table if not exists official_outlooks (
   uploaded_by text
 );
 alter table official_outlooks enable row level security;
+
+-- My farms (backend/assistant/farms.py): saved only with the owner's consent; anonymous like watches (only the hash
+-- of each farm's key is stored). Deleting a farm through the API deletes its diary and crop runs.
+create table if not exists farms (
+  id          uuid primary key default gen_random_uuid(),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz,
+  key_hash    text not null,
+  name        text,
+  geometry    jsonb not null,
+  area_ha     double precision,
+  lat         double precision not null,
+  lon         double precision not null,
+  country     text,
+  crop        text,
+  simulate    boolean not null default true
+);
+create index if not exists farms_simulate on farms (simulate);
+alter table farms enable row level security;
+
+-- The farm diary: sowing, irrigation, fertiliser, weeding, pests, crop stage, rain, harvest, costs, notes
+create table if not exists farm_diary (
+  id          uuid primary key default gen_random_uuid(),
+  created_at  timestamptz not null default now(),
+  farm_id     uuid not null references farms (id) on delete cascade,
+  entry_type  text not null,
+  entry_date  date not null,
+  payload     jsonb not null default '{}'::jsonb
+);
+create index if not exists farm_diary_farm on farm_diary (farm_id);
+alter table farm_diary enable row level security;
+
+-- The latest daily farm crop run of each farm (crop_engine on the PC that runs the daily update)
+create table if not exists farm_sims (
+  id          uuid primary key default gen_random_uuid(),
+  created_at  timestamptz not null default now(),
+  farm_id     uuid not null references farms (id) on delete cascade,
+  result      jsonb not null,
+  inputs      jsonb not null
+);
+create index if not exists farm_sims_farm on farm_sims (farm_id);
+alter table farm_sims enable row level security;
