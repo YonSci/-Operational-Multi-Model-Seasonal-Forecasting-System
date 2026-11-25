@@ -331,3 +331,7 @@
   .about-disclosure-body { padding: 14px 12px 4px; }
   .about-explain-card, .about-spec { padding: 16px; }
 }
+
+/* Items in a PopMenu (App.jsx): the assistant row's More tools and the header's My places */
+.menu-item { background: transparent; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--bg-elevated); color: var(--accent-text); }
