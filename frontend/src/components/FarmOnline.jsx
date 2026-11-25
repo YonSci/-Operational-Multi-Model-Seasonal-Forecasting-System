@@ -173,7 +173,7 @@ export default function FarmOnline({ farm, country, onLinked, Simulation }) {
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <input type="checkbox" checked={!!d.farm.simulate} disabled={busy}
                    onChange={e => run(() => api(`/${on.id}/edit`, { method: 'POST', key: on.key, body: { patch: { simulate: e.target.checked } } }).then(refresh))}/>
-            Run the crop models for this farm every day (results the day after a change, from the 12:30 update)
+            Run the crop models for this farm every day (results after the next daily update, which starts at 19:30 East Africa Time)
           </label>
           {Simulation && <Simulation sim={d.simulation} season={d.season} schema={schema}/>}
           <div style={{ fontWeight: 600, color: 'var(--heading)', fontSize: 13, marginTop: 4 }}>Diary</div>
