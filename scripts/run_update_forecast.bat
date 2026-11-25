@@ -1,6 +1,7 @@
 @echo off
 rem Daily refresh of the Kenya Short Rains forecast (CHIRPS observations, SEAS5 re-run, agronomic onset,
-rem ECMWF ENS 1-15 day outlook, site reports). Registered in Windows Task Scheduler as "OND Forecast Update".
+rem ECMWF ENS 1-15 day outlook, site reports). Registered in Windows Task Scheduler as "OND Forecast Update",
+rem daily at 19:30 (from 26 Nov 2026; it was 12:30, when the laptop was often moved and put to sleep mid-run).
 rem
 rem The pull below can rewrite this file, and cmd reads a batch file as it goes: the script first runs from a copy.
 rem (Run without CALL, the copy takes over and this file is not read again.)

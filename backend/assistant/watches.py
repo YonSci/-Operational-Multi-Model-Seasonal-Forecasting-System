@@ -20,6 +20,16 @@ import secrets
 
 from . import advisory, evidence as ev, feedback, narrate, store, tracker
 
+EAT = dt.timezone(dt.timedelta(hours=3))
+UPDATE_AT = dt.time(19, 30)          # the daily update's start (Task Scheduler on the operations PC), East Africa Time
+
+
+def next_update(now=None):
+    """The date of the next daily update, in East Africa Time: today until 19:30, then tomorrow."""
+    now = (now or dt.datetime.now(dt.timezone.utc)).astimezone(EAT)
+    return (now.date() + dt.timedelta(days=0 if now.time() < UPDATE_AT else 1)).isoformat()
+
+
 TABLE = "watches"
 DEFAULTS = {"chance_points": 15, "median_days": 7, "maturity_points": 10, "stale_days": 21,
             "dry_days": 10, "rain_change_mm": 15, "obs_stale_days": 5}
@@ -287,8 +297,7 @@ def calendar(lat, lon, season, model, crop="maize_early", planted="unknown", sow
                                "source": "draft advisory rules", "past": False})
         except Exception:
             pass
-    nxt = (dt.date.today() + dt.timedelta(days=1)).isoformat()
-    add("Next forecast update (daily, after 12:30 EAT)", nxt, None, "update", None, "platform")
+    add("Next forecast update (daily, from 19:30 EAT)", next_update(), None, "update", None, "platform")
     events.sort(key=lambda e: (e["date"] is None, e["date"] or ""))
     rec = {"schema": ev.SCHEMA, "kind": "calendar", "scope": loc["scope"], "season": loc["season"],
            "run": {k: loc["run"][k] for k in ("model", "initialised", "observations_through")},

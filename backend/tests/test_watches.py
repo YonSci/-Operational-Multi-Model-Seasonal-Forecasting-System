@@ -113,3 +113,10 @@ def test_endpoints():
         cal = c.get("/watches/calendar/for", params={"lat": KIBOKO[0], "lon": KIBOKO[1], "model": LATEST}).json()
         assert cal["kind"] == "calendar" and cal["events"]
         assert c.delete(f"/watches/{w['id']}", headers={"X-Watch-Key": w["key"]}).status_code == 200
+
+
+def test_next_update_is_today_until_the_evening_run_then_tomorrow():
+    utc = dt.timezone.utc
+    assert watches.next_update(dt.datetime(2026, 11, 26, 16, 29, tzinfo=utc)) == "2026-11-26"     # 19:29 EAT
+    assert watches.next_update(dt.datetime(2026, 11, 26, 16, 30, tzinfo=utc)) == "2026-11-27"     # 19:30 EAT
+    assert watches.next_update(dt.datetime(2026, 11, 26, 22, 0, tzinfo=utc)) == "2026-11-27"      # 01:00 EAT on the 27th
