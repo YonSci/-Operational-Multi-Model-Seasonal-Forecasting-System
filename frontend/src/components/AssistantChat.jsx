@@ -30,7 +30,8 @@ const CROP_SUGGESTIONS = [
 const KIND_LABEL = { crop: 'Crop outlook', crop_compare: 'Crop comparison', location: 'Place outlook', changes: 'Run comparison', map: 'Map layer', advisory: 'Advisory (draft)',
                      tracker: 'Rainfall tracking', tracker_changes: 'Weather-model runs' }
 
-export default function AssistantChat({ messages, setMessages, context, onClose, onAction }) {
+// seed: { q, n } from the question box in the assistant row; each new n is sent once
+export default function AssistantChat({ messages, setMessages, context, onClose, onAction, seed }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [audience, setAudience] = useState('general')
@@ -41,6 +42,12 @@ export default function AssistantChat({ messages, setMessages, context, onClose,
   const inputRef = useRef(null)
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [messages, busy])
   useEffect(() => { inputRef.current?.focus() }, [])
+  const sentSeed = useRef(null)
+  useEffect(() => {
+    if (!seed?.q || sentSeed.current === seed.n || busy) return
+    sentSeed.current = seed.n
+    send(seed.q)
+  }, [seed?.n, busy])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)

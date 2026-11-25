@@ -11,7 +11,7 @@ import LandingPage from './components/LandingPage'
 import { SHORT_RAINS_INITS, hasModel, latestShortRainsInit } from './shortRainsRuns'
 import { BRAND } from './brand'
 import { version } from '../package.json'
-import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout, SlidersHorizontal } from 'lucide-react'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout, SlidersHorizontal, ChevronDown, MessageCircle, MapPin } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
@@ -1986,30 +1986,85 @@ const ATTENTION_LAYERS = {
   season_shorter: { variable: 'lgp', layer: 'anomaly', tab: 'forecast' },
   no_onset: { variable: 'onset', layer: 'failure', tab: 'probabilistic' },
 }
-// Forecast assistant entry points (components/ExplainPanel.jsx): explain the selected place, what changed since
-// an earlier run, and the map layer on screen
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts, onTools, onFarms }) {
-  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
-              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+// A button that opens a small menu of actions below it; closes on a pick, a click outside or Escape (focus back on the button)
+function PopMenu({ label, title, buttonStyle, className, align = 'left', width = 280, children }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef(null), btn = useRef(null)
+  useEffect(() => {
+    if (!open) return undefined
+    const away = e => { if (box.current && !box.current.contains(e.target)) setOpen(false) }
+    const esc = e => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus() } }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [open])
+  const close = () => setOpen(false)
   return (
-    <div role="group" aria-label="Forecast assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
-      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant:</span>
-      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
-              title="Ask a question about the forecast on screen">Ask the assistant</button>
-      <button type="button" style={b} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this location</button>
-      {canCompare && <button type="button" style={b} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
-      {canMap && <button type="button" style={b} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
-      {canAdvise && <button type="button" style={b} onClick={() => onOpen('advisory')} title="Draft guidance and crop options for one decision at the selected place">Advisory (draft)</button>}
-      <button type="button" style={b} onClick={() => onOpen('chart')} title="What a chart at the selected place shows">Explain a chart</button>
-      {canAreas && <button type="button" style={b} onClick={() => onOpen('area')} title="The outlook over a county, region or drawn area">Explain an area</button>}
-      {canAreas && <button type="button" style={b} onClick={() => onOpen('attention')} title="Counties or regions ranked on one criterion">Areas needing attention</button>}
-      <button type="button" style={b} onClick={onReport} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</button>
-      <button type="button" style={b} onClick={onStudio} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</button>
-      <button type="button" style={b} onClick={onWatches} title="Saved places: did the forecast or the advice change? And the decision calendar">
-        My watches{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
-      <button type="button" style={b} onClick={onFarms} title="Draw or upload your farm's boundary and see the forecasts for the area it lies in">My farms</button>
-      <button type="button" style={b} onClick={onTools} title="Past seasons like this one, season review, learning, scenario planning, official outlooks">More tools</button>
+    <div ref={box} style={{ position: 'relative' }}>
+      <button ref={btn} type="button" className={className} style={buttonStyle} title={title} aria-expanded={open} onClick={() => setOpen(v => !v)}>
+        {label} <ChevronDown size={14} aria-hidden="true"/>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', [align]: 0, zIndex: 60, width, maxWidth: 'calc(100vw - 24px)',
+                      background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 10,
+                      boxShadow: '0 12px 32px rgba(15,23,42,.18)', padding: 8 }}>
+          {children(close)}
+        </div>
+      )}
     </div>
+  )
+}
+const MENU_ITEM = { display: 'block', width: '100%', textAlign: 'left', border: 0, borderRadius: 6, padding: '8px 10px',
+                    fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer', minHeight: 36 }
+const MENU_HEAD = { fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--text-meta)', padding: '6px 10px 2px' }
+function MenuItem({ onClick, title, children }) {
+  return <button type="button" className="menu-item" style={MENU_ITEM} title={title} onClick={onClick}>{children}</button>
+}
+
+// Forecast assistant entry points (components/ExplainPanel.jsx): a question box for the chat, up to three suggestions
+// for the place and map on screen, and the other tools grouped in one menu
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onTools }) {
+  const [q, setQ] = useState('')
+  const chip = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 999,
+                 padding: '0 14px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 38 }
+  const ask = e => { e.preventDefault(); onAsk(q.trim()); setQ('') }
+  return (
+    <section aria-label="Forecast assistant"
+             style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px', padding: '8px 10px',
+                      background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 10 }}>
+      <form onSubmit={ask} role="search" aria-label="Ask the assistant"
+            style={{ flex: '1 1 340px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--info-border)',
+                     borderRadius: 10, padding: '0 4px 0 10px', background: 'var(--bg-surface)' }}>
+        <MessageCircle size={17} aria-hidden="true" style={{ color: 'var(--accent-text)', flexShrink: 0 }}/>
+        <label htmlFor="assistant-q" className="sr-only">Ask about this forecast</label>
+        <input id="assistant-q" value={q} onChange={e => setQ(e.target.value)} maxLength={2000}
+               placeholder={'Ask about the forecast at ' + siteLabel + '...'}
+               style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: 'var(--text-primary)', fontSize: 14.5, minHeight: 40, outlineOffset: 4 }}/>
+        <button type="submit" className="site-btn site-btn-primary" style={{ minHeight: 34, padding: '0 14px', fontSize: 14 }}
+                title="Ask a question about the forecast on screen">Ask</button>
+      </form>
+      <button type="button" style={chip} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this place</button>
+      {canCompare && <button type="button" style={chip} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
+      {canMap && <button type="button" style={chip} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
+      <PopMenu label="More tools" align="right" width={300} className="site-btn site-btn-secondary" buttonStyle={{ minHeight: 38, padding: '0 12px', fontSize: 14 }}
+               title="Explain a chart or an area, draft advice, bulletins, field reports, past seasons and scenarios">
+        {close => (
+          <>
+            <div style={MENU_HEAD}>Explain</div>
+            <MenuItem onClick={() => { close(); onOpen('chart') }} title="What a chart at the selected place shows">Explain a chart</MenuItem>
+            {canAreas && <MenuItem onClick={() => { close(); onOpen('area') }} title="The outlook over a county, region or drawn area">Explain an area</MenuItem>}
+            {canAreas && <MenuItem onClick={() => { close(); onOpen('attention') }} title="Counties or regions ranked on one criterion">Areas needing attention</MenuItem>}
+            <div style={MENU_HEAD}>Act</div>
+            {canAdvise && <MenuItem onClick={() => { close(); onOpen('advisory') }} title="Draft guidance and crop options for one decision at the selected place">Advisory (draft)</MenuItem>}
+            <MenuItem onClick={() => { close(); onStudio() }} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</MenuItem>
+            <MenuItem onClick={() => { close(); onReport() }} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</MenuItem>
+            <div style={MENU_HEAD}>Plan and learn</div>
+            <MenuItem onClick={() => { close(); onTools() }} title="Past seasons like this one, season review, learning, scenario planning, official outlooks">
+              Past seasons, scenarios and more</MenuItem>
+          </>
+        )}
+      </PopMenu>
+    </section>
   )
 }
 
@@ -2535,7 +2590,7 @@ const TABS = [
 // Tabs that take the full width (no map panel beside them)
 const FULL_PAGE_TABS = ['about', 'tracker', 'crop']
 
-function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, forecastType, setForecastType, frRuns, joinedModels, joinedModel, setJoinedModel, frList, frSel, setFcRun, darkMode, setDarkMode, onLogoClick, onOpenBulletin }) {
+function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, modelsData, country, setCountry, selectedSeason, onSeasonChange, selectedModel, setSelectedModel, selectedYear, setSelectedYear, selectedInit, setSelectedInit, onsetDef, setOnsetDef, forecastType, setForecastType, frRuns, joinedModels, joinedModel, setJoinedModel, frList, frSel, setFcRun, darkMode, setDarkMode, onLogoClick, onOpenBulletin, onFarms, onWatches, watchAlerts }) {
   const isSingleModelSeason = selectedSeason === 'short_rains' || selectedSeason === 'kiremt' || selectedSeason === 'fmam' || selectedSeason === 'belg' || selectedSeason === 'bega' || selectedSeason === 'ondj' || selectedSeason === 'deyr'
   const modelNames = isSingleModelSeason
     ? ['ECMWF SEAS5']
@@ -2586,13 +2641,24 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
             <span aria-hidden="true" style={{width:8,height:8,borderRadius:'50%',background:status==='online'?'var(--ok-text)':status==='offline'?'var(--bad-text)':'var(--text-meta)'}}/>
             {status === 'online' ? 'Data service online' : status === 'offline' ? 'Data service offline' : 'Connecting…'}
           </span>
+          <PopMenu label={<><MapPin size={16} aria-hidden="true"/> My places{watchAlerts ? ` (${watchAlerts})` : ''}</>} align="right" width={300}
+                   className="site-btn site-btn-secondary" buttonStyle={{minHeight:40,padding:'0 14px',fontSize:14}}
+                   title="Your farms and the places you watch">
+            {close => (
+              <>
+                <MenuItem onClick={() => { close(); onFarms() }} title="Draw or upload your farm's boundary and see the forecasts for the area it lies in">My farms</MenuItem>
+                <MenuItem onClick={() => { close(); onWatches() }} title="Saved places: did the forecast or the advice change? And the decision calendar">
+                  My watches{watchAlerts ? ` (${watchAlerts} changed)` : ''}</MenuItem>
+              </>
+            )}
+          </PopMenu>
           <button type="button" onClick={onOpenBulletin} className="site-btn site-btn-secondary" style={{minHeight:40,padding:'0 14px',fontSize:14}}
                   title="Download the forecast bulletin for the selected location (PDF or PNG)">
             <FileDown size={16} aria-hidden="true"/> Download bulletin
           </button>
-          <button type="button" onClick={()=>setDarkMode(d=>!d)} className="site-btn site-btn-quiet">
+          <button type="button" onClick={()=>setDarkMode(d=>!d)} className="site-btn site-btn-quiet" aria-label={darkMode ? 'Light mode' : 'Dark mode'}>
             {darkMode ? <Sun size={16} aria-hidden="true"/> : <Moon size={16} aria-hidden="true"/>}
-            {darkMode ? 'Light mode' : 'Dark mode'}
+            <span className="hidden sm:inline" aria-hidden="true">{darkMode ? 'Light mode' : 'Dark mode'}</span>
           </button>
         </div>
       </div>
@@ -2991,6 +3057,7 @@ export default function App() {
   // place, run, method and map layer, so the panel updates when they change
   const [explain, setExplain] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const [chatSeed, setChatSeed] = useState(null)   // a question typed in the assistant row, sent when the chat opens
   const [reportOpen, setReportOpen] = useState(false)
   const [studioOpen, setStudioOpen] = useState(false)
   const [watchOpen, setWatchOpen] = useState(false)
@@ -3126,6 +3193,10 @@ export default function App() {
               joinedModels={isMedium ? mrfChoices : S2S_MODELS} joinedModel={isMedium ? mrfModel : s2sModel}
               setJoinedModel={isMedium ? setMrfModel : setS2sModel}
               onOpenBulletin={()=>setBulletinModalOpen(true)}
+              watchAlerts={watchAlerts}
+              onWatches={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setToolsOpen(false); setWatchOpen(true) }}
+              onFarms={() => { if (FULL_PAGE_TABS.includes(activeTab)) setActiveTab('forecast')
+                               setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(false); setFarmsOpen(true) }}
               darkMode={darkMode} setDarkMode={setDarkMode}/>
 
       {/* Mobile/Tablet View Switcher Bar */}
@@ -3207,13 +3278,10 @@ export default function App() {
                                                     canMap={mapLayer.variable !== 'mrf'} canAdvise={country === 'kenya' && selectedSeason === 'short_rains'}
                                                     canAreas={!!effectiveModel}
                                                     onOpen={kind => { setFarmsOpen(false); setChatOpen(false); setReportOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
-                                                    onAsk={() => { setFarmsOpen(false); setExplain(null); setReportOpen(false); setChatOpen(true) }}
+                                                    onAsk={q => { setFarmsOpen(false); setExplain(null); setReportOpen(false); if (q) setChatSeed(c => ({ q, n: (c?.n ?? 0) + 1 })); setChatOpen(true) }}
                                                     onReport={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setStudioOpen(false); setWatchOpen(false); setReportOpen(true) }}
                                                     onStudio={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(false); setStudioOpen(true) }}
-                                                    onWatches={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}
-                                                    watchAlerts={watchAlerts}
-                                                    onTools={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(true) }}
-                                                    onFarms={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(false); setFarmsOpen(true) }}/></div>
+                                                    onTools={() => { setFarmsOpen(false); setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(false); setToolsOpen(true) }}/></div>
            )}
            <div className="flex-1 min-h-0">
            <ErrorBoundary name={'Tab ' + activeTab} resetKey={[activeTab, forecastType, mrfModel, s2sModel, fcRun, country, selectedSeason, selectedInit, onsetDef, selectedSite?.lat, selectedSite?.lon, mapLayer.variable, mapLayer.layer].join('|')}>
@@ -3297,7 +3365,7 @@ export default function App() {
                                                                                                           decision: 'establishment', planted: 'yes', crop, sowing_date })) }}/>
       )}
       {chatOpen && (
-        <AssistantChat messages={chatMessages} setMessages={setChatMessages} onClose={() => setChatOpen(false)}
+        <AssistantChat messages={chatMessages} setMessages={setChatMessages} onClose={() => setChatOpen(false)} seed={chatSeed}
                        context={onCrop && cropSel
                          ? { page: 'crop', crop_site: cropSel.site_id, crop_variety: cropSel.variety, crop_rule: cropSel.rule, crop_run: cropSel.run_id,
                              lat: cropSel.lat, lon: cropSel.lon, season: 'short_rains', model: effectiveModel, site_name: cropSel.site_name }
