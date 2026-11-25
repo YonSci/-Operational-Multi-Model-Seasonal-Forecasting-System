@@ -735,7 +735,7 @@ export function CropSkillPanel({ selectedSite, onOpen }) {
 }
 
 // ── The Forecast tab's card: the crop outlook at (or nearest to) the location on the map, and a way there ──────────
-export function CropSiteLink({ selectedSite, onsetDef, onOpen }) {
+export function CropSiteLink({ selectedSite, onsetDef, onOpen, variant = 'line' }) {
   const idx = useQuery({ queryKey: ['crop-index'], queryFn: () => getJSON(DATA + 'index.json'), staleTime: 30 * 60_000, retry: false })
   const ix = idx.data
   if (!ix || !selectedSite || !Number.isFinite(+selectedSite.lat)) return null
@@ -747,6 +747,40 @@ export function CropSiteLink({ selectedSite, onsetDef, onOpen }) {
   const vk = ix.varieties?.maize_early ? 'maize_early' : Object.keys(ix.varieties ?? {})[0]
   const sm = ix.summaries?.[run?.id]?.[near.id]?.[vk]?.[rk], w = ix.wofost?.[run?.id]?.[near.id]?.[vk]?.[rk]
   const here = near.d <= LINK_KM
+  if (variant === 'tile') {
+    const ag = agreementOf(sm, w)
+    return (
+      <article aria-label="Crop outlook"
+               style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 10, padding: '10px 14px',
+                        display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-meta)' }}>
+          Crop{sm ? ` \u00b7 ${ix.varieties[vk].label.toLowerCase()}` : ''}
+        </div>
+        {sm ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '2px 10px' }}>
+              <span style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.15, color: 'var(--heading)' }}>
+                {sm.yield_if_sown_t_ha ? `${fmtT(sm.yield_if_sown_t_ha.median)} t/ha` : '--'}
+              </span>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-secondary)' }}>{pct(sm.p_failure_if_sown)} chance of failure</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-meta)', lineHeight: 1.45 }}>
+              If sown by {ix.planting_rules[rk]}{w?.yield_if_sown_t_ha ? ` \u00b7 WOFOST ${fmtT(w.yield_if_sown_t_ha.median)} t/ha` : ''}
+              {ag ? ` \u00b7 ${ag.label.charAt(0).toLowerCase() + ag.label.slice(1)}` : ''}
+              {here ? '' : ` \u00b7 nearest crop site ${site.name}, ${Math.round(near.d)} km away`}
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 13.5, color: 'var(--text-meta)' }}>Not available for {site.name} yet.</div>
+        )}
+        <button type="button" onClick={() => onOpen({ lat: site.lat, lon: site.lon, site_name: site.name })}
+                style={{ marginTop: 'auto', alignSelf: 'flex-start', background: 'none', border: 0, padding: '4px 0', color: 'var(--accent-text)',
+                         fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 32 }}>
+          Open the Crop outlook &rarr;
+        </button>
+      </article>
+    )
+  }
   return (
     <div role="note" className="flex flex-wrap items-center gap-x-4 gap-y-2"
          style={{ margin: '0 0 10px', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 10,
