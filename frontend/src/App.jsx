@@ -11,7 +11,7 @@ import LandingPage from './components/LandingPage'
 import { SHORT_RAINS_INITS, hasModel, latestShortRainsInit } from './shortRainsRuns'
 import { BRAND } from './brand'
 import { version } from '../package.json'
-import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout } from 'lucide-react'
+import { BarChart3, Percent, Layers, ShieldCheck, History as HistoryIcon, Satellite, Info, FileDown, Sun, Moon, Sprout, SlidersHorizontal } from 'lucide-react'
 import BulletinModal from './components/BulletinModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import AboutTab from './components/AboutTab'
@@ -2545,6 +2545,30 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
   const selStyle = FILTER_SELECT
   const lbl = FILTER_LABEL
   const status = health?.status === 'ok' ? 'online' : healthError ? 'offline' : 'connecting'
+  // Short Rains runs and onset methods: each method lists the runs that have it; the selected method falls back to
+  // Dunning when the selected run lacks it (FAO: Oct runs only). Shared by the Method picker and the summary line.
+  const srInits = SHORT_RAINS_INITS.filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model)))
+  const runsWith = d => d.id === 'dunning' ? srInits : srInits.filter(i => hasModel(modelsData, shortRainsModel(i.init, d.id)))
+  const hereDef = d => runsWith(d).some(i => i.init === selectedInit)
+  const availDefs = ONSET_DEFS.filter(d => runsWith(d).length)
+  const curDef = availDefs.find(d => d.id === onsetDef && hereDef(d)) ?? ONSET_DEFS[0]
+  // Forecast tab: the settings collapse into one summary line; "Change" shows the controls
+  const [showSettings, setShowSettings] = useState(false)
+  const collapsible = activeTab === 'forecast'
+  const defName = d => (d.group ? `${d.label} (${d.defLabel})` : d.label)
+  const summary = !collapsible ? [] : forecastType !== 'seasonal'
+    ? [country === 'ethiopia' ? 'Ethiopia' : 'Kenya',
+       FORECAST_TYPES.find(t => t.id === forecastType)?.label,
+       (joinedModels?.find(x => x.id === joinedModel) ?? joinedModels?.[0])?.label,
+       frSel?.run ? `Run: ${fmtDate(frSel.run)}` : null,
+       `Method: ${defName(ONSET_DEFS.find(d => d.id === onsetDef) ?? ONSET_DEFS[0])}`]
+    : [country === 'ethiopia' ? 'Ethiopia' : 'Kenya',
+       typeOptions.length > 1 ? 'Seasonal' : null,
+       selectedModel,
+       `${(SEASONS[country] ?? SEASONS.kenya).find(s => s.id === selectedSeason)?.label ?? selectedSeason} ${selectedYear}`,
+       `Run: ${INIT_LABELS[selectedInit] ?? selectedInit}`,
+       selectedSeason === 'short_rains' && setOnsetDef && availDefs.length > 1 ? `Method: ${defName(curDef)}` : null]
+  const summaryParts = summary.filter(Boolean)
 
   return (
     <header className="t-header shrink-0">
@@ -2573,8 +2597,28 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
         </div>
       </div>
 
-      {/* Responsive Filter Toolbar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-6 bg-[var(--bg-sunken)] border-t border-[var(--border-primary)]">
+      {/* Forecast tab: what is on screen in one line, and the button that shows the settings */}
+      {collapsible && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-6 bg-[var(--bg-sunken)] border-t border-[var(--border-primary)]">
+          <p aria-label="Forecast shown" style={{margin:0, flex:'1 1 420px', minWidth:0, fontSize:14.5, lineHeight:1.5, color:'var(--text-primary)'}}>
+            {summaryParts.map((p, i) => (
+              <Fragment key={i}>
+                {i > 0 && <span aria-hidden="true" style={{color:'var(--text-meta)', margin:'0 8px'}}>&middot;</span>}
+                <span style={i === 0 ? {fontWeight:600, color:'var(--heading)'} : undefined}>{p}</span>
+              </Fragment>
+            ))}
+          </p>
+          <button type="button" onClick={() => setShowSettings(v => !v)} aria-expanded={showSettings} aria-controls="forecast-settings"
+                  className="site-btn site-btn-secondary" style={{minHeight:40, padding:'0 14px', fontSize:14}}
+                  title="Country, kind of forecast, model, season, year, forecast run and method">
+            <SlidersHorizontal size={16} aria-hidden="true"/> {showSettings ? 'Done' : 'Change'}
+          </button>
+        </div>
+      )}
+
+      {/* Responsive Filter Toolbar (Forecast tab: shown by "Change") */}
+      {(!collapsible || showSettings) && (
+      <div id="forecast-settings" className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-6 bg-[var(--bg-sunken)] border-t border-[var(--border-primary)]">
         <div className="flex items-center gap-2">
           <label style={lbl}>Country</label>
           <select value={country} onChange={e=>setCountry(e.target.value)} style={selStyle}>
@@ -2624,11 +2668,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
                 {setOnsetDef && (()=>{
                   // Every method run for any init is listed; one the selected init lacks (FAO: Oct runs only) names the
                   // runs that have it, and picking it switches to the latest of them
-                  const inits = SHORT_RAINS_INITS.filter(i => !i.experimental && (i.init === '0901' || hasModel(modelsData, i.model)))
-                  const runsWith = d => d.id === 'dunning' ? inits : inits.filter(i => hasModel(modelsData, shortRainsModel(i.init, d.id)))
-                  const here = d => runsWith(d).some(i => i.init === selectedInit)
-                  const avail = ONSET_DEFS.filter(d => runsWith(d).length)
-                  const cur = avail.find(d => d.id === onsetDef && here(d)) ?? ONSET_DEFS[0]
+                  const here = hereDef, avail = availDefs, cur = curDef
                   const methods = avail.filter((d, i) => !d.group || avail.findIndex(x => x.group === d.group) === i)
                   const defs = cur.group ? avail.filter(d => d.group === cur.group && here(d)) : []
                   const pick = id => {
@@ -2667,6 +2707,7 @@ function TopNav({ activeTab, setActiveTab, health, healthLoading, healthError, m
           </div>
         )}
       </div>
+      )}
 
       {/* Modern Tabs Navigation Bar */}
       <div
