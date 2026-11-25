@@ -18,7 +18,11 @@ def _run(monkeypatch, sources, fail=()):
         src = cmd[cmd.index("--sources") + 1] if "--sources" in cmd else None
         return types.SimpleNamespace(returncode=1 if src in fail else 0, stdout="", stderr="")
 
+    def fake_until(cmd, env, end):
+        return fake_run(cmd).returncode
+
     monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(run_all, "run_until", fake_until)
     monkeypatch.setattr(run_all.dashboard, "write_index", lambda: None)
     monkeypatch.setattr(run_all.dashboard, "write", lambda: None)
     monkeypatch.setattr(sys, "argv", ["run_all", "--minutes", "240"])
