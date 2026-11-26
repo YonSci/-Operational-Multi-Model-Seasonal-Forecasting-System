@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { ArrowRight, Sun, Moon, CalendarRange, CloudRain, Sprout, BookOpen, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Sun, Moon, CalendarRange, CloudRain, Sprout, BookOpen, ShieldCheck, Wheat, Users, Landmark, HeartHandshake,
+         RadioTower, FlaskConical } from 'lucide-react'
 import { version } from '../../package.json'
 import { useHealth, useModels, usePixelStats } from '../api/queries'
 import { BRAND } from '../brand'
 import { latestShortRainsInit } from '../shortRainsRuns'
 
-// Landing page: the product's identity, one live example, and three ways in (forecasts, rainfall tracking, crop
-// outlooks). Navigation uses real links to dashboard addresses, so they open in a new tab too; an address that names
+// Landing page: the product's identity, one live example, who it is for, three ways in (forecasts, rainfall tracking,
+// crop outlooks), every tool with its status, how it is used, and where the numbers come from. Navigation uses real links to dashboard addresses, so they open in a new tab too; an address that names
 // no run opens the newest published run, the one the preview shows.
 const ADDR = {
   forecast: '#/forecast?country=kenya&season=short_rains',
@@ -47,6 +48,66 @@ const PRINCIPLES = [
   'A forecast date summarises a range of possible outcomes; read it with that range and the chances.',
   'Different methods answer different questions, so their dates can differ.',
   'Forecast skill varies by location, season and method: check it before relying on a forecast.',
+]
+
+// Who the platform is for: what each group gets, and where to start
+const AUDIENCES = [
+  { Icon: Wheat, who: 'Farmers and farmer groups', to: ADDR.crop, start: 'Crop outlooks',
+    gets: 'When the rains may start and end where you farm, how long the season may last, and what a crop might yield if sown by the rule.' },
+  { Icon: Users, who: 'Extension officers and advisors', to: ADDR.forecast, start: 'Forecasts and the assistant',
+    gets: 'The outlook for a place explained in plain words, draft advice for one decision, and a bulletin you can check and share.' },
+  { Icon: Landmark, who: 'County and national planners', to: ADDR.validation, start: 'Forecast performance',
+    gets: 'Which counties or regions need attention this season, and how well the forecasts have done there before.' },
+  { Icon: HeartHandshake, who: 'Humanitarian and development programmes', to: ADDR.probabilistic, start: 'Probabilities',
+    gets: 'The chance of a late start or a short season, early enough to prepare, and alerts when the outlook for a place changes.' },
+  { Icon: RadioTower, who: 'Meteorological services and climate centres', to: ADDR.multimodel, start: 'Compare models',
+    gets: 'Seasonal forecast systems and ways of timing the season side by side, checked against past seasons and official outlooks.' },
+  { Icon: FlaskConical, who: 'Researchers', about: 'methods', start: 'Data and methods',
+    gets: 'Hindcasts, method and crop-model comparisons, documented methods, and a citation for your work.' },
+]
+
+// What can be used today, with an honest status for each
+const STATUS_CLASS = { 'Available': 'ok', 'New': 'info', 'Experimental': 'exp', 'Draft': 'exp', 'Coming soon': 'neutral' }
+const TOOL_GROUPS = [
+  { head: 'Forecasts and observations', items: [
+    ['Seasonal forecasts', 'Available', 'When the rains start and end, season length and the chances of each, for every season in Kenya and Ethiopia.'],
+    ['Sub-seasonal and medium-range', 'Available', 'The next 7\u201316 days and weeks 2\u20136, joined to the seasonal forecast. Kenya Short Rains, a new run each day.'],
+    ['Rainfall tracking', 'Available', 'Rain so far from five satellite products at monitored sites, updated daily. Kenya Short Rains.'],
+    ['Forecast performance', 'Available', 'How well past forecasts did for each place, season and method.'],
+  ] },
+  { head: 'Explain and share', items: [
+    ['Forecast assistant', 'Available', 'Ask a question, or have a place, a map or a chart explained, using the numbers of the forecast on screen.'],
+    ['Bulletins', 'Available', 'Download a bulletin for a place, or compose, check and export one in Bulletin Studio: Word, PDF, SMS or an audio script.'],
+    ['Watches', 'Available', 'Save a place and see when its forecast or advice changes. Anonymous: the key stays in your browser.'],
+    ['Field reports', 'Available', 'Report sowing, rain, crop stage or harvest. Reports stay unverified until a reviewer checks them.'],
+  ] },
+  { head: 'Crops and farms', items: [
+    ['Crop outlooks', 'Experimental', 'Maize, sorghum and bean at monitored Kenyan sites with AquaCrop, WOFOST and DSSAT. Not yet verified against observed yields.'],
+    ['Advisory', 'Draft', 'Draft guidance and crop options for one decision at a place, to check with a local adviser.'],
+    ['My farms', 'New', 'Draw or upload a farm boundary, then see the forecast cells it overlaps and a recent satellite view. Kept in your browser.'],
+    ['Farm diary and farm crop runs', 'Coming soon', 'Record what was done on the farm, and see crop runs for your own field the day after.'],
+  ] },
+]
+
+// How people use it, in order
+const STEPS = [
+  ['Check the outlook', 'When the rains may start and end, how long the season may last, and the chance of each outcome.'],
+  ['Check the skill', 'How well the forecasts did at that place before, so you know how far to rely on them.'],
+  ['Follow the season', 'Observed rain and the next 16 days, updated each evening as new data arrive.'],
+  ['Decide and share', 'Draft advice, a bulletin for your audience, and a watch that flags when the outlook changes.'],
+  ['Report back', 'Field reports record what really happened and help check the forecasts.'],
+]
+
+// Where the numbers come from
+const EVIDENCE = [
+  ['Seasonal forecasts', 'ECMWF SEAS5 and other Copernicus (C3S) seasonal systems, bias-corrected against observed rainfall'],
+  ['Weather forecasts', 'ECMWF medium-range and extended-range ensembles, joined to the seasonal run'],
+  ['Observed rainfall', 'CHIRPS, ARC2, TAMSAT, PDIR-Now and IMERG satellite estimates'],
+  ['Normal conditions', 'The middle third of past seasons (1993\u20132016 for most seasons)'],
+  ['Grid', '0.25\u00b0 cells, about 28 km across'],
+  ['Crop models', 'AquaCrop, WOFOST and DSSAT, grown in every forecast member'],
+  ['Farm imagery', 'Sentinel-2 satellite images (10 m)'],
+  ['Updates', 'Each evening, East Africa Time, as new observations and forecast runs arrive'],
 ]
 
 // ---- helpers ------------------------------------------------------------------------------------------------------
@@ -252,6 +313,7 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
             <AppLink to={ADDR.forecast} open={open}>Forecasts</AppLink>
             <AppLink to={ADDR.tracker} open={open}>Rainfall tracking</AppLink>
             <AppLink to={ADDR.crop} open={open}>Crop outlooks</AppLink>
+            <button type="button" onClick={() => document.getElementById('lp-who')?.scrollIntoView({ behavior: 'smooth' })}>Who it is for</button>
             <AppLink to={ADDR.about} open={open}>About</AppLink>
           </nav>
           <div className="lp-header-actions">
@@ -295,6 +357,24 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
           </div>
         </section>
 
+        <section id="lp-who" className="lp-section site-container" aria-labelledby="lp-who-h">
+          <p className="site-eyebrow">Who it is for</p>
+          <h2 id="lp-who-h">From one farm to national planning</h2>
+          <p className="lp-sub">The same forecasts, explained for the decisions each group makes.</p>
+          <ul className="lp-who">
+            {AUDIENCES.map(({ Icon, who, gets, to, about, start }) => (
+              <li key={who} className="lp-who-card">
+                <span className="lp-task-icon"><Icon size={20} aria-hidden="true"/></span>
+                <h3>{who}</h3>
+                <p>{gets}</p>
+                {to
+                  ? <AppLink to={to} open={open} className="lp-link">{start} <ArrowRight size={16} aria-hidden="true"/></AppLink>
+                  : <button type="button" className="lp-link lp-inline-btn" onClick={() => onEnter('about', { section: about })}>{start} <ArrowRight size={16} aria-hidden="true"/></button>}
+              </li>
+            ))}
+          </ul>
+        </section>
+
         <section className="lp-section site-container" aria-labelledby="lp-tasks">
           <h2 id="lp-tasks">Where to start</h2>
           <ul className="lp-tasks">
@@ -323,6 +403,44 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
               <p className="lp-task-label"><span className="lp-badge lp-badge-exp">Experimental</span> Monitored Kenyan sites</p>
             </li>
           </ul>
+        </section>
+
+        <section className="lp-section site-container" aria-labelledby="lp-today">
+          <p className="site-eyebrow">What you can use today</p>
+          <h2 id="lp-today">Every tool, and how ready it is</h2>
+          <p className="lp-sub">Experimental and draft products are labelled wherever they appear.</p>
+          <div className="lp-tools">
+            {TOOL_GROUPS.map(g => (
+              <div key={g.head}>
+                <h3 className="lp-tools-h">{g.head}</h3>
+                <ul className="lp-tool-list">
+                  {g.items.map(([name, status, text]) => (
+                    <li key={name} className="lp-tool">
+                      <div className="lp-tool-head">
+                        <span className="lp-tool-name">{name}</span>
+                        <span className={`lp-badge lp-badge-${STATUS_CLASS[status]}`}>{status}</span>
+                      </div>
+                      <p>{text}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="lp-section site-container" aria-labelledby="lp-how">
+          <p className="site-eyebrow">How it works</p>
+          <h2 id="lp-how">From the outlook to the field, and back</h2>
+          <ol className="lp-steps">
+            {STEPS.map(([h, text], i) => (
+              <li key={h} className="lp-step">
+                <span className="lp-step-n" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+                <h3>{h}</h3>
+                <p>{text}</p>
+              </li>
+            ))}
+          </ol>
         </section>
 
         <section className="lp-section site-container" aria-labelledby="lp-coverage">
@@ -365,6 +483,24 @@ export default function LandingPage({ onEnter, onOpenAddress, darkMode, setDarkM
               </p>
             </div>
           </div>
+        </section>
+
+        <section className="lp-section site-container" aria-labelledby="lp-evidence">
+          <p className="site-eyebrow">Data and evidence</p>
+          <h2 id="lp-evidence">Where the numbers come from</h2>
+          <dl className="lp-coverage">
+            {EVIDENCE.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          </dl>
+          <p className="lp-caveat">
+            Forecasts give chances, not certainties, and their skill differs by place, season and method. Decisions stay with farmers
+            and the people who advise them.
+          </p>
+          <p className="lp-more">
+            <AppLink to={ADDR.validation} open={open} className="lp-inline"><ShieldCheck size={16} aria-hidden="true"/> Forecast performance</AppLink>
+            <button type="button" className="lp-inline lp-inline-btn" onClick={() => onEnter('about', { section: 'data' })}>
+              <BookOpen size={16} aria-hidden="true"/> Data and methods
+            </button>
+          </p>
         </section>
 
         <section className="lp-section site-container lp-closing" aria-labelledby="lp-closing">
