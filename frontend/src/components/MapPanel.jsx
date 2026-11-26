@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { Fragment, useEffect, useRef, useState, useMemo } from 'react'
 import * as mapboxgl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { CloudRain, MapPin, Layers, ChevronDown, Map as MapIcon } from 'lucide-react'
 import useDashboardStore from '../store/useDashboardStore'
 import DiagnosticAgreementModal, { AUDITED_20_SITES_ETHIOPIA } from './DiagnosticAgreementModal'
+
+// Layer picker: panel, column heads, row names (readable sizes; the lists used 8-9 px text before)
+const PICK_PANEL = { marginTop: 4, borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.35)', background: 'var(--bg-elevated)',
+                     border: '1px solid var(--border-primary)', padding: 12, minWidth: 300, maxWidth: 'calc(100vw - 40px)', overflowX: 'auto' }
+const PICK_HEAD = { fontSize: 12, fontWeight: 700, color: 'var(--accent-text)', textAlign: 'center', padding: '2px 0' }
+const PICK_ROW = { fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', paddingLeft: 2 }
+const PICK_ROWS = ['Onset', 'Cessation', 'Season length']
 
 if (typeof mapboxgl.setWorkerUrl === 'function') {
   mapboxgl.setWorkerUrl(workerUrl)
@@ -1311,44 +1318,33 @@ export default function MapPanel({
   }
   // the Sub-seasonal view's list has no rainfall terciles: leave that layer for the list's first
   useEffect(() => { if (!ALL_LAYERS.some(l => l.id === activeLayer)) handleLayerChange(ALL_LAYERS[0].id) }, [joinedRun])
-  // onset / cessation / season length by median and anomaly (default and medium-range layer lists)
-  const seasonGrid = () => (
-    <>
-      <div style={{display:'grid',gridTemplateColumns:'80px 1fr 1fr',gap:3,marginBottom:4}}>
-        <div/>
-        {['Median','Anomaly'].map(g=>(
-
-          <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
-                               letterSpacing:'0.08em',color:'var(--accent-blue)',
-                               textAlign:'center',padding:'2px 0'}}>{g}</div>
-        ))}
-      </div>
-      {[
-        {row:'Onset',      ids:['onset_med','onset_anom']},
-        {row:'Cessation',  ids:['cess_med','cess_anom']},
-        {row:'Season Len', ids:['lgp_med','lgp_anom']},
-      ].map(({row,ids})=>(
-        <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr',gap:4,marginBottom:4}}>
-          <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
-                       paddingLeft:2,fontWeight:600}}>{row}</div>
-          {ids.map(id=>{
-            const l=ALL_LAYERS.find(x=>x.id===id)
-            if(!l) return <div key={id}/>
-            const active=l.id===activeLayer
-            return (
-              <button key={id} onClick={()=>handleLayerChange(id)}
-                style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
-                        textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                        background:active?'var(--accent-blue)':'var(--bg-surface)',
-                        color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                {l.group?.slice(0,3)??id}
-              </button>
-            )
-          })}
-        </div>
+  // one layer button; a grid of them with the onset / cessation / season length rows
+  const pickBtn = (l, extra, text) => {
+    const active = l.id === activeLayer
+    return (
+      <button key={l.id} type="button" onClick={() => handleLayerChange(l.id)} aria-pressed={active} title={l.label}
+        style={{minHeight:34, padding:'6px 6px', borderRadius:6, fontSize:13, cursor:'pointer', textAlign:'center',
+                border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
+                background:active?'var(--accent-blue)':'var(--bg-surface)',
+                color:active?'#fff':'var(--text-primary)', fontWeight:active?700:500, ...extra}}>
+        {text ?? l.group ?? l.label}
+      </button>
+    )
+  }
+  const layerGrid = (heads, rows, list) => (
+    <div style={{display:'grid', gridTemplateColumns:`96px repeat(${heads.length}, minmax(58px, 1fr))`, gap:5}}>
+      <div/>
+      {heads.map(g => <div key={g} style={PICK_HEAD}>{g}</div>)}
+      {rows.map((ids, r) => (
+        <Fragment key={PICK_ROWS[r]}>
+          <div style={PICK_ROW}>{PICK_ROWS[r]}</div>
+          {ids.map(id => { const l = list.find(x => x.id === id); return l ? pickBtn(l) : <div key={id}/> })}
+        </Fragment>
       ))}
-    </>
+    </div>
   )
+  // onset / cessation / season length by median and anomaly (default and medium-range layer lists)
+  const seasonGrid = () => layerGrid(['Median', 'Anomaly'], [['onset_med', 'onset_anom'], ['cess_med', 'cess_anom'], ['lgp_med', 'lgp_anom']], ALL_LAYERS)
 
   // Build raster
   const [raster, setRaster] = useState(null)
@@ -1811,10 +1807,10 @@ export default function MapPanel({
                        display:'flex',flexDirection:'column',alignItems:'center',gap:4,textAlign:'center',
                        background:'var(--bg-elevated)',border:brd,borderRadius:10,padding:'10px 18px',
                        backdropFilter:'blur(6px)',maxWidth:260}}>
-            <span style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--accent-blue)'}}>
+            <span style={{fontSize:12,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--accent-blue)'}}>
               {countryView.label} forecasts coming soon
             </span>
-            <span style={{fontSize:9,color:'var(--text-secondary)',lineHeight:1.5}}>
+            <span style={{fontSize:13,color:'var(--text-secondary)',lineHeight:1.5}}>
               The onset / cessation / season-length pipeline for {countryView.label} is still being processed.
               Map shown for reference only.
             </span>
@@ -1833,215 +1829,37 @@ export default function MapPanel({
             <ChevronDown size={13} aria-hidden="true" style={{flexShrink:0}}/>
           </button>
         {showLayers && (
-          activeTab === 'medium' ? (
-            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
-                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:200,display:'grid',gap:4}}>
-              {MRF_LAYERS.filter(l=>l.variable==='mrf').map(l=>{
-                const active=l.id===activeLayer
-                return (
-                  <button key={l.id} onClick={()=>handleLayerChange(l.id)}
-                    style={{padding:'6px 8px',borderRadius:5,fontSize:11,cursor:'pointer',textAlign:'left',
-                            border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                            background:active?'var(--accent-blue)':'var(--bg-surface)',
-                            color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                    {l.label}
-                  </button>
-                )
-              })}
-              <div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--accent-blue)',margin:'6px 0 2px'}}>
-                With this forecast
-              </div>
-              {seasonGrid()}
-            </div>
-          ) : activeTab === 'probabilistic' ? (
-            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
-                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:280}}>
-              <div style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                <div/>
-                {['BN','NN','AN'].map(g=>(
-                  <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
-                                       letterSpacing:'0.08em',color:'var(--accent-blue)',
-                                       textAlign:'center',padding:'2px 0'}}>{g}</div>
-                ))}
-              </div>
-              {[
-                {row:'Onset',      ids:['p_onset_bn','p_onset_nn','p_onset_an']},
-                {row:'Cessation',  ids:['p_cess_bn', 'p_cess_nn', 'p_cess_an']},
-                {row:'Season Len', ids:['p_lgp_bn',  'p_lgp_nn',  'p_lgp_an']},
-              ].map(({row,ids})=>(
-                <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                  <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
-                               paddingLeft:2,fontWeight:600}}>{row}</div>
-                  {ids.map(id=>{
-                    const l=PROB_LAYERS.find(x=>x.id===id)
-                    if(!l) return <div key={id}/>
-                    const active=l.id===activeLayer
-                    return (
-                      <button key={id} onClick={()=>handleLayerChange(id)}
-                        style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
-                                textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                                background:active?'var(--accent-blue)':'var(--bg-surface)',
-                                color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                        {l.group}
-                      </button>
-                    )
-                  })}
+          <div role="group" aria-label="Map layers" style={PICK_PANEL}>
+            {activeTab === 'medium' ? (
+              <>
+                <div style={{display:'grid', gap:5}}>
+                  {MRF_LAYERS.filter(l => l.variable === 'mrf').map(l => pickBtn(l, {textAlign:'left', padding:'7px 10px'}, l.label))}
                 </div>
-              ))}
-              {(()=>{
-                const l=PROB_LAYERS.find(x=>x.id==='p_failure')
-                const active=activeLayer==='p_failure'
-                return l?<button onClick={()=>handleLayerChange('p_failure')}
-                  style={{width:'100%',marginTop:4,padding:'5px 8px',borderRadius:5,fontSize:9,
-                          cursor:'pointer',textAlign:'center',
-                          border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                          background:active?'var(--accent-blue)':'var(--bg-surface)',
-                          color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                  P(Season Failure)</button>:null
-              })()}
-            </div>
-          ) : activeTab !== 'historical' && activeTab !== 'validation' ? (
-            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
-                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:280}}>
-              {seasonGrid()}
-
-              {/* Probabilistic Tercile Section */}
-              {!joinedRun && (
-              <div style={{marginTop:8, paddingTop:8, borderTop:'1px solid var(--border-subtle)'}}>
-                <div style={{fontSize:8, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#10b981', marginBottom:5, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                  <span style={{display:'flex', alignItems:'center', gap:4}}>
-                    <CloudRain size={12} aria-hidden="true"/>
-                    <span>Seasonal Tercile Forecast</span>
-                  </span>
-                </div>
-                <div style={{display:'grid', gridTemplateColumns:'1fr', gap:4}}>
-                  <button
-                    onClick={()=>handleLayerChange('tercile_rainfall')}
-                    title="Rainfall Probabilistic Tercile Forecast (Above/Normal/Below)"
-                    style={{
-                      padding:'7px 8px', borderRadius:5, fontSize:9, cursor:'pointer', textAlign:'center',
-                      border:'1px solid '+(activeLayer==='tercile_rainfall'?'#10b981':'var(--border-primary)'),
-                      background:activeLayer==='tercile_rainfall'?'#10b981':'var(--bg-surface)',
-                      color:activeLayer==='tercile_rainfall'?'#fff':'var(--text-secondary)',
-                      fontWeight:activeLayer==='tercile_rainfall'?700:500
-                    }}
-                  >
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5}}><CloudRain size={12} aria-hidden="true"/>Rainfall Terciles</span>
-                  </button>
-                </div>
-              </div>
-              )}
-            </div>
-          ) : activeTab === 'multimodel' ? (
-            /* Multi-model: 3x3 grid -- Equal/HR-Wt/RPSS-Wt x Onset/Cess/Season */
-            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
-                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:290}}>
-              <div style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                <div/>
-                {['Equal','HR-Wt','RPSS-Wt'].map(g=>(
-                  <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
-                                       letterSpacing:'0.08em',color:'var(--accent-blue)',
-                                       textAlign:'center',padding:'2px 0'}}>{g}</div>
-                ))}
-              </div>
-              {[
-                {row:'Onset',      ids:['onset_med','onset_hr_w','onset_rpss_w']},
-                {row:'Cessation',  ids:['cess_med', 'cess_hr_w', 'cess_rpss_w']},
-                {row:'Season Len', ids:['lgp_med',  'lgp_hr_w',  'lgp_rpss_w']},
-              ].map(({row,ids})=>(
-                <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                  <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
-                               paddingLeft:2,fontWeight:600}}>{row}</div>
-                  {ids.map(id=>{
-                    const l=MULTI_LAYERS.find(x=>x.id===id)
-                    if(!l) return <div key={id}/>
-                    const active=l.id===activeLayer
-                    return (
-                      <button key={id} onClick={()=>handleLayerChange(id)}
-                        style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
-                                textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                                background:active?'var(--accent-blue)':'var(--bg-surface)',
-                                color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                        {l.group}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
-          ) : activeTab === 'validation' ? (
-            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
-                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:280}}>
-              <div style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                <div/>
-                {['RPSS','HR','Alpha'].map(g=>(
-                  <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
-                                       letterSpacing:'0.08em',color:'var(--accent-blue)',
-                                       textAlign:'center',padding:'2px 0'}}>{g}</div>
-                ))}
-              </div>
-              {[
-                {row:'Onset',      ids:['v_rpss_onset','v_hr_onset','v_alpha_onset']},
-                {row:'Cessation',  ids:['v_rpss_cess', 'v_hr_cess', 'v_alpha_cess']},
-                {row:'Season Len', ids:['v_rpss_lgp',  'v_hr_lgp',  'v_alpha_lgp']},
-              ].map(({row,ids})=>(
-                <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                  <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
-                               paddingLeft:2,fontWeight:600}}>{row}</div>
-                  {ids.map(id=>{
-                    const l=VAL_LAYERS.find(x=>x.id===id)
-                    if(!l) return <div key={id}/>
-                    const active=l.id===activeLayer
-                    return (
-                      <button key={id} onClick={()=>handleLayerChange(id)}
-                        style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
-                                textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                                background:active?'var(--accent-blue)':'var(--bg-surface)',
-                                color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                        {l.group}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
-          ) : activeTab === 'historical' ? (
-            <div style={{marginTop:4,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.35)',
-                         background:'var(--bg-elevated)',border:brd,padding:'10px',minWidth:310}}>
-              <div style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                <div/>
-                {['Median','Spread','Bias','Det.'].map(g=>(
-                  <div key={g} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',
-                                       letterSpacing:'0.08em',color:'var(--accent-blue)',
-                                       textAlign:'center',padding:'2px 0'}}>{g}</div>
-                ))}
-              </div>
-              {[
-                {row:'Onset',      ids:['h_onset_p50','h_onset_spr','h_onset_bias','h_onset_det']},
-                {row:'Cessation',  ids:['h_cess_p50', 'h_cess_spr', 'h_cess_bias', 'h_cess_det']},
-                {row:'Season Len', ids:['h_lgp_p50',  'h_lgp_spr',  'h_lgp_bias',  'h_lgp_det']},
-              ].map(({row,ids})=>(
-                <div key={row} style={{display:'grid',gridTemplateColumns:'90px 1fr 1fr 1fr 1fr',gap:4,marginBottom:4}}>
-                  <div style={{fontSize:9,color:'var(--text-muted)',display:'flex',alignItems:'center',
-                               paddingLeft:2,fontWeight:600}}>{row}</div>
-                  {ids.map(id=>{
-                    const l=HIST_LAYERS.find(x=>x.id===id)
-                    if(!l) return <div key={id}/>
-                    const active=l.id===activeLayer
-                    return (
-                      <button key={id} onClick={()=>handleLayerChange(id)}
-                        style={{padding:'5px 4px',borderRadius:5,fontSize:9,cursor:'pointer',
-                                textAlign:'center',border:'1px solid '+(active?'var(--accent-blue)':'var(--border-primary)'),
-                                background:active?'var(--accent-blue)':'var(--bg-surface)',
-                                color:active?'#fff':'var(--text-secondary)',fontWeight:active?700:400}}>
-                        {l.group}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
-          ) : null
+                <div style={{...PICK_HEAD, textAlign:'left', margin:'10px 0 4px'}}>With this forecast</div>
+                {seasonGrid()}
+              </>
+            ) : activeTab === 'probabilistic' ? (
+              <>
+                {layerGrid(['BN', 'NN', 'AN'], [['p_onset_bn', 'p_onset_nn', 'p_onset_an'], ['p_cess_bn', 'p_cess_nn', 'p_cess_an'], ['p_lgp_bn', 'p_lgp_nn', 'p_lgp_an']], PROB_LAYERS)}
+                {(l => l ? <div style={{marginTop:6}}>{pickBtn(l, {width:'100%'}, l.label)}</div> : null)(PROB_LAYERS.find(x => x.id === 'p_failure'))}
+              </>
+            ) : activeTab === 'validation' ? (
+              layerGrid(['RPSS', 'HR', 'Alpha'], [['v_rpss_onset', 'v_hr_onset', 'v_alpha_onset'], ['v_rpss_cess', 'v_hr_cess', 'v_alpha_cess'], ['v_rpss_lgp', 'v_hr_lgp', 'v_alpha_lgp']], VAL_LAYERS)
+            ) : activeTab === 'historical' ? (
+              layerGrid(['Median', 'Spread', 'Bias', 'Det.'], [['h_onset_p50', 'h_onset_spr', 'h_onset_bias', 'h_onset_det'], ['h_cess_p50', 'h_cess_spr', 'h_cess_bias', 'h_cess_det'], ['h_lgp_p50', 'h_lgp_spr', 'h_lgp_bias', 'h_lgp_det']], HIST_LAYERS)
+            ) : (
+              <>
+                {seasonGrid()}
+                {!joinedRun && (
+                  <div style={{marginTop:10, paddingTop:10, borderTop:'1px solid var(--border-subtle)'}}>
+                    <div style={{...PICK_HEAD, textAlign:'left', marginBottom:5}}>Seasonal tercile forecast</div>
+                    {pickBtn({ id: 'tercile_rainfall', label: 'Rainfall Probabilistic Tercile Forecast (Above/Normal/Below)' }, {width:'100%'},
+                             <span style={{display:'inline-flex', alignItems:'center', gap:6}}><CloudRain size={14} aria-hidden="true"/>Rainfall terciles</span>)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
         </div>
 
