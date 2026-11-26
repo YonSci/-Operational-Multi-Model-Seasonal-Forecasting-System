@@ -2016,93 +2016,119 @@ function MenuItem({ onClick, title, children }) {
   return <button type="button" className="menu-item" style={MENU_ITEM} title={title} onClick={onClick}>{children}</button>
 }
 
-// Forecast assistant entry points (components/ExplainPanel.jsx): a question box for the chat, up to three suggestions
-// for the place and map on screen, and the other tools grouped in one menu
-function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onTools }) {
+// The assistant row on every page (components/ExplainPanel.jsx, AssistantChat.jsx): a question box for the chat, up
+// to three suggestions for what is on screen, and the other tools grouped in one menu.
+//   chips: [{ label, title, onClick }]   menu: [{ head, items: [{ label, title, onClick }] }]   (falsy entries are skipped)
+function AssistantRow({ name, inputId, inputLabel, placeholder, askTitle, onAsk, chips, menu, menuTitle }) {
   const [q, setQ] = useState('')
   const chip = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 999,
                  padding: '0 14px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 38 }
   const ask = e => { e.preventDefault(); onAsk(q.trim()); setQ('') }
+  const groups = (menu ?? []).map(g => ({ ...g, items: g.items.filter(Boolean) })).filter(g => g.items.length)
   return (
-    <section aria-label="Forecast assistant"
+    <section aria-label={name}
              style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px', padding: '8px 10px',
                       background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 10 }}>
       <form onSubmit={ask} role="search" aria-label="Ask the assistant"
             style={{ flex: '1 1 340px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--info-border)',
                      borderRadius: 10, padding: '0 4px 0 10px', background: 'var(--bg-surface)' }}>
         <MessageCircle size={17} aria-hidden="true" style={{ color: 'var(--accent-text)', flexShrink: 0 }}/>
-        <label htmlFor="assistant-q" className="sr-only">Ask about this forecast</label>
-        <input id="assistant-q" value={q} onChange={e => setQ(e.target.value)} maxLength={2000}
-               placeholder={'Ask about the forecast at ' + siteLabel + '...'}
+        <label htmlFor={inputId} className="sr-only">{inputLabel}</label>
+        <input id={inputId} value={q} onChange={e => setQ(e.target.value)} maxLength={2000} placeholder={placeholder}
                style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: 'var(--text-primary)', fontSize: 14.5, minHeight: 40, outlineOffset: 4 }}/>
         <button type="submit" className="site-btn site-btn-primary" style={{ minHeight: 34, padding: '0 14px', fontSize: 14 }}
-                title="Ask a question about the forecast on screen">Ask</button>
+                title={askTitle}>Ask</button>
       </form>
-      <button type="button" style={chip} onClick={() => onOpen('location')} title={'What the outlook means at ' + siteLabel}>Explain this place</button>
-      {canCompare && <button type="button" style={chip} onClick={() => onOpen('changes')} title="Compare this run with an earlier one at the selected place">What changed?</button>}
-      {canMap && <button type="button" style={chip} onClick={() => onOpen('map')} title="What the map layer on screen shows">Explain this map</button>}
-      <PopMenu label="More tools" align="right" width={300} className="site-btn site-btn-secondary" buttonStyle={{ minHeight: 38, padding: '0 12px', fontSize: 14 }}
-               title="Explain a chart or an area, draft advice, bulletins, field reports, past seasons and scenarios">
-        {close => (
-          <>
-            <div style={MENU_HEAD}>Explain</div>
-            <MenuItem onClick={() => { close(); onOpen('chart') }} title="What a chart at the selected place shows">Explain a chart</MenuItem>
-            {canAreas && <MenuItem onClick={() => { close(); onOpen('area') }} title="The outlook over a county, region or drawn area">Explain an area</MenuItem>}
-            {canAreas && <MenuItem onClick={() => { close(); onOpen('attention') }} title="Counties or regions ranked on one criterion">Areas needing attention</MenuItem>}
-            <div style={MENU_HEAD}>Act</div>
-            {canAdvise && <MenuItem onClick={() => { close(); onOpen('advisory') }} title="Draft guidance and crop options for one decision at the selected place">Advisory (draft)</MenuItem>}
-            <MenuItem onClick={() => { close(); onStudio() }} title="Compose, check and export a bulletin from the forecast on screen">Bulletin Studio</MenuItem>
-            <MenuItem onClick={() => { close(); onReport() }} title="Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest">Report from the field</MenuItem>
-            <div style={MENU_HEAD}>Plan and learn</div>
-            <MenuItem onClick={() => { close(); onTools() }} title="Past seasons like this one, season review, learning, scenario planning, official outlooks">
-              Past seasons, scenarios and more</MenuItem>
-          </>
-        )}
-      </PopMenu>
+      {chips.filter(Boolean).map(c => (
+        <button key={c.label} type="button" style={chip} onClick={c.onClick} title={c.title}>{c.label}</button>
+      ))}
+      {groups.length > 0 && (
+        <PopMenu label="More tools" align="right" width={300} className="site-btn site-btn-secondary" buttonStyle={{ minHeight: 38, padding: '0 12px', fontSize: 14 }}
+                 title={menuTitle}>
+          {close => groups.map(g => (
+            <Fragment key={g.head}>
+              <div style={MENU_HEAD}>{g.head}</div>
+              {g.items.map(it => (
+                <MenuItem key={it.label} onClick={() => { close(); it.onClick() }} title={it.title}>{it.label}</MenuItem>
+              ))}
+            </Fragment>
+          ))}
+        </PopMenu>
+      )}
     </section>
   )
 }
 
-// The assistant on the crop outlook page: it explains the site, crop, sowing rule and run selected on the page
-function CropAssistantBar({ site, crop, canAdvise, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts }) {
-  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
-              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+// Forecast tabs: the place and map on screen
+function AssistantBar({ siteLabel, canCompare, canMap, canAdvise, canAreas, onOpen, onAsk, onReport, onStudio, onTools }) {
   return (
-    <div role="group" aria-label="Crop outlook assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
-      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant ({site}):</span>
-      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
-              title="Ask about the crop outlook on screen">Ask the assistant</button>
-      <button type="button" style={b} onClick={() => onOpen('crop')}
-              title="Outcomes, sowing, yields, failure, past seasons and the crop models, explained">Explain this crop outlook</button>
-      <button type="button" style={b} onClick={() => onOpen('crop_compare')}
-              title="Every crop and sowing rule at this site side by side">Compare crops and sowing rules</button>
-      {canAdvise && <button type="button" style={b} onClick={() => onOpen('advisory')}
-                            title={'Draft guidance and options for one decision, for ' + crop}>Advisory (draft)</button>}
-      <button type="button" style={b} onClick={onReport} title="Send what you observe in the field at this site">Report from the field</button>
-      <button type="button" style={b} onClick={onStudio} title="Compose a crop advisory bulletin for this site">Bulletin Studio</button>
-      <button type="button" style={b} onClick={onWatches} title="Did the forecast or the advice change for this crop and site?">
-        Watch this crop{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
-    </div>
+    <AssistantRow name="Forecast assistant" inputId="assistant-q" inputLabel="Ask about this forecast"
+                  placeholder={'Ask about the forecast at ' + siteLabel + '...'} askTitle="Ask a question about the forecast on screen" onAsk={onAsk}
+                  chips={[
+                    { label: 'Explain this place', title: 'What the outlook means at ' + siteLabel, onClick: () => onOpen('location') },
+                    canCompare && { label: 'What changed?', title: 'Compare this run with an earlier one at the selected place', onClick: () => onOpen('changes') },
+                    canMap && { label: 'Explain this map', title: 'What the map layer on screen shows', onClick: () => onOpen('map') },
+                  ]}
+                  menuTitle="Explain a chart or an area, draft advice, bulletins, field reports, past seasons and scenarios"
+                  menu={[
+                    { head: 'Explain', items: [
+                      { label: 'Explain a chart', title: 'What a chart at the selected place shows', onClick: () => onOpen('chart') },
+                      canAreas && { label: 'Explain an area', title: 'The outlook over a county, region or drawn area', onClick: () => onOpen('area') },
+                      canAreas && { label: 'Areas needing attention', title: 'Counties or regions ranked on one criterion', onClick: () => onOpen('attention') },
+                    ] },
+                    { head: 'Act', items: [
+                      canAdvise && { label: 'Advisory (draft)', title: 'Draft guidance and crop options for one decision at the selected place', onClick: () => onOpen('advisory') },
+                      { label: 'Bulletin Studio', title: 'Compose, check and export a bulletin from the forecast on screen', onClick: onStudio },
+                      { label: 'Report from the field', title: 'Send what you observe in the field: sowing, rain, emergence, crop stage, stress, harvest', onClick: onReport },
+                    ] },
+                    { head: 'Plan and learn', items: [
+                      { label: 'Past seasons, scenarios and more', title: 'Past seasons like this one, season review, learning, scenario planning, official outlooks', onClick: onTools },
+                    ] },
+                  ]}/>
   )
 }
 
-// The assistant on the near real-time rainfall tracking page: it explains the monitoring site the page shows
-function TrackerAssistantBar({ site, onOpen, onAsk, onReport, onWatches, watchAlerts }) {
-  const b = { background: 'var(--bg-surface)', color: 'var(--accent-text)', border: '1px solid var(--info-border)', borderRadius: 8,
-              padding: '6px 12px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', minHeight: 36 }
+// Crop outlook page: the site, crop, sowing rule and run selected on the page
+function CropAssistantBar({ site, crop, canAdvise, onOpen, onAsk, onReport, onStudio, onWatches, watchAlerts }) {
   return (
-    <div role="group" aria-label="Rainfall tracking assistant" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
-      <span style={{ fontSize: 12.5, color: 'var(--text-meta)' }}>Assistant{site ? ` (${site})` : ''}:</span>
-      <button type="button" style={{ ...b, background: 'var(--btn-primary)', color: '#fff', border: 0 }} onClick={onAsk}
-              title="Ask about the rain at this monitoring site">Ask the assistant</button>
-      <button type="button" style={b} onClick={() => onOpen('tracker')}
-              title="Rain so far, the planting onset, dry days and the next days, explained">How is the season going here?</button>
-      <button type="button" style={b} onClick={() => onOpen('tracker_changes')}
-              title="How the weather models' rain changed between the two latest runs">What changed since the last run?</button>
-      <button type="button" style={b} onClick={onReport} title="Send the rain or crop stage you observe at this site">Report from the field</button>
-      <button type="button" style={b} onClick={onWatches} title="Alerts for this site: planting onset, dry spells and changes in the next days">
-        Watch this site{watchAlerts ? ` (${watchAlerts} changed)` : ''}</button>
-    </div>
+    <AssistantRow name="Crop outlook assistant" inputId="crop-assistant-q" inputLabel="Ask about this crop outlook"
+                  placeholder={'Ask about the crop outlook at ' + site + '...'} askTitle="Ask a question about the crop outlook on screen" onAsk={onAsk}
+                  chips={[
+                    { label: 'Explain this crop outlook', title: 'Outcomes, sowing, yields, failure, past seasons and the crop models, explained', onClick: () => onOpen('crop') },
+                    { label: 'Compare crops and sowing rules', title: 'Every crop and sowing rule at this site side by side', onClick: () => onOpen('crop_compare') },
+                  ]}
+                  menuTitle="Draft advice, bulletins, field reports and alerts for this crop and site"
+                  menu={[
+                    { head: 'Act', items: [
+                      canAdvise && { label: 'Advisory (draft)', title: 'Draft guidance and options for one decision, for ' + crop, onClick: () => onOpen('advisory') },
+                      { label: 'Bulletin Studio', title: 'Compose a crop advisory bulletin for this site', onClick: onStudio },
+                      { label: 'Report from the field', title: 'Send what you observe in the field at this site', onClick: onReport },
+                    ] },
+                    { head: 'Follow', items: [
+                      { label: 'Watch this crop' + (watchAlerts ? ` (${watchAlerts} changed)` : ''), title: 'Did the forecast or the advice change for this crop and site?', onClick: onWatches },
+                    ] },
+                  ]}/>
+  )
+}
+
+// Near real-time rainfall tracking page: the monitoring site the page shows
+function TrackerAssistantBar({ site, onOpen, onAsk, onReport, onWatches, watchAlerts }) {
+  return (
+    <AssistantRow name="Rainfall tracking assistant" inputId="tracker-assistant-q" inputLabel="Ask about the rain at this site"
+                  placeholder={'Ask about the rain at ' + (site || 'this site') + '...'} askTitle="Ask a question about the rain at this monitoring site" onAsk={onAsk}
+                  chips={[
+                    { label: 'How is the season going here?', title: 'Rain so far, the planting onset, dry days and the next days, explained', onClick: () => onOpen('tracker') },
+                    { label: 'What changed since the last run?', title: "How the weather models' rain changed between the two latest runs", onClick: () => onOpen('tracker_changes') },
+                  ]}
+                  menuTitle="Field reports and alerts for this site"
+                  menu={[
+                    { head: 'Act', items: [
+                      { label: 'Report from the field', title: 'Send the rain or crop stage you observe at this site', onClick: onReport },
+                    ] },
+                    { head: 'Follow', items: [
+                      { label: 'Watch this site' + (watchAlerts ? ` (${watchAlerts} changed)` : ''), title: 'Alerts for this site: planting onset, dry spells and changes in the next days', onClick: onWatches },
+                    ] },
+                  ]}/>
   )
 }
 
@@ -3389,7 +3415,7 @@ export default function App() {
                                                     useDashboardStore.getState().setSelectedSite({ lat: cropSel.lat, lon: cropSel.lon, site_name: cropSel.site_name, country })
                                                     setExplain(e => ({ ...e, kind, crop: cropSel.variety, audience: e?.audience ?? 'general' }))
                                                   } else setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
-                                onAsk={() => { setExplain(null); setReportOpen(false); setWatchOpen(false); setStudioOpen(false); setChatOpen(true) }}
+                                onAsk={q => { setExplain(null); setReportOpen(false); setWatchOpen(false); setStudioOpen(false); if (q) setChatSeed(c => ({ q, n: (c?.n ?? 0) + 1 })); setChatOpen(true) }}
                                 onReport={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setStudioOpen(false); setReportOpen(true) }}
                                 onStudio={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setReportOpen(false); setStudioOpen(true) }}
                                 onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setStudioOpen(false); setWatchOpen(true) }}/>
@@ -3403,7 +3429,7 @@ export default function App() {
               <>
                 <TrackerAssistantBar site={trackerSite} watchAlerts={watchAlerts}
                                      onOpen={kind => { setChatOpen(false); setReportOpen(false); setWatchOpen(false); setExplain(e => ({ ...e, kind, audience: e?.audience ?? 'general' })) }}
-                                     onAsk={() => { setExplain(null); setReportOpen(false); setWatchOpen(false); setChatOpen(true) }}
+                                     onAsk={q => { setExplain(null); setReportOpen(false); setWatchOpen(false); if (q) setChatSeed(c => ({ q, n: (c?.n ?? 0) + 1 })); setChatOpen(true) }}
                                      onReport={() => { setExplain(null); setChatOpen(false); setWatchOpen(false); setReportOpen(true) }}
                                      onWatches={() => { setExplain(null); setChatOpen(false); setReportOpen(false); setWatchOpen(true) }}/>
                 <iframe ref={trackerRef} title="Near real-time rainfall tracking" src="tracker/index.html" scrolling={trackerHeight ? 'no' : 'auto'}
