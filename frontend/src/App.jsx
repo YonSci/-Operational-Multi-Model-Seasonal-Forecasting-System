@@ -607,7 +607,9 @@ function RiskGauges({pixelData,activeModels,selectedModel='multimodel',selectedS
 }
 
 // --- Probabilistic Outlook ------------------------------------------------
-function TercileBar({values}) {
+// p_on / p_cs / p_lgp are [BN, NN, AN] = members below the lower tercile, between, at or above the upper one
+// (notebook/dunning_lib.py estimate_probs). For dates BN is the early third, for season length the short third.
+function TercileBar({values, cats=['Below normal','Near normal','Above normal']}) {
   if (!values||!values.length) return null
   const BN=values.map(v=>v?.[0]??1/3), NN=values.map(v=>v?.[1]??1/3), AN=values.map(v=>v?.[2]??1/3)
   const med=arr=>[...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)]
@@ -618,7 +620,7 @@ function TercileBar({values}) {
     <div style={{marginBottom:10}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <span style={{fontSize:9,color:'var(--text-faint)'}}>dominant:</span>
-        <span style={{fontSize:14,fontWeight:800,color:domCol}}>{dom}</span>
+        <span style={{fontSize:14,fontWeight:800,color:domCol}}>{cats[dom==='BN'?0:dom==='AN'?2:1]} ({dom})</span>
       </div>
       <div style={{display:'flex',height:26,borderRadius:6,overflow:'hidden',marginBottom:4}}>
         <div style={{flex:bnM,background:'linear-gradient(90deg,#2563eb,#3b82f6)',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -632,9 +634,9 @@ function TercileBar({values}) {
         </div>
       </div>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:8,color:'var(--text-faint)'}}>
-        <span style={{color:'#60a5fa',fontWeight:600}}>* Below Normal</span>
-        <span style={{color:'#4ade80',fontWeight:600}}>* Near Normal</span>
-        <span style={{color:'#fb923c',fontWeight:600}}>* Above Normal</span>
+        <span style={{color:'#60a5fa',fontWeight:600}}>* {cats[0]} (BN)</span>
+        <span style={{color:'#4ade80',fontWeight:600}}>* {cats[1]} (NN)</span>
+        <span style={{color:'#fb923c',fontWeight:600}}>* {cats[2]} (AN)</span>
       </div>
     </div>
   )
@@ -657,9 +659,12 @@ function ProbabilisticOutlook({pixelData,activeModels,selectedModel='multimodel'
   const entries = (isSingle && allEntries.length > 1) ? [allEntries[0]] : allEntries
   const climLabel = (isShort || isKiremt || isFmam || isBega) ? '1993-2016' : '1981-2016'
   const secs=[
-    {key:'p_on', label:'Onset Timing', icon:'\uD83C\uDF27', def:`BN=late onset, AN=early onset vs ${climLabel} climatological terciles`},
-    {key:'p_cs', label:'Cessation Timing', icon:'\u2600', def:'AN=late cessation (longer rains)'},
-    {key:'p_lgp',label:'Season Length', icon:'\uD83D\uDCC5', def:'BN=shorter than average growing period'},
+    {key:'p_on', label:'Onset Timing', icon:'\uD83C\uDF27', cats:['Early','Normal','Late'],
+     def:`Early (BN) = onset in the earliest third of ${climLabel} years, Late (AN) = the latest third`},
+    {key:'p_cs', label:'Cessation Timing', icon:'\u2600', cats:['Early','Normal','Late'],
+     def:`Early (BN) = rains end in the earliest third of ${climLabel} years, Late (AN) = the latest third (longer rains)`},
+    {key:'p_lgp',label:'Season Length', icon:'\uD83D\uDCC5', cats:['Short','Normal','Long'],
+     def:`Short (BN) = season in the shortest third of ${climLabel} years, Long (AN) = the longest third`},
   ]
   return (
     <div style={{padding:'10px 12px',overflowY:'auto',height:'100%'}}>
@@ -673,7 +678,7 @@ function ProbabilisticOutlook({pixelData,activeModels,selectedModel='multimodel'
             <span style={{fontSize:11,fontWeight:700,color:'var(--text-primary)'}}>{s.label}</span>
             <span style={{fontSize:8,color:'var(--text-faint)',marginLeft:'auto',cursor:'help',padding:'1px 5px',borderRadius:3,border:'1px solid var(--border-primary)'}} title={s.def}>?</span>
           </div>
-          <TercileBar values={entries.map(([,m])=>m[s.key])}/>
+          <TercileBar values={entries.map(([,m])=>m[s.key])} cats={s.cats}/>
         </div>
       ))}
     </div>

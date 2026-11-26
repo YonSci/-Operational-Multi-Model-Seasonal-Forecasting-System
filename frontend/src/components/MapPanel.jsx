@@ -182,15 +182,15 @@ const CS = {
   cess_rpss_w:   { s:[100,115,125,135,145,155,170],c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'Cessation P50 RPSS-Weighted (DOY)' },
   lgp_rpss_w:    { s:[20,30,40,50,60,70,90],       c:['#d73027','#f46d43','#fdae61','#ffffbf','#a6d96a','#66bd63','#1a9850'], label:'Season Length RPSS-Weighted (days)' },
   // Probabilistic tab keyed by PROB_LAYERS id
-  p_onset_bn:   { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#2c7fb8','#253494'],           label:'P(BN) Onset' },
+  p_onset_bn:   { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#2c7fb8','#253494'],           label:'P(BN) Onset (early)' },
   p_onset_nn:   { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#f7f7f7','#d9d9d9','#bdbdbd','#969696','#636363','#252525'],            label:'P(NN) Onset' },
-  p_onset_an:   { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#fee391','#fec44f','#fe9929','#d95f0e','#993404'],            label:'P(AN) Onset' },
-  p_cess_bn:    { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#2c7fb8','#253494'],           label:'P(BN) Cessation' },
+  p_onset_an:   { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#fee391','#fec44f','#fe9929','#d95f0e','#993404'],            label:'P(AN) Onset (late)' },
+  p_cess_bn:    { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#2c7fb8','#253494'],           label:'P(BN) Cessation (early)' },
   p_cess_nn:    { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#f7f7f7','#d9d9d9','#bdbdbd','#969696','#636363','#252525'],            label:'P(NN) Cessation' },
-  p_cess_an:    { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#fee391','#fec44f','#fe9929','#d95f0e','#993404'],            label:'P(AN) Cessation' },
-  p_lgp_bn:     { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#2c7fb8','#253494'],           label:'P(BN) Season Length' },
+  p_cess_an:    { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#fee391','#fec44f','#fe9929','#d95f0e','#993404'],            label:'P(AN) Cessation (late)' },
+  p_lgp_bn:     { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#2c7fb8','#253494'],           label:'P(BN) Season Length (short)' },
   p_lgp_nn:     { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#f7f7f7','#d9d9d9','#bdbdbd','#969696','#636363','#252525'],            label:'P(NN) Season Length' },
-  p_lgp_an:     { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#fee391','#fec44f','#fe9929','#d95f0e','#993404'],            label:'P(AN) Season Length' },
+  p_lgp_an:     { s:[0.2,0.27,0.33,0.4,0.5,0.6], c:['#ffffcc','#fee391','#fec44f','#fe9929','#d95f0e','#993404'],            label:'P(AN) Season Length (long)' },
   p_failure:    { s:[0,0.05,0.1,0.2,0.3,0.5],    c:['#f7f7f7','#cccccc','#969696','#636363','#252525','#000000'],            label:'P(Season Failure)' },
   chirps_p50_onset: { s:[50,65,75,85,95,105,120],     c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Onset P50 (DOY)' },
   chirps_p50_cess:  { s:[100,115,125,135,145,155,170], c:['#1a9850','#66bd63','#a6d96a','#ffffbf','#fdae61','#f46d43','#d73027'], label:'CHIRPS Cessation P50 (DOY)' },
@@ -463,15 +463,15 @@ const MRF_LAYERS = [
 // Probabilistic-only layers -- shown only when activeTab === 'probabilistic'
 const PROB_LAYERS = [
   { id:'tercile_rainfall', label:'Rainfall Terciles (OND 2026)', variable:'rainfall', layer:'tercile', group:'Tercile' },
-  { id:'p_onset_bn',  label:'P(BN) Onset',          variable:'onset',     layer:'prob_bn', group:'BN' },
+  { id:'p_onset_bn',  label:'P(BN) Onset (early)',          variable:'onset',     layer:'prob_bn', group:'BN' },
   { id:'p_onset_nn',  label:'P(NN) Onset',           variable:'onset',     layer:'prob_nn', group:'NN' },
-  { id:'p_onset_an',  label:'P(AN) Onset',           variable:'onset',     layer:'prob_an', group:'AN' },
-  { id:'p_cess_bn',   label:'P(BN) Cessation',       variable:'cessation', layer:'prob_bn', group:'BN' },
+  { id:'p_onset_an',  label:'P(AN) Onset (late)',           variable:'onset',     layer:'prob_an', group:'AN' },
+  { id:'p_cess_bn',   label:'P(BN) Cessation (early)',       variable:'cessation', layer:'prob_bn', group:'BN' },
   { id:'p_cess_nn',   label:'P(NN) Cessation',       variable:'cessation', layer:'prob_nn', group:'NN' },
-  { id:'p_cess_an',   label:'P(AN) Cessation',       variable:'cessation', layer:'prob_an', group:'AN' },
-  { id:'p_lgp_bn',    label:'P(BN) Season Length',   variable:'lgp',       layer:'prob_bn', group:'BN' },
+  { id:'p_cess_an',   label:'P(AN) Cessation (late)',       variable:'cessation', layer:'prob_an', group:'AN' },
+  { id:'p_lgp_bn',    label:'P(BN) Season Length (short)',   variable:'lgp',       layer:'prob_bn', group:'BN' },
   { id:'p_lgp_nn',    label:'P(NN) Season Length',   variable:'lgp',       layer:'prob_nn', group:'NN' },
-  { id:'p_lgp_an',    label:'P(AN) Season Length',   variable:'lgp',       layer:'prob_an', group:'AN' },
+  { id:'p_lgp_an',    label:'P(AN) Season Length (long)',   variable:'lgp',       layer:'prob_an', group:'AN' },
   { id:'p_failure',   label:'P(Season Failure)',      variable:'onset',     layer:'failure', group:'Failure' },
 ]
 
@@ -727,9 +727,9 @@ function fmtTip(props, L, year = 2026, activeSeason = '') {
 
     // Probability layers
     } else if (L.includes('prob_bn') || L === 'prob_bn') {
-      lines.push('P(Below Normal): ' + (mv * 100).toFixed(0) + '%')
+      lines.push('Chance of ' + (isOnset ? 'an early onset' : isCess ? 'an early end of the rains' : 'a short season') + ' (BN): ' + (mv * 100).toFixed(0) + '%')
     } else if (L.includes('prob_an') || L === 'prob_an') {
-      lines.push('P(Above Normal): ' + (mv * 100).toFixed(0) + '%')
+      lines.push('Chance of ' + (isOnset ? 'a late onset' : isCess ? 'a late end of the rains' : 'a long season') + ' (AN): ' + (mv * 100).toFixed(0) + '%')
     } else if (L.includes('failure') || L === 'failure') {
       lines.push('P(Season Failure): ' + (mv * 100).toFixed(0) + '%')
     } else if (L === 'prob_nn' || L.includes('prob_nn')) {
