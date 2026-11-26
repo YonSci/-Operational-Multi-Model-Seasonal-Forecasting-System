@@ -14,6 +14,7 @@ Used by the daily update (scripts/update_forecast.py):
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -22,19 +23,45 @@ from crop_engine import config as C
 from crop_engine import dashboard
 
 
+POLL = 15     # s: how often a running child is checked against the deadline
+
+
+def run_until(cmd, env, end):
+    """Run a child until it ends or the wall clock passes `end` (time.time(); None: no limit). Returns its exit code,
+    or None when it was stopped, with every process it started (the venv's python.exe on Windows is a launcher that
+    starts a second python).
+
+    The deadline is wall-clock time, checked every POLL seconds: subprocess.run(timeout=...) waits with Windows timers
+    that pause while the PC is in sleep or Modern Standby, so on 24 Nov 2026 a 240-minute limit set at 14:13 had not
+    expired at 20:10 (the laptop was in standby 17:42-19:57). After a standby the child is stopped at the first check."""
+    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+    p = subprocess.Popen(cmd, cwd=C.BASE, env=env, **flags)
+    while True:
+        try:
+            return p.wait(timeout=POLL)
+        except subprocess.TimeoutExpired:
+            if end is not None and time.time() >= end:
+                break
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+    else:
+        os.killpg(p.pid, signal.SIGKILL)
+    p.wait()
+    return None
+
+
 def regional_outlook(a, env, end):
     """The gridded regional outlook of the seasonal run (crop_engine/grid.py: it writes its own tab data, grid.json;
     its benchmark is rebuilt only when its configuration changes), within the time left."""
-    left = end - time.monotonic() if end else None
-    if left is not None and left <= 0:
+    if end is not None and time.time() >= end:
         print("crop: time limit reached; regional outlook not run, the previous one kept", flush=True)
         return
     cmd = [sys.executable, "-m", "crop_engine.grid", "--workers", str(max(a.workers, 2))]
-    try:
-        if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
-            print("crop: regional outlook failed; the previous one kept", flush=True)
-    except subprocess.TimeoutExpired:
+    rc = run_until(cmd, env, end)
+    if rc is None:
         print("crop: regional outlook stopped at the time limit; the previous one kept", flush=True)
+    elif rc:
+        print("crop: regional outlook failed; the previous one kept", flush=True)
 
 
 def main():
@@ -47,7 +74,7 @@ def main():
     ap.add_argument("--minutes", type=float, default=None,
                     help="time limit: the running source is stopped and no new one started after it (results so far kept)")
     a = ap.parse_args()
-    end = time.monotonic() + a.minutes * 60 if a.minutes else None
+    end = time.time() + a.minutes * 60 if a.minutes else None     # wall clock (run_until)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     child = [sys.executable, "-m", "crop_engine.run_outlook"]
@@ -61,41 +88,38 @@ def main():
     sources = [s for s in json.loads(got.stdout.strip().splitlines()[-1]) if not a.sources or s in a.sources]
     failed = []
     for k, s in enumerate(sources):
-        left = end - time.monotonic() if end else None
-        if left is not None and left <= 0:
+        if end is not None and time.time() >= end:
             failed += sources[k:]
             print(f"crop: time limit reached; not run: {', '.join(sources[k:])}", flush=True)
             break
         cmd = child + ["--sources", s, "--workers", str(a.workers), "--no-dashboard"] + (["--force"] if a.force else []) + \
               (["--climatology"] if a.climatology and k == 0 else []) + (["--no-refresh"] if k or a.no_refresh else [])
-        try:
-            if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
-                failed.append(s)
-        except subprocess.TimeoutExpired:                                # the child is killed; its previous results stay
+        rc = run_until(cmd, env, end)
+        if rc is None:                                                   # the child is stopped; its previous results stay
             failed.append(s)
             print(f"crop: {s} stopped at the time limit", flush=True)
+        elif rc:
+            failed.append(s)
         if s == "seasonal" and "seasonal" not in failed:
             regional_outlook(a, env, end)
     # management scenarios of the seasonal run in the time left (weekly; crop_engine.run_scenarios)
-    left = end - time.monotonic() if end else None
-    if "seasonal" in sources and "seasonal" not in failed and (left is None or left > 0):
+    if "seasonal" in sources and "seasonal" not in failed and (end is None or time.time() < end):
         cmd = [sys.executable, "-m", "crop_engine.run_scenarios", "--max-age-days", "7", "--workers",
                str(max(a.workers, 2)), "--no-dashboard"]
-        try:
-            if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
-                print("crop: management scenarios failed; the previous ones kept", flush=True)
-        except subprocess.TimeoutExpired:
+        rc = run_until(cmd, env, end)
+        if rc is None:
             print("crop: management scenarios stopped at the time limit; the previous ones kept", flush=True)
+        elif rc:
+            print("crop: management scenarios failed; the previous ones kept", flush=True)
     # DSSAT's nitrogen levels of the seasonal run in the time left (weekly; crop_engine.run_nitrogen; skipped without DSSAT)
-    left = end - time.monotonic() if end else None
-    if "seasonal" in sources and "seasonal" not in failed and (left is None or left > 0):
+    if "seasonal" in sources and "seasonal" not in failed and (end is None or time.time() < end):
         cmd = [sys.executable, "-m", "crop_engine.run_nitrogen", "--max-age-days", "7", "--workers",
                str(max(a.workers, 2)), "--no-dashboard"]
-        try:
-            if subprocess.run(cmd, cwd=C.BASE, env=env, timeout=left).returncode:
-                print("crop: nitrogen levels failed; the previous ones kept", flush=True)
-        except subprocess.TimeoutExpired:
+        rc = run_until(cmd, env, end)
+        if rc is None:
             print("crop: nitrogen levels stopped at the time limit; the previous ones kept", flush=True)
+        elif rc:
+            print("crop: nitrogen levels failed; the previous ones kept", flush=True)
     dashboard.write_index()
     dashboard.write()
     if failed:
